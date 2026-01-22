@@ -1,6 +1,8 @@
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export async function getAccessToken() {
+  const supabase = getSupabaseClient();
+  if (!supabase) return null;
   const { data, error } = await supabase.auth.getSession();
   if (error) return null;
   return data.session?.access_token ?? null;
