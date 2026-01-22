@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import { useHelpPanelEnabled } from "@/hooks/useHelpPanel";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 type TabKey = "profile" | "workspaces" | "team" | "audit";
 
@@ -35,6 +35,8 @@ export default function SettingsPage() {
 
   useEffect(() => {
     let mounted = true;
+    const supabase = getSupabaseClient();
+    if (!supabase) return () => {};
     supabase.auth.getUser().then(({ data }) => {
       if (!mounted) return;
       if (data.user?.email) setEmail(data.user.email);

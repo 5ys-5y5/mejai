@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export function ProfileMenu() {
   const [open, setOpen] = useState(false);
@@ -24,6 +24,8 @@ export function ProfileMenu() {
 
   useEffect(() => {
     let mounted = true;
+    const supabase = getSupabaseClient();
+    if (!supabase) return () => {};
     supabase.auth.getUser().then(({ data }) => {
       if (!mounted) return;
       setEmail(data.user?.email ?? null);
@@ -110,7 +112,10 @@ export function ProfileMenu() {
               <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
                 <button
                   onClick={async () => {
-                    await supabase.auth.signOut();
+                    const supabase = getSupabaseClient();
+                    if (supabase) {
+                      await supabase.auth.signOut();
+                    }
                     window.location.href = "/login";
                   }}
                   className="w-full flex items-center justify-between px-3 py-2 text-sm text-slate-900 hover:bg-slate-50"

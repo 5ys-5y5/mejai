@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { AuthShell } from "@/components/AuthShell";
 import { Input } from "@/components/ui/Input";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -16,6 +16,11 @@ export default function SignupPage() {
   const handleSignup = async () => {
     if (!email || !pw) {
       setError("이메일과 비밀번호를 입력해주세요.");
+      return;
+    }
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setError("Supabase 설정이 필요합니다.");
       return;
     }
 

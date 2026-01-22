@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 const steps = [
   { id: 1, title: "사업체 정보", icon: Building },
@@ -40,6 +40,8 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     let mounted = true;
+    const supabase = getSupabaseClient();
+    if (!supabase) return () => {};
     supabase.auth.getUser().then(({ data }) => {
       if (!mounted) return;
       if (!data.user?.email) return;
@@ -59,6 +61,12 @@ export default function OnboardingPage() {
     if (!orgName.trim()) {
       toast.error("사업체 공식 명칭을 입력해 주세요.");
       setCurrentStep(1);
+      return;
+    }
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      toast.error("Supabase 설정이 필요합니다.");
       return;
     }
 

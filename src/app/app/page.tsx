@@ -6,7 +6,7 @@ import { AgentSelectPopover } from "@/components/AgentSelectPopover";
 import { DateRangePopover } from "@/components/DateRangePopover";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 import { apiFetch } from "@/lib/apiClient";
 
 type SessionRow = {
@@ -72,6 +72,18 @@ export default function DashboardPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
+
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setSessions([]);
+      setReviewQueue([]);
+      setAgents([]);
+      setOrgId(null);
+      setIsAdmin(false);
+      setLoading(false);
+      setError("Supabase 설정이 필요합니다.");
+      return;
+    }
 
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData.user) {

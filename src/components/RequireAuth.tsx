@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -12,6 +12,14 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let mounted = true;
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      setReady(true);
+      setIsAuthed(false);
+      return () => {
+        mounted = false;
+      };
+    }
 
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
