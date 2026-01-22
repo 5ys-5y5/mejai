@@ -105,7 +105,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: turnsError.message }, { status: 400 });
   }
 
-  const eventsPayload = [
+  const eventsPayload: Array<{
+    session_id: string;
+    event_type: string;
+    payload: Record<string, unknown>;
+  }> = [
     {
       session_id: session.id,
       event_type: "SUMMARY_GENERATED",
