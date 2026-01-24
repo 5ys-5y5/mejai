@@ -100,7 +100,7 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
     };
   }, []);
 
-  const badgeCount = typeof reviewCount === "number" ? reviewCount : undefined;
+  const badgeCount = typeof reviewCount === "number" && reviewCount > 0 ? reviewCount : undefined;
   return (
     <aside
       className={cn(

@@ -1,17 +1,38 @@
 ﻿"use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AuthShell } from "@/components/AuthShell";
 import { Input } from "@/components/ui/Input";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation";
 
 export default function SignupPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const from = params.get("from");
+    if (from === "login") return;
+
+    const referrer = document.referrer || "";
+    if (referrer) {
+      try {
+        const refUrl = new URL(referrer);
+        if (refUrl.origin === window.location.origin && refUrl.pathname === "/login") {
+          return;
+        }
+      } catch {
+        // ignore invalid referrer
+      }
+    }
+    router.replace("/login");
+  }, [router]);
 
   const handleSignup = async () => {
     if (!email || !pw) {

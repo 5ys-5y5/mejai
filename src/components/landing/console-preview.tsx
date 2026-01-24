@@ -2,8 +2,11 @@
 
 import { motion } from "framer-motion";
 import { LayoutDashboard, Phone, BarChart2, Book, ShieldCheck } from "lucide-react";
+import type { LandingSettings } from "@/lib/landingSettings";
 
-export function ConsolePreview() {
+const consoleIcons = [Phone, BarChart2, Book, ShieldCheck];
+
+export function ConsolePreview({ settings }: { settings: LandingSettings }) {
   return (
     <section className="py-32 bg-zinc-50 overflow-hidden">
       <div className="container mx-auto px-6">
@@ -12,25 +15,22 @@ export function ConsolePreview() {
             <motion.h2
               initial={{ opacity: 0, x: -20 }}
               whileInView={{ opacity: 1, x: 0 }}
-              className="text-5xl md:text-6xl font-bold tracking-tight mb-8"
+              className="font-bold tracking-tight mb-8 whitespace-pre-line"
+              style={{ fontSize: settings.consoleTitleSize }}
             >
-              모든 것을 <br />
-              통합하는 대시보드.
+              {settings.consoleTitle}
             </motion.h2>
-            <p className="text-xl md:text-2xl text-zinc-500 leading-relaxed mb-12">
-              상담 흐름의 모든 과정을 한눈에 분석하고
-              실시간 지표를 모니터링하세요.
-              <br className="hidden md:block" />
-              Mejai는 운영팀에 정확한 인사이트를 제공합니다.
+            <p
+              className="text-zinc-500 leading-relaxed mb-12 whitespace-pre-line"
+              style={{ fontSize: settings.consoleSubtitleSize }}
+            >
+              {settings.consoleSubtitle}
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-              {[
-                { title: "실시간 로그", desc: "통화 단위 요약 및 상태", icon: Phone },
-                { title: "성과 분석", desc: "성공률과 만족도 통계", icon: BarChart2 },
-                { title: "지식 센터", desc: "정책 및 FAQ 관리", icon: Book },
-                { title: "보안 감사", desc: "데이터 접근 권한 관리", icon: ShieldCheck },
-              ].map((item, i) => (
+              {settings.consoleCards.map((item, i) => {
+                const Icon = consoleIcons[i] || Phone;
+                return (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, y: 10 }}
@@ -38,13 +38,13 @@ export function ConsolePreview() {
                   transition={{ delay: i * 0.1 }}
                   className="space-y-2"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center mb-4">
-                    <item.icon className="w-5 h-5 text-black" />
+                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center mb-4">
+                    <Icon className="w-5 h-5 text-black" />
                   </div>
                   <h4 className="font-bold text-lg">{item.title}</h4>
-                  <p className="text-zinc-500 text-sm leading-relaxed">{item.desc}</p>
+                  <p className="text-zinc-500 text-sm leading-relaxed">{item.description}</p>
                 </motion.div>
-              ))}
+              )})}
             </div>
           </div>
 
@@ -52,7 +52,7 @@ export function ConsolePreview() {
             <motion.div
               initial={{ opacity: 0, scale: 0.9, rotate: 2 }}
               whileInView={{ opacity: 1, scale: 1, rotate: 0 }}
-              className="relative z-10 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] rounded-[2rem] overflow-hidden bg-white border border-zinc-200"
+              className="relative z-10 rounded-[2rem] overflow-hidden bg-white border border-zinc-200"
             >
               <div className="h-10 bg-zinc-100 flex items-center px-6 gap-2">
                 <div className="w-3 h-3 rounded-full bg-zinc-300" />

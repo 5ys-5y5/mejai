@@ -1,16 +1,9 @@
 ﻿"use client";
 
 import { motion } from "framer-motion";
+import type { LandingSettings } from "@/lib/landingSettings";
 
-const comparison = [
-  { feature: "응답 대기 시간", traditional: "평균 5~10분", ai: "0초(즉시 연결)", win: "ai" },
-  { feature: "상담 가능 시간", traditional: "평일 09~18시", ai: "24시간 365일", win: "ai" },
-  { feature: "상담 기록 정확도", traditional: "수동 기록(누락 위험)", ai: "100% 실시간 음성 전사", win: "ai" },
-  { feature: "지식 참조", traditional: "상담사 기억에 의존", ai: "RAG 기반 실시간 정책 검색", win: "ai" },
-  { feature: "운영 비용", traditional: "인건비 및 교육비 부담", ai: "기존 비용 최대 80% 절감", win: "ai" },
-];
-
-export function Comparison() {
+export function Comparison({ settings }: { settings: LandingSettings }) {
   return (
     <section className="py-32 bg-black text-white overflow-hidden">
       <div className="container mx-auto px-6">
@@ -18,14 +11,16 @@ export function Comparison() {
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
-            className="text-5xl md:text-7xl font-bold tracking-tight mb-8"
+            className="font-bold tracking-tight mb-8 whitespace-pre-line"
+            style={{ fontSize: settings.comparisonTitleSize }}
           >
-            기존 방식과는 <br />
-            비교할 수 없는 차이.
+            {settings.comparisonTitle}
           </motion.h2>
-          <p className="text-xl md:text-2xl text-zinc-400 leading-relaxed">
-            비효율적인 상담 대기와 정보 불일치를 없애고
-            실제 상담 경험을 개선합니다.
+          <p
+            className="text-zinc-400 leading-relaxed whitespace-pre-line"
+            style={{ fontSize: settings.comparisonSubtitleSize }}
+          >
+            {settings.comparisonSubtitle}
           </p>
         </div>
 
@@ -45,7 +40,7 @@ export function Comparison() {
               </tr>
             </thead>
             <tbody>
-              {comparison.map((item, index) => (
+              {settings.comparisonRows.map((item, index) => (
                 <motion.tr
                   key={index}
                   initial={{ opacity: 0, x: -20 }}

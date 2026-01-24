@@ -2,6 +2,7 @@
 import "./globals.css";
 import { AppNavbarGate } from "@/components/AppNavbarGate";
 import { Toaster } from "sonner";
+import { RouteAnnouncerCleanup } from "@/components/RouteAnnouncerCleanup";
 
 export const metadata: Metadata = {
   title: "Mejai",
@@ -19,6 +20,7 @@ export default function RootLayout({
         <AppNavbarGate />
         <main>{children}</main>
         <Toaster position="top-center" />
+        <RouteAnnouncerCleanup />
       </body>
     </html>
   );

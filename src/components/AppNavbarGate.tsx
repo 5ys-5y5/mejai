@@ -10,5 +10,12 @@ export function AppNavbarGate() {
     return null;
   }
 
-  return <Navbar />;
+  const needsOffset = pathname !== "/";
+
+  return (
+    <>
+      <Navbar />
+      {needsOffset ? <div className="h-[65px]" aria-hidden="true" /> : null}
+    </>
+  );
 }

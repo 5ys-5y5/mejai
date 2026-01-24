@@ -157,7 +157,7 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        <Card className="shadow-xl border-none">
+        <Card className="border-none">
           <CardHeader>
             <CardTitle>{steps[currentStep - 1].title}</CardTitle>
             <CardDescription>

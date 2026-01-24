@@ -143,7 +143,7 @@ export default function WebInputPage() {
               </div>
               <div
                 className={cn(
-                  "p-3 rounded-2xl text-sm shadow-sm",
+                  "p-3 rounded-2xl text-sm",
                   msg.role === "user"
                     ? "bg-primary text-primary-foreground rounded-tr-none"
                     : "bg-background rounded-tl-none border"

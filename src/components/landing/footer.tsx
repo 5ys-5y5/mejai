@@ -1,22 +1,27 @@
 ﻿"use client";
 
 import Link from "next/link";
+import type { LandingSettings } from "@/lib/landingSettings";
 
-export function Footer() {
+export function Footer({ settings }: { settings: LandingSettings }) {
   return (
-    <footer className="py-20 bg-zinc-50 border-t border-zinc-200">
+    <footer
+      className="bg-zinc-50 border-t border-zinc-200"
+      style={{
+        paddingTop: settings.footerPaddingTop,
+        paddingBottom: settings.footerPaddingBottom,
+        marginTop: settings.footerMarginTop,
+        marginBottom: settings.footerMarginBottom,
+      }}
+    >
       <div className="container mx-auto px-6">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-12 mb-20">
           <div className="col-span-2">
             <Link href="/" className="text-2xl font-bold tracking-tighter mb-6 block">
-              Mejai
+              {settings.footerBrand}
             </Link>
-            <p className="text-zinc-500 text-sm leading-relaxed max-w-xs">
-              전화 상담의 전 과정을 자동화하고 지능화합니다.
-              <br />
-              (주)메자이 | 대표자 홍길동
-              <br />
-              서울특별시 강남구 테헤란로 123
+            <p className="text-zinc-500 text-sm leading-relaxed max-w-xs whitespace-pre-line">
+              {settings.footerDescription}
             </p>
           </div>
           <div>
@@ -81,9 +86,7 @@ export function Footer() {
           </div>
         </div>
         <div className="pt-8 border-t border-zinc-200 flex flex-col md:flex-row justify-between items-center gap-6">
-          <p className="text-zinc-400 text-xs">
-            © 2026 Mejai. 모든 권리 보유.
-          </p>
+          <p className="text-zinc-400 text-xs">{settings.footerCopyright}</p>
           <div className="flex gap-8">
             <Link href="#" className="text-zinc-400 hover:text-black transition-colors text-xs">
               트위터

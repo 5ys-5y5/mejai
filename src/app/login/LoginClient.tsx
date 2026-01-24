@@ -54,7 +54,7 @@ export default function LoginClient() {
       footer={
         <span>
           계정이 없나요?{" "}
-          <Link className="text-emerald-700 hover:underline" href="/signup">
+          <Link className="text-emerald-700 hover:underline" href="/signup?from=login">
             회원가입
           </Link>
         </span>

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardHeader } from "@/components/ui/Card";
 import {
   Phone,
   RotateCcw,
@@ -84,28 +83,45 @@ export default function DemoPage() {
     setCurrentStep(0);
   };
 
+  function CardShell({ children, className }: { children: React.ReactNode; className?: string }) {
+    return (
+      <div className={cn("rounded-2xl border border-slate-200 bg-white", className)}>
+        {children}
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-accent/10 pt-24 pb-12 px-4">
-      <div className="max-w-4xl mx-auto space-y-12">
-        <div className="text-center space-y-4">
-          <h1 className="text-4xl font-bold">인터랙티브 데모</h1>
-          <p className="text-lg text-muted-foreground">
-            인공지능 상담봇이 실제 통화를 처리하는 과정을 단계별로 확인하세요.
+    <div className="min-h-screen bg-slate-50 px-4 py-12">
+      <div className="mx-auto w-full max-w-6xl space-y-10">
+        <div className="flex flex-col gap-3">
+          <span className="text-xs font-semibold tracking-[0.25em] uppercase text-slate-400">
+            Demo
+          </span>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900">
+            인터랙티브 상담 흐름
+          </h1>
+          <p className="text-sm md:text-base text-slate-600 max-w-2xl">
+            Mejai가 통화 흐름을 어떻게 분석하고 응답을 생성하는지 단계별로 확인하세요.
           </p>
         </div>
 
-        <div className="grid lg:grid-cols-5 gap-8">
-          <Card className="lg:col-span-3 border-none shadow-xl overflow-hidden min-h-[500px] flex flex-col">
-            <CardHeader className="bg-primary text-primary-foreground py-4 flex flex-row items-center justify-between">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <CardShell className="flex min-h-[520px] flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                  <Phone className="w-4 h-4 fill-white" />
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white">
+                  <Phone className="h-4 w-4 text-slate-700" />
                 </div>
-                <span className="font-bold text-sm">실시간 통화 시뮬레이션</span>
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">실시간 통화 시뮬레이션</div>
+                  <div className="text-xs text-slate-500">자동 요약/확인/응답 흐름</div>
+                </div>
               </div>
-              <div className="text-[10px] bg-black/20 px-2 py-1 rounded">00:15 / 00:45</div>
-            </CardHeader>
-            <CardContent className="flex-1 p-6 space-y-6 overflow-y-auto">
+              <div className="text-xs text-slate-500">00:15 / 00:45</div>
+            </div>
+
+            <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
               {demoSteps.slice(0, currentStep + 1).map((step) => (
                 <div
                   key={step.id}
@@ -116,86 +132,85 @@ export default function DemoPage() {
                 >
                   <div
                     className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1 shadow-sm",
-                      step.role === "user"
-                        ? "bg-muted text-muted-foreground"
-                        : "bg-primary text-primary-foreground"
+                      "mt-1 flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700",
+                      step.role === "user" ? "" : "bg-slate-900 text-white border-slate-900"
                     )}
                   >
                     {step.role === "user" ? (
-                      <User className="w-4 h-4" />
+                      <User className="h-4 w-4" />
                     ) : (
-                      <Bot className="w-4 h-4" />
+                      <Bot className="h-4 w-4" />
                     )}
                   </div>
                   <div
                     className={cn(
-                      "p-4 rounded-2xl text-sm leading-relaxed max-w-[80%] shadow-sm",
+                      "max-w-[80%] rounded-2xl border px-4 py-3 text-sm leading-relaxed",
                       step.role === "user"
-                        ? "bg-accent/50 rounded-tl-none border"
-                        : "bg-primary/5 border border-primary/20 rounded-tr-none"
+                        ? "bg-slate-50 border-slate-200"
+                        : "bg-white border-slate-200"
                     )}
                   >
-                    <div className="text-[10px] font-bold uppercase tracking-wider mb-1 opacity-50">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 mb-2">
                       {step.title}
                     </div>
-                    <p className="whitespace-pre-wrap">{step.message}</p>
+                    <p className="whitespace-pre-wrap text-slate-800">{step.message}</p>
                   </div>
                 </div>
               ))}
-            </CardContent>
-            <div className="p-6 border-t bg-muted/20 flex justify-between items-center">
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={reset} disabled={currentStep === 0}>
-                  <RotateCcw className="w-4 h-4 mr-2" /> 초기화
-                </Button>
-              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-4">
+              <Button variant="outline" size="sm" onClick={reset} disabled={currentStep === 0}>
+                <RotateCcw className="mr-2 h-4 w-4" /> 초기화
+              </Button>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" onClick={prevStep} disabled={currentStep === 0}>
-                  <ChevronLeft className="w-4 h-4 mr-2" /> 이전
+                  <ChevronLeft className="mr-2 h-4 w-4" /> 이전
                 </Button>
                 <Button size="sm" onClick={nextStep} disabled={currentStep === demoSteps.length - 1}>
-                  다음 단계 <ChevronRight className="w-4 h-4 ml-2" />
+                  다음 단계 <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             </div>
-          </Card>
+          </CardShell>
 
-          <div className="lg:col-span-2 space-y-6">
-            <h3 className="text-xl font-bold flex items-center gap-2">
-              <Database className="w-5 h-5 text-primary" /> 처리 로직 설명
-            </h3>
-            <div className="space-y-4">
+          <CardShell className="flex flex-col gap-4 p-5">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+              <Database className="h-4 w-4 text-slate-600" /> 처리 로직 설명
+            </div>
+            <div className="space-y-3">
               {demoSteps.map((step, index) => (
-                <div
+                <button
                   key={step.id}
+                  type="button"
+                  onClick={() => setCurrentStep(index)}
                   className={cn(
-                    "p-4 rounded-xl border transition-all duration-300",
+                    "w-full rounded-xl border px-3 py-3 text-left transition-colors",
                     currentStep === index
-                      ? "bg-background shadow-lg border-primary border-l-4 translate-x-2"
-                      : "bg-muted/30 opacity-40 grayscale"
+                      ? "border-slate-400 bg-white"
+                      : "border-slate-200 bg-slate-50 text-slate-500"
                   )}
                 >
-                  <h4 className="font-bold text-sm mb-1">{step.title}</h4>
-                  <p className="text-xs text-muted-foreground">{step.detail}</p>
-                </div>
+                  <div className="text-xs font-semibold text-slate-700">{step.title}</div>
+                  <div className="mt-1 text-[11px] text-slate-500">{step.detail}</div>
+                </button>
               ))}
             </div>
 
             {currentStep === demoSteps.length - 1 && (
-              <div className="p-6 bg-primary/10 rounded-2xl border border-primary/20 animate-in zoom-in-95">
-                <h4 className="font-bold mb-2">시뮬레이션 완료!</h4>
-                <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-                  이제 실제 서비스에 적용해 상담 품질을 높여보세요.
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-sm font-semibold text-slate-900">시뮬레이션 완료</div>
+                <p className="mt-2 text-xs text-slate-600 leading-relaxed">
+                  실제 서비스로 이어서 설정을 진행해 보세요.
                 </p>
-                <Link href="/signup">
-                  <Button className="w-full h-11 text-xs">
-                    지금 바로 시작하기 <ArrowRight className="ml-2 w-4 h-4" />
+                <Link href="/login">
+                  <Button className="mt-4 w-full h-10 text-xs">
+                    지금 바로 시작하기 <ArrowRight className="ml-2 h-4 w-4" />
                   </Button>
                 </Link>
               </div>
             )}
-          </div>
+          </CardShell>
         </div>
       </div>
     </div>
