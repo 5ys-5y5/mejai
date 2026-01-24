@@ -5,8 +5,35 @@ import { Button } from "@/components/ui/Button";
 import Link from "next/link";
 import { ArrowRight, PlayCircle, Sparkles } from "lucide-react";
 import type { LandingSettings } from "@/lib/landingSettings";
+import { useEffect, useState } from "react";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export function Hero({ settings }: { settings: LandingSettings }) {
+  const [isAuthed, setIsAuthed] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    const supabase = getSupabaseClient();
+    if (!supabase) return () => {};
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+      setIsAuthed(!!data.session);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      setIsAuthed(!!session);
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
+
+  const primaryHref = isAuthed ? "/app" : "/login";
+
   return (
     <section className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-white antialiased px-0 !pt-0 !pb-0 md:!pt-0 md:!pb-0">
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -69,8 +96,11 @@ export function Hero({ settings }: { settings: LandingSettings }) {
               <Button
                 size="lg"
                 className="h-20 px-14 text-2xl rounded-full bg-black text-white hover:bg-zinc-800 transition-all active:scale-95"
+                asChild
               >
-                {settings.primaryCta} <ArrowRight className="ml-3 w-6 h-6" />
+                <Link href={primaryHref} className="inline-flex items-center">
+                  {settings.primaryCta} <ArrowRight className="ml-3 w-6 h-6" />
+                </Link>
               </Button>
               <Button
                 variant="ghost"
