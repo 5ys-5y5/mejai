@@ -1,4 +1,18 @@
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
+
+type ServerUserError = { error: "UNAUTHORIZED" };
+
+type ServerUserSuccess = { supabase: SupabaseClient; user: User };
+
+type ServerContextError =
+  | ServerUserError
+  | { error: "ORG_LOOKUP_FAILED" }
+  | { error: "ORG_NOT_FOUND" }
+  | { error: "ORG_PENDING" };
+
+type ServerContextSuccess = ServerUserSuccess & { orgId: string; orgRole: string };
+
 
 function parseCookies(cookieHeader?: string) {
   if (!cookieHeader) return new Map<string, string>();
@@ -75,7 +89,10 @@ export function resolveAuthHeader(authHeader?: string, cookieHeader?: string) {
   return token ? `Bearer ${token}` : "";
 }
 
-export async function getServerUser(authHeader: string, cookieHeader?: string) {
+export async function getServerUser(
+  authHeader: string,
+  cookieHeader?: string
+): Promise<ServerUserSuccess | ServerUserError> {
   const header = resolveAuthHeader(authHeader, cookieHeader);
 
   if (!header) {
@@ -94,7 +111,10 @@ export async function getServerUser(authHeader: string, cookieHeader?: string) {
   };
 }
 
-export async function getServerContext(authHeader: string, cookieHeader?: string) {
+export async function getServerContext(
+  authHeader: string,
+  cookieHeader?: string
+): Promise<ServerContextSuccess | ServerContextError> {
   const userContext = await getServerUser(authHeader, cookieHeader);
   if ("error" in userContext) {
     return userContext;
