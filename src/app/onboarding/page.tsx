@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import {
@@ -36,7 +36,30 @@ export default function OnboardingPage() {
   const [currentStep, setCurrentStep] = useState(1);
   const [orgName, setOrgName] = useState("");
   const [ownerName, setOwnerName] = useState("");
+  const [businessNumber, setBusinessNumber] = useState("");
+  const [existingOrg, setExistingOrg] = useState<{
+    id: string;
+    name: string;
+    owner_id: string;
+    business_registration_number: string | null;
+  } | null>(null);
+  const [isCheckingOrg, setIsCheckingOrg] = useState(false);
+  const [nameLocked, setNameLocked] = useState(false);
   const router = useRouter();
+
+  const normalizedBusinessNumber = useMemo(
+    () => businessNumber.replace(/\D/g, "").slice(0, 10),
+    [businessNumber]
+  );
+
+  const formattedBusinessNumber = useMemo(() => {
+    const digits = normalizedBusinessNumber;
+    if (!digits) return "";
+    const part1 = digits.slice(0, 3);
+    const part2 = digits.slice(3, 5);
+    const part3 = digits.slice(5, 10);
+    return [part1, part2, part3].filter(Boolean).join("-");
+  }, [normalizedBusinessNumber]);
 
   useEffect(() => {
     let mounted = true;
@@ -52,7 +75,65 @@ export default function OnboardingPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (normalizedBusinessNumber.length !== 10) {
+      setExistingOrg(null);
+      setNameLocked(false);
+      return;
+    }
+
+    let cancelled = false;
+    const supabase = getSupabaseClient();
+    if (!supabase) return () => {};
+
+    const timer = setTimeout(async () => {
+      setIsCheckingOrg(true);
+      const { data, error } = await supabase
+        .from("organizations")
+        .select("id, name, owner_id, business_registration_number")
+        .eq("business_registration_number", normalizedBusinessNumber)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (error) {
+        setExistingOrg(null);
+        setNameLocked(false);
+        setIsCheckingOrg(false);
+        return;
+      }
+
+      if (data) {
+        setExistingOrg(data);
+        setNameLocked(true);
+        if (!orgName.trim() || orgName.trim() !== data.name) {
+          setOrgName(data.name);
+          toast.info("해당 사업자 등록번호로 등록된 사업체 공식 명칭으로 자동 정정했습니다.");
+        }
+      } else {
+        setExistingOrg(null);
+        setNameLocked(false);
+      }
+      setIsCheckingOrg(false);
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [normalizedBusinessNumber]);
+
   const nextStep = async () => {
+    if (currentStep === 1) {
+      if (!orgName.trim()) {
+        toast.error("사업체 공식 명칭을 입력해 주세요.");
+        return;
+      }
+      if (normalizedBusinessNumber.length !== 10) {
+        toast.error("사업자 등록번호를 정확히 입력해 주세요.");
+        return;
+      }
+    }
+
     if (currentStep < 4) {
       setCurrentStep(currentStep + 1);
       return;
@@ -60,6 +141,11 @@ export default function OnboardingPage() {
 
     if (!orgName.trim()) {
       toast.error("사업체 공식 명칭을 입력해 주세요.");
+      setCurrentStep(1);
+      return;
+    }
+    if (normalizedBusinessNumber.length !== 10) {
+      toast.error("사업자 등록번호를 정확히 입력해 주세요.");
       setCurrentStep(1);
       return;
     }
@@ -76,11 +162,66 @@ export default function OnboardingPage() {
       return;
     }
 
+    if (existingOrg) {
+      if (orgName.trim() !== existingOrg.name) {
+        setOrgName(existingOrg.name);
+        toast.error("기존에 등록된 사업체 공식 명칭과 일치해야 합니다.");
+        setCurrentStep(1);
+        return;
+      }
+
+      if (existingOrg.owner_id !== userData.user.id) {
+        const { error: updateError } = await supabase
+          .from("organizations")
+          .update({ registrant_id: userData.user.id })
+          .eq("id", existingOrg.id);
+
+        if (updateError) {
+          toast.error(updateError.message || "등록자 정보 업데이트에 실패했습니다.");
+          return;
+        }
+
+        const { error: accessError } = await supabase.from("user_access").upsert({
+          user_id: userData.user.id,
+          org_id: existingOrg.id,
+          plan: "starter",
+          is_admin: false,
+          org_role: "pending",
+        });
+        if (accessError) {
+          toast.error(accessError.message || "승인 요청 생성에 실패했습니다.");
+          return;
+        }
+
+        toast.success("승인 요청이 접수되었습니다. 소유자 승인 후 이용할 수 있습니다.");
+        router.push("/app");
+        return;
+      }
+
+      const { error: accessError } = await supabase.from("user_access").upsert({
+        user_id: userData.user.id,
+        org_id: existingOrg.id,
+        plan: "starter",
+        is_admin: true,
+        org_role: "owner",
+      });
+      if (accessError) {
+        toast.error(accessError.message || "사용자 권한 생성에 실패했습니다.");
+        return;
+      }
+
+      toast.success("온보딩이 완료되었습니다.");
+      router.push("/app");
+      return;
+    }
+
     const { data: orgData, error: orgError } = await supabase
       .from("organizations")
       .insert({
         name: orgName.trim(),
         owner_id: userData.user.id,
+        registrant_id: userData.user.id,
+        business_registration_number: normalizedBusinessNumber,
       })
       .select("id")
       .single();
@@ -91,7 +232,7 @@ export default function OnboardingPage() {
     }
 
     if (orgData?.id) {
-      const { error: accessError } = await supabase.from("user_access").insert({
+      const { error: accessError } = await supabase.from("user_access").upsert({
         user_id: userData.user.id,
         org_id: orgData.id,
         plan: "starter",
@@ -176,11 +317,30 @@ export default function OnboardingPage() {
                     placeholder="(주) 메자이"
                     value={orgName}
                     onChange={(e) => setOrgName(e.target.value)}
+                    readOnly={nameLocked}
                   />
+                  {nameLocked ? (
+                    <p className="text-xs text-muted-foreground">
+                      해당 사업자 등록번호로 등록된 명칭이 자동 적용됩니다.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">사업자 등록번호</label>
-                  <Input placeholder="000-00-00000" />
+                  <Input
+                    placeholder="000-00-00000"
+                    value={formattedBusinessNumber}
+                    onChange={(e) => setBusinessNumber(e.target.value)}
+                  />
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {isCheckingOrg ? (
+                      <span>기존 등록 여부 확인 중...</span>
+                    ) : existingOrg ? (
+                      <span>기존 사업체가 확인되었습니다. 소유자 승인 후 이용할 수 있습니다.</span>
+                    ) : (
+                      <span>사업자 등록번호는 10자리 숫자입니다.</span>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">관리자 이름</label>

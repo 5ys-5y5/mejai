@@ -63,6 +63,7 @@ export default function DashboardPage() {
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [orgId, setOrgId] = useState<string | null>(null);
+  const [orgPending, setOrgPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [simulating, setSimulating] = useState(false);
   const [simulateError, setSimulateError] = useState<string | null>(null);
@@ -97,21 +98,28 @@ export default function DashboardPage() {
     }
 
     try {
-      const profile = await apiFetch<{ plan: string; is_admin: boolean }>("/api/user-profile");
+      const profile = await apiFetch<{
+        plan: string;
+        is_admin: boolean;
+        org_role: string;
+        org_id: string | null;
+      }>("/api/user-profile");
+      const pending = profile.org_role === "pending";
       setIsAdmin(Boolean(profile.is_admin));
       setPlan(profile.plan || "starter");
+      setOrgPending(pending);
+      setOrgId(profile.org_id || null);
+      if (pending || !profile.org_id) {
+        setSessions([]);
+        setReviewQueue([]);
+        setAgents([]);
+        setLoading(false);
+        return;
+      }
     } catch {
       setIsAdmin(false);
       setPlan("starter");
-    }
-
-    const { data: org, error: orgError } = await supabase
-      .from("organizations")
-      .select("id")
-      .eq("owner_id", userData.user.id)
-      .maybeSingle();
-
-    if (orgError || !org) {
+      setOrgPending(false);
       setOrgId(null);
       setSessions([]);
       setReviewQueue([]);
@@ -142,7 +150,6 @@ export default function DashboardPage() {
       }
     });
 
-    setOrgId(org.id);
     setSessions(sessionRows);
     setReviewQueue(reviewRows);
     setAgents([...agentMap.values()]);
@@ -276,8 +283,17 @@ export default function DashboardPage() {
             </div>
           ) : null}
 
-          {!orgId ? (
+          {orgPending ? (
             <CardShell className="p-5">
+              <div className="text-sm font-semibold text-slate-900">사업체 승인 대기 중입니다.</div>
+              <div className="mt-2 text-sm text-slate-600">
+                사업자 등록번호 소유자의 승인 후 서비스를 이용할 수 있습니다.
+              </div>
+            </CardShell>
+          ) : null}
+
+          {!orgId ? (
+            <CardShell className="bg-amber-50 p-5">
               <div className="text-sm font-semibold text-slate-900">조직 정보가 없습니다.</div>
               <div className="mt-2 text-sm text-slate-600">
                 이메일 인증 후 온보딩에서 조직 정보를 입력해 주세요.
@@ -290,13 +306,15 @@ export default function DashboardPage() {
             </CardShell>
           ) : null}
 
+          {isAdmin ? <div className="border-t border-slate-200" /> : null}
+
           {error ? (
             <CardShell className="p-5">
               <div className="text-sm text-rose-600">{error}</div>
             </CardShell>
           ) : null}
 
-          <div className="rounded-2xl bg-slate-100/40 p-4 space-y-4">
+          <div className="rounded-2xl space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <Metric label="통화 수" value={loading ? "-" : String(summary.totalCalls)} sub="" />
               <Metric label="평균 통화 시간" value={loading ? "-" : fmtDuration(summary.avgDurationSec)} sub="" />

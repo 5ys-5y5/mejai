@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerContext } from "@/lib/serverAuth";
+import { getServerUser } from "@/lib/serverAuth";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
-  const context = await getServerContext(authHeader, cookieHeader);
+  const context = await getServerUser(authHeader, cookieHeader);
   if ("error" in context) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }

@@ -75,7 +75,7 @@ export function resolveAuthHeader(authHeader?: string, cookieHeader?: string) {
   return token ? `Bearer ${token}` : "";
 }
 
-export async function getServerContext(authHeader: string, cookieHeader?: string) {
+export async function getServerUser(authHeader: string, cookieHeader?: string) {
   const header = resolveAuthHeader(authHeader, cookieHeader);
 
   if (!header) {
@@ -88,23 +88,42 @@ export async function getServerContext(authHeader: string, cookieHeader?: string
     return { error: "UNAUTHORIZED" as const };
   }
 
-  const { data: org, error: orgError } = await supabase
-    .from("organizations")
-    .select("id")
-    .eq("owner_id", userData.user.id)
+  return {
+    supabase,
+    user: userData.user,
+  };
+}
+
+export async function getServerContext(authHeader: string, cookieHeader?: string) {
+  const userContext = await getServerUser(authHeader, cookieHeader);
+  if ("error" in userContext) {
+    return userContext;
+  }
+
+  const { supabase, user } = userContext;
+
+  const { data: access, error: accessError } = await supabase
+    .from("user_access")
+    .select("org_id, org_role")
+    .eq("user_id", user.id)
     .maybeSingle();
 
-  if (orgError) {
+  if (accessError) {
     return { error: "ORG_LOOKUP_FAILED" as const };
   }
 
-  if (!org) {
+  if (!access?.org_id) {
     return { error: "ORG_NOT_FOUND" as const };
+  }
+
+  if (access.org_role === "pending") {
+    return { error: "ORG_PENDING" as const };
   }
 
   return {
     supabase,
-    user: userData.user,
-    orgId: org.id,
+    user,
+    orgId: access.org_id,
+    orgRole: access.org_role || "operator",
   };
 }
