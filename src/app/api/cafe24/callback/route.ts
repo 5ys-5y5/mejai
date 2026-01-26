@@ -101,8 +101,9 @@ export async function GET(req: NextRequest) {
     return new NextResponse(`DB read failed: ${existingError.message}`, { status: 500 });
   }
   const existingProviders = (existing?.providers || {}) as Record<string, unknown>;
+  const existingCafe24 = (existingProviders.cafe24 ?? {}) as Record<string, unknown>;
   existingProviders.cafe24 = {
-    ...existingProviders.cafe24,
+    ...existingCafe24,
     mall_id: tokenJson.mall_id || mallId,
     client_id: clientId,
     client_secret: clientSecret,
