@@ -13,6 +13,13 @@ type ServerContextError =
 
 type ServerContextSuccess = ServerUserSuccess & { orgId: string; orgRole: string };
 
+function isUuid(value: string | null | undefined) {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
 
 function parseCookies(cookieHeader?: string) {
   if (!cookieHeader) return new Map<string, string>();
@@ -138,6 +145,13 @@ export async function getServerContext(
 
   if (access.org_role === "pending") {
     return { error: "ORG_PENDING" as const };
+  }
+
+  if (!isUuid(access.org_id)) {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("[serverAuth] invalid org_id", { org_id: access.org_id, user_id: user.id });
+    }
+    return { error: "ORG_NOT_FOUND" as const };
   }
 
   return {

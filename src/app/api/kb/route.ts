@@ -1,6 +1,6 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { getServerContext } from "@/lib/serverAuth";
+import crypto from "crypto";
 
 function parseOrder(orderParam: string | null) {
   if (!orderParam) return { field: "created_at", ascending: false };
@@ -10,11 +10,11 @@ function parseOrder(orderParam: string | null) {
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
-  if (!authHeader) {
-    return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const cookieHeader = req.headers.get("cookie") || "";
+  const context = await getServerContext(authHeader, cookieHeader);
+  if ("error" in context) {
+    return NextResponse.json({ error: context.error }, { status: 401 });
   }
-
-  const supabase = createServerSupabaseClient(authHeader);
   const url = new URL(req.url);
   const limit = Math.min(Number(url.searchParams.get("limit") || 50), 100);
   const offset = Math.max(Number(url.searchParams.get("offset") || 0), 0);
@@ -23,11 +23,12 @@ export async function GET(req: NextRequest) {
   const orderParam = url.searchParams.get("order");
   const { field, ascending } = parseOrder(orderParam);
 
-  let query = supabase
+  let query = context.supabase
     .from("knowledge_base")
     .select("*", { count: "exact" })
     .order(field, { ascending })
-    .range(offset, offset + limit - 1);
+    .range(offset, offset + limit - 1)
+    .or(`org_id.eq.${context.orgId},org_id.is.null`);
 
   if (category) {
     query = query.eq("category", category);
@@ -59,7 +60,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
   }
 
+  const newId = crypto.randomUUID();
   const payload = {
+    id: newId,
+    parent_id: newId,
     title: body.title,
     content: body.content,
     category: body.category ?? null,

@@ -52,12 +52,19 @@ export default function LoginClient() {
     <AuthShell
       title="다시 오신 것을 환영합니다"
       footer={
-        <span>
-          계정이 없나요?{" "}
-          <Link className="text-emerald-700 hover:underline" href="/signup?from=login">
-            회원가입
-          </Link>
-        </span>
+        <div className="space-y-2">
+          <span className="block">
+            <Link className="text-emerald-700 hover:underline" href="/forgot">
+              비밀번호를 잊으셨나요?
+            </Link>
+          </span>
+          <span className="block">
+            계정이 없나요?{" "}
+            <Link className="text-emerald-700 hover:underline" href="/signup?from=login">
+              회원가입
+            </Link>
+          </span>
+        </div>
       }
     >
       <div className="space-y-4">
@@ -72,12 +79,7 @@ export default function LoginClient() {
         </label>
 
         <label className="block">
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-slate-600">비밀번호</div>
-            <Link href="/forgot" className="text-xs text-slate-500 hover:underline">
-              비밀번호를 잊으셨나요?
-            </Link>
-          </div>
+          <div className="text-xs text-slate-600">비밀번호</div>
           <Input
             value={pw}
             type="password"

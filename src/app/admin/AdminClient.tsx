@@ -9,6 +9,7 @@ import {
   saveLandingSettings,
   type LandingSettings,
 } from "@/lib/landingSettings";
+import { formatKstTime } from "@/lib/kst";
 
 type SectionKey =
   | "global"
@@ -172,13 +173,13 @@ export function AdminClient() {
 
   const handleSave = () => {
     saveLandingSettings(settings);
-    setSavedAt(new Date().toLocaleTimeString());
+    setSavedAt(formatKstTime(new Date().toISOString()));
   };
 
   const handleReset = () => {
     setSettings(defaultLandingSettings);
     saveLandingSettings(defaultLandingSettings);
-    setSavedAt(new Date().toLocaleTimeString());
+    setSavedAt(formatKstTime(new Date().toISOString()));
   };
 
   const renderFields = () => {

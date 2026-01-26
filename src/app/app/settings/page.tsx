@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -89,7 +89,7 @@ export default function SettingsPage() {
           {tab === "workspaces" ? (
             <Card>
               <div className="divide-y divide-slate-200">
-                <section className="flex items-center justify-between gap-3 p-4">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div>
                     <div className="text-sm font-semibold text-slate-900">워크스페이스</div>
                     <div className="mt-1 text-sm text-slate-600">성지용 워크스페이스</div>
@@ -98,7 +98,7 @@ export default function SettingsPage() {
                   <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
                     관리
                   </button>
-                </section>
+                </div>
               </div>
             </Card>
           ) : tab === "team" ? (
@@ -130,14 +130,14 @@ export default function SettingsPage() {
           ) : (
             <Card>
               <div className="divide-y divide-slate-200">
-                <section className="flex items-center justify-between gap-3 p-4">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
                     <p className="text-sm font-semibold text-slate-900">이메일 주소</p>
                     <p className="text-sm text-slate-600">{email}</p>
                   </div>
-                </section>
+                </div>
 
-                <section className="flex items-center justify-between gap-3 p-4">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
                     <p className="text-sm font-semibold text-slate-900">이름</p>
                     <p className="text-sm text-slate-600">{givenName}</p>
@@ -145,9 +145,9 @@ export default function SettingsPage() {
                   <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
                     이름 변경
                   </button>
-                </section>
+                </div>
 
-                <section className="flex items-center justify-between gap-3 p-4">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
                     <p className="text-sm font-semibold text-slate-900">현재 플랜</p>
                     <p className="text-sm text-slate-600">무료</p>
@@ -158,9 +158,9 @@ export default function SettingsPage() {
                   >
                     구독 관리
                   </Link>
-                </section>
+                </div>
 
-                <section className="flex items-center justify-between gap-3 p-4">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
                     <p className="text-sm font-semibold text-slate-900">도움 패널</p>
                     <p className="text-sm text-slate-600">
@@ -178,9 +178,9 @@ export default function SettingsPage() {
                   >
                     {helpPanelEnabled ? "ON" : "OFF"}
                   </button>
-                </section>
+                </div>
 
-                <section className="flex items-center justify-between gap-3 p-4">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
                     <p className="text-sm font-semibold text-slate-900">모든 기기에서 로그아웃</p>
                     <p className="text-sm text-slate-600">모든 기기 및 세션에서 로그아웃합니다.</p>
@@ -188,9 +188,9 @@ export default function SettingsPage() {
                   <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
                     로그아웃
                   </button>
-                </section>
+                </div>
 
-                <section className="flex items-center justify-between gap-3 p-4">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
                     <p className="text-sm font-semibold text-rose-600">계정 삭제</p>
                     <p className="text-sm text-slate-600">계정 삭제는 되돌릴 수 없습니다.</p>
@@ -198,7 +198,7 @@ export default function SettingsPage() {
                   <button className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600 hover:bg-rose-100">
                     계정 삭제
                   </button>
-                </section>
+                </div>
               </div>
             </Card>
           )}

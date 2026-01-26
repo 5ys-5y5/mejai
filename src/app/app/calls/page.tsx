@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { IconChip } from "@/components/ui/IconChip";
 import { Clock, Headphones, PhoneCall } from "lucide-react";
 import { apiFetch } from "@/lib/apiClient";
+import { formatKstDateTime } from "@/lib/kst";
 
 type SessionItem = {
   id: string;
@@ -21,10 +22,7 @@ type SessionItem = {
 };
 
 function formatDate(value?: string | null) {
-  if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleString("ko-KR", { hour12: false });
+  return formatKstDateTime(value);
 }
 
 export default function CallsListPage({ headerSearch = "" }: { headerSearch?: string }) {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { AgentSelectPopover } from "@/components/AgentSelectPopover";
 import { DateRangePopover } from "@/components/DateRangePopover";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { apiFetch } from "@/lib/apiClient";
@@ -157,12 +157,26 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    let mounted = true;
-
     loadData();
+  }, [loadData]);
 
+  useEffect(() => {
+    const supabase = getSupabaseClient();
+    if (!supabase) return () => {};
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      loadData();
+    });
     return () => {
-      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [loadData]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadData();
+    }, 600000);
+    return () => {
+      clearInterval(timer);
     };
   }, [loadData]);
 
@@ -251,7 +265,16 @@ export default function DashboardPage() {
     <div className="px-5 md:px-8 py-6">
       <div className="mx-auto w-full max-w-6xl">
         <div className="space-y-6">
-          <div className="flex flex-wrap items-start justify-end gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <button
+              type="button"
+              onClick={loadData}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              aria-label="대시보드 새로 고침"
+            >
+              <RefreshCw className="h-4 w-4" />
+              
+            </button>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <div className="flex items-center gap-2">
                 <AgentSelectPopover

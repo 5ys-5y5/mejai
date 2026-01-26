@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
+import { getSupabaseClient } from "@/lib/supabaseClient";
 
 function BrandMark() {
   return (
@@ -33,7 +34,7 @@ function SidebarGroup({ header, children, collapsed }: { header: string; childre
   return (
     <div>
       {collapsed ? (
-        <div className="px-3 text-[11px] font-medium text-slate-400 uppercase tracking-wide">•</div>
+        <div className="px-3 text-[11px] font-medium text-slate-400 uppercase tracking-wide flex justify-center">•</div>
       ) : (
         <div className="px-3 text-[11px] font-medium text-slate-500">{header}</div>
       )}
@@ -86,6 +87,7 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
 
   useEffect(() => {
     let mounted = true;
+    let timer: ReturnType<typeof setInterval> | null = null;
     async function loadCount() {
       try {
         const res = await apiFetch<{ total: number }>("/api/review-queue?limit=1&offset=0");
@@ -95,8 +97,17 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
       }
     }
     loadCount();
+    timer = setInterval(loadCount, 30000);
+    const supabase = getSupabaseClient();
+    if (!supabase) return () => {};
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!mounted) return;
+      if (session) loadCount();
+    });
     return () => {
       mounted = false;
+      if (timer) clearInterval(timer);
+      sub?.subscription.unsubscribe();
     };
   }, []);
 
@@ -110,7 +121,7 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
     >
       <div className={cn("h-[60px] flex items-center", collapsed ? "px-3" : "px-5")}>
         {collapsed ? (
-          <div className="flex items-center justify-center">
+          <div className="flex items-center justify-center w-full">
             <Link href="/" aria-label="랜딩 페이지로 이동" title="Mejai">
               <div className="h-9 w-9 rounded-2xl bg-slate-200" />
             </Link>
@@ -156,10 +167,12 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
       <div className="mt-auto p-4 border-t border-slate-200 space-y-3">
         <Link
           href="/app/billing"
+          title="결제/플랜"
+          aria-label="결제/플랜"
           className="w-full inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
         >
-          <CreditCard className="h-4 w-4 mr-2 text-slate-600" />
-          결제/플랜
+          <CreditCard className={cn("h-4 w-4 text-slate-600", collapsed ? "" : "mr-2")} />
+          {collapsed ? null : "결제/플랜"}
         </Link>
       </div>
     </aside>

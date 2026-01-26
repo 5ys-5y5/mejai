@@ -8,6 +8,7 @@ import { IconChip } from "@/components/ui/IconChip";
 import { Input } from "@/components/ui/Input";
 import { CheckCircle2 } from "lucide-react";
 import { apiFetch } from "@/lib/apiClient";
+import { formatKstDate } from "@/lib/kst";
 
 type ReviewItem = {
   id: string;
@@ -19,10 +20,7 @@ type ReviewItem = {
 };
 
 function formatDate(value?: string | null) {
-  if (!value) return "-";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return value;
-  return d.toLocaleDateString("ko-KR");
+  return formatKstDate(value);
 }
 
 export default function ReviewPage() {
