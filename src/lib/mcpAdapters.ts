@@ -121,11 +121,13 @@ const adapters: Record<string, ToolAdapter> = {
     const result = await cafe24Request(cfg, `/boards/${encodeURIComponent(boardNo)}/articles`, {
       method: "POST",
       body: {
-        shop_no: cfg.shopNo,
-        writer,
-        title,
-        content,
-        client_ip: clientIp,
+        request: {
+          shop_no: cfg.shopNo,
+          writer,
+          title,
+          content,
+          client_ip: clientIp,
+        },
       },
     });
     if (!result.ok) {
