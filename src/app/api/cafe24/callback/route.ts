@@ -100,9 +100,9 @@ export async function GET(req: NextRequest) {
   if (existingError) {
     return new NextResponse(`DB read failed: ${existingError.message}`, { status: 500 });
   }
-  const providers = (existing?.providers || {}) as Record<string, unknown>;
-  providers.cafe24 = {
-    ...providers.cafe24,
+  const existingProviders = (existing?.providers || {}) as Record<string, unknown>;
+  existingProviders.cafe24 = {
+    ...existingProviders.cafe24,
     mall_id: tokenJson.mall_id || mallId,
     client_id: clientId,
     client_secret: clientSecret,
@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
   if (existing?.id) {
     const { error: updateError } = await context.supabase
       .from("auth_settings")
-      .update({ providers, updated_at: new Date().toISOString() })
+      .update({ providers: existingProviders, updated_at: new Date().toISOString() })
       .eq("id", existing.id);
     if (updateError) {
       return new NextResponse(`DB update failed: ${updateError.message}`, { status: 500 });
@@ -123,7 +123,7 @@ export async function GET(req: NextRequest) {
     const { error: insertError } = await context.supabase.from("auth_settings").insert({
       org_id: context.orgId,
       user_id: context.user.id,
-      providers,
+      providers: existingProviders,
       updated_at: new Date().toISOString(),
     });
     if (insertError) {
