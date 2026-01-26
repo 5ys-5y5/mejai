@@ -115,14 +115,14 @@ const adapters: Record<string, ToolAdapter> = {
       return { status: "error", error: { code: "INVALID_INPUT", message: "board_no is required" } };
     }
     const writer = String(params.writer || "mejai");
-    const title = String(params.title || params.summary || "Support request");
+    const subject = String(params.title || params.summary || "Support request");
     const content = String(params.content || params.summary || "");
     const clientIp = String(params.client_ip || "1.1.1.1");
     const requestBody: Record<string, unknown> = {
       shop_no: cfg.shopNo,
       board_no: boardNo,
       writer,
-      title,
+      subject,
       content,
       client_ip: clientIp,
     };
