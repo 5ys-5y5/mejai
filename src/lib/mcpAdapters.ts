@@ -20,8 +20,50 @@ function maskValue(value: string) {
   return `${value.slice(0, 2)}***${value.slice(-2)}`;
 }
 
+function maskOptional(value: unknown) {
+  if (typeof value !== "string") return value;
+  return maskValue(value);
+}
+
+function addOrderSummary(order: Record<string, unknown>) {
+  const paid = order.paid === "T";
+  const canceled = order.canceled === "T";
+  const shippingStatus = String(order.shipping_status || "");
+  return {
+    ...order,
+    order_summary: {
+      paid,
+      canceled,
+      shipping_status: shippingStatus,
+      order_date: order.order_date,
+      payment_method_name: order.payment_method_name,
+      total_amount_due: order.actual_order_amount?.total_amount_due ?? order.initial_order_amount?.total_amount_due,
+    },
+  };
+}
+
+function maskOrderSensitive(order: Record<string, unknown>) {
+  return {
+    ...order,
+    billing_name: maskOptional(order.billing_name),
+    bank_account_no: maskOptional(order.bank_account_no),
+    bank_account_owner_name: maskOptional(order.bank_account_owner_name),
+    member_id: maskOptional(order.member_id),
+  };
+}
+
+function formatOrderData(payload: Record<string, unknown>) {
+  if (!payload || typeof payload !== "object" || !("order" in payload)) return payload;
+  const order = (payload as { order?: Record<string, unknown> }).order;
+  if (!order) return payload;
+  const summarized = addOrderSummary(order);
+  const masked = maskOrderSensitive(summarized);
+  return { ...payload, order: masked };
+}
+
 type Cafe24ProviderConfig = {
   mall_id?: string;
+  scope?: string;
   client_id?: string;
   client_secret?: string;
   access_token?: string;
@@ -38,6 +80,45 @@ type AuthSettingsRow = {
   providers: Record<string, Cafe24ProviderConfig | undefined>;
 };
 
+function readEnv(name: string) {
+  return (process.env[name] || "").trim();
+}
+
+async function bootstrapCafe24FromEnv(ctx: AdapterContext, row: AuthSettingsRow) {
+  const mallId = readEnv("CAFE24_MALL_ID");
+  const clientId = readEnv("CAFE24_CLIENT_ID");
+  const clientSecret = readEnv("CAFE24_CLIENT_SECRET_KEY");
+  const accessToken = readEnv("CAFE24_ACCESS_TOKEN");
+  const refreshToken = readEnv("CAFE24_REFRESH_TOKEN");
+  const scope = readEnv("CAFE24_SCOPE");
+  const shopNo = readEnv("CAFE24_SHOP_NO");
+  const boardNo = readEnv("CAFE24_BOARD_NO");
+  const expiresAt = readEnv("CAFE24_EXPIRES_AT");
+  if (!mallId || !accessToken || !refreshToken) return null;
+
+  const providers = (row.providers || {}) as Record<string, Cafe24ProviderConfig | undefined>;
+  const current = providers.cafe24 || {};
+  providers.cafe24 = {
+    ...current,
+    mall_id: mallId,
+    client_id: clientId || current.client_id,
+    client_secret: clientSecret || current.client_secret,
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_at: expiresAt || new Date().toISOString(),
+    scope: scope || current.scope,
+    shop_no: shopNo || current.shop_no,
+    board_no: boardNo || current.board_no,
+  };
+
+  await ctx.supabase
+    .from("auth_settings")
+    .update({ providers, updated_at: new Date().toISOString() })
+    .eq("id", row.id);
+
+  return providers.cafe24 || null;
+}
+
 async function getCafe24Config(ctx?: AdapterContext) {
   if (!ctx) {
     return { ok: false as const, error: "MISSING_CONTEXT" };
@@ -53,7 +134,13 @@ async function getCafe24Config(ctx?: AdapterContext) {
     return { ok: false as const, error: "CAFE24_TOKEN_NOT_FOUND" };
   }
   const row = data as AuthSettingsRow;
-  const cafe24 = row.providers?.cafe24 || {};
+  let cafe24 = row.providers?.cafe24 || {};
+  if (!cafe24.mall_id || !cafe24.access_token || !cafe24.refresh_token) {
+    const bootstrapped = await bootstrapCafe24FromEnv(ctx, row);
+    if (bootstrapped) {
+      cafe24 = bootstrapped;
+    }
+  }
   if (!cafe24.mall_id || !cafe24.access_token || !cafe24.refresh_token) {
     return { ok: false as const, error: "CAFE24_PROVIDER_CONFIG_MISSING" };
   }
@@ -356,9 +443,11 @@ const adapters: Record<string, ToolAdapter> = {
     if (!cfg.ok) {
       return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
     }
-    const cellphone = String(params.cellphone || "");
-    if (!cellphone) {
-      return { status: "error", error: { code: "INVALID_INPUT", message: "cellphone is required" } };
+    const rawCellphone = String(params.cellphone || "").trim();
+    const digitsOnly = rawCellphone.replace(/[^\d]/g, "");
+    const memberId = String((params.member_id ?? (params as { memberId?: unknown }).memberId ?? "")).trim();
+    if (!digitsOnly && !memberId && !rawCellphone) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "cellphone or member_id is required" } };
     }
     if (isExpired(cfg.expiresAt)) {
       const refreshed = await refreshCafe24Token({
@@ -375,8 +464,109 @@ const adapters: Record<string, ToolAdapter> = {
         return { status: "error", error: { code: "TOKEN_REFRESH_FAILED", message: refreshed.error } };
       }
     }
-    const result = await cafe24Request(cfg, `/customers`, {
-      query: { shop_no: cfg.shopNo, cellphone },
+    const hasCustomers = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return false;
+      const asObj = payload as { customers?: unknown; customersprivacy?: unknown };
+      const list = Array.isArray(asObj.customers)
+        ? asObj.customers
+        : Array.isArray(asObj.customersprivacy)
+          ? asObj.customersprivacy
+          : null;
+      return Array.isArray(list) && list.length > 0;
+    };
+    const debugSteps: Array<{
+      query: Record<string, string>;
+      ok: boolean;
+      hasCustomers: boolean;
+      error?: string;
+    }> = [];
+    const includeDebug = (params as { debug?: boolean }).debug === true;
+    const attachDebug = (data: Record<string, unknown>) => {
+      if (!includeDebug) return data;
+      return { ...data, _debug: debugSteps };
+    };
+
+    const buildQuery = (query: Record<string, string>) =>
+      Object.fromEntries(Object.entries(query).filter(([, value]) => value !== "")) as Record<string, string>;
+
+    if (memberId) {
+      const query = buildQuery({ shop_no: String(cfg.shopNo || ""), member_id: String(memberId || "") });
+      const result = await cafe24Request(cfg, `/customers`, { query });
+      debugSteps.push({
+        query,
+        ok: result.ok,
+        hasCustomers: result.ok ? hasCustomers(result.data) : false,
+        error: result.ok ? undefined : result.error,
+      });
+      if (!result.ok && result.error.includes("401")) {
+        const refreshed = await refreshCafe24Token({
+          settingsId: cfg.settingsId,
+          mallId: cfg.mallId,
+          clientId: cfg.clientId,
+          clientSecret: cfg.clientSecret,
+          refreshToken: cfg.refreshToken,
+          supabase: ctx!.supabase,
+        });
+        if (refreshed.ok) {
+          const retry = await cafe24Request(
+            { ...cfg, accessToken: refreshed.accessToken },
+            `/customers`,
+            { query }
+          );
+          debugSteps.push({
+            query,
+            ok: retry.ok,
+            hasCustomers: retry.ok ? hasCustomers(retry.data) : false,
+            error: retry.ok ? undefined : retry.error,
+          });
+          if (retry.ok) return { status: "success", data: attachDebug(retry.data) };
+          return {
+            status: "error",
+            error: { code: "CAFE24_ERROR", message: retry.error, debug: debugSteps },
+          };
+        }
+      }
+      if (!result.ok) {
+        return {
+          status: "error",
+          error: { code: "CAFE24_ERROR", message: result.error, debug: debugSteps },
+        };
+      }
+      return { status: "success", data: attachDebug(result.data) };
+    }
+
+    const formatted = digitsOnly.length === 11
+      ? `${digitsOnly.slice(0, 3)}-${digitsOnly.slice(3, 7)}-${digitsOnly.slice(7)}`
+      : "";
+    const candidates = Array.from(new Set([rawCellphone, digitsOnly, formatted].filter(Boolean)));
+    for (const cellphone of candidates) {
+      const query = buildQuery({ shop_no: String(cfg.shopNo || ""), cellphone: String(cellphone || "") });
+      const result = await cafe24Request(cfg, `/customers`, { query });
+      debugSteps.push({
+        query,
+        ok: result.ok,
+        hasCustomers: result.ok ? hasCustomers(result.data) : false,
+        error: result.ok ? undefined : result.error,
+      });
+      if (result.ok) {
+        return { status: "success", data: attachDebug(result.data) };
+      }
+    }
+
+    const finalQuery = buildQuery({
+      shop_no: String(cfg.shopNo || ""),
+      cellphone: String(digitsOnly || rawCellphone || ""),
+    });
+    if (!finalQuery.cellphone) {
+      debugSteps.push({ query: finalQuery, ok: false, hasCustomers: false, error: "Missing cellphone" });
+      return { status: "error", error: { code: "INVALID_INPUT", message: "cellphone is required", debug: debugSteps } };
+    }
+    const result = await cafe24Request(cfg, `/customers`, { query: finalQuery });
+    debugSteps.push({
+      query: finalQuery,
+      ok: result.ok,
+      hasCustomers: result.ok ? hasCustomers(result.data) : false,
+      error: result.ok ? undefined : result.error,
     });
     if (!result.ok && result.error.includes("401")) {
       const refreshed = await refreshCafe24Token({
@@ -391,15 +581,24 @@ const adapters: Record<string, ToolAdapter> = {
         const retry = await cafe24Request(
           { ...cfg, accessToken: refreshed.accessToken },
           `/customers`,
-          { query: { shop_no: cfg.shopNo, cellphone } }
+          { query: finalQuery }
         );
-        if (retry.ok) return { status: "success", data: retry.data };
+        debugSteps.push({
+          query: finalQuery,
+          ok: retry.ok,
+          hasCustomers: retry.ok ? hasCustomers(retry.data) : false,
+          error: retry.ok ? undefined : retry.error,
+        });
+        if (retry.ok) return { status: "success", data: attachDebug(retry.data) };
       }
     }
     if (!result.ok) {
-      return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
+      return {
+        status: "error",
+        error: { code: "CAFE24_ERROR", message: result.error, debug: debugSteps },
+      };
     }
-    return { status: "success", data: result.data };
+    return { status: "success", data: attachDebug(result.data) };
   },
   lookup_order: async (params, ctx) => {
     const orderId = String(params.order_id || "");
@@ -443,13 +642,13 @@ const adapters: Record<string, ToolAdapter> = {
           `/orders/${encodeURIComponent(orderId)}`,
           { query: { shop_no: cfg.shopNo } }
         );
-        if (retry.ok) return { status: "success", data: retry.data };
+        if (retry.ok) return { status: "success", data: formatOrderData(retry.data) };
       }
     }
     if (!result.ok) {
       return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
     }
-    return { status: "success", data: result.data };
+    return { status: "success", data: formatOrderData(result.data) };
   },
   track_shipment: async (params, ctx) => {
     const orderId = String(params.order_id || params.tracking_number || "");
