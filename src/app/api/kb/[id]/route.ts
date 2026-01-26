@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type RouteContext = { params: { id: string } };
+type RouteContext = { params: Promise<{ id: string }> };
 
 function isUuid(value: string | null | undefined) {
   if (!value) return false;
@@ -62,11 +62,12 @@ function buildParentQuery(client: SupabaseClient, parentId: string, orgId: strin
 }
 
 export async function GET(req: NextRequest, context: RouteContext) {
+  const { id: routeId } = await context.params;
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
   if (process.env.NODE_ENV !== "production") {
     console.debug("[api/kb/[id]] GET start", {
-      id: context.params.id,
+      id: routeId,
       hasAuthHeader: Boolean(authHeader),
       hasCookieHeader: Boolean(cookieHeader),
     });
@@ -79,7 +80,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: serverContext.error }, { status: 401 });
   }
 
-  const rawId = context.params.id;
+  const rawId = routeId;
   const urlId = req.nextUrl.pathname.split("/").pop() || "";
   const id = normalizeId(rawId && rawId !== "undefined" ? rawId : urlId);
   if (!isUuid(id)) {
@@ -120,6 +121,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
 }
 
 export async function PATCH(req: NextRequest, context: RouteContext) {
+  const { id: routeId } = await context.params;
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
   const serverContext = await getServerContext(authHeader, cookieHeader);
@@ -151,7 +153,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "INVALID_CONTENT" }, { status: 400 });
   }
 
-  const rawId = context.params.id;
+  const rawId = routeId;
   const urlId = req.nextUrl.pathname.split("/").pop() || "";
   const id = normalizeId(rawId && rawId !== "undefined" ? rawId : urlId);
   let { data: existing, error: fetchError } = await buildScopedQuery(
@@ -255,6 +257,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 }
 
 export async function DELETE(req: NextRequest, context: RouteContext) {
+  const { id: routeId } = await context.params;
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
   const serverContext = await getServerContext(authHeader, cookieHeader);
@@ -262,7 +265,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: serverContext.error }, { status: 401 });
   }
 
-  const rawId = context.params.id;
+  const rawId = routeId;
   const urlId = req.nextUrl.pathname.split("/").pop() || "";
   const id = normalizeId(rawId && rawId !== "undefined" ? rawId : urlId);
   const { data, error } = await serverContext.supabase
