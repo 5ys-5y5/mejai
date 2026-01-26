@@ -47,6 +47,9 @@
   - `POST /kb`
 - 감사 로그
   - `GET /audit-logs`
+- MCP
+  - `GET /mcp/tools`
+  - `POST /mcp/tools/call`
 
 ## 4) 요청/응답 스키마
 
@@ -217,6 +220,52 @@
     "created_at": "2026-01-21T01:30:00Z"
   }
 ]
+```
+
+### 4.10 MCP Tools
+#### GET /mcp/tools
+```json
+{
+  "items": [
+    {
+      "id": "uuid",
+      "name": "lookup_order",
+      "description": "주문 조회",
+      "schema": {
+        "type": "object",
+        "properties": { "order_id": { "type": "string" } },
+        "required": ["order_id"]
+      },
+      "version": "v1",
+      "policy": {
+        "is_allowed": true,
+        "allowed_scopes": ["read"],
+        "rate_limit_per_min": 30,
+        "masking_rules": { "field_paths": ["email"], "strategy": "mask" }
+      }
+    }
+  ]
+}
+```
+
+#### POST /mcp/tools/call
+```json
+{
+  "tool": "lookup_order",
+  "params": { "order_id": "A-1001" },
+  "session_id": "uuid"
+}
+```
+응답:
+```json
+{
+  "tool": "lookup_order",
+  "version": "v1",
+  "status": "success",
+  "data": { "status": "SHIPPED", "eta": "2026-01-28" },
+  "error": null,
+  "meta": { "latency_ms": 120 }
+}
 ```
 
 ## 5) 화면별 매핑
