@@ -47,13 +47,18 @@ function bumpVersion(value?: string | null) {
   return `${raw}-rev1`;
 }
 
+function isValidLlm(value?: string | null) {
+  if (!value) return false;
+  return value === "chatgpt" || value === "gemini";
+}
+
 function buildScopedQuery(client: SupabaseClient, id: string, orgId: string) {
-  return client.from("knowledge_base").select("*").eq("id", id).or(`org_id.eq.${orgId},org_id.is.null`);
+  return client.from("agent").select("*").eq("id", id).or(`org_id.eq.${orgId},org_id.is.null`);
 }
 
 function buildParentQuery(client: SupabaseClient, parentId: string, orgId: string) {
   return client
-    .from("knowledge_base")
+    .from("agent")
     .select("*")
     .eq("parent_id", parentId)
     .or(`org_id.eq.${orgId},org_id.is.null`)
@@ -65,18 +70,8 @@ export async function GET(req: NextRequest, context: RouteContext) {
   const { id: routeId } = await context.params;
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
-  if (process.env.NODE_ENV !== "production") {
-    console.debug("[api/kb/[id]] GET start", {
-      id: routeId,
-      hasAuthHeader: Boolean(authHeader),
-      hasCookieHeader: Boolean(cookieHeader),
-    });
-  }
   const serverContext = await getServerContext(authHeader, cookieHeader);
   if ("error" in serverContext) {
-    if (process.env.NODE_ENV !== "production") {
-      console.debug("[api/kb/[id]] GET auth error", { error: serverContext.error });
-    }
     return NextResponse.json({ error: serverContext.error }, { status: 401 });
   }
 
@@ -84,18 +79,12 @@ export async function GET(req: NextRequest, context: RouteContext) {
   const urlId = req.nextUrl.pathname.split("/").pop() || "";
   const id = normalizeId(rawId && rawId !== "undefined" ? rawId : urlId);
   if (!isUuid(id)) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[api/kb/[id]] GET invalid id", { rawId, urlId, id });
-      return NextResponse.json({ error: "INVALID_ID", rawId, urlId, normalizedId: id }, { status: 400 });
-    }
     return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
   }
+
   let { data, error } = await buildScopedQuery(serverContext.supabase, id, serverContext.orgId).maybeSingle();
 
   if (error) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[api/kb/[id]] GET query error", { id, error });
-    }
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
@@ -108,15 +97,9 @@ export async function GET(req: NextRequest, context: RouteContext) {
   }
 
   if (!data) {
-    if (process.env.NODE_ENV !== "production") {
-      console.debug("[api/kb/[id]] GET not found", { id, orgId: serverContext.orgId });
-    }
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  if (process.env.NODE_ENV !== "production") {
-    console.debug("[api/kb/[id]] GET ok", { id, orgId: serverContext.orgId });
-  }
   return NextResponse.json(data);
 }
 
@@ -135,27 +118,37 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   }
 
   const payload: {
-    title?: string;
-    content?: string;
-    category?: string | null;
-    llm?: string | null;
+    name?: string;
+    llm?: string;
+    kb_id?: string;
+    mcp_tool_ids?: string[];
+    agent_type?: string | null;
+    industry?: string | null;
+    use_case?: string | null;
+    website?: string | null;
+    goal?: string | null;
     is_active?: boolean;
   } = {};
 
-  if (typeof body.title === "string") payload.title = body.title;
-  if (typeof body.content === "string") payload.content = body.content;
-  if (body.category === null || typeof body.category === "string") payload.category = body.category;
-  if (body.llm === null || typeof body.llm === "string") payload.llm = body.llm;
+  if (typeof body.name === "string") payload.name = body.name;
+  if (typeof body.llm === "string") payload.llm = body.llm;
+  if (typeof body.kb_id === "string") payload.kb_id = body.kb_id;
+  if (Array.isArray(body.mcp_tool_ids)) payload.mcp_tool_ids = body.mcp_tool_ids;
+  if (body.agent_type === null || typeof body.agent_type === "string") payload.agent_type = body.agent_type;
+  if (body.industry === null || typeof body.industry === "string") payload.industry = body.industry;
+  if (body.use_case === null || typeof body.use_case === "string") payload.use_case = body.use_case;
+  if (body.website === null || typeof body.website === "string") payload.website = body.website;
+  if (body.goal === null || typeof body.goal === "string") payload.goal = body.goal;
   if (typeof body.is_active === "boolean") payload.is_active = body.is_active;
 
-  if (payload.title !== undefined && payload.title.trim().length === 0) {
-    return NextResponse.json({ error: "INVALID_TITLE" }, { status: 400 });
+  if (payload.name !== undefined && payload.name.trim().length === 0) {
+    return NextResponse.json({ error: "INVALID_NAME" }, { status: 400 });
   }
-  if (payload.content !== undefined && payload.content.trim().length === 0) {
-    return NextResponse.json({ error: "INVALID_CONTENT" }, { status: 400 });
-  }
-  if (payload.llm !== undefined && payload.llm !== null && payload.llm !== "chatgpt" && payload.llm !== "gemini") {
+  if (payload.llm !== undefined && !isValidLlm(payload.llm)) {
     return NextResponse.json({ error: "INVALID_LLM" }, { status: 400 });
+  }
+  if (payload.kb_id !== undefined && !isUuid(payload.kb_id)) {
+    return NextResponse.json({ error: "INVALID_KB_ID" }, { status: 400 });
   }
 
   const rawId = routeId;
@@ -183,30 +176,33 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   }
 
   const parentId = (existing as { parent_id?: string | null }).parent_id ?? existing.id;
-  const nextTitle = payload.title ?? existing.title;
-  const nextCategory = payload.category ?? existing.category ?? null;
-  const nextContent = payload.content ?? existing.content;
-  const nextLlm = payload.llm ?? existing.llm ?? null;
+  const nextName = payload.name ?? existing.name;
+  const nextLlm = payload.llm ?? existing.llm;
+  const nextKbId = payload.kb_id ?? existing.kb_id;
+  const nextMcpToolIds = payload.mcp_tool_ids ?? existing.mcp_tool_ids ?? [];
+  const nextAgentType = payload.agent_type ?? existing.agent_type ?? null;
+  const nextIndustry = payload.industry ?? existing.industry ?? null;
+  const nextUseCase = payload.use_case ?? existing.use_case ?? null;
+  const nextWebsite = payload.website ?? existing.website ?? null;
+  const nextGoal = payload.goal ?? existing.goal ?? null;
   const nextIsActive = payload.is_active ?? existing.is_active ?? true;
-  const contentChanged = nextContent !== (existing.content ?? "");
-  const llmChanged = (nextLlm ?? "") !== (existing.llm ?? "");
-  const titleChanged = nextTitle !== (existing.title ?? "");
-  const categoryChanged = (nextCategory ?? "") !== (existing.category ?? "");
 
-  if (titleChanged || categoryChanged) {
-    const { error: updateMetaError } = await serverContext.supabase
-      .from("knowledge_base")
-      .update({ title: nextTitle, category: nextCategory })
-      .eq("parent_id", parentId)
-      .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
-    if (updateMetaError) {
-      return NextResponse.json({ error: updateMetaError.message }, { status: 400 });
-    }
-  }
+  const mcpChanged =
+    JSON.stringify(nextMcpToolIds ?? []) !== JSON.stringify(existing.mcp_tool_ids ?? []);
+  const versionChanged =
+    nextName !== existing.name ||
+    nextLlm !== existing.llm ||
+    nextKbId !== existing.kb_id ||
+    nextAgentType !== (existing.agent_type ?? null) ||
+    nextIndustry !== (existing.industry ?? null) ||
+    nextUseCase !== (existing.use_case ?? null) ||
+    nextWebsite !== (existing.website ?? null) ||
+    nextGoal !== (existing.goal ?? null) ||
+    mcpChanged;
 
   if (nextIsActive) {
     const { error: deactivateError } = await serverContext.supabase
-      .from("knowledge_base")
+      .from("agent")
       .update({ is_active: false })
       .eq("parent_id", parentId)
       .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
@@ -218,34 +214,35 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   let data = existing as typeof existing;
   let error: { message: string } | null = null;
 
-  const versionChanged = contentChanged || llmChanged;
-
   if (versionChanged) {
     const insertPayload = {
       parent_id: parentId,
-      title: nextTitle,
-      content: nextContent,
-      category: nextCategory,
+      name: nextName,
       llm: nextLlm,
+      kb_id: nextKbId,
+      mcp_tool_ids: nextMcpToolIds,
+      agent_type: nextAgentType,
+      industry: nextIndustry,
+      use_case: nextUseCase,
+      website: nextWebsite,
+      goal: nextGoal,
       version: bumpVersion(existing.version),
       is_active: nextIsActive,
       org_id: existing.org_id ?? serverContext.orgId,
+      created_by: existing.created_by ?? serverContext.user.id,
     };
 
     const { data: inserted, error: insertError } = await serverContext.supabase
-      .from("knowledge_base")
+      .from("agent")
       .insert(insertPayload)
       .select("*")
       .single();
     data = inserted as typeof existing;
     error = insertError ? { message: insertError.message } : null;
-  } else if (payload.is_active !== undefined || titleChanged || categoryChanged) {
+  } else if (payload.is_active !== undefined) {
     const { data: updated, error: updateError } = await serverContext.supabase
-      .from("knowledge_base")
+      .from("agent")
       .update({
-        title: nextTitle,
-        category: nextCategory,
-        llm: nextLlm,
         is_active: nextIsActive,
       })
       .eq("id", existing.id)
@@ -258,55 +255,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
-  }
-
-  if (llmChanged && data?.id && data.id !== existing.id) {
-    const { data: agents, error: agentError } = await serverContext.supabase
-      .from("agent")
-      .select("*")
-      .eq("kb_id", existing.id)
-      .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
-
-    if (agentError) {
-      return NextResponse.json({ error: agentError.message }, { status: 400 });
-    }
-
-    const agentRows = agents || [];
-    for (const agent of agentRows) {
-      const agentParentId = agent.parent_id ?? agent.id;
-      const nextAgentIsActive = agent.is_active ?? true;
-      if (nextAgentIsActive) {
-        const { error: deactivateError } = await serverContext.supabase
-          .from("agent")
-          .update({ is_active: false })
-          .eq("parent_id", agentParentId)
-          .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
-        if (deactivateError) {
-          return NextResponse.json({ error: deactivateError.message }, { status: 400 });
-        }
-      }
-
-      const { error: insertError } = await serverContext.supabase.from("agent").insert({
-        parent_id: agentParentId,
-        name: agent.name,
-        llm: agent.llm,
-        kb_id: data.id,
-        mcp_tool_ids: agent.mcp_tool_ids ?? [],
-        agent_type: agent.agent_type ?? null,
-        industry: agent.industry ?? null,
-        use_case: agent.use_case ?? null,
-        website: agent.website ?? null,
-        goal: agent.goal ?? null,
-        version: bumpVersion(agent.version),
-        is_active: nextAgentIsActive,
-        org_id: agent.org_id ?? serverContext.orgId,
-        created_by: agent.created_by ?? serverContext.user.id,
-      });
-
-      if (insertError) {
-        return NextResponse.json({ error: insertError.message }, { status: 400 });
-      }
-    }
   }
 
   if (!data) {
@@ -329,7 +277,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
   const urlId = req.nextUrl.pathname.split("/").pop() || "";
   const id = normalizeId(rawId && rawId !== "undefined" ? rawId : urlId);
   const { data, error } = await serverContext.supabase
-    .from("knowledge_base")
+    .from("agent")
     .delete()
     .eq("id", id)
     .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)

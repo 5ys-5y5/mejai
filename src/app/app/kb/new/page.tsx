@@ -138,6 +138,7 @@ export default function NewKbPage() {
   const [category, setCategory] = useState("");
   const [version, setVersion] = useState("1.0");
   const [content, setContent] = useState("");
+  const [llm, setLlm] = useState<"chatgpt" | "gemini">("chatgpt");
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [usedBytes, setUsedBytes] = useState(0);
@@ -217,10 +218,12 @@ export default function NewKbPage() {
         content: string;
         category?: string | null;
         version?: string | null;
+        llm?: string;
         is_active: boolean;
       } = {
         title: title.trim(),
         content: content.trim(),
+        llm,
         is_active: isActive,
       };
 
@@ -282,7 +285,7 @@ export default function NewKbPage() {
               />
             </div>
 
-            <div className="grid gap-2 md:grid-cols-2">
+            <div className="grid gap-2 md:grid-cols-3">
               <div className="grid gap-2">
                 <label className="text-sm font-medium text-slate-900">카테고리</label>
                 <input
@@ -300,6 +303,17 @@ export default function NewKbPage() {
                   placeholder="예: 1.0"
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-900">LLM</label>
+                <select
+                  value={llm}
+                  onChange={(e) => setLlm(e.target.value === "gemini" ? "gemini" : "chatgpt")}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
+                >
+                  <option value="chatgpt">chatGPT</option>
+                  <option value="gemini">GEMINI</option>
+                </select>
               </div>
             </div>
 

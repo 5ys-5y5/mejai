@@ -20,6 +20,7 @@ type KbItem = {
   category: string | null;
   version: string | null;
   is_active: boolean | null;
+  llm?: string | null;
   created_at?: string | null;
 };
 
@@ -139,6 +140,7 @@ export default function EditKbPage() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [content, setContent] = useState("");
+  const [llm, setLlm] = useState<"chatgpt" | "gemini">("chatgpt");
   const [savingMeta, setSavingMeta] = useState(false);
   const [savingContent, setSavingContent] = useState(false);
   const [activeUpdateId, setActiveUpdateId] = useState<string | null>(null);
@@ -150,6 +152,7 @@ export default function EditKbPage() {
   const [baseTitle, setBaseTitle] = useState("");
   const [baseCategory, setBaseCategory] = useState<string | null>(null);
   const [baseContent, setBaseContent] = useState("");
+  const [baseLlm, setBaseLlm] = useState<"chatgpt" | "gemini">("chatgpt");
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const metaChanged = useMemo(() => {
     const nextTitle = title.trim();
@@ -163,13 +166,17 @@ export default function EditKbPage() {
     return content.trim() !== baseContent.trim();
   }, [content, baseContent]);
 
+  const llmChanged = useMemo(() => {
+    return llm !== baseLlm;
+  }, [llm, baseLlm]);
+
   const canSaveMeta = useMemo(() => {
     return metaChanged && title.trim().length > 0 && !savingMeta;
   }, [metaChanged, title, savingMeta]);
 
   const canSaveContent = useMemo(() => {
-    return contentChanged && content.trim().length > 0 && !savingContent;
-  }, [contentChanged, content, savingContent]);
+    return (contentChanged || llmChanged) && content.trim().length > 0 && !savingContent;
+  }, [contentChanged, llmChanged, content, savingContent]);
 
   useEffect(() => {
     let mounted = true;
@@ -183,9 +190,11 @@ export default function EditKbPage() {
         setTitle(res.title || "");
         setCategory(res.category || "");
         setCurrentVersion(res.version || "");
+        setLlm(res.llm === "gemini" ? "gemini" : "chatgpt");
         setBaseTitle(res.title || "");
         setBaseCategory(res.category ?? null);
         setBaseContent(res.content || "");
+        setBaseLlm(res.llm === "gemini" ? "gemini" : "chatgpt");
         setContent(res.content || "");
         setLoading(false);
       } catch (err) {
@@ -282,13 +291,13 @@ export default function EditKbPage() {
       toast.error("내용을 입력해 주세요.");
       return;
     }
-    if (!contentChanged) {
+    if (!contentChanged && !llmChanged) {
       toast.error("변경된 내용이 없습니다.");
       return;
     }
     setSavingContent(true);
     try {
-      const payload = { content: content.trim() };
+      const payload = { content: content.trim(), llm };
       const saved = await apiFetch<KbItem>(`/api/kb/${kbId}`, {
         method: "PATCH",
         headers: {
@@ -301,6 +310,8 @@ export default function EditKbPage() {
       setBaseContent(saved.content || "");
       setContent(saved.content || "");
       setCurrentVersion(saved.version || "");
+      setBaseLlm(saved.llm === "gemini" ? "gemini" : "chatgpt");
+      setLlm(saved.llm === "gemini" ? "gemini" : "chatgpt");
       await refreshItems();
       if (saved?.id && saved.id !== kbId) {
         router.replace(`/app/kb/${saved.id}`);
@@ -488,6 +499,17 @@ export default function EditKbPage() {
                     disabled
                     className="h-10 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 text-xs text-slate-500 cursor-not-allowed"
                   />
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-sm font-medium text-slate-900">LLM</label>
+                  <select
+                    value={llm}
+                    onChange={(e) => setLlm(e.target.value === "gemini" ? "gemini" : "chatgpt")}
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
+                  >
+                    <option value="chatgpt">chatGPT</option>
+                    <option value="gemini">GEMINI</option>
+                  </select>
                 </div>
               </div>
               <div className="grid gap-2">

@@ -1,272 +1,377 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { apiFetch } from "@/lib/apiClient";
 import { toast } from "sonner";
+import { formatKstDateTime } from "@/lib/kst";
 
-const agentTypes = [
+type MpcTool = {
+  id: string;
+  name: string;
+  description?: string | null;
+};
+
+type KbItem = {
+  id: string;
+  parent_id?: string | null;
+  title: string;
+  version: string | null;
+  is_active: boolean | null;
+  created_at?: string | null;
+  llm?: string | null;
+};
+
+type KbParentGroup = {
+  parentId: string;
+  title: string;
+  versions: KbItem[];
+};
+
+const llmOptions = [
   {
-    id: "blank",
-    title: "빈 에이전트",
-    description: "직접 대화를 설계하고 구성합니다.",
+    id: "chatgpt",
+    title: "chatGPT",
+    description: "대화형 작업에 최적화된 기본 모델",
   },
   {
-    id: "personal",
-    title: "개인 비서",
-    description: "메일, 일정, 개인 작업을 도와줍니다.",
-  },
-  {
-    id: "business",
-    title: "비즈니스 에이전트",
-    description: "업무 응대와 고객 지원에 최적화됩니다.",
+    id: "gemini",
+    title: "GEMINI",
+    description: "빠른 요약과 멀티모달 확장에 강점",
   },
 ];
 
-const industries = [
-  "리테일 & 이커머스",
-  "헬스케어 & 메디컬",
-  "금융 & 은행",
-  "부동산",
-  "교육 & 트레이닝",
-  "여행 & 호스피탈리티",
-  "자동차",
-  "전문 서비스",
-  "테크 & 소프트웨어",
-  "공공 & 정부",
-  "식음료",
-  "제조",
-  "피트니스 & 웰니스",
-  "법률 서비스",
-  "비영리",
-  "미디어 & 엔터테인먼트",
-  "기타",
-];
+const stepLabels = ["LLM 선택", "MCP 연결", "KB 선택", "에이전트 정보"];
 
-const useCases = [
-  "고객 지원",
-  "아웃바운드 세일즈",
-  "교육 & 학습",
-  "스케줄링",
-  "리드 검증",
-  "응답 대행",
-  "상품 추천",
-  "주문 추적",
-  "반품/교환",
-  "리드 생성",
-  "로열티 프로그램",
-  "기타",
-];
+function parseVersionParts(value?: string | null) {
+  if (!value) return null;
+  const raw = value.trim();
+  const match = raw.match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$/i);
+  if (!match) return null;
+  const major = Number(match[1] || 0);
+  const minor = Number(match[2] || 0);
+  const patch = Number(match[3] || 0);
+  return [major, minor, patch];
+}
 
-const stepLabels = ["에이전트 유형", "업종", "사용 목적", "상세 설정"];
+function compareVersions(a: KbItem, b: KbItem) {
+  const aParts = parseVersionParts(a.version);
+  const bParts = parseVersionParts(b.version);
+  if (aParts && bParts) {
+    for (let i = 0; i < 3; i += 1) {
+      if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
+    }
+  } else if (aParts && !bParts) {
+    return -1;
+  } else if (!aParts && bParts) {
+    return 1;
+  }
+  const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+  return bTime - aTime;
+}
 
-const personalUseCases = [
-  "개인 비서",
-  "학습 동반자",
-  "크리에이티브 도우미",
-  "헬스 & 웰니스",
-  "작업 관리",
-  "리서치 보조",
-  "기타",
-];
-
-const businessUseCases = [
-  "고객 지원",
-  "아웃바운드 세일즈",
-  "교육 & 학습",
-  "스케줄링",
-  "리드 검증",
-  "응답 대행",
-  "상품 추천",
-  "주문 추적",
-  "반품/교환",
-  "리드 생성",
-  "로열티 프로그램",
-  "기타",
-];
+function pickDefaultKbVersion(versions: KbItem[]) {
+  if (versions.length === 0) return null;
+  const active = versions.find((item) => item.is_active);
+  return active ?? versions[0];
+}
 
 export default function NewAgentPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
-  const [agentType, setAgentType] = useState("blank");
-  const [industry, setIndustry] = useState("");
-  const [useCase, setUseCase] = useState("");
+  const [llm, setLlm] = useState<"chatgpt" | "gemini">("chatgpt");
+  const [mcpTools, setMcpTools] = useState<MpcTool[]>([]);
+  const [selectedMcpIds, setSelectedMcpIds] = useState<string[]>([]);
+  const [kbItems, setKbItems] = useState<KbItem[]>([]);
+  const [selectedParentId, setSelectedParentId] = useState("");
+  const [selectedKbId, setSelectedKbId] = useState("");
+  const [plan, setPlan] = useState("starter");
+  const [loading, setLoading] = useState(true);
   const [agentName, setAgentName] = useState("");
   const [website, setWebsite] = useState("");
   const [goal, setGoal] = useState("");
 
-  const totalSteps = useMemo(() => {
-    if (agentType === "blank") return 2;
-    if (agentType === "personal") return 3;
-    return 4;
-  }, [agentType]);
+  const isPaid = useMemo(() => {
+    const normalized = (plan || "").toLowerCase();
+    return normalized !== "starter" && normalized !== "free" && normalized !== "";
+  }, [plan]);
+
+  const kbParents = useMemo(() => {
+    const byParent = new Map<string, KbItem[]>();
+    kbItems.forEach((item) => {
+      const parentId = item.parent_id ?? item.id;
+      if (!byParent.has(parentId)) byParent.set(parentId, []);
+      byParent.get(parentId)?.push(item);
+    });
+    return Array.from(byParent.entries()).map(([parentId, versions]) => {
+      const sorted = [...versions].sort(compareVersions);
+      const title = sorted[0]?.title || "제목 없음";
+      return { parentId, title, versions: sorted } satisfies KbParentGroup;
+    });
+  }, [kbItems]);
+
+  const selectedGroup = useMemo(() => {
+    return kbParents.find((group) => group.parentId === selectedParentId) || null;
+  }, [kbParents, selectedParentId]);
 
   const canNext = useMemo(() => {
-    if (step === 0) return Boolean(agentType);
-    if (agentType === "blank") {
-      return true;
-    }
-    if (agentType === "personal") {
-      if (step === 1) return Boolean(useCase);
-      return true;
-    }
-    if (step === 1) return Boolean(industry);
-    if (step === 2) return Boolean(useCase);
+    if (step === 0) return Boolean(llm);
+    if (step === 1) return true;
+    if (step === 2) return Boolean(selectedKbId);
     return true;
-  }, [step, agentType, industry, useCase]);
+  }, [step, llm, selectedKbId]);
 
   const canSubmit = useMemo(() => {
-    return agentName.trim().length > 0 && goal.trim().length > 0;
-  }, [agentName, goal]);
+    return agentName.trim().length > 0 && goal.trim().length > 0 && Boolean(selectedKbId);
+  }, [agentName, goal, selectedKbId]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      setLoading(true);
+      try {
+        const [profile, toolsRes, kbRes] = await Promise.all([
+          apiFetch<{ plan?: string }>("/api/user-profile").catch(() => null),
+          apiFetch<{ items: MpcTool[] }>("/api/mcp/tools").catch(() => ({ items: [] })),
+          apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
+        ]);
+        if (!mounted) return;
+        setPlan(profile?.plan || "starter");
+        setMcpTools(toolsRes?.items || []);
+        setKbItems(kbRes?.items || []);
+      } catch (err) {
+        if (!mounted) return;
+        toast.error("에이전트 설정 데이터를 불러오지 못했습니다.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (selectedParentId) return;
+    if (kbParents.length === 0) return;
+    const firstParent = kbParents[0];
+    setSelectedParentId(firstParent.parentId);
+    const defaultVersion = pickDefaultKbVersion(firstParent.versions);
+    setSelectedKbId(defaultVersion?.id || "");
+  }, [kbParents, selectedParentId]);
 
   const handleNext = () => {
     if (!canNext) {
-      toast.error("선택 항목을 완료해 주세요.");
+      toast.error("필수 항목을 완료해 주세요.");
       return;
     }
-    setStep((prev) => Math.min(prev + 1, totalSteps - 1));
+    setStep((prev) => Math.min(prev + 1, stepLabels.length - 1));
   };
 
   const handleBack = () => {
     setStep((prev) => Math.max(prev - 1, 0));
   };
 
-  const handleCreate = () => {
+  const handleSelectParent = (parentId: string) => {
+    setSelectedParentId(parentId);
+    const group = kbParents.find((item) => item.parentId === parentId);
+    if (!group) {
+      setSelectedKbId("");
+      return;
+    }
+    const next = pickDefaultKbVersion(group.versions);
+    setSelectedKbId(next?.id || "");
+  };
+
+  const toggleMcpTool = (toolId: string) => {
+    setSelectedMcpIds((prev) => {
+      if (prev.includes(toolId)) return prev.filter((id) => id !== toolId);
+      return [...prev, toolId];
+    });
+  };
+
+  const handleCreate = async () => {
     if (!canSubmit) {
       toast.error("필수 항목을 입력해 주세요.");
       return;
     }
-    toast.success("에이전트가 등록되었습니다.");
-    router.push("/app/agents");
+    try {
+      const payload = {
+        name: agentName.trim(),
+        llm,
+        kb_id: selectedKbId,
+        mcp_tool_ids: isPaid ? selectedMcpIds : [],
+        website: website.trim() || null,
+        goal: goal.trim(),
+      };
+      await apiFetch("/api/agents", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+      toast.success("에이전트가 등록되었습니다.");
+      router.push("/app/agents");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "에이전트 생성에 실패했습니다.";
+      toast.error(message || "에이전트 생성에 실패했습니다.");
+    }
   };
 
   return (
     <div className="px-5 md:px-8 py-8">
       <div className="mx-auto w-full max-w-3xl">
         <div className="text-center">
-          <div className="text-xl font-semibold text-slate-900">
-            {step === 0 && "새 에이전트"}
-            {step === 1 && (agentType === "business" ? "사업 업종 선택" : "사용 목적 선택")}
-            {step === 2 && (agentType === "business" ? "사용 목적 선택" : "에이전트 설정")}
-            {step === 3 && "에이전트 설정"}
-          </div>
-          <div className="mt-1 text-sm text-slate-500">
-            {step === 1 && agentType !== "business" ? "사용 목적" : stepLabels[step]}
-          </div>
+          <div className="text-xl font-semibold text-slate-900">새 에이전트</div>
+          <div className="mt-1 text-sm text-slate-500">{stepLabels[step]}</div>
         </div>
 
         {step === 0 ? (
           <div className="mt-8 space-y-4">
-            {agentTypes.map((t) => (
+            {llmOptions.map((option) => (
               <div
-                key={t.id}
-                onClick={() => setAgentType(t.id)}
+                key={option.id}
+                onClick={() => setLlm(option.id === "gemini" ? "gemini" : "chatgpt")}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    setAgentType(t.id);
+                    setLlm(option.id === "gemini" ? "gemini" : "chatgpt");
                   }
                 }}
                 className={cn(
                   "w-full rounded-2xl border px-4 py-4 text-left transition-colors",
-                  agentType === t.id
-                    ? "border-slate-900 bg-slate-50"
-                    : "border-slate-200 bg-white hover:bg-slate-50"
+                  llm === option.id ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white hover:bg-slate-50"
                 )}
                 role="button"
                 tabIndex={0}
               >
-                <div className="text-sm font-semibold text-slate-900">{t.title}</div>
-                <div className="mt-1 text-xs text-slate-500">{t.description}</div>
+                <div className="text-sm font-semibold text-slate-900">{option.title}</div>
+                <div className="mt-1 text-xs text-slate-500">{option.description}</div>
               </div>
             ))}
           </div>
         ) : null}
 
-        {step === 1 && agentType === "business" ? (
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {industries.map((item) => (
-              <div
-                key={item}
-                onClick={() => setIndustry(item)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setIndustry(item);
-                  }
-                }}
-                className={cn(
-                  "rounded-2xl border px-4 py-3 text-sm font-medium transition-colors",
-                  industry === item
-                    ? "border-slate-900 bg-slate-50"
-                    : "border-slate-200 bg-white hover:bg-slate-50"
-                )}
-                role="button"
-                tabIndex={0}
-              >
-                {item}
+        {step === 1 ? (
+          <div className="mt-8 space-y-4">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+              MCP 연결은 유료 플랜에서만 사용할 수 있습니다.
+              {isPaid ? " 연결할 도구를 선택하세요." : " 현재 플랜에서는 비활성화됩니다."}
+            </div>
+            {loading ? (
+              <div className="text-sm text-slate-500">MCP 도구를 불러오는 중...</div>
+            ) : mcpTools.length === 0 ? (
+              <div className="text-sm text-slate-500">연결 가능한 MCP 도구가 없습니다.</div>
+            ) : (
+              <div className="grid gap-3">
+                {mcpTools.map((tool) => {
+                  const selected = selectedMcpIds.includes(tool.id);
+                  return (
+                    <button
+                      key={tool.id}
+                      type="button"
+                      onClick={() => (isPaid ? toggleMcpTool(tool.id) : null)}
+                      disabled={!isPaid}
+                      className={cn(
+                        "flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
+                        selected ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white",
+                        !isPaid ? "cursor-not-allowed opacity-60" : "hover:bg-slate-50"
+                      )}
+                    >
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{tool.name}</div>
+                        <div className="mt-1 text-xs text-slate-500">{tool.description || "설명 없음"}</div>
+                      </div>
+                      <span
+                        className={cn(
+                          "mt-1 inline-flex h-6 items-center rounded-full px-2 text-[11px] font-semibold",
+                          selected ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"
+                        )}
+                      >
+                        {selected ? "선택됨" : "미선택"}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-            ))}
+            )}
           </div>
         ) : null}
 
-        {step === 1 && agentType === "personal" ? (
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {personalUseCases.map((item) => (
-              <div
-                key={item}
-                onClick={() => setUseCase(item)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setUseCase(item);
-                  }
-                }}
-                className={cn(
-                  "rounded-2xl border px-4 py-3 text-sm font-medium transition-colors",
-                  useCase === item
-                    ? "border-slate-900 bg-slate-50"
-                    : "border-slate-200 bg-white hover:bg-slate-50"
-                )}
-                role="button"
-                tabIndex={0}
-              >
-                {item}
+        {step === 2 ? (
+          <div className="mt-8 space-y-5">
+            <div className="text-sm font-semibold text-slate-900">KB 부모 선택</div>
+            {loading ? (
+              <div className="text-sm text-slate-500">KB 목록을 불러오는 중...</div>
+            ) : kbParents.length === 0 ? (
+              <div className="text-sm text-slate-500">선택 가능한 KB가 없습니다.</div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2">
+                {kbParents.map((group) => (
+                  <button
+                    key={group.parentId}
+                    type="button"
+                    onClick={() => handleSelectParent(group.parentId)}
+                    className={cn(
+                      "rounded-2xl border px-4 py-3 text-left transition-colors",
+                      selectedParentId === group.parentId
+                        ? "border-slate-900 bg-slate-50"
+                        : "border-slate-200 bg-white hover:bg-slate-50"
+                    )}
+                  >
+                    <div className="text-sm font-semibold text-slate-900">{group.title}</div>
+                    <div className="mt-1 text-xs text-slate-500">버전 {group.versions.length}개</div>
+                  </button>
+                ))}
               </div>
-            ))}
+            )}
+
+            {selectedGroup ? (
+              <div className="space-y-3">
+                <div className="text-sm font-semibold text-slate-900">KB 버전 선택</div>
+                <div className="grid gap-3">
+                  {selectedGroup.versions.map((version) => {
+                    const selected = selectedKbId === version.id;
+                    return (
+                      <button
+                        key={version.id}
+                        type="button"
+                        onClick={() => setSelectedKbId(version.id)}
+                        className={cn(
+                          "flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
+                          selected ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                        )}
+                      >
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">
+                            {version.version || "버전 없음"}
+                          </div>
+                          <div className="mt-1 text-xs text-slate-500">
+                            {formatKstDateTime(version.created_at)} · LLM {version.llm || "chatgpt"}
+                          </div>
+                        </div>
+                        <span
+                          className={cn(
+                            "inline-flex h-6 items-center rounded-full px-2 text-[11px] font-semibold",
+                            version.is_active ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"
+                          )}
+                        >
+                          {version.is_active ? "배포" : "비활성"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        {step === 2 && agentType === "business" ? (
-          <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {businessUseCases.map((item) => (
-              <div
-                key={item}
-                onClick={() => setUseCase(item)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    setUseCase(item);
-                  }
-                }}
-                className={cn(
-                  "rounded-2xl border px-4 py-3 text-sm font-medium transition-colors",
-                  useCase === item
-                    ? "border-slate-900 bg-slate-50"
-                    : "border-slate-200 bg-white hover:bg-slate-50"
-                )}
-                role="button"
-                tabIndex={0}
-              >
-                {item}
-              </div>
-            ))}
-          </div>
-        ) : null}
-
-        {((agentType === "blank" && step === 1) ||
-          (agentType === "personal" && step === 2) ||
-          (agentType === "business" && step === 3)) ? (
+        {step === 3 ? (
           <div className="mt-8 space-y-6">
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-900">에이전트 이름 *</label>
@@ -279,20 +384,16 @@ export default function NewAgentPage() {
               <div className="text-xs text-slate-400">{agentName.length}/50</div>
             </div>
 
-            {agentType === "business" ? (
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-900">웹사이트 (선택)</label>
-                <input
-                  value={website}
-                  onChange={(e) => setWebsite(e.target.value)}
-                  placeholder="https://yourwebsite.com"
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
-                />
-                <div className="text-xs text-slate-400">
-                  공개된 정보만 참고하여 에이전트를 개인화합니다.
-                </div>
-              </div>
-            ) : null}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-900">웹사이트 (선택)</label>
+              <input
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+                placeholder="https://yourwebsite.com"
+                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
+              />
+              <div className="text-xs text-slate-400">공개된 정보만 참고하여 에이전트를 개인화합니다.</div>
+            </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-900">주요 목표 *</label>
@@ -303,7 +404,6 @@ export default function NewAgentPage() {
                 className="min-h-[120px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
               />
             </div>
-
           </div>
         ) : null}
 
@@ -322,7 +422,7 @@ export default function NewAgentPage() {
             이전
           </button>
 
-          {step < totalSteps - 1 ? (
+          {step < stepLabels.length - 1 ? (
             <button
               type="button"
               onClick={handleNext}
@@ -350,13 +450,10 @@ export default function NewAgentPage() {
         </div>
 
         <div className="mt-8 flex items-center justify-center gap-2">
-          {Array.from({ length: totalSteps }).map((_, idx) => (
+          {Array.from({ length: stepLabels.length }).map((_, idx) => (
             <span
               key={idx}
-              className={cn(
-                "h-1.5 w-6 rounded-full",
-                step === idx ? "bg-slate-900" : "bg-slate-200"
-              )}
+              className={cn("h-1.5 w-6 rounded-full", step === idx ? "bg-slate-900" : "bg-slate-200")}
             />
           ))}
         </div>

@@ -125,7 +125,6 @@ const adapters: Record<string, ToolAdapter> = {
       title,
       content,
       client_ip: clientIp,
-      reply_mail: String(params.reply_mail || "F"),
     };
     const optionalKeys = [
       "writer_email",
