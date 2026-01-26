@@ -117,16 +117,41 @@ const adapters: Record<string, ToolAdapter> = {
     const writer = String(params.writer || "mejai");
     const title = String(params.title || params.summary || "Support request");
     const content = String(params.content || params.summary || "");
-    const clientIp = String(params.client_ip || "127.0.0.1");
+    const clientIp = String(params.client_ip || "1.1.1.1");
+    const requestBody: Record<string, unknown> = {
+      shop_no: cfg.shopNo,
+      board_no: boardNo,
+      writer,
+      title,
+      content,
+      client_ip: clientIp,
+    };
+    const optionalKeys = [
+      "writer_email",
+      "member_id",
+      "password",
+      "reply_mail",
+      "secret",
+      "notice",
+      "fixed",
+      "reply",
+      "board_category_no",
+      "input_channel",
+      "order_id",
+      "product_no",
+      "category_no",
+    ];
+    for (const key of optionalKeys) {
+      const value = (params as Record<string, unknown>)[key];
+      if (value !== undefined && value !== null && value !== "") {
+        requestBody[key] = value;
+      }
+    }
     const result = await cafe24Request(cfg, `/boards/${encodeURIComponent(boardNo)}/articles`, {
       method: "POST",
       body: {
         request: {
-          shop_no: cfg.shopNo,
-          writer,
-          title,
-          content,
-          client_ip: clientIp,
+          ...requestBody,
         },
       },
     });
