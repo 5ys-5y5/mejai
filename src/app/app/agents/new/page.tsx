@@ -193,6 +193,10 @@ export default function NewAgentPage() {
     });
   };
 
+  const handleClearMcp = () => {
+    setSelectedMcpIds([]);
+  };
+
   const handleCreate = async () => {
     if (!canSubmit) {
       toast.error("필수 항목을 입력해 주세요.");
@@ -268,6 +272,29 @@ export default function NewAgentPage() {
               <div className="text-sm text-slate-500">연결 가능한 MCP 도구가 없습니다.</div>
             ) : (
               <div className="grid gap-3">
+                <button
+                  type="button"
+                  onClick={() => (isPaid ? handleClearMcp() : null)}
+                  disabled={!isPaid}
+                  className={cn(
+                    "flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
+                    selectedMcpIds.length === 0 ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white",
+                    !isPaid ? "cursor-not-allowed opacity-60" : "hover:bg-slate-50"
+                  )}
+                >
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">선택 안 함</div>
+                    <div className="mt-1 text-xs text-slate-500">MCP 연결 없이 진행합니다.</div>
+                  </div>
+                  <span
+                    className={cn(
+                      "mt-1 inline-flex h-6 items-center rounded-full px-2 text-[11px] font-semibold",
+                      selectedMcpIds.length === 0 ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"
+                    )}
+                  >
+                    {selectedMcpIds.length === 0 ? "선택됨" : "미선택"}
+                  </span>
+                </button>
                 {mcpTools.map((tool) => {
                   const selected = selectedMcpIds.includes(tool.id);
                   return (
@@ -310,7 +337,7 @@ export default function NewAgentPage() {
             ) : kbParents.length === 0 ? (
               <div className="text-sm text-slate-500">선택 가능한 KB가 없습니다.</div>
             ) : (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3">
                 {kbParents.map((group) => (
                   <button
                     key={group.parentId}

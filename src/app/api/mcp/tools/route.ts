@@ -2,11 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 
 export async function GET(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") || "";
+  const url = new URL(req.url);
+  const rawAuthHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
+  let authHeader = rawAuthHeader;
+  if (!authHeader) {
+    const tokenParam = url.searchParams.get("token") || url.searchParams.get("access_token");
+    if (tokenParam) {
+      authHeader = `Bearer ${tokenParam}`;
+    } else if (process.env.NODE_ENV !== "production" && process.env.MCP_TOKEN) {
+      authHeader = `Bearer ${process.env.MCP_TOKEN}`;
+    }
+  }
   const context = await getServerContext(authHeader, cookieHeader);
   if ("error" in context) {
     return NextResponse.json({ error: context.error }, { status: 401 });
+  }
+
+  const { data: access, error: accessError } = await context.supabase
+    .from("user_access")
+    .select("is_admin")
+    .eq("user_id", context.user.id)
+    .maybeSingle();
+
+  if (accessError) {
+    return NextResponse.json({ error: accessError.message }, { status: 400 });
+  }
+
+  if (!access?.is_admin) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
   const { data: policies, error: policyError } = await context.supabase

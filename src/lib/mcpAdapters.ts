@@ -129,19 +129,11 @@ const adapters: Record<string, ToolAdapter> = {
       client_ip: clientIp,
     };
     const optionalKeys = [
+      "reply_article_no",
+      "created_date",
       "writer_email",
       "member_id",
-      "password",
-      "reply_mail",
-      "secret",
       "notice",
-      "fixed",
-      "reply",
-      "board_category_no",
-      "input_channel",
-      "order_id",
-      "product_no",
-      "category_no",
     ];
     for (const key of optionalKeys) {
       const value = (params as Record<string, unknown>)[key];

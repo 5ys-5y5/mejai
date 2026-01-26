@@ -1,7 +1,53 @@
-﻿import { Badge } from "@/components/ui/Badge";
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { apiFetch } from "@/lib/apiClient";
+import { cn } from "@/lib/utils";
+
+type MpcTool = {
+  id: string;
+  name: string;
+  description?: string | null;
+  version?: string | null;
+  policy?: {
+    is_allowed?: boolean | null;
+    rate_limit_per_min?: number | null;
+    adapter_key?: string | null;
+  } | null;
+};
 
 export default function RulesPage() {
+  const [tools, setTools] = useState<MpcTool[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadTools() {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await apiFetch<{ items: MpcTool[] }>("/api/mcp/tools");
+        if (!mounted) return;
+        setTools(res.items || []);
+      } catch (err) {
+        if (!mounted) return;
+        const message = err instanceof Error ? err.message : "MCP 목록을 불러오지 못했습니다.";
+        setError(message);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    loadTools();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const toolCount = useMemo(() => tools.length, [tools]);
+
   return (
     <div className="px-5 md:px-8 py-6">
       <div className="mx-auto w-full max-w-6xl">
@@ -82,6 +128,53 @@ export default function RulesPage() {
                 도구 호출의 권한/감사로그/속도제한/마스킹을 중앙에서 수행하기 좋습니다.
               </div>
             </div>
+          </div>
+        </Card>
+
+        <Card className="mt-4">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+            <div className="text-sm font-semibold text-slate-900">MCP 도구 목록</div>
+            <div className="text-xs text-slate-500">총 {loading ? "-" : toolCount}건</div>
+          </div>
+          {error ? <div className="p-4 text-sm text-rose-600">{error}</div> : null}
+          {!error && !loading && toolCount === 0 ? (
+            <div className="p-4 text-sm text-slate-500">연결 가능한 MCP 도구가 없습니다.</div>
+          ) : null}
+          <div className="divide-y divide-slate-200">
+            {tools.map((tool) => {
+              const allowed = tool.policy?.is_allowed ?? true;
+              const rate = tool.policy?.rate_limit_per_min ?? null;
+              return (
+                <div key={tool.id} className="p-4 hover:bg-slate-50">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">{tool.name}</div>
+                      <div className="mt-1 text-xs text-slate-500">{tool.description || "설명 없음"}</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                          버전 {tool.version || "v1"}
+                        </span>
+                        <span
+                          className={cn(
+                            "rounded-full border px-2 py-0.5",
+                            allowed
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-rose-200 bg-rose-50 text-rose-700"
+                          )}
+                        >
+                          {allowed ? "허용됨" : "차단"}
+                        </span>
+                        {rate !== null ? (
+                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                            분당 {rate}회
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </Card>
       </div>
