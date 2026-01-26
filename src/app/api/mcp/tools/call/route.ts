@@ -107,7 +107,11 @@ export async function POST(req: NextRequest) {
 
   const start = Date.now();
   const adapterKey = policy.adapter_key || tool.name;
-  const result = await callAdapter(adapterKey, params);
+  const result = await callAdapter(adapterKey, params, {
+    supabase: context.supabase,
+    orgId: context.orgId,
+    userId: context.user.id,
+  });
   const latency = Date.now() - start;
 
   const responsePayload = result.data ? { ...result.data } : {};

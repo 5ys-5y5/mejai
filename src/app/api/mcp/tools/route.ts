@@ -10,8 +10,6 @@ export async function GET(req: NextRequest) {
     const tokenParam = url.searchParams.get("token") || url.searchParams.get("access_token");
     if (tokenParam) {
       authHeader = `Bearer ${tokenParam}`;
-    } else if (process.env.NODE_ENV !== "production" && process.env.MCP_TOKEN) {
-      authHeader = `Bearer ${process.env.MCP_TOKEN}`;
     }
   }
   const context = await getServerContext(authHeader, cookieHeader);

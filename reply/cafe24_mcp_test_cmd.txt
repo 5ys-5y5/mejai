@@ -1,4 +1,7 @@
-$refresh = (Get-Content .env | Select-String -Pattern '^CAFE24_REFRESH_TOKEN=').Line.Split('=')[1].Trim('"')
-$auth = "Basic SkFZbXdhZTlMQ2JBekVXejN2SXNkQjo5Tm0wVzg2S01sM29TYnhycndkZWFD"
-$resp = Invoke-RestMethod -Method Post -Uri "https://sungjy2020.cafe24api.com/api/v2/oauth/token" -Headers @{ Authorization = $auth } -ContentType "application/x-www-form-urlencoded" -Body ("grant_type=refresh_token&refresh_token=" + $refresh)
-$resp | ConvertTo-Json -Depth 5
+$line = (Get-Content .env | Select-String -Pattern '^MCP_TOKEN=')
+if (-not $line) { Write-Output 'MCP_TOKEN missing in .env'; exit }
+$token = $line.Line.Split('=')[1].Trim('"')
+Invoke-RestMethod -Method Post -Uri "https://mejai.help/api/mcp/tools/call" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body '{"tool":"list_boards","params":{}}' | ConvertTo-Json -Depth 6
+Invoke-RestMethod -Method Post -Uri "https://mejai.help/api/mcp/tools/call" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body '{"tool":"list_board_articles","params":{"board_no":"5","limit":10}}' | ConvertTo-Json -Depth 6
+Invoke-RestMethod -Method Post -Uri "https://mejai.help/api/mcp/tools/call" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body '{"tool":"list_orders","params":{"start_date":"2026-01-01","end_date":"2026-01-26","limit":10}}' | ConvertTo-Json -Depth 6
+Invoke-RestMethod -Method Post -Uri "https://mejai.help/api/mcp/tools/call" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body '{"tool":"find_customer_by_phone","params":{"cellphone":"010-0000-0000"}}' | ConvertTo-Json -Depth 6
