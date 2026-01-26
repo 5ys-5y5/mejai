@@ -1,15 +1,121 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Plus } from "lucide-react";
+import { apiFetch } from "@/lib/apiClient";
+import { formatKstDateTime } from "@/lib/kst";
+
+type AgentItem = {
+  id: string;
+  parent_id?: string | null;
+  name: string;
+  llm: string | null;
+  kb_id: string | null;
+  mcp_tool_ids?: string[] | null;
+  version: string | null;
+  is_active: boolean | null;
+  created_at?: string | null;
+};
+
+type KbItem = {
+  id: string;
+  parent_id?: string | null;
+  title: string;
+  version: string | null;
+  is_active: boolean | null;
+  created_at?: string | null;
+};
+
+function parseVersionParts(value?: string | null) {
+  if (!value) return null;
+  const raw = value.trim();
+  const match = raw.match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$/i);
+  if (!match) return null;
+  const major = Number(match[1] || 0);
+  const minor = Number(match[2] || 0);
+  const patch = Number(match[3] || 0);
+  return [major, minor, patch];
+}
+
+function compareVersions(a: AgentItem, b: AgentItem) {
+  const aParts = parseVersionParts(a.version);
+  const bParts = parseVersionParts(b.version);
+  if (aParts && bParts) {
+    for (let i = 0; i < 3; i += 1) {
+      if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
+    }
+  } else if (aParts && !bParts) {
+    return -1;
+  } else if (!aParts && bParts) {
+    return 1;
+  }
+  const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+  return bTime - aTime;
+}
+
+function getActiveAgents(items: AgentItem[]) {
+  const map = new Map<string, AgentItem>();
+  items.forEach((item) => {
+    const key = item.parent_id ?? item.id;
+    if (item.is_active) {
+      map.set(key, item);
+      return;
+    }
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, item);
+      return;
+    }
+    if (!existing.is_active) {
+      const newer = compareVersions(item, existing) < 0 ? item : existing;
+      map.set(key, newer);
+    }
+  });
+  return Array.from(map.values()).sort(compareVersions);
+}
 
 export default function AgentsPage() {
-  const agents = useMemo(
-    () => [{ id: "a_01", name: "테스트", createdBy: "성지용", createdAt: "2026-01-21 13:10" }],
-    []
-  );
+  const [agents, setAgents] = useState<AgentItem[]>([]);
+  const [kbItems, setKbItems] = useState<KbItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [agentRes, kbRes] = await Promise.all([
+          apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200"),
+          apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
+        ]);
+        if (!mounted) return;
+        setAgents(agentRes.items || []);
+        setKbItems(kbRes.items || []);
+      } catch (err) {
+        if (!mounted) return;
+        setError("에이전트 목록을 불러오지 못했습니다.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const activeAgents = useMemo(() => getActiveAgents(agents), [agents]);
+
+  const kbById = useMemo(() => {
+    const map = new Map<string, KbItem>();
+    kbItems.forEach((item) => map.set(item.id, item));
+    return map;
+  }, [kbItems]);
 
   return (
     <div className="px-5 md:px-8 py-6">
@@ -32,26 +138,38 @@ export default function AgentsPage() {
               새 에이전트
             </Link>
           </div>
+          <div className="text-xs text-slate-500">총 {loading ? "-" : activeAgents.length}건</div>
         </div>
 
         <Card className="mt-4">
           <div className="px-4 py-3 border-b border-slate-200 text-sm font-semibold text-slate-900">에이전트</div>
+          {error ? <div className="p-4 text-sm text-rose-600">{error}</div> : null}
+          {!error && !loading && activeAgents.length === 0 ? (
+            <div className="p-4 text-sm text-slate-500">등록된 에이전트가 없습니다.</div>
+          ) : null}
           <div className="divide-y divide-slate-200">
-            {agents.map((a) => (
-              <div key={a.id} className="p-4 hover:bg-slate-50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">{a.name}</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      생성자 {a.createdBy} · {a.createdAt}
+            {activeAgents.map((agent) => {
+              const kb = agent.kb_id ? kbById.get(agent.kb_id) : null;
+              const mcpCount = Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0;
+              return (
+                <div key={agent.id} className="p-4 hover:bg-slate-50">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">{agent.name}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        LLM {agent.llm || "-"} · KB {kb?.title || "-"} · MCP {mcpCount}개
+                      </div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        버전 {agent.version || "-"} · {formatKstDateTime(agent.created_at)}
+                      </div>
                     </div>
+                    <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
+                      옵션
+                    </button>
                   </div>
-                  <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
-                    옵션
-                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </Card>
       </div>

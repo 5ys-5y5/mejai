@@ -118,9 +118,11 @@ const adapters: Record<string, ToolAdapter> = {
     const title = String(params.title || params.summary || "Support request");
     const content = String(params.content || params.summary || "");
     const clientIp = String(params.client_ip || "1.1.1.1");
+    const shopNoNum = Number(cfg.shopNo);
+    const boardNoNum = Number(boardNo);
     const requestBody: Record<string, unknown> = {
-      shop_no: cfg.shopNo,
-      board_no: boardNo,
+      shop_no: Number.isFinite(shopNoNum) ? shopNoNum : cfg.shopNo,
+      board_no: Number.isFinite(boardNoNum) ? boardNoNum : boardNo,
       writer,
       title,
       content,
@@ -150,9 +152,7 @@ const adapters: Record<string, ToolAdapter> = {
     const result = await cafe24Request(cfg, `/boards/${encodeURIComponent(boardNo)}/articles`, {
       method: "POST",
       body: {
-        request: {
-          ...requestBody,
-        },
+        request: [requestBody],
       },
     });
     if (!result.ok) {
