@@ -29,6 +29,13 @@ function addOrderSummary(order: Record<string, unknown>) {
   const paid = order.paid === "T";
   const canceled = order.canceled === "T";
   const shippingStatus = String(order.shipping_status || "");
+  const readTotalAmountDue = (value: unknown) => {
+    if (!value || typeof value !== "object") return undefined;
+    const record = value as Record<string, unknown>;
+    return record.total_amount_due;
+  };
+  const actualTotal = readTotalAmountDue(order.actual_order_amount);
+  const initialTotal = readTotalAmountDue(order.initial_order_amount);
   return {
     ...order,
     order_summary: {
@@ -37,7 +44,7 @@ function addOrderSummary(order: Record<string, unknown>) {
       shipping_status: shippingStatus,
       order_date: order.order_date,
       payment_method_name: order.payment_method_name,
-      total_amount_due: order.actual_order_amount?.total_amount_due ?? order.initial_order_amount?.total_amount_due,
+      total_amount_due: actualTotal ?? initialTotal,
     },
   };
 }
