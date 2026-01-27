@@ -65,7 +65,7 @@ export function SelectPopover({
         type="button"
         onClick={() => {
           if (disabled) return;
-          setOpen((v) => !v);
+          setOpen(!open);
         }}
         className={cn(
           "inline-flex w-full min-w-0 items-center justify-between gap-2 overflow-hidden rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50",
