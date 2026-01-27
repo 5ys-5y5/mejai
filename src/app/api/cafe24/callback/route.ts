@@ -30,13 +30,15 @@ export async function GET(req: NextRequest) {
   const error = searchParams.get("error") || "";
   const traceId = searchParams.get("trace_id") || "";
 
+  const decodedState = decodeStatePayload(state);
+  const originForPostMessage = JSON.stringify(decodedState?.origin || "*");
   const title = error ? "Cafe24 OAuth Error" : "Cafe24 OAuth Success";
 
   if (error) {
     const script = `
     <script>
       (function () {
-        var origin = ${JSON.stringify(decodedState?.origin || "*")};
+        var origin = ${originForPostMessage};
         try {
           if (window.opener) {
             window.opener.postMessage(
@@ -75,7 +77,6 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const decodedState = decodeStatePayload(state);
   if (!decodedState?.org_id || !decodedState?.user_id) {
     return new NextResponse("Invalid state", { status: 400 });
   }
@@ -199,7 +200,7 @@ export async function GET(req: NextRequest) {
     <p>토큰이 저장되었습니다. 이제 MCP 호출을 진행할 수 있습니다.</p>
     <script>
       (function () {
-        var origin = ${JSON.stringify(decodedState?.origin || "*")};
+        var origin = ${originForPostMessage};
         try {
           if (window.opener) {
             window.opener.postMessage(
