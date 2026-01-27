@@ -164,6 +164,8 @@ type MultiSelectPopoverProps = {
   renderValue?: (selected: SelectOption[]) => React.ReactNode;
   renderOption?: (option: SelectOption, active: boolean) => React.ReactNode;
   showBulkActions?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 export function MultiSelectPopover({
@@ -180,8 +182,18 @@ export function MultiSelectPopover({
   renderValue,
   renderOption,
   showBulkActions = false,
+  open: openProp,
+  onOpenChange,
 }: MultiSelectPopoverProps) {
-  const [open, setOpen] = useState(false);
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (next: boolean) => {
+    if (onOpenChange) {
+      onOpenChange(next);
+      return;
+    }
+    setOpenState(next);
+  };
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 

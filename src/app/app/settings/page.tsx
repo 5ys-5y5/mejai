@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import { useHelpPanelEnabled } from "@/hooks/useHelpPanel";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
-import { ExternalLink, Eye, EyeOff, Search } from "lucide-react";
+import { ExternalLink, Eye, EyeOff } from "lucide-react";
 
 type TabKey = "profile" | "workspaces" | "team" | "audit" | "env";
 type ProviderKey = "cafe24" | "shopify";
@@ -57,7 +57,6 @@ export default function SettingsPage() {
   const [envLoading, setEnvLoading] = useState(false);
   const [envError, setEnvError] = useState<string | null>(null);
   const [envSavedAt, setEnvSavedAt] = useState<string | null>(null);
-  const [showEnvHelp, setShowEnvHelp] = useState(false);
   const [authToken, setAuthToken] = useState<string>("");
   const [activeProvider, setActiveProvider] = useState<ProviderKey>("cafe24");
   const [revealedField, setRevealedField] = useState<string | null>(null);
@@ -65,9 +64,17 @@ export default function SettingsPage() {
   const editableCafe24Keys = new Set(["mall_id", "mall_domain", "shop_no", "board_no"]);
   const [shopOptions, setShopOptions] = useState<SelectOption[]>([]);
   const [shopError, setShopError] = useState<string | null>(null);
-  const [shopReloadKey, setShopReloadKey] = useState(0);
   const [shopLoading, setShopLoading] = useState(false);
-  const [refreshLoading, setRefreshLoading] = useState(false);
+  const [shopPickerOpen, setShopPickerOpen] = useState(false);
+  const [cafe24TokenMallId, setCafe24TokenMallId] = useState<string>("");
+  const [cafe24Flow, setCafe24Flow] = useState<"idle" | "oauth" | "token" | "shops" | "done">("idle");
+  const [cafe24Step, setCafe24Step] = useState<"mall" | "scope" | "shop" | "board">("mall");
+  const [cafe24CallbackUrl, setCafe24CallbackUrl] = useState<string>("");
+  const [cafe24SaveNotice, setCafe24SaveNotice] = useState<string>("");
+  const [cafe24ScopeTouched, setCafe24ScopeTouched] = useState(false);
+  const oauthPollRef = useRef<number | null>(null);
+  const lastOauthKeyRef = useRef<string>("");
+  const lastMallIdRef = useRef<string>("");
   const [cafe24Draft, setCafe24Draft] = useState<Cafe24ProviderDraft>({
     mall_id: "",
     mall_domain: "",
@@ -287,17 +294,34 @@ export default function SettingsPage() {
       .filter(Boolean)
       .join(", ");
 
+  const allCafe24Scopes = useMemo(() => cafe24ScopeOptions.map((opt) => opt.id), [cafe24ScopeOptions]);
+
   const openDomain = (domain?: string) => {
     if (!domain) return;
     const url = domain.startsWith("http") ? domain : `https://${domain}`;
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  const cafe24StatusText = useMemo(() => {
+    switch (cafe24Flow) {
+      case "oauth":
+        return "OAuth 인증 진행 중입니다.";
+      case "token":
+        return "토큰을 확인하는 중입니다.";
+      case "shops":
+        return "shop_no 목록을 불러오는 중입니다.";
+      case "done":
+        return "인증이 완료되었습니다.";
+      default:
+        return "";
+    }
+  }, [cafe24Flow]);
+
 
   const loadShops = useCallback(async () => {
-    if (!adminReady || !isAdmin || tab !== "env") return;
-    if (activeProvider !== "cafe24") return;
-    if (!cafe24Draft.mall_id || !cafe24Draft.access_token || !authToken) return;
+    if (!adminReady || !isAdmin || tab !== "env") return false;
+    if (activeProvider !== "cafe24") return false;
+    if (!cafe24Draft.mall_id || !cafe24Draft.access_token || !authToken) return false;
     setShopLoading(true);
     setShopError(null);
     try {
@@ -319,7 +343,7 @@ export default function SettingsPage() {
         setShopError(payload.error || "shop_no 목록을 불러오지 못했습니다.");
         setShopOptions([]);
         setShopLoading(false);
-        return;
+        return false;
       }
       const options =
         payload.shops?.map((shop) => ({
@@ -328,9 +352,11 @@ export default function SettingsPage() {
           description: shop.primary_domain || shop.base_domain || shop.shop_name || "",
         })) || [];
       setShopOptions(options);
+      return true;
     } catch {
       setShopError("shop_no 목록을 불러오지 못했습니다.");
       setShopOptions([]);
+      return false;
     } finally {
       setShopLoading(false);
     }
@@ -344,25 +370,29 @@ export default function SettingsPage() {
     cafe24Draft.access_token,
   ]);
 
-  useEffect(() => {
-    if (!shopReloadKey) return;
-    loadShops();
-  }, [loadShops, shopReloadKey]);
-
-  const refreshCafe24ForMall = useCallback(async () => {
-    if (!authToken) return;
-    setRefreshLoading(true);
+  const reloadCafe24Provider = useCallback(async (overrideMallId?: string) => {
+    if (!authToken) return false;
     try {
-      await fetch("/api/cafe24/refresh", {
+      const res = await fetch(`/api/auth-settings/providers?provider=cafe24`, {
         headers: {
-          "x-cron-secret": "",
           Authorization: `Bearer ${authToken}`,
         },
       });
+      const payload = (await res.json()) as { provider?: Record<string, unknown>; error?: string };
+      if (!res.ok || payload.error || !payload.provider) {
+        setShopError(payload.error || "OAuth 결과를 불러오지 못했습니다.");
+        return null;
+      }
+      setCafe24Flow("token");
+      const next = payload.provider as Partial<Cafe24ProviderDraft>;
+      const forcedMallId = overrideMallId || lastMallIdRef.current;
+      if (forcedMallId) next.mall_id = forcedMallId;
+      if (next.mall_id) setCafe24TokenMallId(next.mall_id);
+      setCafe24Draft((prev) => ({ ...prev, ...next }));
+      return next;
     } catch {
-      // ignore refresh errors here
-    } finally {
-      setRefreshLoading(false);
+      setShopError("OAuth 결과를 불러오지 못했습니다.");
+      return null;
     }
   }, [authToken]);
 
@@ -375,6 +405,7 @@ export default function SettingsPage() {
       setShopError("mall_id와 scope를 입력한 뒤 OAuth 연결을 진행해주세요.");
       return;
     }
+    setCafe24Flow("oauth");
     try {
       const res = await fetch(
         `/api/cafe24/authorize?mode=json&mall_id=${encodeURIComponent(
@@ -392,18 +423,107 @@ export default function SettingsPage() {
         setShopError(payload.error || "OAuth 연결을 시작할 수 없습니다.");
         return;
       }
-      window.location.href = payload.url;
+      const popup = window.open(payload.url, "cafe24_oauth", "width=520,height=720");
+      if (!popup) {
+        setCafe24Flow("idle");
+        setShopError("팝업이 차단되었습니다. 브라우저에서 팝업을 허용해주세요.");
+      }
     } catch {
       setShopError("OAuth 연결을 시작할 수 없습니다.");
     }
   }, [authToken, cafe24Draft.mall_id, cafe24Draft.scope]);
 
-  const handleShopSearch = async () => {
-    setShopOptions([]);
-    setShopError(null);
-    await refreshCafe24ForMall();
-    setShopReloadKey((prev) => prev + 1);
-  };
+  const handleMallNext = useCallback(() => {
+    if (!cafe24Draft.mall_id) {
+      setShopError("mall_id를 입력해주세요.");
+      return;
+    }
+    const trimmed = cafe24Draft.mall_id.trim();
+    lastMallIdRef.current = trimmed;
+    if (trimmed !== cafe24Draft.mall_id) {
+      setCafe24Draft((prev) => ({ ...prev, mall_id: trimmed }));
+    }
+    setCafe24CallbackUrl("");
+    setCafe24Step("scope");
+  }, [cafe24Draft.mall_id]);
+
+  const handleScopeNext = useCallback(async () => {
+    if (!cafe24Draft.scope) {
+      setShopError("scope를 선택해주세요.");
+      return;
+    }
+    setCafe24CallbackUrl("");
+    setCafe24Flow("oauth");
+    await startCafe24OAuth();
+    if (oauthPollRef.current) {
+      window.clearInterval(oauthPollRef.current);
+    }
+    const startedAt = Date.now();
+    oauthPollRef.current = window.setInterval(async () => {
+      if (Date.now() - startedAt > 60_000) {
+        if (oauthPollRef.current) window.clearInterval(oauthPollRef.current);
+        oauthPollRef.current = null;
+        return;
+      }
+      const pollMallId = lastMallIdRef.current || cafe24Draft.mall_id;
+      const next = await reloadCafe24Provider(pollMallId);
+      if (!next) return;
+      const tokenMallId = next.mall_id || pollMallId;
+      if (!tokenMallId || tokenMallId !== pollMallId) return;
+      if (!next.access_token || !next.refresh_token) return;
+      if (oauthPollRef.current) window.clearInterval(oauthPollRef.current);
+      oauthPollRef.current = null;
+      setCafe24Flow("shops");
+      const loaded = await loadShops();
+      if (loaded) {
+        setShopPickerOpen(true);
+        setCafe24Step("shop");
+      }
+      setCafe24Flow(loaded ? "done" : "idle");
+    }, 1200);
+  }, [cafe24Draft.scope, startCafe24OAuth, reloadCafe24Provider, loadShops, cafe24Draft.mall_id]);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as {
+        type?: string;
+        error?: string;
+        trace_id?: string;
+        callback_url?: string;
+        mall_id?: string;
+      };
+      if (data?.type === "cafe24_oauth_error") {
+        setShopError(`OAuth 오류: ${data.error || "unknown"}`);
+        setCafe24Flow("idle");
+        if (data.callback_url) setCafe24CallbackUrl(data.callback_url);
+        return;
+      }
+      if (data?.type !== "cafe24_oauth_complete") return;
+      if (data.callback_url) setCafe24CallbackUrl(data.callback_url);
+      const messageMallId = data.mall_id || lastMallIdRef.current;
+      reloadCafe24Provider(messageMallId).then((next) => {
+        if (!next) return;
+        window.setTimeout(async () => {
+          setCafe24Flow("shops");
+          const loaded = await loadShops();
+          if (loaded) {
+            setShopPickerOpen(true);
+            setCafe24Step("shop");
+          }
+          setCafe24Flow(loaded ? "done" : "idle");
+        }, 0);
+      });
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [reloadCafe24Provider, loadShops]);
+
+  useEffect(() => {
+    return () => {
+      if (oauthPollRef.current) window.clearInterval(oauthPollRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (activeProvider !== "cafe24") return;
@@ -436,7 +556,9 @@ export default function SettingsPage() {
           setEnvError(payload.error || "환경 변수 정보를 불러오지 못했습니다.");
         } else if (payload.provider) {
           if (activeProvider === "cafe24") {
-            setCafe24Draft((prev) => ({ ...prev, ...(payload.provider as Partial<Cafe24ProviderDraft>) }));
+            const next = payload.provider as Partial<Cafe24ProviderDraft>;
+            if (next.mall_id) setCafe24TokenMallId(next.mall_id);
+            setCafe24Draft((prev) => ({ ...prev, ...next }));
           } else {
             setShopifyDraft((prev) => ({ ...prev, ...(payload.provider as Partial<ShopifyProviderDraft>) }));
           }
@@ -453,15 +575,59 @@ export default function SettingsPage() {
     };
   }, [adminReady, isAdmin, tab, authToken, activeProvider]);
 
+  useEffect(() => {
+    if (activeProvider !== "cafe24") return;
+    if (cafe24Draft.scope || cafe24ScopeTouched) return;
+    setCafe24Draft((prev) => ({ ...prev, scope: allCafe24Scopes.join(" ") }));
+  }, [activeProvider, cafe24Draft.scope, allCafe24Scopes, cafe24ScopeTouched]);
+
+  useEffect(() => {
+    if (activeProvider !== "cafe24") return;
+    if (!cafe24Draft.mall_id || !cafe24Draft.scope) return;
+    if (cafe24Draft.access_token && cafe24TokenMallId === cafe24Draft.mall_id) {
+      return;
+    }
+    const key = `${cafe24Draft.mall_id}|${cafe24Draft.scope}`;
+    if (lastOauthKeyRef.current === key || cafe24Flow === "oauth") return;
+    lastOauthKeyRef.current = key;
+  }, [
+    activeProvider,
+    cafe24Draft.mall_id,
+    cafe24Draft.scope,
+    cafe24Draft.access_token,
+    cafe24TokenMallId,
+    cafe24Flow,
+  ]);
+
+  useEffect(() => {
+    if (!cafe24Draft.mall_id) return;
+    if (!cafe24TokenMallId) return;
+    if (cafe24Draft.mall_id === cafe24TokenMallId) return;
+    setCafe24Draft((prev) => ({
+      ...prev,
+      access_token: "",
+      refresh_token: "",
+      expires_at: "",
+      shop_no: "",
+    }));
+    setShopOptions([]);
+    setShopPickerOpen(false);
+    setCafe24Flow("idle");
+    setCafe24Step("mall");
+    setCafe24CallbackUrl("");
+  }, [cafe24Draft.mall_id, cafe24TokenMallId]);
+
   const handleProviderSave = async () => {
     setEnvLoading(true);
     setEnvError(null);
     try {
+      const forcedMallId = lastMallIdRef.current;
+      const cafe24Values = forcedMallId ? { ...cafe24Draft, mall_id: forcedMallId } : cafe24Draft;
       const values =
         activeProvider === "cafe24"
           ? {
-              ...cafe24Draft,
-              scope: sortStrings(filterCafe24Scopes(parseScopes(cafe24Draft.scope))).join(" "),
+              ...cafe24Values,
+              scope: sortStrings(filterCafe24Scopes(parseScopes(cafe24Values.scope))).join(" "),
             }
           : shopifyDraft;
       const res = await fetch("/api/auth-settings/providers", {
@@ -484,6 +650,37 @@ export default function SettingsPage() {
       setEnvLoading(false);
     }
   };
+
+  const handleShopSave = useCallback(async () => {
+    if (!cafe24Draft.shop_no) {
+      setShopError("shop_no를 선택해주세요.");
+      return;
+    }
+    setCafe24Step("board");
+  }, [cafe24Draft.shop_no]);
+
+  const handleBoardSave = useCallback(async () => {
+    if (!cafe24Draft.board_no) {
+      setShopError("board_no를 선택해주세요.");
+      return;
+    }
+    await handleProviderSave();
+    setCafe24SaveNotice("저장이 완료되었습니다.");
+  }, [cafe24Draft.board_no]);
+
+  const handleStepPrev = useCallback(() => {
+    if (cafe24Step === "board") {
+      setCafe24Step("shop");
+      return;
+    }
+    if (cafe24Step === "shop") {
+      setCafe24Step("scope");
+      return;
+    }
+    if (cafe24Step === "scope") {
+      setCafe24Step("mall");
+    }
+  }, [cafe24Step]);
 
   return (
     <div className="px-5 md:px-8 pt-6 pb-[100px]">
@@ -596,23 +793,7 @@ export default function SettingsPage() {
               <Card className="p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm font-semibold text-slate-900">환경 변수</div>
-                      <button
-                        type="button"
-                        onClick={() => setShowEnvHelp((prev) => !prev)}
-                        className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-xs text-slate-500 hover:bg-slate-50"
-                        aria-label="환경 변수 설명"
-                      >
-                        ?
-                      </button>
-                    </div>
-                    {showEnvHelp ? (
-                      <div className="mt-1 text-xs text-slate-500">
-                        아래 값은 auth_settings.providers.cafe24에 저장됩니다. OAuth 완료 시
-                        access/refresh_token, expires_at은 자동으로 업데이트됩니다.
-                      </div>
-                    ) : null}
+                    <div className="text-sm font-semibold text-slate-900">환경 변수</div>
                   </div>
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="w-32 min-w-0">
@@ -624,13 +805,6 @@ export default function SettingsPage() {
                         buttonClassName="w-full min-w-0"
                       />
                     </div>
-                    <button
-                      onClick={handleProviderSave}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50 whitespace-nowrap shrink-0 max-w-[80px] truncate"
-                      disabled={envLoading}
-                    >
-                      저장
-                    </button>
                   </div>
                 </div>
 
@@ -640,287 +814,347 @@ export default function SettingsPage() {
                 ) : null}
 
                 {activeProvider === "cafe24" ? (
-                  <div className="mt-4 grid gap-3 md:grid-cols-2 min-w-0">
-                    <label className="relative flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1">
-                        mall_id 로 도메인 찾기
-                        <a
-                          href={buildCompanyInfoUrl("상점%20아이디")}
-                          type="button"
-                          className="text-slate-400 hover:text-slate-600"
-                          target="_blank"
-                          rel="noreferrer"
-                          title="mall_id 위치 열기"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      </span>
-                      <div className="relative w-full">
-                        <input
-                          className="h-9 w-full rounded-lg border border-slate-200 px-3 pr-9 text-left text-sm truncate"
-                          value={cafe24Draft.mall_id}
-                          onChange={(event) =>
-                            setCafe24Draft((prev) => ({ ...prev, mall_id: event.target.value }))
-                          }
-                          disabled={envReadOnly && !editableCafe24Keys.has("mall_id")}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleShopSearch}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full border border-slate-200 bg-white p-1 text-slate-500 hover:bg-slate-50"
-                          title="shop_no 탐색"
-                        >
-                          <Search className="h-3.5 w-3.5" />
-                        </button>
+                  <div className="mt-4 space-y-4 min-w-0">
+                    {cafe24Step === "mall" ? (
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="text-xs font-semibold text-slate-900">1. mall_id 입력</div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          좌측 메뉴 맨 아래의 [⚙️쇼핑몰 설정] → [기본 설정] → [내 쇼핑몰 정보] → [기본정보 설정] → [상점 아이디]에서 확인해주세요.
+                        </div>
+                        <label className="mt-3 flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
+                          <input
+                            className="h-9 w-full rounded-lg border border-slate-200 px-3 text-left text-sm truncate"
+                            value={cafe24Draft.mall_id}
+                            onChange={(event) =>
+                              setCafe24Draft((prev) => ({ ...prev, mall_id: event.target.value }))
+                            }
+                            disabled={envReadOnly && !editableCafe24Keys.has("mall_id")}
+                          />
+                        </label>
                       </div>
-                    </label>
-                    <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1">shop_no (멀티쇼핑몰 번호)</span>
-                      <MultiSelectPopover
-                        values={sortNumbers(parseCsv(cafe24Draft.shop_no))}
-                        onChange={(values) => {
-                          const ordered = sortNumbers(values);
-                          const domain = buildMallDomainFromShopNo(ordered);
-                          setCafe24Draft((prev) => ({
-                            ...prev,
-                            shop_no: ordered.join(","),
-                            mall_domain: domain || prev.mall_domain,
-                          }));
-                        }}
-                        options={shopOptions}
-                        searchable={false}
-                        disabled={envReadOnly && !editableCafe24Keys.has("shop_no")}
-                        showBulkActions
-                        className="w-full"
-                        buttonClassName="w-full min-w-0"
-                        renderValue={(selected) =>
-                          shopLoading ? (
-                            <span className="truncate block w-full text-slate-500">shop_no 불러오는 중...</span>
-                          ) : selected.length === 0 ? (
-                            "선택"
-                          ) : (
-                            <span className="truncate block w-full">
-                              {sortNumbers(selected.map((opt) => opt.id)).join(", ")}
-                            </span>
-                          )
-                        }
-                        renderOption={(option) => (
-                          <div className="min-w-0 text-left">
-                            <div className="flex items-center gap-2 truncate">
-                              <span className="text-slate-900">{option.label}</span>
-                              {option.description ? (
-                                <span
-                                  role="link"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    openDomain(option.description);
-                                  }}
-                                  className="text-[10px] text-slate-500 underline cursor-pointer truncate"
-                                >
-                                  {option.description}
-                                </span>
-                              ) : null}
+                    ) : cafe24Step === "scope" ? (
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="text-xs font-semibold text-slate-900">2. scope 선택</div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          필요한 권한을 선택한 뒤 인증을 진행합니다.
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCafe24Draft((prev) => ({ ...prev, scope: allCafe24Scopes.join(" ") }))
+                            }
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+                          >
+                            전체 선택
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCafe24ScopeTouched(true);
+                              setCafe24Draft((prev) => ({ ...prev, scope: "" }));
+                            }}
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+                          >
+                            전체 해제
+                          </button>
+                        </div>
+                        <label className="mt-3 flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
+                          <div className="w-full rounded-xl border border-slate-200 bg-white p-2">
+                            <div className="max-h-56 overflow-auto text-xs">
+                              <div className="sticky top-0 z-10 grid grid-cols-[1fr_72px] items-center gap-2 bg-white px-2 py-1 text-[10px] leading-none text-slate-400">
+                                <span>scope</span>
+                                <span>상태</span>
+                              </div>
+                              <div className="grid grid-cols-1 gap-1">
+                                {cafe24ScopeOptions.map((opt) => {
+                                  const active = cafe24ScopeValues.includes(opt.id);
+                                  return (
+                                    <button
+                                      key={opt.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setCafe24ScopeTouched(true);
+                                        const next = active
+                                          ? cafe24ScopeValues.filter((v) => v !== opt.id)
+                                          : [...cafe24ScopeValues, opt.id];
+                                        setCafe24Draft((prev) => ({
+                                          ...prev,
+                                          scope: sortStrings(filterCafe24Scopes(next)).join(" "),
+                                        }));
+                                      }}
+                                      className={cn(
+                                        "grid w-full grid-cols-[1fr_72px] items-center gap-2 rounded-lg px-2 py-1 text-left leading-none",
+                                        active
+                                          ? "bg-slate-100 text-slate-900"
+                                          : "text-slate-600 hover:bg-slate-50"
+                                      )}
+                                    >
+                                      <span className="truncate">{opt.label}</span>
+                                      <span
+                                        className={cn(
+                                          "text-[10px]",
+                                          active ? "text-emerald-600" : "text-slate-400"
+                                        )}
+                                      >
+                                        {active ? "선택됨" : "해제됨"}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
                             </div>
                           </div>
-                        )}
-                      />
-                      {shopError ? (
-                        <span className="text-[10px] text-rose-600">{shopError}</span>
+                        </label>
+                        {cafe24StatusText ? (
+                          <div className="mt-2 text-[11px] text-slate-500">{cafe24StatusText}</div>
+                        ) : null}
+                      </div>
+                    ) : cafe24Step === "shop" ? (
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="text-xs font-semibold text-slate-900">3. shop_no 선택</div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          mall_id로 선택 가능한 shop_no를 선택합니다.
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const all = shopOptions.map((opt) => opt.id);
+                              const ordered = sortNumbers(all);
+                              const domain = buildMallDomainFromShopNo(ordered);
+                              setCafe24Draft((prev) => ({
+                                ...prev,
+                                shop_no: ordered.join(","),
+                                mall_domain: domain || prev.mall_domain,
+                              }));
+                            }}
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+                          >
+                            전체 선택
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCafe24Draft((prev) => ({ ...prev, shop_no: "" }))}
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+                          >
+                            전체 해제
+                          </button>
+                        </div>
+                        <label className="mt-3 flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
+                          <div className="w-full rounded-xl border border-slate-200 bg-white p-2">
+                            <div className="max-h-56 overflow-auto text-xs">
+                              <div className="sticky top-0 z-10 grid grid-cols-[80px_1fr_60px] items-center gap-2 bg-white px-2 py-1 text-[10px] leading-none text-slate-400">
+                                <span>shop_no</span>
+                                <span>domain</span>
+                                <span>상태</span>
+                              </div>
+                              {shopLoading ? (
+                                <div className="px-2 py-1 text-xs text-slate-500">shop_no 불러오는 중...</div>
+                              ) : (
+                                <div className="grid grid-cols-1 gap-1">
+                                  {shopOptions.map((opt) => {
+                                    const current = sortNumbers(parseCsv(cafe24Draft.shop_no));
+                                    const active = current.includes(opt.id);
+                                    return (
+                                      <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => {
+                                          const next = active
+                                            ? current.filter((v) => v !== opt.id)
+                                            : [...current, opt.id];
+                                          const ordered = sortNumbers(next);
+                                          const domain = buildMallDomainFromShopNo(ordered);
+                                          setCafe24Draft((prev) => ({
+                                            ...prev,
+                                            shop_no: ordered.join(","),
+                                            mall_domain: domain || prev.mall_domain,
+                                          }));
+                                        }}
+                                        className={cn(
+                                          "grid w-full grid-cols-[80px_1fr_60px] items-center gap-2 rounded-lg px-2 py-1 text-left leading-none",
+                                          active
+                                            ? "bg-slate-100 text-slate-900"
+                                            : "text-slate-600 hover:bg-slate-50"
+                                        )}
+                                      >
+                                        <span className="truncate">{opt.label}</span>
+                                        <span className="truncate text-[11px] text-slate-500">{opt.description || ""}</span>
+                                        <span
+                                          className={cn(
+                                            "text-[10px]",
+                                            active ? "text-emerald-600" : "text-slate-400"
+                                          )}
+                                        >
+                                          {active ? "선택됨" : "해제됨"}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    ) : cafe24Step === "board" ? (
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="text-xs font-semibold text-slate-900">4. board_no 선택</div>
+                        <div className="mt-1 text-[11px] text-slate-500">
+                          사용할 게시판 번호를 선택합니다.
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setCafe24Draft((prev) => ({
+                                ...prev,
+                                board_no: boardNoOptions.map((opt) => opt.id).join(","),
+                              }))
+                            }
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+                          >
+                            전체 선택
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCafe24Draft((prev) => ({ ...prev, board_no: "" }))}
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+                          >
+                            전체 해제
+                          </button>
+                        </div>
+                        <label className="mt-3 flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
+                          <div className="w-full rounded-xl border border-slate-200 bg-white p-2">
+                            <div className="max-h-56 overflow-auto text-xs">
+                              <div className="sticky top-0 z-10 grid grid-cols-[80px_1fr_72px] items-center gap-2 bg-white px-2 py-1 text-[10px] leading-none text-slate-400">
+                                <span>board_no</span>
+                                <span>이름</span>
+                                <span>상태</span>
+                              </div>
+                              <div className="grid grid-cols-1 gap-1">
+                                {boardNoOptions.map((opt) => {
+                                  const current = sortNumbers(parseCsv(cafe24Draft.board_no));
+                                  const active = current.includes(opt.id);
+                                  return (
+                                    <button
+                                      key={opt.id}
+                                      type="button"
+                                      onClick={() => {
+                                        const next = active
+                                          ? current.filter((v) => v !== opt.id)
+                                          : [...current, opt.id];
+                                        setCafe24Draft((prev) => ({
+                                          ...prev,
+                                          board_no: sortNumbers(next).join(","),
+                                        }));
+                                      }}
+                                      className={cn(
+                                        "grid w-full grid-cols-[80px_1fr_72px] items-center gap-2 rounded-lg px-2 py-1 text-left leading-none",
+                                        active
+                                          ? "bg-slate-100 text-slate-900"
+                                          : "text-slate-600 hover:bg-slate-50"
+                                      )}
+                                    >
+                                      <span className="truncate">{opt.id}</span>
+                                      <span className="truncate text-[11px] text-slate-500">
+                                        {opt.description || opt.label}
+                                      </span>
+                                      <span
+                                        className={cn(
+                                          "text-[10px]",
+                                          active ? "text-emerald-600" : "text-slate-400"
+                                        )}
+                                      >
+                                        {active ? "선택됨" : "해제됨"}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </label>
+                      </div>
+                    ) : null}
+                    {cafe24CallbackUrl ? (
+                      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                        <iframe
+                          title="Cafe24 OAuth 결과"
+                          src={cafe24CallbackUrl}
+                          className="h-[240px] w-full border-0"
+                        />
+                      </div>
+                    ) : null}
+                    {cafe24Step === "scope" ? (
+                      <div className="h-1 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div
+                          className={cn(
+                            "h-full rounded-full bg-emerald-400 transition-all duration-500",
+                            cafe24Flow === "idle" ? "w-0" : cafe24Flow === "done" ? "w-full" : "w-2/3"
+                          )}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="flex items-center gap-2">
+                      {cafe24Step !== "mall" ? (
+                        <button
+                          type="button"
+                          onClick={handleStepPrev}
+                          className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
+                        >
+                          이전
+                        </button>
                       ) : null}
-                    </label>
-                    <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1">access_token</span>
-                      <div className="relative w-full">
-                        <input
-                          type={revealedField === "cafe24.access_token" ? "text" : "password"}
-                          className="h-9 w-full rounded-lg border border-slate-200 px-3 pr-9 text-left text-sm truncate"
-                          value={cafe24Draft.access_token}
-                          onChange={(event) =>
-                            setCafe24Draft((prev) => ({ ...prev, access_token: event.target.value }))
-                          }
-                          disabled
-                        />
-                        <button
-                          type="button"
-                          onClick={() => revealFor("cafe24.access_token")}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          aria-label="access_token 표시"
-                        >
-                          {revealedField === "cafe24.access_token" ? (
-                            <EyeOff className="h-4 w-4 opacity-70" />
-                          ) : (
-                            <Eye className="h-4 w-4 opacity-70" />
-                          )}
-                        </button>
+                      <div className="flex flex-1 items-center gap-2">
+                        {cafe24Step === "mall" ? (
+                          <button
+                            type="button"
+                            onClick={handleMallNext}
+                            className="w-full rounded-lg border border-slate-300 bg-slate-600 px-3 py-2 text-xs text-white hover:bg-slate-700"
+                          >
+                            다음
+                          </button>
+                        ) : null}
+                        {cafe24Step === "scope" ? (
+                          <button
+                            type="button"
+                            onClick={handleScopeNext}
+                            className="w-full rounded-lg border border-slate-300 bg-slate-600 px-3 py-2 text-xs text-white hover:bg-slate-700"
+                          >
+                            다음
+                          </button>
+                        ) : null}
+                        {cafe24Step === "shop" ? (
+                          <button
+                            type="button"
+                            onClick={handleShopSave}
+                            className="w-full rounded-lg border border-slate-300 bg-slate-600 px-3 py-2 text-xs text-white hover:bg-slate-700"
+                          >
+                            다음
+                          </button>
+                        ) : null}
+                        {cafe24Step === "board" ? (
+                          <button
+                            type="button"
+                            onClick={handleBoardSave}
+                            className="w-full rounded-lg border border-slate-300 bg-slate-600 px-3 py-2 text-xs text-white hover:bg-slate-700"
+                          >
+                            저장
+                          </button>
+                        ) : null}
                       </div>
-                    </label>
-                    <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1">refresh_token</span>
-                      <div className="relative w-full">
-                        <input
-                          type={revealedField === "cafe24.refresh_token" ? "text" : "password"}
-                          className="h-9 w-full rounded-lg border border-slate-200 px-3 pr-9 text-left text-sm truncate"
-                          value={cafe24Draft.refresh_token}
-                          onChange={(event) =>
-                            setCafe24Draft((prev) => ({ ...prev, refresh_token: event.target.value }))
-                          }
-                          disabled
-                        />
-                        <button
-                          type="button"
-                          onClick={() => revealFor("cafe24.refresh_token")}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          aria-label="refresh_token 표시"
-                        >
-                          {revealedField === "cafe24.refresh_token" ? (
-                            <EyeOff className="h-4 w-4 opacity-70" />
-                          ) : (
-                            <Eye className="h-4 w-4 opacity-70" />
-                          )}
-                        </button>
-                      </div>
-                    </label>
-                    <div className="flex w-full items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={startCafe24OAuth}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
-                      >
-                        OAuth 연결
-                      </button>
-                      <span className="text-[10px] text-slate-500">
-                        mall_id/scope 기준 토큰 발급
-                      </span>
                     </div>
-                    <label className="relative flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1">scope (권한 범위)</span>
-                      <MultiSelectPopover
-                        values={cafe24ScopeValues}
-                        onChange={(values) =>
-                          setCafe24Draft((prev) => ({
-                            ...prev,
-                            scope: sortStrings(filterCafe24Scopes(values)).join(" "),
-                          }))
-                        }
-                        options={cafe24ScopeOptions}
-                        displayMode="count"
-                        showBulkActions
-                        className="w-full"
-                        buttonClassName="w-full min-w-0"
-                      />
-                    </label>
-                    <label className="flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
-                      <span className="inline-flex items-center gap-1">board_no (게시판 번호)</span>
-                      <MultiSelectPopover
-                        values={sortNumbers(cafe24BoardNoValues)}
-                        onChange={(values) =>
-                          setCafe24Draft((prev) => ({ ...prev, board_no: sortNumbers(values).join(",") }))
-                        }
-                        options={boardNoOptions}
-                        searchable={false}
-                        disabled={envReadOnly && !editableCafe24Keys.has("board_no")}
-                        showBulkActions
-                        className="w-full"
-                        buttonClassName="w-full min-w-0"
-                        renderValue={(selected) =>
-                          selected.length === 0 ? (
-                            "선택"
-                          ) : (
-                            <span className="truncate block w-full">
-                              {sortNumbers(selected.map((opt) => opt.id)).join(", ")}
-                            </span>
-                          )
-                        }
-                      />
-                    </label>
+                    {cafe24Step === "board" && cafe24SaveNotice ? (
+                      <div className="w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs text-emerald-700">
+                        {cafe24SaveNotice}
+                      </div>
+                    ) : null}
                   </div>
                 ) : (
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <label className="grid gap-1 text-xs font-medium text-slate-600 min-w-0">
-                      shop_domain
-                      <input
-                        className="h-9 rounded-lg border border-slate-200 px-3 text-sm"
-                        value={shopifyDraft.shop_domain}
-                        onChange={(event) =>
-                          setShopifyDraft((prev) => ({ ...prev, shop_domain: event.target.value }))
-                        }
-                        disabled={envReadOnly}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-medium text-slate-600 min-w-0">
-                      client_id
-                      <input
-                        className="h-9 rounded-lg border border-slate-200 px-3 text-sm"
-                        value={shopifyDraft.client_id}
-                        onChange={(event) =>
-                          setShopifyDraft((prev) => ({ ...prev, client_id: event.target.value }))
-                        }
-                        disabled={envReadOnly}
-                      />
-                    </label>
-                    <label className="grid gap-1 text-xs font-medium text-slate-600 min-w-0">
-                      client_secret
-                      <div className="relative">
-                        <input
-                          type={revealedField === "shopify.client_secret" ? "text" : "password"}
-                          className="h-9 w-full rounded-lg border border-slate-200 px-3 pr-9 text-sm"
-                          value={shopifyDraft.client_secret}
-                          onChange={(event) =>
-                            setShopifyDraft((prev) => ({ ...prev, client_secret: event.target.value }))
-                          }
-                          disabled={envReadOnly}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => revealFor("shopify.client_secret")}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          aria-label="client_secret 표시"
-                        >
-                          {revealedField === "shopify.client_secret" ? (
-                            <EyeOff className="h-4 w-4 opacity-70" />
-                          ) : (
-                            <Eye className="h-4 w-4 opacity-70" />
-                          )}
-                        </button>
-                      </div>
-                    </label>
-                    <label className="grid gap-1 text-xs font-medium text-slate-600 min-w-0">
-                      access_token
-                      <div className="relative">
-                        <input
-                          type={revealedField === "shopify.access_token" ? "text" : "password"}
-                          className="h-9 w-full rounded-lg border border-slate-200 px-3 pr-9 text-sm"
-                          value={shopifyDraft.access_token}
-                          onChange={(event) =>
-                            setShopifyDraft((prev) => ({ ...prev, access_token: event.target.value }))
-                          }
-                          disabled={envReadOnly}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => revealFor("shopify.access_token")}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                          aria-label="access_token 표시"
-                        >
-                          {revealedField === "shopify.access_token" ? (
-                            <EyeOff className="h-4 w-4 opacity-70" />
-                          ) : (
-                            <Eye className="h-4 w-4 opacity-70" />
-                          )}
-                        </button>
-                      </div>
-                    </label>
-                    <label className="grid gap-1 text-xs font-medium text-slate-600 min-w-0">
-                      scopes (multi)
-                      <MultiSelectPopover
-                        values={shopifyScopeValues}
-                        onChange={(values) =>
-                          setShopifyDraft((prev) => ({ ...prev, scopes: values.join(" ") }))
-                        }
-                        options={shopifyScopeOptions}
-                        disabled={envReadOnly}
-                      />
-                    </label>
+                  <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
+                    준비중입니다.
                   </div>
                 )}
               </Card>

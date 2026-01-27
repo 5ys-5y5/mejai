@@ -60,10 +60,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "MISSING_CAFE24_CONFIG" }, { status: 400 });
   }
 
+  const origin = new URL(req.url).origin;
   const statePayload = JSON.stringify({
     mall_id: mallId,
     org_id: context.orgId,
     user_id: context.user.id,
+    origin,
     ts: Date.now(),
     nonce: Math.random(),
   });

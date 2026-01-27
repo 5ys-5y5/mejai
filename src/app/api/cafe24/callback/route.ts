@@ -12,7 +12,12 @@ function decodeStatePayload(state: string) {
   if (expected !== signature) return null;
   try {
     const decoded = Buffer.from(encoded, "base64url").toString("utf8");
-    return JSON.parse(decoded) as { mall_id?: string; org_id?: string; user_id?: string } | null;
+    return JSON.parse(decoded) as {
+      mall_id?: string;
+      org_id?: string;
+      user_id?: string;
+      origin?: string;
+    } | null;
   } catch {
     return null;
   }
@@ -28,6 +33,26 @@ export async function GET(req: NextRequest) {
   const title = error ? "Cafe24 OAuth Error" : "Cafe24 OAuth Success";
 
   if (error) {
+    const script = `
+    <script>
+      (function () {
+        var origin = ${JSON.stringify(decodedState?.origin || "*")};
+        try {
+          if (window.opener) {
+            window.opener.postMessage(
+              {
+                type: "cafe24_oauth_error",
+                error: ${JSON.stringify(error)},
+                trace_id: ${JSON.stringify(traceId)},
+                callback_url: window.location.href
+              },
+              origin
+            );
+          }
+        } catch {}
+      })();
+    </script>
+    `.trim();
     const body = `
 <!doctype html>
 <html lang="ko">
@@ -40,6 +65,7 @@ export async function GET(req: NextRequest) {
     <h1>${title}</h1>
     <div>error: ${error}</div>
     <div>trace_id: ${traceId}</div>
+    ${script}
   </body>
 </html>
     `.trim();
@@ -123,7 +149,7 @@ export async function GET(req: NextRequest) {
   const existingCafe24 = (existingProviders.cafe24 ?? {}) as Record<string, unknown>;
   const nextCafe24: Record<string, unknown> = {
     ...existingCafe24,
-    mall_id: tokenJson.mall_id || mallId,
+    mall_id: mallId,
     access_token: tokenJson.access_token,
     refresh_token: tokenJson.refresh_token,
     expires_at: tokenJson.expires_at,
@@ -169,7 +195,24 @@ export async function GET(req: NextRequest) {
     <h1>${title}</h1>
     <div class="label">status</div><pre>stored</pre>
     <div class="label">state</div><pre>${state}</pre>
+    <div class="label">saved_mall_id</div><pre>${mallId}</pre>
     <p>토큰이 저장되었습니다. 이제 MCP 호출을 진행할 수 있습니다.</p>
+    <script>
+      (function () {
+        var origin = ${JSON.stringify(decodedState?.origin || "*")};
+        try {
+          if (window.opener) {
+            window.opener.postMessage(
+              { type: "cafe24_oauth_complete", callback_url: window.location.href, mall_id: ${JSON.stringify(mallId)} },
+              origin
+            );
+          }
+        } catch {}
+        try {
+          window.close();
+        } catch {}
+      })();
+    </script>
   </body>
 </html>
   `.trim();
