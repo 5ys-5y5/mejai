@@ -36,7 +36,7 @@
     outline-color: color-mix(in srgb, var(--color-ring) 50%, transparent);
     font-family: "Apple SD Gothic Neo";
   }
-  body {
+body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-feature-settings: "ss01", "ss02", "cv01", "cv02";

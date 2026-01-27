@@ -72,8 +72,6 @@ function formatOrderData(payload: Record<string, unknown>) {
 type Cafe24ProviderConfig = {
   mall_id?: string;
   scope?: string;
-  client_id?: string;
-  client_secret?: string;
   access_token?: string;
   refresh_token?: string;
   expires_at?: string;
@@ -94,8 +92,6 @@ function readEnv(name: string) {
 
 async function bootstrapCafe24FromEnv(ctx: AdapterContext, row: AuthSettingsRow) {
   const mallId = readEnv("CAFE24_MALL_ID");
-  const clientId = readEnv("CAFE24_CLIENT_ID");
-  const clientSecret = readEnv("CAFE24_CLIENT_SECRET_KEY");
   const accessToken = readEnv("CAFE24_ACCESS_TOKEN");
   const refreshToken = readEnv("CAFE24_REFRESH_TOKEN");
   const scope = readEnv("CAFE24_SCOPE");
@@ -106,11 +102,9 @@ async function bootstrapCafe24FromEnv(ctx: AdapterContext, row: AuthSettingsRow)
 
   const providers = (row.providers || {}) as Record<string, Cafe24ProviderConfig | undefined>;
   const current = providers.cafe24 || {};
-  providers.cafe24 = {
+  const nextCafe24 = {
     ...current,
     mall_id: mallId,
-    client_id: clientId || current.client_id,
-    client_secret: clientSecret || current.client_secret,
     access_token: accessToken,
     refresh_token: refreshToken,
     expires_at: expiresAt || new Date().toISOString(),
@@ -118,6 +112,9 @@ async function bootstrapCafe24FromEnv(ctx: AdapterContext, row: AuthSettingsRow)
     shop_no: shopNo || current.shop_no,
     board_no: boardNo || current.board_no,
   };
+  delete (nextCafe24 as Record<string, unknown>).client_id;
+  delete (nextCafe24 as Record<string, unknown>).client_secret;
+  providers.cafe24 = nextCafe24;
 
   await ctx.supabase
     .from("auth_settings")
@@ -160,8 +157,6 @@ async function getCafe24Config(ctx?: AdapterContext) {
     mallId: cafe24.mall_id,
     accessToken: cafe24.access_token,
     refreshToken: cafe24.refresh_token,
-    clientId: cafe24.client_id || "",
-    clientSecret: cafe24.client_secret || "",
     expiresAt: cafe24.expires_at || "",
     shopNo,
     boardNo,
@@ -217,8 +212,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -235,8 +228,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -267,8 +258,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -309,8 +298,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -342,8 +329,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -363,8 +348,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -397,8 +380,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -446,8 +427,6 @@ const adapters: Record<string, ToolAdapter> = {
         const refreshed = await refreshCafe24Token({
           settingsId: cfg.settingsId,
           mallId: cfg.mallId,
-          clientId: cfg.clientId,
-          clientSecret: cfg.clientSecret,
           refreshToken: cfg.refreshToken,
           supabase: ctx!.supabase,
         });
@@ -516,8 +495,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -557,8 +534,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -575,8 +550,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -610,8 +583,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -628,8 +599,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -687,8 +656,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -708,8 +675,6 @@ const adapters: Record<string, ToolAdapter> = {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
-        clientId: cfg.clientId,
-        clientSecret: cfg.clientSecret,
         refreshToken: cfg.refreshToken,
         supabase: ctx!.supabase,
       });
@@ -760,3 +725,4 @@ export async function callAdapter(
   }
   return adapter(params, ctx);
 }
+

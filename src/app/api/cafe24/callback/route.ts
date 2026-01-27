@@ -1,5 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerContext } from "@/lib/serverAuth";
+import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
+import crypto from "crypto";
+
+function decodeStatePayload(state: string) {
+  if (!state || !state.includes(".")) return null;
+  const [encoded, signature] = state.split(".");
+  if (!encoded || !signature) return null;
+  const secret = (process.env.CAFE24_OAUTH_STATE_SECRET || "").trim();
+  if (!secret) return null;
+  const expected = crypto.createHmac("sha256", secret).update(encoded).digest("base64url");
+  if (expected !== signature) return null;
+  try {
+    const decoded = Buffer.from(encoded, "base64url").toString("utf8");
+    return JSON.parse(decoded) as { mall_id?: string; org_id?: string; user_id?: string } | null;
+  } catch {
+    return null;
+  }
+}
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -7,13 +24,6 @@ export async function GET(req: NextRequest) {
   const state = searchParams.get("state") || "";
   const error = searchParams.get("error") || "";
   const traceId = searchParams.get("trace_id") || "";
-
-  const authHeader = req.headers.get("authorization") || "";
-  const cookieHeader = req.headers.get("cookie") || "";
-  const context = await getServerContext(authHeader, cookieHeader);
-  if ("error" in context) {
-    return new NextResponse("Unauthorized", { status: 401 });
-  }
 
   const title = error ? "Cafe24 OAuth Error" : "Cafe24 OAuth Success";
 
@@ -39,6 +49,11 @@ export async function GET(req: NextRequest) {
     });
   }
 
+  const decodedState = decodeStatePayload(state);
+  if (!decodedState?.org_id || !decodedState?.user_id) {
+    return new NextResponse("Invalid state", { status: 400 });
+  }
+
   if (!code) {
     return new NextResponse("Missing code", { status: 400 });
   }
@@ -48,25 +63,29 @@ export async function GET(req: NextRequest) {
     return new NextResponse("Missing redirect uri", { status: 500 });
   }
 
-  const { data: settings, error: settingsError } = await context.supabase
+  const clientId = (process.env.CAFE24_CLIENT_ID || "").trim();
+  const clientSecret = (process.env.CAFE24_CLIENT_SECRET_KEY || "").trim();
+  if (!clientId || !clientSecret) {
+    return new NextResponse("Missing Cafe24 client credentials", { status: 500 });
+  }
+
+  const mallIdFromState = decodedState?.mall_id || "";
+
+  const adminSupabase = createAdminSupabaseClient();
+  const { data: settings, error: settingsError } = await adminSupabase
     .from("auth_settings")
     .select("providers")
-    .eq("org_id", context.orgId)
-    .eq("user_id", context.user.id)
+    .eq("org_id", decodedState.org_id)
+    .eq("user_id", decodedState.user_id)
     .maybeSingle();
-  if (settingsError || !settings) {
-    return new NextResponse("Missing auth settings", { status: 400 });
+  if (settingsError && settingsError.code !== "PGRST116") {
+    return new NextResponse(`Auth settings lookup failed: ${settingsError.message}`, { status: 400 });
   }
-  const providers = (settings.providers || {}) as Record<
-    string,
-    { mall_id?: string; client_id?: string; client_secret?: string }
-  >;
+  const providers = ((settings?.providers || {}) as Record<string, { mall_id?: string }>) || {};
   const cafe24 = providers.cafe24 || {};
-  const mallId = cafe24.mall_id || "";
-  const clientId = cafe24.client_id || "";
-  const clientSecret = cafe24.client_secret || "";
-  if (!clientId || !clientSecret || !mallId) {
-    return new NextResponse("Missing Cafe24 config in DB", { status: 400 });
+  const mallId = mallIdFromState || cafe24.mall_id || "";
+  if (!mallId) {
+    return new NextResponse("Missing Cafe24 mall_id", { status: 400 });
   }
 
   const basic = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
@@ -91,29 +110,30 @@ export async function GET(req: NextRequest) {
     mall_id: string;
   };
 
-  const { data: existing, error: existingError } = await context.supabase
+  const { data: existing, error: existingError } = await adminSupabase
     .from("auth_settings")
     .select("id, providers")
-    .eq("org_id", context.orgId)
-    .eq("user_id", context.user.id)
+    .eq("org_id", decodedState.org_id)
+    .eq("user_id", decodedState.user_id)
     .maybeSingle();
   if (existingError) {
     return new NextResponse(`DB read failed: ${existingError.message}`, { status: 500 });
   }
   const existingProviders = (existing?.providers || {}) as Record<string, unknown>;
   const existingCafe24 = (existingProviders.cafe24 ?? {}) as Record<string, unknown>;
-  existingProviders.cafe24 = {
+  const nextCafe24: Record<string, unknown> = {
     ...existingCafe24,
     mall_id: tokenJson.mall_id || mallId,
-    client_id: clientId,
-    client_secret: clientSecret,
     access_token: tokenJson.access_token,
     refresh_token: tokenJson.refresh_token,
     expires_at: tokenJson.expires_at,
   };
+  delete nextCafe24.client_id;
+  delete nextCafe24.client_secret;
+  existingProviders.cafe24 = nextCafe24;
 
   if (existing?.id) {
-    const { error: updateError } = await context.supabase
+    const { error: updateError } = await adminSupabase
       .from("auth_settings")
       .update({ providers: existingProviders, updated_at: new Date().toISOString() })
       .eq("id", existing.id);
@@ -121,9 +141,9 @@ export async function GET(req: NextRequest) {
       return new NextResponse(`DB update failed: ${updateError.message}`, { status: 500 });
     }
   } else {
-    const { error: insertError } = await context.supabase.from("auth_settings").insert({
-      org_id: context.orgId,
-      user_id: context.user.id,
+    const { error: insertError } = await adminSupabase.from("auth_settings").insert({
+      org_id: decodedState.org_id,
+      user_id: decodedState.user_id,
       providers: existingProviders,
       updated_at: new Date().toISOString(),
     });

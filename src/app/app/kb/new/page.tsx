@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/apiClient";
 import { calcRagUsageBytes, DEFAULT_RAG_LIMIT_BYTES, getRagLimitBytes } from "@/lib/ragStorage";
 import { toast } from "sonner";
+import { SelectPopover } from "@/components/SelectPopover";
 
 type KbItem = {
   id: string;
@@ -306,14 +307,14 @@ export default function NewKbPage() {
               </div>
               <div className="grid gap-2">
                 <label className="text-sm font-medium text-slate-900">LLM</label>
-                <select
+                <SelectPopover
                   value={llm}
-                  onChange={(e) => setLlm(e.target.value === "gemini" ? "gemini" : "chatgpt")}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
-                >
-                  <option value="chatgpt">chatGPT</option>
-                  <option value="gemini">GEMINI</option>
-                </select>
+                  onChange={(value) => setLlm(value === "gemini" ? "gemini" : "chatgpt")}
+                  options={[
+                    { id: "chatgpt", label: "chatGPT" },
+                    { id: "gemini", label: "GEMINI" },
+                  ]}
+                />
               </div>
             </div>
 

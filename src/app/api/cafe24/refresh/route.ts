@@ -62,8 +62,6 @@ export async function GET(req: NextRequest) {
     }
     const mallId = String(cafe24.mall_id || "");
     const refreshToken = String(cafe24.refresh_token || "");
-    const clientId = String(cafe24.client_id || "");
-    const clientSecret = String(cafe24.client_secret || "");
     if (!mallId || !refreshToken) {
       summary.skipped += 1;
       continue;
@@ -73,8 +71,6 @@ export async function GET(req: NextRequest) {
     const refreshed = await refreshCafe24Token({
       settingsId: row.id,
       mallId,
-      clientId,
-      clientSecret,
       refreshToken,
       supabase,
     });

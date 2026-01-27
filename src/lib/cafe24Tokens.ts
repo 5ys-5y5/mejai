@@ -12,18 +12,22 @@ export function isExpiringSoon(expiresAt: string, windowMs = 45 * 60_000) {
   return exp <= Date.now() + windowMs;
 }
 
+function readEnv(name: string) {
+  return (process.env[name] || "").trim();
+}
+
 export async function refreshCafe24Token(cfg: {
   settingsId: string;
   mallId: string;
-  clientId: string;
-  clientSecret: string;
   refreshToken: string;
   supabase: SupabaseClient;
 }) {
-  if (!cfg.clientId || !cfg.clientSecret) {
-    return { ok: false as const, error: "Missing client_id/client_secret" };
+  const clientId = readEnv("CAFE24_CLIENT_ID");
+  const clientSecret = readEnv("CAFE24_CLIENT_SECRET_KEY");
+  if (!clientId || !clientSecret) {
+    return { ok: false as const, error: "Missing CAFE24_CLIENT_ID/CAFE24_CLIENT_SECRET_KEY" };
   }
-  const auth = Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString("base64");
+  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
   const res = await fetch(`https://${cfg.mallId}.cafe24api.com/api/v2/oauth/token`, {
     method: "POST",
     headers: {

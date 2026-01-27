@@ -132,8 +132,8 @@ export function HelpPanel() {
     return createPortal(
       <button
         onClick={() => setCollapsed(false)}
-        className="fixed bottom-4 right-4 left-auto z-50 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 relative"
-        style={{ position: "fixed", right: 16, bottom: 16, left: "auto" }}
+        className="fixed bottom-4 right-8 left-auto z-50 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 relative"
+        style={{ position: "fixed", right: 32, bottom: 16, left: "auto" }}
         aria-label="도움 패널 열기"
         title="도움 패널"
       >
@@ -152,8 +152,8 @@ export function HelpPanel() {
 
   return createPortal(
     <div
-      className="fixed bottom-4 right-4 left-auto z-50 w-[360px] max-w-[92vw] rounded-2xl border border-slate-200 bg-white "
-      style={{ position: "fixed", right: 16, bottom: 16, left: "auto" }}
+      className="fixed bottom-4 right-8 left-auto z-50 w-[360px] max-w-[92vw] rounded-2xl border border-slate-200 bg-white "
+      style={{ position: "fixed", right: 32, bottom: 16, left: "auto" }}
     >
       <div className="flex items-start justify-between gap-3 px-4 py-3 border-b border-slate-200">
         <div className="min-w-0">
