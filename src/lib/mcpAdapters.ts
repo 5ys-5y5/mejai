@@ -6,6 +6,7 @@ type ToolCallResult = {
 };
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isTokenExpired, refreshCafe24Token } from "@/lib/cafe24Tokens";
 
 type AdapterContext = {
   supabase: SupabaseClient;
@@ -168,70 +169,6 @@ async function getCafe24Config(ctx?: AdapterContext) {
   };
 }
 
-function isExpired(expiresAt: string) {
-  const exp = Date.parse(expiresAt);
-  if (Number.isNaN(exp)) return true;
-  return exp <= Date.now() + 30_000;
-}
-
-async function refreshCafe24Token(cfg: {
-  settingsId: string;
-  mallId: string;
-  clientId: string;
-  clientSecret: string;
-  refreshToken: string;
-  supabase: SupabaseClient;
-}) {
-  if (!cfg.clientId || !cfg.clientSecret) {
-    return { ok: false as const, error: "Missing client_id/client_secret" };
-  }
-  const auth = Buffer.from(`${cfg.clientId}:${cfg.clientSecret}`).toString("base64");
-  const res = await fetch(`https://${cfg.mallId}.cafe24api.com/api/v2/oauth/token`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(cfg.refreshToken)}`,
-  });
-  const payloadText = await res.text();
-  if (!res.ok) {
-    return { ok: false as const, error: `Cafe24 refresh failed ${res.status}: ${payloadText}` };
-  }
-  const payload = JSON.parse(payloadText) as {
-    access_token: string;
-    refresh_token: string;
-    expires_at: string;
-  };
-  const { data: settingsRow, error: settingsError } = await cfg.supabase
-    .from("auth_settings")
-    .select("providers")
-    .eq("id", cfg.settingsId)
-    .maybeSingle();
-  if (settingsError || !settingsRow) {
-    return { ok: false as const, error: "Auth settings not found" };
-  }
-  const providers = (settingsRow.providers || {}) as Record<string, Cafe24ProviderConfig | undefined>;
-  const current = providers.cafe24 || {};
-  const next = {
-    ...current,
-    access_token: payload.access_token,
-    refresh_token: payload.refresh_token,
-    expires_at: payload.expires_at,
-  };
-  providers.cafe24 = next;
-  const { error } = await cfg.supabase
-    .from("auth_settings")
-    .update({
-      providers,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", cfg.settingsId);
-  if (error) {
-    return { ok: false as const, error: `Token update failed: ${error.message}` };
-  }
-  return { ok: true as const, accessToken: payload.access_token };
-}
 
 async function cafe24Request(
   config: { baseUrl: string; accessToken: string },
@@ -276,7 +213,7 @@ const adapters: Record<string, ToolAdapter> = {
     if (!cfg.ok) {
       return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
     }
-    if (isExpired(cfg.expiresAt)) {
+    if (isTokenExpired(cfg.expiresAt)) {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
@@ -326,7 +263,7 @@ const adapters: Record<string, ToolAdapter> = {
     if (!boardNo) {
       return { status: "error", error: { code: "INVALID_INPUT", message: "board_no is required" } };
     }
-    if (isExpired(cfg.expiresAt)) {
+    if (isTokenExpired(cfg.expiresAt)) {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
@@ -401,7 +338,7 @@ const adapters: Record<string, ToolAdapter> = {
     if (!startDate || !endDate) {
       return { status: "error", error: { code: "INVALID_INPUT", message: "start_date and end_date are required" } };
     }
-    if (isExpired(cfg.expiresAt)) {
+    if (isTokenExpired(cfg.expiresAt)) {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
@@ -456,7 +393,7 @@ const adapters: Record<string, ToolAdapter> = {
     if (!digitsOnly && !memberId && !rawCellphone) {
       return { status: "error", error: { code: "INVALID_INPUT", message: "cellphone or member_id is required" } };
     }
-    if (isExpired(cfg.expiresAt)) {
+    if (isTokenExpired(cfg.expiresAt)) {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
@@ -616,7 +553,7 @@ const adapters: Record<string, ToolAdapter> = {
     if (!cfg.ok) {
       return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
     }
-    if (isExpired(cfg.expiresAt)) {
+    if (isTokenExpired(cfg.expiresAt)) {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
@@ -669,7 +606,7 @@ const adapters: Record<string, ToolAdapter> = {
     if (!cfg.ok) {
       return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
     }
-    if (isExpired(cfg.expiresAt)) {
+    if (isTokenExpired(cfg.expiresAt)) {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,
@@ -746,7 +683,7 @@ const adapters: Record<string, ToolAdapter> = {
         requestBody[key] = value;
       }
     }
-    if (isExpired(cfg.expiresAt)) {
+    if (isTokenExpired(cfg.expiresAt)) {
       const refreshed = await refreshCafe24Token({
         settingsId: cfg.settingsId,
         mallId: cfg.mallId,

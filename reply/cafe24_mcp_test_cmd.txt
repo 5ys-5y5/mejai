@@ -1,7 +1,0 @@
-$line = (Get-Content .env | Select-String -Pattern '^MCP_TOKEN=')
-if (-not $line) { Write-Output 'MCP_TOKEN missing in .env'; exit }
-$token = $line.Line.Split('=')[1].Trim('"')
-Invoke-RestMethod -Method Post -Uri "https://mejai.help/api/mcp/tools/call" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body '{"tool":"list_boards","params":{}}' | ConvertTo-Json -Depth 6
-Invoke-RestMethod -Method Post -Uri "https://mejai.help/api/mcp/tools/call" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body '{"tool":"list_board_articles","params":{"board_no":"5","limit":10}}' | ConvertTo-Json -Depth 6
-Invoke-RestMethod -Method Post -Uri "https://mejai.help/api/mcp/tools/call" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body '{"tool":"list_orders","params":{"start_date":"2026-01-01","end_date":"2026-01-26","limit":10}}' | ConvertTo-Json -Depth 6
-Invoke-RestMethod -Method Post -Uri "https://mejai.help/api/mcp/tools/call" -Headers @{ Authorization = "Bearer $token" } -ContentType "application/json" -Body '{"tool":"find_customer_by_phone","params":{"cellphone":"010-0000-0000"}}' | ConvertTo-Json -Depth 6
