@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isExpiringSoon, refreshCafe24Token } from "@/lib/cafe24Tokens";
+import { refreshCafe24Token } from "@/lib/cafe24Tokens";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 
 type AuthSettingsRow = {
@@ -64,13 +64,7 @@ export async function GET(req: NextRequest) {
     const refreshToken = String(cafe24.refresh_token || "");
     const clientId = String(cafe24.client_id || "");
     const clientSecret = String(cafe24.client_secret || "");
-    const expiresAt = String(cafe24.expires_at || "");
-
     if (!mallId || !refreshToken) {
-      summary.skipped += 1;
-      continue;
-    }
-    if (!isExpiringSoon(expiresAt)) {
       summary.skipped += 1;
       continue;
     }
