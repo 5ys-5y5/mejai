@@ -75,6 +75,7 @@ export default function SettingsPage() {
   const oauthPollRef = useRef<number | null>(null);
   const lastOauthKeyRef = useRef<string>("");
   const lastMallIdRef = useRef<string>("");
+  const lastSavedMallIdRef = useRef<string>("");
   const [cafe24Draft, setCafe24Draft] = useState<Cafe24ProviderDraft>({
     mall_id: "",
     mall_domain: "",
@@ -387,7 +388,10 @@ export default function SettingsPage() {
       const next = payload.provider as Partial<Cafe24ProviderDraft>;
       const forcedMallId = overrideMallId || lastMallIdRef.current;
       if (forcedMallId) next.mall_id = forcedMallId;
-      if (next.mall_id) setCafe24TokenMallId(next.mall_id);
+      if (next.mall_id) {
+        setCafe24TokenMallId(next.mall_id);
+        lastSavedMallIdRef.current = next.mall_id;
+      }
       setCafe24Draft((prev) => ({ ...prev, ...next }));
       return next;
     } catch {
@@ -557,7 +561,10 @@ export default function SettingsPage() {
         } else if (payload.provider) {
           if (activeProvider === "cafe24") {
             const next = payload.provider as Partial<Cafe24ProviderDraft>;
-            if (next.mall_id) setCafe24TokenMallId(next.mall_id);
+            if (next.mall_id) {
+              setCafe24TokenMallId(next.mall_id);
+              lastSavedMallIdRef.current = next.mall_id;
+            }
             setCafe24Draft((prev) => ({ ...prev, ...next }));
           } else {
             setShopifyDraft((prev) => ({ ...prev, ...(payload.provider as Partial<ShopifyProviderDraft>) }));
@@ -623,13 +630,28 @@ export default function SettingsPage() {
     try {
       const forcedMallId = lastMallIdRef.current;
       const cafe24Values = forcedMallId ? { ...cafe24Draft, mall_id: forcedMallId } : cafe24Draft;
-      const values =
+      let values =
         activeProvider === "cafe24"
           ? {
               ...cafe24Values,
               scope: sortStrings(filterCafe24Scopes(parseScopes(cafe24Values.scope))).join(" "),
             }
           : shopifyDraft;
+      if (activeProvider === "cafe24") {
+        const normalizedMallId = cafe24Values.mall_id.trim();
+        const tokenMallId = cafe24TokenMallId || lastSavedMallIdRef.current;
+        const mallIdChanged = tokenMallId && normalizedMallId && normalizedMallId !== tokenMallId;
+        if (mallIdChanged) {
+          values = {
+            ...values,
+            access_token: "",
+            refresh_token: "",
+            expires_at: "",
+            shop_no: "",
+            board_no: "",
+          };
+        }
+      }
       const res = await fetch("/api/auth-settings/providers", {
         method: "POST",
         headers: {
@@ -642,6 +664,9 @@ export default function SettingsPage() {
       if (!res.ok || payload.error) {
         setEnvError(payload.error || "저장에 실패했습니다.");
         return;
+      }
+      if (activeProvider === "cafe24") {
+        lastSavedMallIdRef.current = (values as Cafe24ProviderDraft).mall_id;
       }
       setEnvSavedAt(new Date().toISOString());
     } catch {
