@@ -152,9 +152,10 @@ export async function GET(req: NextRequest) {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>${title}</title>
     <style>
-      body { font-family: Arial, sans-serif; padding: 24px; line-height: 1.5; }
-      code, pre { background: #f4f4f4; padding: 8px; display: block; }
-      .label { font-weight: 700; margin-top: 16px; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; padding: 24px; line-height: 1.5; color: #0f172a; }
+      code, pre { background: #f1f5f9; padding: 8px; display: block; border-radius: 8px; }
+      .label { font-weight: 700; margin-top: 16px; color: #334155; }
+      .note { color: #64748b; margin-top: 12px; }
     </style>
   </head>
   <body>
@@ -162,7 +163,7 @@ export async function GET(req: NextRequest) {
     <div class="label">status</div><pre>authorized</pre>
     <div class="label">state</div><pre>${state}</pre>
     <div class="label">saved_mall_id</div><pre>${mallId}</pre>
-    <p>토큰이 브라우저로 전달되었습니다. 마지막에 저장 버튼을 눌러야 DB에 기록됩니다.</p>
+    <p class="note">토큰이 브라우저로 전달되었습니다. 마지막에 저장 버튼을 눌러야 DB에 기록됩니다.</p>
     <script>
       (function () {
         var origin = ${originForPostMessage};
@@ -175,6 +176,7 @@ export async function GET(req: NextRequest) {
               },
               origin
             );
+            window.setTimeout(function () { window.close(); }, 0);
           }
         } catch {}
       })();

@@ -78,8 +78,10 @@ export default function SettingsPage() {
   const [cafe24ScopeBusy, setCafe24ScopeBusy] = useState(false);
   const [cafe24MallBusy, setCafe24MallBusy] = useState(false);
   const [cafe24MallStatus, setCafe24MallStatus] = useState<string>("");
+  const [cafe24AdvanceNotice, setCafe24AdvanceNotice] = useState(false);
   const oauthPollRef = useRef<number | null>(null);
   const oauthTimeoutRef = useRef<number | null>(null);
+  const advanceTimeoutRef = useRef<number | null>(null);
   const lastOauthKeyRef = useRef<string>("");
   const lastMallIdRef = useRef<string>("");
   const lastSavedMallIdRef = useRef<string>("");
@@ -514,6 +516,8 @@ export default function SettingsPage() {
     setCafe24ScopeBusy(true);
     setCafe24MallStatus("OAuth 연결을 시작합니다...");
     if (oauthTimeoutRef.current) window.clearTimeout(oauthTimeoutRef.current);
+    if (advanceTimeoutRef.current) window.clearTimeout(advanceTimeoutRef.current);
+    setCafe24AdvanceNotice(false);
     const started = await startCafe24OAuth({ mallId: trimmed, scope: forcedScope });
     if (!started) {
       setCafe24MallStatus("OAuth 시작에 실패했습니다. 다시 시도해주세요.");
@@ -566,6 +570,11 @@ export default function SettingsPage() {
         setCafe24MallStatus(`OAuth 오류: ${friendly}`);
         setCafe24ScopeBusy(false);
         setCafe24MallBusy(false);
+        setCafe24AdvanceNotice(false);
+        if (advanceTimeoutRef.current) {
+          window.clearTimeout(advanceTimeoutRef.current);
+          advanceTimeoutRef.current = null;
+        }
         if (oauthTimeoutRef.current) {
           window.clearTimeout(oauthTimeoutRef.current);
           oauthTimeoutRef.current = null;
@@ -577,6 +586,10 @@ export default function SettingsPage() {
       if (oauthTimeoutRef.current) {
         window.clearTimeout(oauthTimeoutRef.current);
         oauthTimeoutRef.current = null;
+      }
+      if (advanceTimeoutRef.current) {
+        window.clearTimeout(advanceTimeoutRef.current);
+        advanceTimeoutRef.current = null;
       }
       if (data.callback_url) setCafe24CallbackUrl(data.callback_url);
       const messageMallId = data.mall_id || lastMallIdRef.current;
@@ -600,12 +613,18 @@ export default function SettingsPage() {
           accessToken,
         });
         if (loaded) {
-          setCafe24Step("shop");
-          setShopPickerOpen(true);
-          setCafe24MallStatus("");
+          setCafe24MallStatus("shop_no 목록 확인 완료. 잠시 후 다음 단계로 이동합니다.");
+          setCafe24AdvanceNotice(true);
+          advanceTimeoutRef.current = window.setTimeout(() => {
+            setCafe24Step("shop");
+            setShopPickerOpen(true);
+            setCafe24MallStatus("");
+            setCafe24AdvanceNotice(false);
+          }, 3_000);
         } else {
           setCafe24Step("mall");
           setCafe24MallStatus("shop_no 목록을 불러오지 못했습니다. 다시 시도해주세요.");
+          setCafe24AdvanceNotice(false);
         }
         setCafe24Flow(loaded ? "done" : "idle");
         setCafe24ScopeBusy(false);
@@ -620,6 +639,7 @@ export default function SettingsPage() {
     return () => {
       if (oauthPollRef.current) window.clearInterval(oauthPollRef.current);
       if (oauthTimeoutRef.current) window.clearTimeout(oauthTimeoutRef.current);
+      if (advanceTimeoutRef.current) window.clearTimeout(advanceTimeoutRef.current);
     };
   }, []);
 
@@ -769,7 +789,7 @@ export default function SettingsPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${authToken}`,
         },
-        body: JSON.stringify({ provider: activeProvider, values }),
+        body: JSON.stringify({ provider: activeProvider, values, commit: true }),
       });
       const payload = (await res.json()) as { error?: string };
       if (!res.ok || payload.error) {

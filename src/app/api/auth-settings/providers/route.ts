@@ -58,10 +58,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
-  const body = (await req.json()) as { provider?: string; values?: Record<string, unknown> };
+  const body = (await req.json()) as {
+    provider?: string;
+    values?: Record<string, unknown>;
+    commit?: boolean;
+  };
   const provider = (body.provider || "").trim();
   if (!provider || !body.values) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
+  }
+  if (body.commit !== true) {
+    return NextResponse.json({ error: "COMMIT_REQUIRED" }, { status: 400 });
   }
 
   const { data, error } = await context.supabase
