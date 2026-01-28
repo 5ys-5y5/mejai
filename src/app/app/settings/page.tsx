@@ -9,6 +9,7 @@ import { useHelpPanelEnabled } from "@/hooks/useHelpPanel";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
 import { ExternalLink, Eye, EyeOff } from "lucide-react";
+import { toast } from "sonner";
 
 type TabKey = "profile" | "workspaces" | "team" | "audit" | "env";
 type ProviderKey = "cafe24" | "shopify";
@@ -67,12 +68,18 @@ export default function SettingsPage() {
   const [shopLoading, setShopLoading] = useState(false);
   const [shopPickerOpen, setShopPickerOpen] = useState(false);
   const [cafe24TokenMallId, setCafe24TokenMallId] = useState<string>("");
+  const [cafe24Stored, setCafe24Stored] = useState<Partial<Cafe24ProviderDraft> | null>(null);
+  const [shopifyStored, setShopifyStored] = useState<Partial<ShopifyProviderDraft> | null>(null);
   const [cafe24Flow, setCafe24Flow] = useState<"idle" | "oauth" | "token" | "shops" | "done">("idle");
-  const [cafe24Step, setCafe24Step] = useState<"mall" | "scope" | "shop" | "board">("mall");
+  const [cafe24Step, setCafe24Step] = useState<"mall" | "shop" | "board">("mall");
   const [cafe24CallbackUrl, setCafe24CallbackUrl] = useState<string>("");
   const [cafe24SaveNotice, setCafe24SaveNotice] = useState<string>("");
   const [cafe24ScopeTouched, setCafe24ScopeTouched] = useState(false);
+  const [cafe24ScopeBusy, setCafe24ScopeBusy] = useState(false);
+  const [cafe24MallBusy, setCafe24MallBusy] = useState(false);
+  const [cafe24MallStatus, setCafe24MallStatus] = useState<string>("");
   const oauthPollRef = useRef<number | null>(null);
+  const oauthTimeoutRef = useRef<number | null>(null);
   const lastOauthKeyRef = useRef<string>("");
   const lastMallIdRef = useRef<string>("");
   const lastSavedMallIdRef = useRef<string>("");
@@ -253,6 +260,8 @@ export default function SettingsPage() {
       .filter(Boolean)
       .sort((a, b) => Number(a) - Number(b));
 
+  const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
   const cafe24AllowedScopes = useMemo(
     () => new Set(cafe24ScopeOptions.map((option) => option.id)),
     [cafe24ScopeOptions]
@@ -261,16 +270,46 @@ export default function SettingsPage() {
     (values: string[]) => values.filter((value) => cafe24AllowedScopes.has(value)),
     [cafe24AllowedScopes]
   );
-  const cafe24ScopeValues = useMemo(
-    () => sortStrings(filterCafe24Scopes(parseScopes(cafe24Draft.scope))),
-    [cafe24Draft.scope, filterCafe24Scopes]
-  );
   const cafe24BoardNoValues = useMemo(
     () => sortNumbers(parseCsv(cafe24Draft.board_no)),
     [cafe24Draft.board_no]
   );
 
   const shopifyScopeValues = useMemo(() => parseScopes(shopifyDraft.scopes), [shopifyDraft.scopes]);
+
+  const formatBoardPairs = useCallback(
+    (value: string) => {
+      const ids = sortNumbers(parseCsv(value));
+      if (ids.length === 0) return "-";
+      const map = new Map(boardNoOptions.map((opt) => [opt.id, opt.description]));
+      return ids
+        .map((id) => {
+          const name = map.get(id);
+          return name ? `${id}(${name})` : id;
+        })
+        .join(", ");
+    },
+    [boardNoOptions]
+  );
+
+  const formatShopDomainPairs = useCallback((stored?: Partial<Cafe24ProviderDraft> | null) => {
+    if (!stored) return "-";
+    const shops = parseCsv(stored.shop_no || "");
+    const domains = parseCsv(stored.mall_domain || "");
+    if (shops.length === 0 && domains.length === 0) return "-";
+    if (shops.length === domains.length && shops.length > 0) {
+      return shops.map((shop, idx) => `${shop}(${domains[idx] || "-"})`).join(", ");
+    }
+    const shopText = shops.length > 0 ? shops.join(", ") : "-";
+    const domainText = domains.length > 0 ? domains.join(", ") : "-";
+    return `${shopText} | ${domainText}`;
+  }, []);
+
+  const maskValue = (value?: string) => {
+    if (!value) return "";
+    if (value.length <= 4) return "*".repeat(value.length);
+    return `${value.slice(0, 2)}***${value.slice(-2)}`;
+  };
 
   const revealFor = (field: string) => {
     setRevealedField(field);
@@ -303,32 +342,22 @@ export default function SettingsPage() {
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const cafe24StatusText = useMemo(() => {
-    switch (cafe24Flow) {
-      case "oauth":
-        return "OAuth 인증 진행 중입니다.";
-      case "token":
-        return "토큰을 확인하는 중입니다.";
-      case "shops":
-        return "shop_no 목록을 불러오는 중입니다.";
-      case "done":
-        return "인증이 완료되었습니다.";
-      default:
-        return "";
-    }
-  }, [cafe24Flow]);
 
-
-  const loadShops = useCallback(async () => {
+  const loadShops = useCallback(async (override?: { mallId?: string; accessToken?: string }) => {
     if (!adminReady || !isAdmin || tab !== "env") return false;
     if (activeProvider !== "cafe24") return false;
-    if (!cafe24Draft.mall_id || !cafe24Draft.access_token || !authToken) return false;
+    const mallId = override?.mallId || cafe24Draft.mall_id;
+    const accessToken = override?.accessToken || cafe24Draft.access_token;
+    if (!mallId || !accessToken || !authToken) return false;
     setShopLoading(true);
     setShopError(null);
+    setShopOptions([]);
     try {
       const res = await fetch("/api/cafe24/shops", {
         headers: {
           Authorization: `Bearer ${authToken}`,
+          "x-cafe24-mall-id": mallId,
+          "x-cafe24-access-token": accessToken,
         },
       });
       const payload = (await res.json()) as {
@@ -352,6 +381,10 @@ export default function SettingsPage() {
           label: String(shop.shop_no),
           description: shop.primary_domain || shop.base_domain || shop.shop_name || "",
         })) || [];
+      if (options.length === 0) {
+        setShopOptions([]);
+        return false;
+      }
       setShopOptions(options);
       return true;
     } catch {
@@ -370,6 +403,20 @@ export default function SettingsPage() {
     cafe24Draft.mall_id,
     cafe24Draft.access_token,
   ]);
+
+  const loadShopsWithRetry = useCallback(
+    async (attempts = 3, delayMs = 1500, override?: { mallId?: string; accessToken?: string }) => {
+      for (let i = 0; i < attempts; i += 1) {
+        const ok = await loadShops(override);
+        if (ok) return true;
+        if (i < attempts - 1) {
+          await sleep(delayMs);
+        }
+      }
+      return false;
+    },
+    [loadShops]
+  );
 
   const reloadCafe24Provider = useCallback(async (overrideMallId?: string) => {
     if (!authToken) return false;
@@ -392,29 +439,36 @@ export default function SettingsPage() {
         setCafe24TokenMallId(next.mall_id);
         lastSavedMallIdRef.current = next.mall_id;
       }
-      setCafe24Draft((prev) => ({ ...prev, ...next }));
+      setCafe24Draft((prev) => {
+        const keepScope = cafe24ScopeTouched && prev.scope;
+        const merged = { ...prev, ...next };
+        if (keepScope) merged.scope = prev.scope;
+        return merged;
+      });
       return next;
     } catch {
       setShopError("OAuth 결과를 불러오지 못했습니다.");
       return null;
     }
-  }, [authToken]);
+  }, [authToken, cafe24ScopeTouched]);
 
-  const startCafe24OAuth = useCallback(async () => {
+  const startCafe24OAuth = useCallback(async (override?: { mallId?: string; scope?: string }) => {
     if (!authToken) {
       setShopError("로그인 세션이 없습니다. 다시 로그인해주세요.");
-      return;
+      return false;
     }
-    if (!cafe24Draft.mall_id || !cafe24Draft.scope) {
+    const mallId = (override?.mallId || cafe24Draft.mall_id || "").trim();
+    const scope = (override?.scope || cafe24Draft.scope || "").trim();
+    if (!mallId || !scope) {
       setShopError("mall_id와 scope를 입력한 뒤 OAuth 연결을 진행해주세요.");
-      return;
+      return false;
     }
     setCafe24Flow("oauth");
     try {
       const res = await fetch(
-        `/api/cafe24/authorize?mode=json&mall_id=${encodeURIComponent(
-          cafe24Draft.mall_id
-        )}&scope=${encodeURIComponent(cafe24Draft.scope)}`,
+        `/api/cafe24/authorize?mode=json&mall_id=${encodeURIComponent(mallId)}&scope=${encodeURIComponent(
+          scope
+        )}`,
         {
           headers: {
             Authorization: `Bearer ${authToken}`,
@@ -425,107 +479,147 @@ export default function SettingsPage() {
       const payload = (await res.json()) as { url?: string; error?: string };
       if (!res.ok || !payload.url) {
         setShopError(payload.error || "OAuth 연결을 시작할 수 없습니다.");
-        return;
+        return false;
       }
       const popup = window.open(payload.url, "cafe24_oauth", "width=520,height=720");
       if (!popup) {
         setCafe24Flow("idle");
         setShopError("팝업이 차단되었습니다. 브라우저에서 팝업을 허용해주세요.");
+        return false;
       }
+      return true;
     } catch {
       setShopError("OAuth 연결을 시작할 수 없습니다.");
+      return false;
     }
   }, [authToken, cafe24Draft.mall_id, cafe24Draft.scope]);
 
-  const handleMallNext = useCallback(() => {
+  const handleMallNext = useCallback(async () => {
     if (!cafe24Draft.mall_id) {
       setShopError("mall_id를 입력해주세요.");
       return;
     }
+    if (cafe24MallBusy) return;
     const trimmed = cafe24Draft.mall_id.trim();
     lastMallIdRef.current = trimmed;
     if (trimmed !== cafe24Draft.mall_id) {
       setCafe24Draft((prev) => ({ ...prev, mall_id: trimmed }));
     }
+    const forcedScope = allCafe24Scopes.join(" ");
+    setCafe24Draft((prev) => ({ ...prev, scope: forcedScope }));
+    setCafe24ScopeTouched(false);
     setCafe24CallbackUrl("");
-    setCafe24Step("scope");
-  }, [cafe24Draft.mall_id]);
-
-  const handleScopeNext = useCallback(async () => {
-    if (!cafe24Draft.scope) {
-      setShopError("scope를 선택해주세요.");
+    if (cafe24ScopeBusy) return;
+    setCafe24MallBusy(true);
+    setCafe24ScopeBusy(true);
+    setCafe24MallStatus("OAuth 연결을 시작합니다...");
+    if (oauthTimeoutRef.current) window.clearTimeout(oauthTimeoutRef.current);
+    const started = await startCafe24OAuth({ mallId: trimmed, scope: forcedScope });
+    if (!started) {
+      setCafe24MallStatus("OAuth 시작에 실패했습니다. 다시 시도해주세요.");
+      setCafe24MallBusy(false);
+      setCafe24ScopeBusy(false);
       return;
     }
-    setCafe24CallbackUrl("");
-    setCafe24Flow("oauth");
-    await startCafe24OAuth();
+    setCafe24MallStatus("OAuth 응답을 기다리는 중...");
+    oauthTimeoutRef.current = window.setTimeout(() => {
+      setCafe24MallStatus("OAuth 응답이 없습니다. 다시 시도해주세요.");
+      setCafe24MallBusy(false);
+      setCafe24ScopeBusy(false);
+    }, 5_000);
     if (oauthPollRef.current) {
       window.clearInterval(oauthPollRef.current);
     }
-    const startedAt = Date.now();
-    oauthPollRef.current = window.setInterval(async () => {
-      if (Date.now() - startedAt > 60_000) {
-        if (oauthPollRef.current) window.clearInterval(oauthPollRef.current);
-        oauthPollRef.current = null;
-        return;
-      }
-      const pollMallId = lastMallIdRef.current || cafe24Draft.mall_id;
-      const next = await reloadCafe24Provider(pollMallId);
-      if (!next) return;
-      const tokenMallId = next.mall_id || pollMallId;
-      if (!tokenMallId || tokenMallId !== pollMallId) return;
-      if (!next.access_token || !next.refresh_token) return;
-      if (oauthPollRef.current) window.clearInterval(oauthPollRef.current);
-      oauthPollRef.current = null;
-      setCafe24Flow("shops");
-      const loaded = await loadShops();
-      if (loaded) {
-        setShopPickerOpen(true);
-        setCafe24Step("shop");
-      }
-      setCafe24Flow(loaded ? "done" : "idle");
-    }, 1200);
-  }, [cafe24Draft.scope, startCafe24OAuth, reloadCafe24Provider, loadShops, cafe24Draft.mall_id]);
+    if (oauthPollRef.current) window.clearInterval(oauthPollRef.current);
+  }, [
+    allCafe24Scopes,
+    cafe24Draft.mall_id,
+    cafe24MallBusy,
+    cafe24ScopeBusy,
+    startCafe24OAuth,
+  ]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
+      const allowedOrigins = new Set([window.location.origin, "https://mejai.help", "https://www.mejai.help"]);
+      if (!allowedOrigins.has(event.origin)) return;
       const data = event.data as {
         type?: string;
         error?: string;
         trace_id?: string;
         callback_url?: string;
         mall_id?: string;
+        scope?: string;
+        access_token?: string;
+        refresh_token?: string;
+        expires_at?: string;
       };
       if (data?.type === "cafe24_oauth_error") {
-        setShopError(`OAuth 오류: ${data.error || "unknown"}`);
+        const message = data.error || "OAuth 오류가 발생했습니다.";
+        const friendly =
+          message.includes("Code time expired")
+            ? "OAuth 시간이 만료되었습니다. 다시 로그인 후 시도해주세요."
+            : message;
+        setShopError(`OAuth 오류: ${message}`);
+        toast.error(friendly);
         setCafe24Flow("idle");
+        setCafe24MallStatus(`OAuth 오류: ${friendly}`);
+        setCafe24ScopeBusy(false);
+        setCafe24MallBusy(false);
+        if (oauthTimeoutRef.current) {
+          window.clearTimeout(oauthTimeoutRef.current);
+          oauthTimeoutRef.current = null;
+        }
         if (data.callback_url) setCafe24CallbackUrl(data.callback_url);
         return;
       }
       if (data?.type !== "cafe24_oauth_complete") return;
+      if (oauthTimeoutRef.current) {
+        window.clearTimeout(oauthTimeoutRef.current);
+        oauthTimeoutRef.current = null;
+      }
       if (data.callback_url) setCafe24CallbackUrl(data.callback_url);
       const messageMallId = data.mall_id || lastMallIdRef.current;
-      reloadCafe24Provider(messageMallId).then((next) => {
-        if (!next) return;
-        window.setTimeout(async () => {
-          setCafe24Flow("shops");
-          const loaded = await loadShops();
-          if (loaded) {
-            setShopPickerOpen(true);
-            setCafe24Step("shop");
-          }
-          setCafe24Flow(loaded ? "done" : "idle");
-        }, 0);
-      });
+      const accessToken = data.access_token || "";
+      const refreshToken = data.refresh_token || "";
+      const expiresAt = data.expires_at || "";
+      const scope = data.scope || allCafe24Scopes.join(" ");
+      setCafe24Draft((prev) => ({
+        ...prev,
+        mall_id: messageMallId || prev.mall_id,
+        scope,
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        expires_at: expiresAt,
+      }));
+      window.setTimeout(async () => {
+        setCafe24Flow("shops");
+        setCafe24MallStatus("shop_no 목록을 불러오는 중...");
+        const loaded = await loadShopsWithRetry(3, 1500, {
+          mallId: messageMallId,
+          accessToken,
+        });
+        if (loaded) {
+          setCafe24Step("shop");
+          setShopPickerOpen(true);
+          setCafe24MallStatus("");
+        } else {
+          setCafe24Step("mall");
+          setCafe24MallStatus("shop_no 목록을 불러오지 못했습니다. 다시 시도해주세요.");
+        }
+        setCafe24Flow(loaded ? "done" : "idle");
+        setCafe24ScopeBusy(false);
+        setCafe24MallBusy(false);
+      }, 0);
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [reloadCafe24Provider, loadShops]);
+  }, [allCafe24Scopes, loadShopsWithRetry]);
 
   useEffect(() => {
     return () => {
       if (oauthPollRef.current) window.clearInterval(oauthPollRef.current);
+      if (oauthTimeoutRef.current) window.clearTimeout(oauthTimeoutRef.current);
     };
   }, []);
 
@@ -565,9 +659,9 @@ export default function SettingsPage() {
               setCafe24TokenMallId(next.mall_id);
               lastSavedMallIdRef.current = next.mall_id;
             }
-            setCafe24Draft((prev) => ({ ...prev, ...next }));
+            setCafe24Stored(next);
           } else {
-            setShopifyDraft((prev) => ({ ...prev, ...(payload.provider as Partial<ShopifyProviderDraft>) }));
+            setShopifyStored(payload.provider as Partial<ShopifyProviderDraft>);
           }
         }
       } catch {
@@ -581,12 +675,6 @@ export default function SettingsPage() {
       active = false;
     };
   }, [adminReady, isAdmin, tab, authToken, activeProvider]);
-
-  useEffect(() => {
-    if (activeProvider !== "cafe24") return;
-    if (cafe24Draft.scope || cafe24ScopeTouched) return;
-    setCafe24Draft((prev) => ({ ...prev, scope: allCafe24Scopes.join(" ") }));
-  }, [activeProvider, cafe24Draft.scope, allCafe24Scopes, cafe24ScopeTouched]);
 
   useEffect(() => {
     if (activeProvider !== "cafe24") return;
@@ -639,6 +727,29 @@ export default function SettingsPage() {
           : shopifyDraft;
       if (activeProvider === "cafe24") {
         const normalizedMallId = cafe24Values.mall_id.trim();
+        const selectedShopNos = sortNumbers(parseCsv(cafe24Values.shop_no));
+        if (selectedShopNos.length === 0) {
+          setEnvError("shop_no를 선택해주세요.");
+          return;
+        }
+        if (!cafe24Values.board_no) {
+          setEnvError("board_no를 선택해주세요.");
+          return;
+        }
+        if (shopOptions.length === 0) {
+          setEnvError("shop_no 목록이 준비되지 않았습니다. OAuth 완료 후 다시 시도해주세요.");
+          return;
+        }
+        const allowed = new Set(shopOptions.map((opt) => opt.id));
+        const invalid = selectedShopNos.filter((shopNo) => !allowed.has(shopNo));
+        if (invalid.length > 0) {
+          setEnvError("shop_no 목록과 일치하지 않는 값이 있습니다. 목록에서 다시 선택해주세요.");
+          return;
+        }
+        const derivedDomain = buildMallDomainFromShopNo(selectedShopNos);
+        if (derivedDomain) {
+          cafe24Values.mall_domain = derivedDomain;
+        }
         const tokenMallId = cafe24TokenMallId || lastSavedMallIdRef.current;
         const mallIdChanged = tokenMallId && normalizedMallId && normalizedMallId !== tokenMallId;
         if (mallIdChanged) {
@@ -667,6 +778,10 @@ export default function SettingsPage() {
       }
       if (activeProvider === "cafe24") {
         lastSavedMallIdRef.current = (values as Cafe24ProviderDraft).mall_id;
+        setCafe24Stored(values as Cafe24ProviderDraft);
+        setCafe24TokenMallId((values as Cafe24ProviderDraft).mall_id);
+      } else {
+        setShopifyStored(values as ShopifyProviderDraft);
       }
       setEnvSavedAt(new Date().toISOString());
     } catch {
@@ -699,10 +814,6 @@ export default function SettingsPage() {
       return;
     }
     if (cafe24Step === "shop") {
-      setCafe24Step("scope");
-      return;
-    }
-    if (cafe24Step === "scope") {
       setCafe24Step("mall");
     }
   }, [cafe24Step]);
@@ -838,6 +949,45 @@ export default function SettingsPage() {
                   <div className="mt-2 text-xs text-slate-500">저장됨: {envSavedAt}</div>
                 ) : null}
 
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-xs font-semibold text-slate-900">등록된 정보</div>
+                  {activeProvider === "cafe24" ? (
+                    <div className="mt-2 grid gap-2 text-xs text-slate-700 md:grid-cols-2">
+                      <div className="rounded-lg border border-slate-200 bg-white p-2">
+                        <div className="text-[10px] text-slate-500">mall_id</div>
+                        <div className="font-semibold">{cafe24Stored?.mall_id || "-"}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white p-2">
+                        <div className="text-[10px] text-slate-500">shop_no | mall_domain</div>
+                        <div className="font-semibold">{formatShopDomainPairs(cafe24Stored)}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white p-2">
+                        <div className="text-[10px] text-slate-500">board_no | board_name</div>
+                        <div className="font-semibold">{formatBoardPairs(cafe24Stored?.board_no || "")}</div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-2 grid gap-2 text-xs text-slate-700 md:grid-cols-2">
+                      <div className="rounded-lg border border-slate-200 bg-white p-2">
+                        <div className="text-[10px] text-slate-500">shop_domain</div>
+                        <div className="font-semibold">{shopifyStored?.shop_domain || "-"}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white p-2">
+                        <div className="text-[10px] text-slate-500">scopes</div>
+                        <div className="font-semibold">{shopifyStored?.scopes || "-"}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white p-2">
+                        <div className="text-[10px] text-slate-500">client_id</div>
+                        <div className="font-semibold">{maskValue(shopifyStored?.client_id)}</div>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-white p-2">
+                        <div className="text-[10px] text-slate-500">access_token</div>
+                        <div className="font-semibold">{maskValue(shopifyStored?.access_token)}</div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {activeProvider === "cafe24" ? (
                   <div className="mt-4 space-y-4 min-w-0">
                     {cafe24Step === "mall" ? (
@@ -846,6 +996,9 @@ export default function SettingsPage() {
                         <div className="mt-1 text-[11px] text-slate-500">
                           좌측 메뉴 맨 아래의 [⚙️쇼핑몰 설정] → [기본 설정] → [내 쇼핑몰 정보] → [기본정보 설정] → [상점 아이디]에서 확인해주세요.
                         </div>
+                        {cafe24MallStatus ? (
+                          <div className="mt-2 text-[11px] text-slate-500">{cafe24MallStatus}</div>
+                        ) : null}
                         <label className="mt-3 flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
                           <input
                             className="h-9 w-full rounded-lg border border-slate-200 px-3 text-left text-sm truncate"
@@ -857,175 +1010,103 @@ export default function SettingsPage() {
                           />
                         </label>
                       </div>
-                    ) : cafe24Step === "scope" ? (
-                      <div className="rounded-xl border border-slate-200 bg-white p-3">
-                        <div className="text-xs font-semibold text-slate-900">2. scope 선택</div>
-                        <div className="mt-1 text-[11px] text-slate-500">
-                          필요한 권한을 선택한 뒤 인증을 진행합니다.
-                        </div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCafe24Draft((prev) => ({ ...prev, scope: allCafe24Scopes.join(" ") }))
-                            }
-                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
-                          >
-                            전체 선택
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCafe24ScopeTouched(true);
-                              setCafe24Draft((prev) => ({ ...prev, scope: "" }));
-                            }}
-                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
-                          >
-                            전체 해제
-                          </button>
-                        </div>
-                        <label className="mt-3 flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
-                          <div className="w-full rounded-xl border border-slate-200 bg-white p-2">
-                            <div className="max-h-56 overflow-auto text-xs">
-                              <div className="sticky top-0 z-10 grid grid-cols-[1fr_72px] items-center gap-2 bg-white px-2 py-1 text-[10px] leading-none text-slate-400">
-                                <span>scope</span>
-                                <span>상태</span>
-                              </div>
-                              <div className="grid grid-cols-1 gap-1">
-                                {cafe24ScopeOptions.map((opt) => {
-                                  const active = cafe24ScopeValues.includes(opt.id);
-                                  return (
-                                    <button
-                                      key={opt.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setCafe24ScopeTouched(true);
-                                        const next = active
-                                          ? cafe24ScopeValues.filter((v) => v !== opt.id)
-                                          : [...cafe24ScopeValues, opt.id];
-                                        setCafe24Draft((prev) => ({
-                                          ...prev,
-                                          scope: sortStrings(filterCafe24Scopes(next)).join(" "),
-                                        }));
-                                      }}
-                                      className={cn(
-                                        "grid w-full grid-cols-[1fr_72px] items-center gap-2 rounded-lg px-2 py-1 text-left leading-none",
-                                        active
-                                          ? "bg-slate-100 text-slate-900"
-                                          : "text-slate-600 hover:bg-slate-50"
-                                      )}
-                                    >
-                                      <span className="truncate">{opt.label}</span>
-                                      <span
-                                        className={cn(
-                                          "text-[10px]",
-                                          active ? "text-emerald-600" : "text-slate-400"
-                                        )}
-                                      >
-                                        {active ? "선택됨" : "해제됨"}
-                                      </span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-                        </label>
-                        {cafe24StatusText ? (
-                          <div className="mt-2 text-[11px] text-slate-500">{cafe24StatusText}</div>
-                        ) : null}
-                      </div>
                     ) : cafe24Step === "shop" ? (
                       <div className="rounded-xl border border-slate-200 bg-white p-3">
-                        <div className="text-xs font-semibold text-slate-900">3. shop_no 선택</div>
+                        <div className="text-xs font-semibold text-slate-900">2. shop_no 선택</div>
                         <div className="mt-1 text-[11px] text-slate-500">
                           mall_id로 선택 가능한 shop_no를 선택합니다.
                         </div>
-                        <div className="mt-2 flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const all = shopOptions.map((opt) => opt.id);
-                              const ordered = sortNumbers(all);
-                              const domain = buildMallDomainFromShopNo(ordered);
-                              setCafe24Draft((prev) => ({
-                                ...prev,
-                                shop_no: ordered.join(","),
-                                mall_domain: domain || prev.mall_domain,
-                              }));
-                            }}
-                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
-                          >
-                            전체 선택
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCafe24Draft((prev) => ({ ...prev, shop_no: "" }))}
-                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
-                          >
-                            전체 해제
-                          </button>
-                        </div>
-                        <label className="mt-3 flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
-                          <div className="w-full rounded-xl border border-slate-200 bg-white p-2">
-                            <div className="max-h-56 overflow-auto text-xs">
-                              <div className="sticky top-0 z-10 grid grid-cols-[80px_1fr_60px] items-center gap-2 bg-white px-2 py-1 text-[10px] leading-none text-slate-400">
-                                <span>shop_no</span>
-                                <span>domain</span>
-                                <span>상태</span>
-                              </div>
-                              {shopLoading ? (
-                                <div className="px-2 py-1 text-xs text-slate-500">shop_no 불러오는 중...</div>
-                              ) : (
-                                <div className="grid grid-cols-1 gap-1">
-                                  {shopOptions.map((opt) => {
-                                    const current = sortNumbers(parseCsv(cafe24Draft.shop_no));
-                                    const active = current.includes(opt.id);
-                                    return (
-                                      <button
-                                        key={opt.id}
-                                        type="button"
-                                        onClick={() => {
-                                          const next = active
-                                            ? current.filter((v) => v !== opt.id)
-                                            : [...current, opt.id];
-                                          const ordered = sortNumbers(next);
-                                          const domain = buildMallDomainFromShopNo(ordered);
-                                          setCafe24Draft((prev) => ({
-                                            ...prev,
-                                            shop_no: ordered.join(","),
-                                            mall_domain: domain || prev.mall_domain,
-                                          }));
-                                        }}
-                                        className={cn(
-                                          "grid w-full grid-cols-[80px_1fr_60px] items-center gap-2 rounded-lg px-2 py-1 text-left leading-none",
-                                          active
-                                            ? "bg-slate-100 text-slate-900"
-                                            : "text-slate-600 hover:bg-slate-50"
-                                        )}
-                                      >
-                                        <span className="truncate">{opt.label}</span>
-                                        <span className="truncate text-[11px] text-slate-500">{opt.description || ""}</span>
-                                        <span
-                                          className={cn(
-                                            "text-[10px]",
-                                            active ? "text-emerald-600" : "text-slate-400"
-                                          )}
-                                        >
-                                          {active ? "선택됨" : "해제됨"}
-                                        </span>
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
+                        {shopOptions.length > 0 ? (
+                          <>
+                            <div className="mt-2 flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const all = shopOptions.map((opt) => opt.id);
+                                  const ordered = sortNumbers(all);
+                                  const domain = buildMallDomainFromShopNo(ordered);
+                                  setCafe24Draft((prev) => ({
+                                    ...prev,
+                                    shop_no: ordered.join(","),
+                                    mall_domain: domain || prev.mall_domain,
+                                  }));
+                                }}
+                                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+                              >
+                                전체 선택
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setCafe24Draft((prev) => ({ ...prev, shop_no: "" }))}
+                                className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+                              >
+                                전체 해제
+                              </button>
                             </div>
-                          </div>
-                        </label>
+                            <label className="mt-3 flex w-full min-w-0 flex-col items-start gap-1 text-xs font-medium text-slate-600">
+                              <div className="w-full rounded-xl border border-slate-200 bg-white p-2">
+                                <div className="max-h-56 overflow-auto text-xs">
+                                  <div className="sticky top-0 z-10 grid grid-cols-[80px_1fr_60px] items-center gap-2 bg-white px-2 py-1 text-[10px] leading-none text-slate-400">
+                                    <span>shop_no</span>
+                                    <span>domain</span>
+                                    <span>상태</span>
+                                  </div>
+                                  {shopLoading ? (
+                                    <div className="px-2 py-1 text-xs text-slate-500">shop_no 불러오는 중...</div>
+                                  ) : (
+                                    <div className="grid grid-cols-1 gap-1">
+                                      {shopOptions.map((opt) => {
+                                        const current = sortNumbers(parseCsv(cafe24Draft.shop_no));
+                                        const active = current.includes(opt.id);
+                                        return (
+                                          <button
+                                            key={opt.id}
+                                            type="button"
+                                            onClick={() => {
+                                              const next = active
+                                                ? current.filter((v) => v !== opt.id)
+                                                : [...current, opt.id];
+                                              const ordered = sortNumbers(next);
+                                              const domain = buildMallDomainFromShopNo(ordered);
+                                              setCafe24Draft((prev) => ({
+                                                ...prev,
+                                                shop_no: ordered.join(","),
+                                                mall_domain: domain || prev.mall_domain,
+                                              }));
+                                            }}
+                                            className={cn(
+                                              "grid w-full grid-cols-[80px_1fr_60px] items-center gap-2 rounded-lg px-2 py-1 text-left leading-none",
+                                              active
+                                                ? "bg-slate-100 text-slate-900"
+                                                : "text-slate-600 hover:bg-slate-50"
+                                            )}
+                                          >
+                                            <span className="truncate">{opt.label}</span>
+                                            <span className="truncate text-[11px] text-slate-500">
+                                              {opt.description || ""}
+                                            </span>
+                                            <span
+                                              className={cn(
+                                                "text-[10px]",
+                                                active ? "text-emerald-600" : "text-slate-400"
+                                              )}
+                                            >
+                                              {active ? "선택됨" : "해제됨"}
+                                            </span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </label>
+                          </>
+                        ) : null}
                       </div>
                     ) : cafe24Step === "board" ? (
                       <div className="rounded-xl border border-slate-200 bg-white p-3">
-                        <div className="text-xs font-semibold text-slate-900">4. board_no 선택</div>
+                      <div className="text-xs font-semibold text-slate-900">3. board_no 선택</div>
                         <div className="mt-1 text-[11px] text-slate-500">
                           사용할 게시판 번호를 선택합니다.
                         </div>
@@ -1112,16 +1193,6 @@ export default function SettingsPage() {
                         />
                       </div>
                     ) : null}
-                    {cafe24Step === "scope" ? (
-                      <div className="h-1 w-full overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className={cn(
-                            "h-full rounded-full bg-emerald-400 transition-all duration-500",
-                            cafe24Flow === "idle" ? "w-0" : cafe24Flow === "done" ? "w-full" : "w-2/3"
-                          )}
-                        />
-                      </div>
-                    ) : null}
                     <div className="flex items-center gap-2">
                       {cafe24Step !== "mall" ? (
                         <button
@@ -1137,25 +1208,27 @@ export default function SettingsPage() {
                           <button
                             type="button"
                             onClick={handleMallNext}
-                            className="w-full rounded-lg border border-slate-300 bg-slate-600 px-3 py-2 text-xs text-white hover:bg-slate-700"
+                            disabled={cafe24ScopeBusy || !cafe24Draft.mall_id}
+                            className={cn(
+                              "w-full rounded-lg border px-3 py-2 text-xs text-white",
+                              cafe24ScopeBusy || cafe24MallBusy || !cafe24Draft.mall_id
+                                ? "cursor-not-allowed border-slate-200 bg-slate-300"
+                                : "border-slate-300 bg-stone-800 hover:bg-stone-500"
+                            )}
                           >
-                            다음
-                          </button>
-                        ) : null}
-                        {cafe24Step === "scope" ? (
-                          <button
-                            type="button"
-                            onClick={handleScopeNext}
-                            className="w-full rounded-lg border border-slate-300 bg-slate-600 px-3 py-2 text-xs text-white hover:bg-slate-700"
-                          >
-                            다음
+                            <span className="flex items-center justify-center gap-2">
+                              {cafe24ScopeBusy || cafe24MallBusy ? (
+                                <span className="h-3 w-3 animate-spin rounded-full border border-white border-t-transparent" />
+                              ) : null}
+                              {cafe24MallStatus ? "다시 시도" : "다음"}
+                            </span>
                           </button>
                         ) : null}
                         {cafe24Step === "shop" ? (
                           <button
                             type="button"
                             onClick={handleShopSave}
-                            className="w-full rounded-lg border border-slate-300 bg-slate-600 px-3 py-2 text-xs text-white hover:bg-slate-700"
+                            className="w-full rounded-lg border border-slate-300 bg-stone-800 px-3 py-2 text-xs text-white hover:bg-stone-500"
                           >
                             다음
                           </button>
@@ -1164,7 +1237,7 @@ export default function SettingsPage() {
                           <button
                             type="button"
                             onClick={handleBoardSave}
-                            className="w-full rounded-lg border border-slate-300 bg-slate-600 px-3 py-2 text-xs text-white hover:bg-slate-700"
+                            className="w-full rounded-lg border border-slate-300 bg-stone-800 px-3 py-2 text-xs text-white hover:bg-stone-500"
                           >
                             저장
                           </button>

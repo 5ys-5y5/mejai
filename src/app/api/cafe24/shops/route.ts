@@ -37,6 +37,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }
 
+  const headerMallId = (req.headers.get("x-cafe24-mall-id") || "").trim();
+  const headerAccessToken = (req.headers.get("x-cafe24-access-token") || "").trim();
+
   const { data: access } = await context.supabase
     .from("user_access")
     .select("is_admin")
@@ -47,32 +50,40 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
-  const { data, error } = await context.supabase
-    .from("auth_settings")
-    .select("id, providers")
-    .eq("org_id", context.orgId)
-    .eq("user_id", context.user.id)
-    .maybeSingle();
+  let mallId = headerMallId;
+  let accessToken = headerAccessToken;
+  let refreshToken = "";
+  let settingsId = "";
+  let apiVersion = readApiVersion();
+  if (!mallId || !accessToken) {
+    const { data, error } = await context.supabase
+      .from("auth_settings")
+      .select("id, providers")
+      .eq("org_id", context.orgId)
+      .eq("user_id", context.user.id)
+      .maybeSingle();
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    const providers = (data?.providers || {}) as Record<string, Cafe24ProviderConfig | undefined>;
+    const cafe24 = providers.cafe24 || {};
+    mallId = mallId || cafe24.mall_id || "";
+    accessToken = accessToken || cafe24.access_token || "";
+    refreshToken = cafe24.refresh_token || "";
+    settingsId = data?.id || "";
+    apiVersion = readApiVersion(cafe24);
   }
-
-  const providers = (data?.providers || {}) as Record<string, Cafe24ProviderConfig | undefined>;
-  const cafe24 = providers.cafe24 || {};
-  const mallId = cafe24.mall_id || "";
-  const accessToken = cafe24.access_token || "";
-  const refreshToken = cafe24.refresh_token || "";
 
   if (!mallId || !accessToken) {
     return NextResponse.json({ error: "CAFE24_TOKEN_MISSING" }, { status: 400 });
   }
 
-  const apiVersion = readApiVersion(cafe24);
   let response = await requestShops({ mallId, accessToken, apiVersion });
-  if (!response.ok && response.status === 401 && refreshToken && data?.id) {
+  if (!response.ok && response.status === 401 && refreshToken && settingsId) {
     const refreshed = await refreshCafe24Token({
-      settingsId: data.id,
+      settingsId,
       mallId,
       refreshToken,
       supabase: context.supabase,

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import crypto from "crypto";
 
 function decodeStatePayload(state: string) {
@@ -14,6 +13,7 @@ function decodeStatePayload(state: string) {
     const decoded = Buffer.from(encoded, "base64url").toString("utf8");
     return JSON.parse(decoded) as {
       mall_id?: string;
+      scope?: string;
       org_id?: string;
       user_id?: string;
       origin?: string;
@@ -33,8 +33,7 @@ export async function GET(req: NextRequest) {
   const decodedState = decodeStatePayload(state);
   const originForPostMessage = JSON.stringify(decodedState?.origin || "*");
   const title = error ? "Cafe24 OAuth Error" : "Cafe24 OAuth Success";
-
-  if (error) {
+  const renderErrorPage = (message: string) => {
     const script = `
     <script>
       (function () {
@@ -44,7 +43,7 @@ export async function GET(req: NextRequest) {
             window.opener.postMessage(
               {
                 type: "cafe24_oauth_error",
-                error: ${JSON.stringify(error)},
+                error: ${JSON.stringify(message)},
                 trace_id: ${JSON.stringify(traceId)},
                 callback_url: window.location.href
               },
@@ -65,7 +64,7 @@ export async function GET(req: NextRequest) {
   </head>
   <body>
     <h1>${title}</h1>
-    <div>error: ${error}</div>
+    <div>error: ${message}</div>
     <div>trace_id: ${traceId}</div>
     ${script}
   </body>
@@ -75,6 +74,10 @@ export async function GET(req: NextRequest) {
       status: 200,
       headers: { "content-type": "text/html; charset=utf-8" },
     });
+  };
+
+  if (error) {
+    return renderErrorPage(error);
   }
 
   if (!decodedState?.org_id || !decodedState?.user_id) {
@@ -97,20 +100,8 @@ export async function GET(req: NextRequest) {
   }
 
   const mallIdFromState = decodedState?.mall_id || "";
-
-  const adminSupabase = createAdminSupabaseClient();
-  const { data: settings, error: settingsError } = await adminSupabase
-    .from("auth_settings")
-    .select("providers")
-    .eq("org_id", decodedState.org_id)
-    .eq("user_id", decodedState.user_id)
-    .maybeSingle();
-  if (settingsError && settingsError.code !== "PGRST116") {
-    return new NextResponse(`Auth settings lookup failed: ${settingsError.message}`, { status: 400 });
-  }
-  const providers = ((settings?.providers || {}) as Record<string, { mall_id?: string }>) || {};
-  const cafe24 = providers.cafe24 || {};
-  const mallId = mallIdFromState || cafe24.mall_id || "";
+  const scopeFromState = decodedState?.scope || "";
+  const mallId = mallIdFromState || "";
   if (!mallId) {
     return new NextResponse("Missing Cafe24 mall_id", { status: 400 });
   }
@@ -128,7 +119,14 @@ export async function GET(req: NextRequest) {
   });
   const tokenText = await tokenRes.text();
   if (!tokenRes.ok) {
-    return new NextResponse(`Token exchange failed: ${tokenText}`, { status: 400 });
+    let friendly = `Token exchange failed: ${tokenText}`;
+    try {
+      const parsed = JSON.parse(tokenText) as { error?: string; error_description?: string };
+      if (parsed?.error === "invalid_grant" && (parsed.error_description || "").includes("mall_id")) {
+        friendly = "Cafe24 로그인 계정의 mall_id와 입력한 mall_id가 일치하지 않습니다. 올바른 계정으로 로그인해주세요.";
+      }
+    } catch {}
+    return renderErrorPage(friendly);
   }
   const tokenJson = JSON.parse(tokenText) as {
     access_token: string;
@@ -136,48 +134,15 @@ export async function GET(req: NextRequest) {
     expires_at: string;
     mall_id: string;
   };
-
-  const { data: existing, error: existingError } = await adminSupabase
-    .from("auth_settings")
-    .select("id, providers")
-    .eq("org_id", decodedState.org_id)
-    .eq("user_id", decodedState.user_id)
-    .maybeSingle();
-  if (existingError) {
-    return new NextResponse(`DB read failed: ${existingError.message}`, { status: 500 });
-  }
-  const existingProviders = (existing?.providers || {}) as Record<string, unknown>;
-  const existingCafe24 = (existingProviders.cafe24 ?? {}) as Record<string, unknown>;
-  const nextCafe24: Record<string, unknown> = {
-    ...existingCafe24,
+  const postPayload = {
+    type: "cafe24_oauth_complete",
+    callback_url: "", // filled in browser
     mall_id: mallId,
+    scope: scopeFromState,
     access_token: tokenJson.access_token,
     refresh_token: tokenJson.refresh_token,
     expires_at: tokenJson.expires_at,
   };
-  delete nextCafe24.client_id;
-  delete nextCafe24.client_secret;
-  existingProviders.cafe24 = nextCafe24;
-
-  if (existing?.id) {
-    const { error: updateError } = await adminSupabase
-      .from("auth_settings")
-      .update({ providers: existingProviders, updated_at: new Date().toISOString() })
-      .eq("id", existing.id);
-    if (updateError) {
-      return new NextResponse(`DB update failed: ${updateError.message}`, { status: 500 });
-    }
-  } else {
-    const { error: insertError } = await adminSupabase.from("auth_settings").insert({
-      org_id: decodedState.org_id,
-      user_id: decodedState.user_id,
-      providers: existingProviders,
-      updated_at: new Date().toISOString(),
-    });
-    if (insertError) {
-      return new NextResponse(`DB insert failed: ${insertError.message}`, { status: 500 });
-    }
-  }
 
   const body = `
 <!doctype html>
@@ -194,23 +159,23 @@ export async function GET(req: NextRequest) {
   </head>
   <body>
     <h1>${title}</h1>
-    <div class="label">status</div><pre>stored</pre>
+    <div class="label">status</div><pre>authorized</pre>
     <div class="label">state</div><pre>${state}</pre>
     <div class="label">saved_mall_id</div><pre>${mallId}</pre>
-    <p>토큰이 저장되었습니다. 이제 MCP 호출을 진행할 수 있습니다.</p>
+    <p>토큰이 브라우저로 전달되었습니다. 마지막에 저장 버튼을 눌러야 DB에 기록됩니다.</p>
     <script>
       (function () {
         var origin = ${originForPostMessage};
         try {
           if (window.opener) {
             window.opener.postMessage(
-              { type: "cafe24_oauth_complete", callback_url: window.location.href, mall_id: ${JSON.stringify(mallId)} },
+              {
+                ...${JSON.stringify(postPayload)},
+                callback_url: window.location.href
+              },
               origin
             );
           }
-        } catch {}
-        try {
-          window.close();
         } catch {}
       })();
     </script>

@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
   const origin = new URL(req.url).origin;
   const statePayload = JSON.stringify({
     mall_id: mallId,
+    scope,
     org_id: context.orgId,
     user_id: context.user.id,
     origin,
