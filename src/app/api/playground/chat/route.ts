@@ -57,6 +57,32 @@ function needsTicketAction(text: string) {
   return /문의|접수|요청|처리|환불|취소|반품|교환/.test(text);
 }
 
+function extractAddress(text: string) {
+  const match = text.match(/(\d+\s*호)/);
+  if (match) return match[1].replace(/\s+/g, "");
+  if (/주소/.test(text)) return text.trim();
+  if (/배송지/.test(text)) return text.trim();
+  return null;
+}
+
+function sanitizeConfirmPrompt(prompt: string, fallback: string) {
+  const trimmed = (prompt || "").trim();
+  if (!trimmed) return fallback;
+  if (/^\d+\./.test(trimmed)) return fallback;
+  if (/고객/.test(trimmed)) return fallback;
+  return trimmed;
+}
+
+function sanitizeSummary(summary: string, fallback: string) {
+  const trimmed = (summary || "").trim();
+  if (!trimmed) return fallback;
+  let cleaned = trimmed.replace(/^\d+\.\s*/, "");
+  if (/고객/.test(cleaned) && cleaned.length <= fallback.length) {
+    cleaned = fallback;
+  }
+  return cleaned;
+}
+
 function isRepeatRequest(prev?: string | null, next?: string | null) {
   if (!prev || !next) return false;
   const p = prev.replace(/\s+/g, " ").trim();
@@ -300,14 +326,30 @@ export async function POST(req: NextRequest) {
         };
         await context.supabase.from("turns").update(confirmUpdateAuto).eq("id", lastTurn.id);
       } else {
-      const summaryPrompt = `아래 고객 정정 내용을 반영해 요약(핵심 3~5개)과 확인 질문을 만들어 주세요.
-형식: 
+      const summaryPrompt = `아래 고객 정정 내용을 반영해 요약과 확인 질문을 만들어 주세요.
+- 요약: 한 문장, 자연스러운 한국어, 숫자/목록/고객 단어 금지
+- 확인질문: 한 문장, 자연스러운 한국어, 숫자/목록/고객 단어 금지
+형식:
 요약: ...
 확인질문: ...`;
-      const summaryRes = await runLlm(agent.llm, summaryPrompt, message);
+      const summaryRes = await runLlm(
+        agent.llm,
+        summaryPrompt,
+        `기존 요약: ${lastTurn?.summary_text || lastTurn?.transcript_text || ""}
+고객 정정: ${message}`
+      );
       const [summaryLine, confirmLine] = summaryRes.text.split("\n").filter(Boolean);
-      const summaryText = summaryLine?.replace("요약:", "").trim() || message;
-      const confirmPrompt = confirmLine?.replace("확인질문:", "").trim() || "정리한 내용이 맞나요?";
+      const rawSummary = summaryLine?.replace("요약:", "").trim() || message;
+      const summaryText = sanitizeSummary(rawSummary, message);
+      const orderId = extractOrderId(lastTurn?.transcript_text || "");
+      const address = extractAddress(message);
+      const fallbackConfirm = orderId && address
+        ? `주문번호 ${orderId}의 배송 주소를 ${address}로 변경해 드리면 되나요?`
+        : "정리한 내용이 맞나요?";
+      const confirmPrompt = sanitizeConfirmPrompt(
+        confirmLine?.replace("확인질문:", "").trim() || "",
+        fallbackConfirm
+      );
 
       const { data: turnRow } = await context.supabase.from("turns").insert({
         session_id: sessionId,
@@ -333,13 +375,24 @@ export async function POST(req: NextRequest) {
 
   if (!hasPendingConfirm) {
     const summaryPrompt = `아래 고객 발화를 요약하고 확인 질문을 만들어 주세요.
+- 요약: 한 문장, 자연스러운 한국어, 숫자/목록/고객 단어 금지
+- 확인질문: 한 문장, 자연스러운 한국어, 숫자/목록/고객 단어 금지
 형식:
 요약: ...
 확인질문: ...`;
     const summaryRes = await runLlm(agent.llm, summaryPrompt, message);
     const [summaryLine, confirmLine] = summaryRes.text.split("\n").filter(Boolean);
-    const summaryText = summaryLine?.replace("요약:", "").trim() || message;
-    const confirmPrompt = confirmLine?.replace("확인질문:", "").trim() || "정리한 내용이 맞나요?";
+    const rawSummary = summaryLine?.replace("요약:", "").trim() || message;
+    const summaryText = sanitizeSummary(rawSummary, message);
+    const orderId = extractOrderId(message);
+    const address = extractAddress(message);
+    const fallbackConfirm = orderId && address
+      ? `주문번호 ${orderId}의 배송 주소를 ${address}로 변경해 드리면 되나요?`
+      : "정리한 내용이 맞나요?";
+    const confirmPrompt = sanitizeConfirmPrompt(
+      confirmLine?.replace("확인질문:", "").trim() || "",
+      fallbackConfirm
+    );
 
     const { data: turnRow } = await context.supabase.from("turns").insert({
       session_id: sessionId,
@@ -361,7 +414,9 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const questionText = hasPendingConfirm ? String(lastTurn?.transcript_text || message) : message;
+  const questionText = hasPendingConfirm
+    ? String(lastTurn?.summary_text || lastTurn?.transcript_text || message)
+    : message;
   const orderId = extractOrderId(questionText);
   let mcpSummary = "";
   const mcpActions: string[] = [];
@@ -399,7 +454,7 @@ export async function POST(req: NextRequest) {
         if (ticket.ok) mcpActions.push("문의 티켓 생성");
       }
     } else {
-      mcpSummary += "주문 조회 실패. ";
+      mcpSummary += `주문 조회 실패: ${lookup.error || "UNKNOWN"}. `;
     }
   }
 

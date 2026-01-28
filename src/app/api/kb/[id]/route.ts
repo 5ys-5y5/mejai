@@ -222,6 +222,10 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const versionChanged = contentChanged || llmChanged;
 
   if (versionChanged) {
+    let nextVersion = bumpVersion(existing.version);
+    if (nextVersion === (existing.version ?? "")) {
+      nextVersion = `${existing.version || "1.0"}-rev1`;
+    }
     let embedding: number[] | null = null;
     try {
       const embeddingRes = await createEmbedding(String(nextContent || ""));
@@ -236,7 +240,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       category: nextCategory,
       llm: nextLlm,
       embedding,
-      version: bumpVersion(existing.version),
+      version: nextVersion,
       is_active: nextIsActive,
       org_id: existing.org_id ?? serverContext.orgId,
     };
@@ -269,7 +273,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  if (llmChanged && data?.id && data.id !== existing.id) {
+  if (data?.id && data.id !== existing.id) {
     const { data: agents, error: agentError } = await serverContext.supabase
       .from("agent")
       .select("*")
