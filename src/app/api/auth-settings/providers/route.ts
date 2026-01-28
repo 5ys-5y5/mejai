@@ -98,7 +98,11 @@ export async function POST(req: NextRequest) {
 
   const providers = (data.providers || {}) as Record<string, Record<string, unknown> | undefined>;
   const current = providers[provider] || {};
-  providers[provider] = { ...current, ...body.values };
+  const next = { ...current, ...body.values };
+  if (provider === "cafe24") {
+    delete (next as Record<string, unknown>).scope;
+  }
+  providers[provider] = next;
 
   const { error: updateError } = await context.supabase
     .from("auth_settings")

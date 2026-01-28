@@ -39,8 +39,9 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   let mallId = (url.searchParams.get("mall_id") || "").trim();
   let scope = (url.searchParams.get("scope") || "").trim();
+  const envScope = (process.env.CAFE24_SCOPE || "").trim();
 
-  if (!mallId || !scope) {
+  if (!mallId) {
     const { data, error } = await context.supabase
       .from("auth_settings")
       .select("providers")
@@ -50,10 +51,12 @@ export async function GET(req: NextRequest) {
     if (error || !data) {
       return NextResponse.json({ error: "AUTH_SETTINGS_NOT_FOUND" }, { status: 400 });
     }
-    const providers = (data.providers || {}) as Record<string, { mall_id?: string; scope?: string }>;
+    const providers = (data.providers || {}) as Record<string, { mall_id?: string }>;
     const cafe24 = providers.cafe24 || {};
     mallId = mallId || cafe24.mall_id || "";
-    scope = scope || cafe24.scope || "";
+  }
+  if (!scope) {
+    scope = envScope;
   }
 
   if (!mallId || !scope) {
