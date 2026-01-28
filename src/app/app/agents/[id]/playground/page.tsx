@@ -62,6 +62,7 @@ export default function AgentPlaygroundPage() {
   const [status, setStatus] = useState("연결 대기");
   const wsRef = useRef<WebSocket | null>(null);
   const [reindexing, setReindexing] = useState(false);
+  const [awaitingResponse, setAwaitingResponse] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -124,12 +125,14 @@ export default function AgentPlaygroundPage() {
           if (payload.session_id && mounted) {
             setSessionId(String(payload.session_id));
           }
+          if (mounted) setAwaitingResponse(false);
           setMessages((prev) => [
             ...prev,
             { id: makeId(), role: "bot", content: String(payload.text || "") },
           ]);
         }
         if (payload.type === "error" && mounted) {
+          setAwaitingResponse(false);
           setMessages((prev) => [
             ...prev,
             { id: makeId(), role: "bot", content: `오류: ${payload.error || "UNKNOWN"}` },
@@ -193,6 +196,7 @@ export default function AgentPlaygroundPage() {
         text,
       })
     );
+    setAwaitingResponse(true);
   };
 
   const handleReindex = async () => {
@@ -302,6 +306,16 @@ export default function AgentPlaygroundPage() {
                 ) : null}
               </div>
             ))}
+            {awaitingResponse ? (
+              <div className="flex gap-3 justify-start">
+                <div className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
+                  <Bot className="h-4 w-4 text-slate-500" />
+                </div>
+                <div className="max-w-[75%] rounded-2xl px-4 py-2 text-sm bg-slate-100 text-slate-600 border border-slate-200">
+                  답변 생성 중...
+                </div>
+              </div>
+            ) : null}
           </div>
           <form onSubmit={handleSend} className="mt-6 flex gap-2">
             <Input

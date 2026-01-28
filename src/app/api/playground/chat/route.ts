@@ -33,10 +33,20 @@ function isYes(text: string) {
 }
 
 function extractOrderId(text: string) {
-  const match = text.match(/(?:주문번호|order)[^\d]{0,10}(\d{4,20})/i);
-  if (match) return match[1];
+  const labeled = text.match(/(?:주문번호|order)[^\dA-Za-z]{0,10}([0-9A-Za-z\-]{6,30})/i);
+  if (labeled) return labeled[1];
+  const hyphenId = text.match(/\b\d{4,12}-\d{3,12}(?:-\d{1,6})?\b/);
+  if (hyphenId) return hyphenId[0];
   const plain = text.match(/\b\d{6,20}\b/);
   return plain ? plain[0] : null;
+}
+
+function isOrderOnlyMessage(text: string) {
+  const trimmed = text.trim();
+  const extracted = extractOrderId(trimmed);
+  if (!extracted) return false;
+  const cleaned = trimmed.replace(extracted, "").replace(/[^\p{L}\p{N}]/gu, "").trim();
+  return cleaned.length <= 6;
 }
 
 function needsShipmentAction(text: string) {
@@ -45,6 +55,16 @@ function needsShipmentAction(text: string) {
 
 function needsTicketAction(text: string) {
   return /문의|접수|요청|처리|환불|취소|반품|교환/.test(text);
+}
+
+function isRepeatRequest(prev?: string | null, next?: string | null) {
+  if (!prev || !next) return false;
+  const p = prev.replace(/\s+/g, " ").trim();
+  const n = next.replace(/\s+/g, " ").trim();
+  if (!p || !n) return false;
+  if (p === n) return true;
+  const token = n.replace(/[^\p{L}\p{N}]/gu, "");
+  return token.length > 4 && p.includes(token);
 }
 
 function nowIso() {
@@ -258,7 +278,7 @@ export async function POST(req: NextRequest) {
     lastTurn && lastTurn.confirm_prompt && lastTurn.user_confirmed === null && !lastTurn.final_answer;
 
   if (hasPendingConfirm) {
-    const confirmed = isYes(message);
+    const confirmed = isYes(message) || isOrderOnlyMessage(message);
     const confirmUpdate = {
       confirmation_response: message,
       user_confirmed: confirmed,
@@ -268,6 +288,18 @@ export async function POST(req: NextRequest) {
     await context.supabase.from("turns").update(confirmUpdate).eq("id", lastTurn.id);
 
     if (!confirmed) {
+      const autoProceed =
+        extractOrderId(message) ||
+        isRepeatRequest(lastTurn?.transcript_text, message);
+      if (autoProceed) {
+        const confirmUpdateAuto = {
+          confirmation_response: message,
+          user_confirmed: true,
+          correction_text: null,
+          bot_context: botContext,
+        };
+        await context.supabase.from("turns").update(confirmUpdateAuto).eq("id", lastTurn.id);
+      } else {
       const summaryPrompt = `아래 고객 정정 내용을 반영해 요약(핵심 3~5개)과 확인 질문을 만들어 주세요.
 형식: 
 요약: ...
@@ -289,12 +321,13 @@ export async function POST(req: NextRequest) {
       await insertEvent(context, sessionId, "SUMMARY_GENERATED", { summary: summaryText, seq: nextSeq }, botContext);
       await insertEvent(context, sessionId, "CONFIRMATION_REQUESTED", { confirm_prompt: confirmPrompt, seq: nextSeq }, botContext);
 
-      return NextResponse.json({
+        return NextResponse.json({
         session_id: sessionId,
         step: "confirm",
         message: confirmPrompt,
         turn_id: turnRow?.id || null,
-      });
+        });
+      }
     }
   }
 
@@ -328,7 +361,7 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  const questionText = hasPendingConfirm ? String(lastTurn?.transcript_text || "") : message;
+  const questionText = hasPendingConfirm ? String(lastTurn?.transcript_text || message) : message;
   const orderId = extractOrderId(questionText);
   let mcpSummary = "";
   const mcpActions: string[] = [];
