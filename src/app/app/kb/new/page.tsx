@@ -161,7 +161,7 @@ export default function NewKbPage() {
       try {
         const [res, profile] = await Promise.all([
           apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
-          apiFetch<{ plan?: string }>("/api/user-profile").catch(() => null),
+          apiFetch<{ plan?: string; is_admin?: boolean }>("/api/user-profile").catch(() => null),
         ]);
         if (!mounted) return;
         const rawItems = res.items || [];
