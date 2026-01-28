@@ -12,6 +12,13 @@ npm install
 npm run dev
 ```
 
+## WebSocket 서버 실행 (로컬)
+```bash
+npm run ws
+```
+
+WS 서버는 `process.env.PORT`로 listen 하며, 기본값은 8080입니다.
+
 브라우저에서 `http://localhost:3000` 접속
 
 ## UI 진입 경로
@@ -44,7 +51,7 @@ npm run dev
 
 예시:
 ```
-NEXT_PUBLIC_CALL_WS_URL=ws://localhost:8080/ws/call
+NEXT_PUBLIC_CALL_WS_URL=ws://localhost:8080
 ```
 
 ## 참고

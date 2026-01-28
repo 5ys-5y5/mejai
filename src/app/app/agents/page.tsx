@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
-import { Plus } from "lucide-react";
+import { Bot, Plus } from "lucide-react";
 import { apiFetch } from "@/lib/apiClient";
 import { formatKstDateTime } from "@/lib/kst";
 
@@ -163,9 +163,21 @@ export default function AgentsPage() {
                         버전 {agent.version || "-"} · {formatKstDateTime(agent.created_at)}
                       </div>
                     </div>
-                    <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
-                      옵션
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        href={`/app/agents/${encodeURIComponent(agent.id)}/playground`}
+                        aria-label="대화 테스트"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                      >
+                        <Bot className="h-4 w-4" />
+                      </Link>
+                      <Link
+                        href={`/app/agents/${encodeURIComponent(agent.parent_id ?? agent.id)}`}
+                        className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+                      >
+                        옵션
+                      </Link>
+                    </div>
                   </div>
                 </div>
               );

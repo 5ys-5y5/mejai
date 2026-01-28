@@ -76,6 +76,16 @@ body {
     font-family: inherit;
     font-weight: 500;
   }
+  button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    vertical-align: middle;
+  }
+  button svg {
+    display: block;
+  }
   small,
   .text-xs {
     font-weight: 400;
