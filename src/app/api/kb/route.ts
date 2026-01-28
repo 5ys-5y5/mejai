@@ -61,23 +61,42 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
   }
 
-  const llmValue = typeof body.llm === "string" ? body.llm : "chatgpt";
-  if (llmValue !== "chatgpt" && llmValue !== "gemini") {
-    return NextResponse.json({ error: "INVALID_LLM" }, { status: 400 });
+  const newId = crypto.randomUUID();
+  const wantsAdmin = Boolean(body.is_admin);
+  let applyGroups = Array.isArray(body.apply_groups) ? body.apply_groups : null;
+  let applyGroupsMode =
+    body.apply_groups_mode === "any" || body.apply_groups_mode === "all" ? body.apply_groups_mode : "all";
+  let isAdmin = false;
+  if (wantsAdmin) {
+    const { data: access, error: accessError } = await context.supabase
+      .from("user_access")
+      .select("is_admin")
+      .eq("user_id", context.user.id)
+      .maybeSingle();
+    if (accessError || !access?.is_admin) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
+    isAdmin = true;
   }
 
-  const newId = crypto.randomUUID();
+  if (!isAdmin) {
+    applyGroups = null;
+    applyGroupsMode = null;
+  }
+
   const payload = {
     id: newId,
     parent_id: newId,
     title: body.title,
     content: body.content,
     category: body.category ?? null,
-    version: body.version ?? "1.0",
+    version: "1.0",
     is_active: body.is_active ?? true,
-    llm: llmValue,
     org_id: context.orgId,
     embedding: null as number[] | null,
+    is_admin: isAdmin,
+    apply_groups: applyGroups,
+    apply_groups_mode: applyGroupsMode,
   };
 
   try {

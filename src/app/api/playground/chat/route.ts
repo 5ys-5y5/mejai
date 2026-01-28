@@ -23,6 +23,9 @@ type KbRow = {
   content: string | null;
   is_active: boolean | null;
   version: string | null;
+  is_admin?: boolean | null;
+  apply_groups?: Array<{ path: string; values: string[] }> | null;
+  apply_groups_mode?: "all" | "any" | null;
 };
 
 const YES_PATTERNS = [/^네/, /^예/, /^맞/, /^응/, /^확인/, /^yes/i, /^y$/i];
@@ -57,11 +60,24 @@ function needsTicketAction(text: string) {
   return /문의|접수|요청|처리|환불|취소|반품|교환/.test(text);
 }
 
+function detectIntent(text: string) {
+  if (/주소|배송지|수령인|연락처/.test(text)) return "change";
+  if (/배송|송장|출고|운송장|배송조회/.test(text)) return "shipment";
+  if (/환불|취소|반품|교환/.test(text)) return "refund";
+  return "general";
+}
+
 function extractAddress(text: string) {
   const match = text.match(/(\d+\s*호)/);
   if (match) return match[1].replace(/\s+/g, "");
   if (/주소/.test(text)) return text.trim();
   if (/배송지/.test(text)) return text.trim();
+  return null;
+}
+
+function extractPhone(text: string) {
+  const digits = text.replace(/[^\d]/g, "");
+  if (digits.length >= 10 && digits.length <= 11) return digits;
   return null;
 }
 
@@ -97,6 +113,32 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function isAbusive(text: string) {
+  return /(미친|병신|새끼|욕|꺼져|좆)/.test(text);
+}
+
+function readGroupValue(group: Record<string, unknown> | null, path: string) {
+  if (!group) return null;
+  return path.split(".").reduce((acc: unknown, key) => {
+    if (!acc || typeof acc !== "object") return null;
+    return (acc as Record<string, unknown>)[key];
+  }, group as unknown);
+}
+
+function matchesAdminGroup(
+  applyGroups: Array<{ path: string; values: string[] }> | null | undefined,
+  group: Record<string, unknown> | null,
+  mode: "all" | "any" | null | undefined
+) {
+  if (!applyGroups || applyGroups.length === 0) return true;
+  const matcher = mode === "any" ? "some" : "every";
+  return applyGroups[matcher]((rule) => {
+    const value = readGroupValue(group, rule.path);
+    if (value === null || value === undefined) return false;
+    return rule.values.map(String).includes(String(value));
+  });
+}
+
 async function fetchAgent(context: any, agentId: string) {
   const { data, error } = await context.supabase
     .from("agent")
@@ -121,12 +163,23 @@ async function fetchAgent(context: any, agentId: string) {
 async function fetchKb(context: any, kbId: string) {
   const { data, error } = await context.supabase
     .from("knowledge_base")
-    .select("id, title, content, is_active, version")
+    .select("id, title, content, is_active, version, is_admin, apply_groups")
     .eq("id", kbId)
     .or(`org_id.eq.${context.orgId},org_id.is.null`)
     .maybeSingle();
   if (error) return { error: error.message };
   return { data: data as KbRow | null };
+}
+
+async function fetchAdminKbs(context: any) {
+  const { data, error } = await context.supabase
+    .from("knowledge_base")
+    .select("id, title, content, is_active, version, is_admin, apply_groups")
+    .eq("is_admin", true)
+    .eq("is_active", true)
+    .or(`org_id.eq.${context.orgId},org_id.is.null`);
+  if (error) return { error: error.message };
+  return { data: (data || []) as KbRow[] };
 }
 
 async function createSession(context: any, agentId: string) {
@@ -153,6 +206,36 @@ async function getLastTurn(context: any, sessionId: string) {
     .maybeSingle();
   if (error) return { error: error.message };
   return { data };
+}
+
+async function getRecentTurns(context: any, sessionId: string) {
+  const { data, error } = await context.supabase
+    .from("turns")
+    .select("id, transcript_text, summary_text, correction_text, confirm_prompt, user_confirmed, answer_text, seq")
+    .eq("session_id", sessionId)
+    .order("seq", { ascending: true })
+    .limit(20);
+  if (error) return { error: error.message };
+  return { data: data || [] };
+}
+
+function deriveContext(turns: any[], currentMessage: string) {
+  const candidates = [
+    currentMessage,
+    ...turns.map((t) => t.correction_text || t.transcript_text || t.summary_text || ""),
+  ].filter(Boolean);
+  let orderId: string | null = null;
+  let address: string | null = null;
+  let phone: string | null = null;
+  let intent = "general";
+  for (const text of candidates) {
+    if (!orderId) orderId = extractOrderId(text);
+    if (!address) address = extractAddress(text);
+    if (!phone) phone = extractPhone(text);
+    if (intent === "general") intent = detectIntent(text);
+    if (orderId && address && phone && intent !== "general") break;
+  }
+  return { orderId, address, phone, intent };
 }
 
 async function insertEvent(context: any, sessionId: string, eventType: string, payload: Record<string, unknown>, botContext: Record<string, unknown>) {
@@ -265,11 +348,29 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "KB_NOT_ACTIVE" }, { status: 400 });
   }
   const kb = kbRes.data;
+  const { data: accessRow } = await context.supabase
+    .from("user_access")
+    .select("group")
+    .eq("user_id", context.user.id)
+    .maybeSingle();
+  const userGroup = (accessRow?.group as Record<string, unknown> | null) ?? null;
+  const adminKbRes = await fetchAdminKbs(context);
+  const adminKbs = (adminKbRes.data || []).filter((item) =>
+    matchesAdminGroup(
+      Array.isArray(item.apply_groups) ? item.apply_groups : null,
+      userGroup,
+      item.apply_groups_mode === "any" ? "any" : "all"
+    )
+  );
+  const adminKbText = adminKbs
+    .map((item) => `[ADMIN KB] ${item.title}\n${item.content || ""}`)
+    .join("\n\n");
 
   const botContext = {
     agent_version_id: agent.id,
     kb_version_id: kb.id,
     kb_version: kb.version,
+    admin_kb_ids: adminKbs.map((item) => item.id),
     llm_provider: agent.llm,
     mcp_tool_ids: agent.mcp_tool_ids ?? [],
     ts: nowIso(),
@@ -299,6 +400,13 @@ export async function POST(req: NextRequest) {
   const lastTurnRes = await getLastTurn(context, sessionId);
   const lastTurn = lastTurnRes.data as any;
   const nextSeq = lastTurn?.seq ? Number(lastTurn.seq) + 1 : 1;
+  const recentTurnsRes = await getRecentTurns(context, sessionId);
+  const recentTurns = (recentTurnsRes.data as any[]) || [];
+  const derived = deriveContext(recentTurns, message);
+  const derivedOrderId = derived.orderId;
+  const derivedAddress = derived.address;
+  const derivedPhone = derived.phone;
+  const derivedIntent = derived.intent;
 
   const hasPendingConfirm =
     lastTurn && lastTurn.confirm_prompt && lastTurn.user_confirmed === null && !lastTurn.final_answer;
@@ -373,7 +481,100 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (isAbusive(message)) {
+    const reply = "불편을 드려 죄송합니다. 주문번호나 휴대폰 번호를 알려주시면 바로 확인해 도와드리겠습니다.";
+    await context.supabase.from("turns").insert({
+      session_id: sessionId,
+      seq: nextSeq,
+      transcript_text: message,
+      answer_text: reply,
+      final_answer: reply,
+      bot_context: botContext,
+    });
+    return NextResponse.json({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+  }
+
   if (!hasPendingConfirm) {
+    if (!derivedOrderId && !derivedPhone && derivedIntent !== "general") {
+      const prompt = "주문번호 또는 휴대폰 번호를 알려주시면 확인 후 도와드리겠습니다.";
+      await context.supabase.from("turns").insert({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        summary_text: message,
+        confirm_prompt: prompt,
+        bot_context: botContext,
+      });
+      await insertEvent(context, sessionId, "CONFIRMATION_REQUESTED", { confirm_prompt: prompt, seq: nextSeq }, botContext);
+      return NextResponse.json({ session_id: sessionId, step: "confirm", message: prompt, turn_id: null });
+    }
+
+    if (derivedOrderId && derivedIntent === "change" && !derivedAddress) {
+      const prompt = `주문번호 ${derivedOrderId}의 배송지 변경을 위해 새 주소를 알려 주세요.`;
+      await context.supabase.from("turns").insert({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        summary_text: message,
+        confirm_prompt: prompt,
+        bot_context: botContext,
+      });
+      await insertEvent(context, sessionId, "CONFIRMATION_REQUESTED", { confirm_prompt: prompt, seq: nextSeq }, botContext);
+      return NextResponse.json({ session_id: sessionId, step: "confirm", message: prompt, turn_id: null });
+    }
+
+    if (!derivedOrderId && derivedPhone) {
+      const start = new Date();
+      const end = new Date();
+      start.setDate(end.getDate() - 30);
+      const toDate = (d: Date) => d.toISOString().slice(0, 10);
+      const list = await callMcpTool(
+        context,
+        "list_orders",
+        { start_date: toDate(start), end_date: toDate(end), limit: 5 },
+        sessionId,
+        botContext,
+        allowedToolNames
+      );
+      if (list.ok) {
+        const orders = (list.data as any)?.orders || (list.data as any)?.orders?.order || [];
+        const items = Array.isArray(orders) ? orders : [];
+        if (items.length > 0) {
+          const lines = items.slice(0, 3).map((o: any) => {
+            const id = o.order_id || o.order_no || "";
+            const date = o.order_date || "";
+            const name = o.first_product_name || o.product_name || "";
+            return `- ${id} ${date} ${name}`.trim();
+          });
+          const prompt = `확인된 주문입니다. 원하시는 주문번호를 알려 주세요.\n${lines.join("\n")}`;
+          await context.supabase.from("turns").insert({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            summary_text: message,
+            confirm_prompt: prompt,
+            bot_context: botContext,
+          });
+          await insertEvent(context, sessionId, "CONFIRMATION_REQUESTED", { confirm_prompt: prompt, seq: nextSeq }, botContext);
+          return NextResponse.json({ session_id: sessionId, step: "confirm", message: prompt, turn_id: null });
+        }
+      }
+    }
+
+    if (derivedOrderId && derivedAddress && derivedIntent === "change") {
+      const prompt = `주문번호 ${derivedOrderId}의 배송지를 ${derivedAddress}로 변경해 드리면 되나요?`;
+      await context.supabase.from("turns").insert({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        summary_text: message,
+        confirm_prompt: prompt,
+        bot_context: botContext,
+      });
+      await insertEvent(context, sessionId, "CONFIRMATION_REQUESTED", { confirm_prompt: prompt, seq: nextSeq }, botContext);
+      return NextResponse.json({ session_id: sessionId, step: "confirm", message: prompt, turn_id: null });
+    }
+
     const summaryPrompt = `아래 고객 발화를 요약하고 확인 질문을 만들어 주세요.
 - 요약: 한 문장, 자연스러운 한국어, 숫자/목록/고객 단어 금지
 - 확인질문: 한 문장, 자연스러운 한국어, 숫자/목록/고객 단어 금지
@@ -417,7 +618,7 @@ export async function POST(req: NextRequest) {
   const questionText = hasPendingConfirm
     ? String(lastTurn?.summary_text || lastTurn?.transcript_text || message)
     : message;
-  const orderId = extractOrderId(questionText);
+  const orderId = derivedOrderId || extractOrderId(questionText);
   let mcpSummary = "";
   const mcpActions: string[] = [];
   if (orderId) {
@@ -430,7 +631,14 @@ export async function POST(req: NextRequest) {
       allowedToolNames
     );
     if (lookup.ok) {
-      mcpSummary += `주문 조회 성공 (order_id: ${orderId}). `;
+      const order = (lookup.data as any)?.order || {};
+      const orderInfo = [
+        order.order_id || order.order_no || orderId,
+        order.order_date,
+        order.order_summary?.total_amount_due,
+        order.order_summary?.shipping_status,
+      ].filter(Boolean).join(", ");
+      mcpSummary += `주문 조회 성공 (${orderInfo || orderId}). `;
       if (needsShipmentAction(questionText)) {
         const shipment = await callMcpTool(
           context,
@@ -442,7 +650,20 @@ export async function POST(req: NextRequest) {
         );
         if (shipment.ok) mcpActions.push("배송 조회");
       }
-      if (needsTicketAction(questionText)) {
+      if (derivedIntent === "change" && derivedAddress) {
+        const ticket = await callMcpTool(
+          context,
+          "create_ticket",
+          {
+            title: `배송지 변경 요청 - ${orderId}`,
+            content: `배송지 변경 요청: ${derivedAddress}\n주문번호: ${orderId}`,
+          },
+          sessionId,
+          botContext,
+          allowedToolNames
+        );
+        if (ticket.ok) mcpActions.push("배송지 변경 문의 티켓 생성");
+      } else if (needsTicketAction(questionText)) {
         const ticket = await callMcpTool(
           context,
           "create_ticket",
@@ -466,6 +687,13 @@ export async function POST(req: NextRequest) {
 답변 형식: 요약 -> 근거 -> 상세 -> 다음 액션`;
 
   const userPrompt = `고객 질문: ${questionText}
+추출 정보:
+- 주문번호: ${orderId || "없음"}
+- 배송지: ${derivedAddress || "없음"}
+- 휴대폰: ${derivedPhone || "없음"}
+- 의도: ${derivedIntent}
+관리자 공통 KB:
+${adminKbText || "(없음)"}
 KB 제목: ${kb.title}
 KB 내용:
 ${kb.content || ""}
@@ -488,6 +716,11 @@ ${mcpActions.length ? mcpActions.join(", ") : "없음"}`;
         title: kb.title,
         version: kb.version,
       },
+      ...adminKbs.map((adminKb) => ({
+        kb_id: adminKb.id,
+        title: adminKb.title,
+        version: adminKb.version,
+      })),
     ],
     bot_context: {
       ...botContext,

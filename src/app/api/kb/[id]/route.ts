@@ -139,14 +139,12 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     title?: string;
     content?: string;
     category?: string | null;
-    llm?: string | null;
     is_active?: boolean;
   } = {};
 
   if (typeof body.title === "string") payload.title = body.title;
   if (typeof body.content === "string") payload.content = body.content;
   if (body.category === null || typeof body.category === "string") payload.category = body.category;
-  if (body.llm === null || typeof body.llm === "string") payload.llm = body.llm;
   if (typeof body.is_active === "boolean") payload.is_active = body.is_active;
 
   if (payload.title !== undefined && payload.title.trim().length === 0) {
@@ -155,10 +153,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   if (payload.content !== undefined && payload.content.trim().length === 0) {
     return NextResponse.json({ error: "INVALID_CONTENT" }, { status: 400 });
   }
-  if (payload.llm !== undefined && payload.llm !== null && payload.llm !== "chatgpt" && payload.llm !== "gemini") {
-    return NextResponse.json({ error: "INVALID_LLM" }, { status: 400 });
-  }
-
   const rawId = routeId;
   const urlId = req.nextUrl.pathname.split("/").pop() || "";
   const id = normalizeId(rawId && rawId !== "undefined" ? rawId : urlId);
@@ -187,10 +181,11 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const nextTitle = payload.title ?? existing.title;
   const nextCategory = payload.category ?? existing.category ?? null;
   const nextContent = payload.content ?? existing.content;
-  const nextLlm = payload.llm ?? existing.llm ?? null;
   const nextIsActive = payload.is_active ?? existing.is_active ?? true;
+  const nextIsAdmin = (existing as { is_admin?: boolean | null }).is_admin ?? false;
+  const nextApplyGroups = (existing as { apply_groups?: unknown }).apply_groups ?? null;
+  const nextApplyGroupsMode = (existing as { apply_groups_mode?: string | null }).apply_groups_mode ?? null;
   const contentChanged = nextContent !== (existing.content ?? "");
-  const llmChanged = (nextLlm ?? "") !== (existing.llm ?? "");
   const titleChanged = nextTitle !== (existing.title ?? "");
   const categoryChanged = (nextCategory ?? "") !== (existing.category ?? "");
 
@@ -219,7 +214,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   let data = existing as typeof existing;
   let error: { message: string } | null = null;
 
-  const versionChanged = contentChanged || llmChanged;
+  const versionChanged = contentChanged;
 
   if (versionChanged) {
     let nextVersion = bumpVersion(existing.version);
@@ -238,11 +233,13 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       title: nextTitle,
       content: nextContent,
       category: nextCategory,
-      llm: nextLlm,
       embedding,
       version: nextVersion,
       is_active: nextIsActive,
       org_id: existing.org_id ?? serverContext.orgId,
+      is_admin: nextIsAdmin,
+      apply_groups: nextApplyGroups,
+      apply_groups_mode: nextApplyGroupsMode,
     };
 
     const { data: inserted, error: insertError } = await serverContext.supabase
@@ -258,7 +255,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       .update({
         title: nextTitle,
         category: nextCategory,
-        llm: nextLlm,
         is_active: nextIsActive,
       })
       .eq("id", existing.id)

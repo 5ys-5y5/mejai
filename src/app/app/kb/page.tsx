@@ -18,6 +18,7 @@ type KbItem = {
   version: string | null;
   category: string | null;
   is_active: boolean | null;
+  is_admin?: boolean | null;
   created_at: string | null;
   content?: string | null;
 };
@@ -282,8 +283,9 @@ export default function KbPage() {
               const metric = metricsById[d.id];
               return (
                 <li key={d.id} className="contents">
-                  <div className="flex min-h-[44px] items-center px-4 py-3 text-left text-sm font-medium text-slate-900">
-                    {d.title}
+                  <div className="flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium text-slate-900">
+                    <span>{d.title}</span>
+                    {d.is_admin ? <Badge variant="slate">ADMIN</Badge> : null}
                   </div>
                   <div className="flex min-h-[44px] items-center px-4 py-3 text-left text-xs text-slate-600">
                     {d.is_active ? "배포됨" : "비활성"}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
@@ -135,6 +135,16 @@ export default function AgentDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const agentId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const searchParams = useSearchParams();
+  const issueParam = searchParams.get("issue") || "";
+  const issueSet = useMemo(() => {
+    return new Set(
+      issueParam
+        .split(",")
+        .map((v) => v.trim().toLowerCase())
+        .filter(Boolean)
+    );
+  }, [issueParam]);
 
   const [name, setName] = useState("");
   const [llm, setLlm] = useState("chatgpt");
@@ -470,7 +480,12 @@ export default function AgentDetailPage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="grid gap-2">
+                <div
+                  className={cn(
+                    "grid gap-2 rounded-xl",
+                    issueSet.has("llm") ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-white" : ""
+                  )}
+                >
                   <label className="text-sm font-medium text-slate-900">LLM</label>
                   <SelectPopover
                     value={llm}
@@ -478,7 +493,12 @@ export default function AgentDetailPage() {
                     options={llmOptions}
                   />
                 </div>
-                <div className="grid gap-2">
+                <div
+                  className={cn(
+                    "grid gap-2 rounded-xl",
+                    issueSet.has("kb") ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-white" : ""
+                  )}
+                >
                   <label className="text-sm font-medium text-slate-900">KB 버전 *</label>
                   <SelectPopover
                     value={kbId}
@@ -490,7 +510,12 @@ export default function AgentDetailPage() {
                 </div>
               </div>
 
-              <div className="grid gap-2">
+              <div
+                className={cn(
+                  "grid gap-2 rounded-xl",
+                  issueSet.has("mcp") ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-white" : ""
+                )}
+              >
                 <label className="text-sm font-medium text-slate-900">MCP 도구</label>
                 <MultiSelectPopover
                   values={mcpToolIds}

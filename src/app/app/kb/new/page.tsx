@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/apiClient";
 import { calcRagUsageBytes, DEFAULT_RAG_LIMIT_BYTES, getRagLimitBytes } from "@/lib/ragStorage";
 import { toast } from "sonner";
-import { SelectPopover } from "@/components/SelectPopover";
 
 type KbItem = {
   id: string;
@@ -22,6 +21,11 @@ type Recommendation = {
   title: string;
   detail: string;
   insertText: string;
+};
+
+type GroupOption = {
+  path: string;
+  values: string[];
 };
 
 function buildKeywordSet(text: string) {
@@ -137,10 +141,7 @@ export default function NewKbPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [version, setVersion] = useState("1.0");
   const [content, setContent] = useState("");
-  const [llm, setLlm] = useState<"chatgpt" | "gemini">("chatgpt");
-  const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [usedBytes, setUsedBytes] = useState(0);
   const [limitBytes, setLimitBytes] = useState(DEFAULT_RAG_LIMIT_BYTES);
@@ -148,6 +149,11 @@ export default function NewKbPage() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [selectedRecos, setSelectedRecos] = useState<Record<string, boolean>>({});
   const [diffText, setDiffText] = useState("");
+  const [isAdminUser, setIsAdminUser] = useState(false);
+  const [kbType, setKbType] = useState<"normal" | "admin">("normal");
+  const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
+  const [groupSelections, setGroupSelections] = useState<Record<string, Record<string, boolean>>>({});
+  const [groupMatchMode, setGroupMatchMode] = useState<"all" | "any">("all");
 
   useEffect(() => {
     let mounted = true;
@@ -163,6 +169,16 @@ export default function NewKbPage() {
         setUsedBytes(calcRagUsageBytes(rawItems));
         if (profile?.plan) {
           setLimitBytes(getRagLimitBytes(profile.plan));
+        }
+        if (profile?.is_admin) {
+          setIsAdminUser(true);
+          apiFetch<{ items: GroupOption[] }>("/api/user-access/groups")
+            .then((groupRes) => {
+              setGroupOptions(groupRes.items || []);
+            })
+            .catch(() => {
+              setGroupOptions([]);
+            });
         }
       } catch {
         // keep defaults if usage cannot be loaded
@@ -207,6 +223,19 @@ export default function NewKbPage() {
     return title.trim().length > 0 && content.trim().length > 0;
   }, [title, content]);
 
+  const buildApplyGroups = () => {
+    const entries: Array<{ path: string; values: string[] }> = [];
+    Object.entries(groupSelections).forEach(([path, values]) => {
+      const selected = Object.entries(values)
+        .filter(([, checked]) => checked)
+        .map(([value]) => value);
+      if (selected.length > 0) {
+        entries.push({ path, values: selected });
+      }
+    });
+    return entries;
+  };
+
   const handleSubmit = async () => {
     if (!canSubmit) {
       toast.error("제목과 내용을 입력해 주세요.");
@@ -218,14 +247,14 @@ export default function NewKbPage() {
         title: string;
         content: string;
         category?: string | null;
-        version?: string | null;
-        llm?: string;
         is_active: boolean;
+        is_admin?: boolean;
+        apply_groups?: Array<{ path: string; values: string[] }>;
+        apply_groups_mode?: "all" | "any";
       } = {
         title: title.trim(),
         content: content.trim(),
-        llm,
-        is_active: isActive,
+        is_active: true,
       };
 
       const trimmedCategory = category.trim();
@@ -233,9 +262,10 @@ export default function NewKbPage() {
         payload.category = trimmedCategory;
       }
 
-      const trimmedVersion = version.trim();
-      if (trimmedVersion) {
-        payload.version = trimmedVersion;
+      if (isAdminUser && kbType === "admin") {
+        payload.is_admin = true;
+        payload.apply_groups = buildApplyGroups();
+        payload.apply_groups_mode = groupMatchMode;
       }
 
       await apiFetch("/api/kb", {
@@ -275,18 +305,45 @@ export default function NewKbPage() {
         </div>
 
         <Card className="mt-6 p-6">
-          <div className="grid gap-6">
-            <div className="grid gap-2">
-              <label className="text-sm font-medium text-slate-900">문서 제목 *</label>
-              <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                placeholder="예: 반품 정책 안내"
-                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
-              />
-            </div>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="grid gap-6">
+              {isAdminUser ? (
+                <div className="grid gap-2">
+                  <div className="flex gap-3">
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="radio"
+                        name="kb-type"
+                        checked={kbType === "normal"}
+                        onChange={() => setKbType("normal")}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-0"
+                      />
+                      일반 KB
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="radio"
+                        name="kb-type"
+                        checked={kbType === "admin"}
+                        onChange={() => setKbType("admin")}
+                        className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-0"
+                      />
+                      ADMIN 공통 KB (추후 변경 불가)
+                    </label>
+                  </div>
+                </div>
+              ) : null}
 
-            <div className="grid gap-2 md:grid-cols-3">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-900">문서 제목 *</label>
+                <input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="예: 반품 정책 안내"
+                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
+                />
+              </div>
+
               <div className="grid gap-2">
                 <label className="text-sm font-medium text-slate-900">카테고리</label>
                 <input
@@ -296,99 +353,128 @@ export default function NewKbPage() {
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
+
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-slate-900">버전</label>
-                <input
-                  value={version}
-                  onChange={(e) => setVersion(e.target.value)}
-                  placeholder="예: 1.0"
-                  className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
-                />
-              </div>
-              <div className="grid gap-2">
-                <label className="text-sm font-medium text-slate-900">LLM</label>
-                <SelectPopover
-                  value={llm}
-                  onChange={(value) => setLlm(value === "gemini" ? "gemini" : "chatgpt")}
-                  options={[
-                    { id: "chatgpt", label: "chatGPT" },
-                    { id: "gemini", label: "GEMINI" },
-                  ]}
+                <label className="text-sm font-medium text-slate-900">내용 *</label>
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="문서 내용을 입력하세요."
+                  className="min-h-[220px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
             </div>
 
-            <div className="grid gap-2">
-              <label className="text-sm font-medium text-slate-900">내용 *</label>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="문서 내용을 입력하세요."
-                className="min-h-[220px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
-              />
-            </div>
-
-            <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={isActive}
-                onChange={(e) => setIsActive(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-0"
-              />
-              바로 배포 상태로 설정
-            </label>
-          </div>
-        </Card>
-
-        <Card className="mt-6 p-6">
-          <div className="text-sm font-semibold text-slate-900">추천 지침 (생성 전 점검)</div>
-          <p className="mt-1 text-xs text-slate-500">
-            유사 문서와 일반 권장사항을 바탕으로 추가하면 좋은 지침을 제안합니다. 필요한 항목만 선택하세요.
-          </p>
-          <div className="mt-4 grid gap-3">
-            {recommendations.length === 0 ? (
-              <div className="text-sm text-slate-500">추천할 항목이 없습니다.</div>
-            ) : (
-              recommendations.map((rec) => (
-                <label key={rec.id} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(selectedRecos[rec.id])}
-                    onChange={(e) =>
-                      setSelectedRecos((prev) => ({
-                        ...prev,
-                        [rec.id]: e.target.checked,
-                      }))
-                    }
-                    className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-0"
-                  />
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">{rec.title}</div>
-                    <div className="text-xs text-slate-500">{rec.detail}</div>
+            {isAdminUser && kbType === "admin" ? (
+              <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-slate-900">적용 대상 그룹</div>
+                <div className="text-xs text-slate-500">
+                  user_access.group의 키/값 조합을 기준으로 공통 규칙을 적용합니다.
+                </div>
+                <div className="mt-2 flex items-center gap-3 text-xs text-slate-700">
+                  <span className="font-semibold text-slate-700">매칭 방식</span>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="group-match-mode"
+                      checked={groupMatchMode === "all"}
+                      onChange={() => setGroupMatchMode("all")}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
+                    />
+                    모두 포함
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="group-match-mode"
+                      checked={groupMatchMode === "any"}
+                      onChange={() => setGroupMatchMode("any")}
+                      className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
+                    />
+                    하나라도 포함
+                  </label>
+                </div>
+                {groupOptions.length === 0 ? (
+                  <div className="text-sm text-slate-500">선택 가능한 그룹이 없습니다.</div>
+                ) : (
+                  <div className="grid gap-3">
+                    {groupOptions.map((opt) => (
+                      <div key={opt.path} className="rounded-lg border border-slate-200 bg-white p-3">
+                        <div className="text-xs font-semibold text-slate-700">{opt.path}</div>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {opt.values.map((value) => (
+                            <label
+                              key={`${opt.path}-${value}`}
+                              className="flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={Boolean(groupSelections[opt.path]?.[value])}
+                                onChange={(e) =>
+                                  setGroupSelections((prev) => ({
+                                    ...prev,
+                                    [opt.path]: {
+                                      ...(prev[opt.path] || {}),
+                                      [value]: e.target.checked,
+                                    },
+                                  }))
+                                }
+                                className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
+                              />
+                              {value}
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </label>
-              ))
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">추천 지침 (생성 전 점검)</div>
+                  <p className="mt-1 text-xs text-slate-500">
+                    유사 문서와 일반 권장사항을 바탕으로 추가하면 좋은 지침을 제안합니다. 필요한 항목만 선택하세요.
+                  </p>
+                </div>
+                <div className="grid gap-3">
+                  {recommendations.length === 0 ? (
+                    <div className="text-sm text-slate-500">추천할 항목이 없습니다.</div>
+                  ) : (
+                    recommendations.map((rec) => (
+                      <label key={rec.id} className="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selectedRecos[rec.id])}
+                          onChange={(e) =>
+                            setSelectedRecos((prev) => ({
+                              ...prev,
+                              [rec.id]: e.target.checked,
+                            }))
+                          }
+                          className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-0"
+                        />
+                        <div>
+                          <div className="text-sm font-semibold text-slate-900">{rec.title}</div>
+                          <div className="text-xs text-slate-500">{rec.detail}</div>
+                        </div>
+                      </label>
+                    ))
+                  )}
+                </div>
+
+                <div className="flex">
+                  <button
+                    type="button"
+                    onClick={handleApplyRecommendations}
+                    className="w-full rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                    추천 지침 적용
+                  </button>
+                </div>
+              </div>
             )}
-          </div>
-
-          <div className="mt-4">
-            <div className="text-xs font-semibold text-slate-600">diff (편집 가능)</div>
-            <textarea
-              value={diffText}
-              onChange={(e) => setDiffText(e.target.value)}
-              placeholder="추천 지침을 선택하면 diff가 생성됩니다."
-              className="mt-2 min-h-[140px] w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-xs text-slate-700"
-            />
-          </div>
-
-          <div className="mt-3 flex items-center justify-end">
-            <button
-              type="button"
-              onClick={handleApplyRecommendations}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800"
-            >
-              추천 지침 적용
-            </button>
           </div>
         </Card>
 

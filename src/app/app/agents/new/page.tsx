@@ -20,7 +20,6 @@ type KbItem = {
   version: string | null;
   is_active: boolean | null;
   created_at?: string | null;
-  llm?: string | null;
 };
 
 type KbParentGroup = {
@@ -378,7 +377,7 @@ export default function NewAgentPage() {
                             {version.version || "버전 없음"}
                           </div>
                           <div className="mt-1 text-xs text-slate-500">
-                            {formatKstDateTime(version.created_at)} · LLM {version.llm || "chatgpt"}
+                            {formatKstDateTime(version.created_at)}
                           </div>
                         </div>
                         <span

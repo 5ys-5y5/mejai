@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/apiClient";
 import { calcRagUsageBytes, DEFAULT_RAG_LIMIT_BYTES, getRagLimitBytes } from "@/lib/ragStorage";
 import { toast } from "sonner";
-import { SelectPopover } from "@/components/SelectPopover";
 import { formatKstDateTime } from "@/lib/kst";
 import { PencilLine, Trash2 } from "lucide-react";
 import DiffViewer, { type DiffLine } from "@/components/DiffViewer";
@@ -21,7 +20,9 @@ type KbItem = {
   category: string | null;
   version: string | null;
   is_active: boolean | null;
-  llm?: string | null;
+  is_admin?: boolean | null;
+  apply_groups?: Array<{ path: string; values: string[] }> | null;
+  apply_groups_mode?: "all" | "any" | null;
   created_at?: string | null;
 };
 
@@ -141,7 +142,6 @@ export default function EditKbPage() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [content, setContent] = useState("");
-  const [llm, setLlm] = useState<"chatgpt" | "gemini">("chatgpt");
   const [savingMeta, setSavingMeta] = useState(false);
   const [savingContent, setSavingContent] = useState(false);
   const [activeUpdateId, setActiveUpdateId] = useState<string | null>(null);
@@ -153,8 +153,10 @@ export default function EditKbPage() {
   const [baseTitle, setBaseTitle] = useState("");
   const [baseCategory, setBaseCategory] = useState<string | null>(null);
   const [baseContent, setBaseContent] = useState("");
-  const [baseLlm, setBaseLlm] = useState<"chatgpt" | "gemini">("chatgpt");
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
+  const [isAdminKb, setIsAdminKb] = useState(false);
+  const [applyGroups, setApplyGroups] = useState<Array<{ path: string; values: string[] }>>([]);
+  const [applyGroupsMode, setApplyGroupsMode] = useState<"all" | "any" | null>(null);
   const metaChanged = useMemo(() => {
     const nextTitle = title.trim();
     const nextCategory = category.trim();
@@ -167,17 +169,13 @@ export default function EditKbPage() {
     return content.trim() !== baseContent.trim();
   }, [content, baseContent]);
 
-  const llmChanged = useMemo(() => {
-    return llm !== baseLlm;
-  }, [llm, baseLlm]);
-
   const canSaveMeta = useMemo(() => {
     return metaChanged && title.trim().length > 0 && !savingMeta;
   }, [metaChanged, title, savingMeta]);
 
   const canSaveContent = useMemo(() => {
-    return (contentChanged || llmChanged) && content.trim().length > 0 && !savingContent;
-  }, [contentChanged, llmChanged, content, savingContent]);
+    return contentChanged && content.trim().length > 0 && !savingContent;
+  }, [contentChanged, content, savingContent]);
 
   useEffect(() => {
     let mounted = true;
@@ -191,11 +189,12 @@ export default function EditKbPage() {
         setTitle(res.title || "");
         setCategory(res.category || "");
         setCurrentVersion(res.version || "");
-        setLlm(res.llm === "gemini" ? "gemini" : "chatgpt");
+        setIsAdminKb(Boolean(res.is_admin));
+        setApplyGroups(Array.isArray(res.apply_groups) ? res.apply_groups : []);
+        setApplyGroupsMode(res.apply_groups_mode === "any" ? "any" : "all");
         setBaseTitle(res.title || "");
         setBaseCategory(res.category ?? null);
         setBaseContent(res.content || "");
-        setBaseLlm(res.llm === "gemini" ? "gemini" : "chatgpt");
         setContent(res.content || "");
         setLoading(false);
       } catch (err) {
@@ -292,13 +291,13 @@ export default function EditKbPage() {
       toast.error("내용을 입력해 주세요.");
       return;
     }
-    if (!contentChanged && !llmChanged) {
+    if (!contentChanged) {
       toast.error("변경된 내용이 없습니다.");
       return;
     }
     setSavingContent(true);
     try {
-      const payload = { content: content.trim(), llm };
+      const payload = { content: content.trim() };
       const saved = await apiFetch<KbItem>(`/api/kb/${kbId}`, {
         method: "PATCH",
         headers: {
@@ -311,8 +310,6 @@ export default function EditKbPage() {
       setBaseContent(saved.content || "");
       setContent(saved.content || "");
       setCurrentVersion(saved.version || "");
-      setBaseLlm(saved.llm === "gemini" ? "gemini" : "chatgpt");
-      setLlm(saved.llm === "gemini" ? "gemini" : "chatgpt");
       await refreshItems();
       if (saved?.id && saved.id !== kbId) {
         router.replace(`/app/kb/${saved.id}`);
@@ -436,6 +433,33 @@ export default function EditKbPage() {
             <div className="mt-4 text-sm text-rose-600">{error}</div>
           ) : (
             <div className="mt-4 grid gap-6">
+              {isAdminKb ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-semibold text-slate-900">ADMIN 공통 KB</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    생성 후 유형/대상은 변경할 수 없습니다.
+                  </div>
+                  <div className="mt-3 grid gap-2">
+                    <div className="text-xs font-semibold text-slate-600">적용 대상 그룹</div>
+                    {applyGroups.length === 0 ? (
+                      <div className="text-xs text-slate-500">전체 사용자 적용</div>
+                    ) : (
+                      <div className="grid gap-2 text-xs text-slate-600">
+                        <div className="text-xs font-semibold text-slate-700">
+                          매칭 방식: {applyGroupsMode === "any" ? "하나라도 포함" : "모두 포함"}
+                        </div>
+                        <ul className="grid gap-1">
+                          {applyGroups.map((group) => (
+                            <li key={`${group.path}-${group.values.join(",")}`}>
+                              {group.path}: {group.values.join(", ")}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
               <div className="grid gap-2">
                 <label className="text-sm font-medium text-slate-900">문서 제목 *</label>
                 <input
@@ -492,24 +516,13 @@ export default function EditKbPage() {
             <div className="mt-4 text-sm text-rose-600">{error}</div>
           ) : (
             <div className="mt-4 grid gap-4">
-              <div className="grid gap-2 md:grid-cols-2">
+              <div className="grid gap-2">
                 <div className="grid gap-2">
                   <label className="text-sm font-medium text-slate-900">현재 버전</label>
                   <input
                     value={currentVersion ? `${currentVersion} · 저장 시 새 버전 생성` : "저장 시 새 버전 생성"}
                     disabled
                     className="h-10 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 text-xs text-slate-500 cursor-not-allowed"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-900">LLM</label>
-                  <SelectPopover
-                    value={llm}
-                    onChange={(value) => setLlm(value === "gemini" ? "gemini" : "chatgpt")}
-                    options={[
-                      { id: "chatgpt", label: "chatGPT" },
-                      { id: "gemini", label: "GEMINI" },
-                    ]}
                   />
                 </div>
               </div>

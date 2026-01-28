@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
-import { Bot, Plus } from "lucide-react";
+import { AlertTriangle, Bot, Plus } from "lucide-react";
 import { apiFetch } from "@/lib/apiClient";
 import { formatKstDateTime } from "@/lib/kst";
+import { cn } from "@/lib/utils";
 
 type AgentItem = {
   id: string;
@@ -27,6 +28,17 @@ type KbItem = {
   is_active: boolean | null;
   created_at?: string | null;
 };
+
+type ConnectionIssue = {
+  key: "llm" | "kb" | "mcp" | "ws";
+  title: string;
+  detail: string;
+  action: string;
+  linkHref: string;
+  linkLabel: string;
+};
+
+const WS_URL = process.env.NEXT_PUBLIC_CALL_WS_URL || "";
 
 function parseVersionParts(value?: string | null) {
   if (!value) return null;
@@ -77,11 +89,99 @@ function getActiveAgents(items: AgentItem[]) {
   return Array.from(map.values()).sort(compareVersions);
 }
 
+function getAgentIssues({
+  agent,
+  kb,
+  mcpCount,
+}: {
+  agent: AgentItem;
+  kb: KbItem | null;
+  mcpCount: number;
+}) {
+  const issues: ConnectionIssue[] = [];
+  const agentSettingsHref = `/app/agents/${encodeURIComponent(agent.parent_id ?? agent.id)}`;
+  if (!agent.llm) {
+    issues.push({
+      key: "llm",
+      title: "LLM 미설정",
+      detail: "LLM이 연결되어 있지 않습니다.",
+      action: "에이전트 옵션에서 LLM을 선택하세요.",
+      linkHref: agentSettingsHref,
+      linkLabel: "에이전트 옵션 열기",
+    });
+  }
+  if (!agent.kb_id) {
+    issues.push({
+      key: "kb",
+      title: "KB 미연결",
+      detail: "지식베이스가 연결되어 있지 않습니다.",
+      action: "에이전트 옵션에서 KB를 선택하세요.",
+      linkHref: agentSettingsHref,
+      linkLabel: "에이전트 옵션 열기",
+    });
+  } else if (!kb) {
+    issues.push({
+      key: "kb",
+      title: "KB 조회 실패",
+      detail: "연결된 KB 정보를 찾을 수 없습니다.",
+      action: "KB를 다시 선택하거나 KB 상태를 확인하세요.",
+      linkHref: agentSettingsHref,
+      linkLabel: "에이전트 옵션 열기",
+    });
+  }
+  if (mcpCount === 0) {
+    issues.push({
+      key: "mcp",
+      title: "MCP 미연결",
+      detail: "연결된 MCP 도구가 없습니다.",
+      action: "에이전트 옵션에서 MCP 도구를 추가하세요.",
+      linkHref: agentSettingsHref,
+      linkLabel: "에이전트 옵션 열기",
+    });
+  }
+  if (!WS_URL) {
+    issues.push({
+      key: "ws",
+      title: "WebSocket 미설정",
+      detail: "실시간 서버 주소가 설정되지 않았습니다.",
+      action: "NEXT_PUBLIC_CALL_WS_URL을 설정하고 서버를 재시작하세요.",
+      linkHref: "/app/settings",
+      linkLabel: "설정 페이지 열기",
+    });
+  }
+  return issues;
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [kbItems, setKbItems] = useState<KbItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [issueNotice, setIssueNotice] = useState<{
+    agentName: string;
+    issues: ConnectionIssue[];
+  } | null>(null);
+  const [noticeVisible, setNoticeVisible] = useState(false);
+  const [noticeLeaving, setNoticeLeaving] = useState(false);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (issueNotice) {
+      setNoticeLeaving(false);
+      setNoticeVisible(false);
+      const enter = setTimeout(() => setNoticeVisible(true), 10);
+      return () => clearTimeout(enter);
+    }
+    setNoticeVisible(false);
+    setNoticeLeaving(false);
+    return () => {};
+  }, [issueNotice]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -120,6 +220,60 @@ export default function AgentsPage() {
   return (
     <div className="px-5 md:px-8 py-6">
       <div className="mx-auto w-full max-w-6xl">
+        {issueNotice ? (
+          <div className="fixed bottom-4 left-0 right-0 z-40 md:left-72">
+            <div className="mx-auto w-full max-w-6xl px-5 md:px-8">
+              <div
+                className={cn(
+                  "w-full rounded-2xl border border-amber-400 bg-amber-200 p-4 shadow-lg transition-all duration-200 ease-out",
+                  noticeVisible && !noticeLeaving ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">연결 점검 알림</div>
+                    <div className="text-xs text-slate-600">{issueNotice.agentName}</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNoticeLeaving(true);
+                      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+                      closeTimerRef.current = setTimeout(() => {
+                        setIssueNotice(null);
+                      }, 200);
+                    }}
+                    className="text-xs text-slate-500 hover:text-slate-700"
+                  >
+                    닫기
+                  </button>
+                </div>
+                <div className="mt-3 space-y-3 text-xs text-slate-700">
+                  {issueNotice.issues.map((issue) => (
+                    <div key={issue.key}>
+                      <div className="font-semibold">{issue.title}</div>
+                      <div>문제: {issue.detail}</div>
+                      <div>해결: {issue.action}</div>
+                      <Link
+                        href={issue.linkHref}
+                        className="inline-flex items-center text-amber-700 underline underline-offset-2"
+                        onClick={() => {
+                          setNoticeLeaving(true);
+                          if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+                          closeTimerRef.current = setTimeout(() => {
+                            setIssueNotice(null);
+                          }, 200);
+                        }}
+                      >
+                        {issue.linkLabel}
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
         <h1 className="text-2xl font-semibold text-slate-900">에이전트</h1>
 
         <div className="mt-4 flex items-center justify-between gap-3">
@@ -149,8 +303,9 @@ export default function AgentsPage() {
           ) : null}
           <div className="divide-y divide-slate-200">
             {activeAgents.map((agent) => {
-              const kb = agent.kb_id ? kbById.get(agent.kb_id) : null;
+              const kb = agent.kb_id ? kbById.get(agent.kb_id) ?? null : null;
               const mcpCount = Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0;
+              const issues = getAgentIssues({ agent, kb, mcpCount });
               return (
                 <div key={agent.id} className="p-4 hover:bg-slate-50">
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -164,6 +319,21 @@ export default function AgentsPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
+                      {issues.length > 0 ? (
+                        <button
+                          type="button"
+                          aria-label="연결 점검"
+                          onClick={() => {
+                            setIssueNotice({
+                              agentName: agent.name,
+                              issues,
+                            });
+                          }}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                        </button>
+                      ) : null}
                       <Link
                         href={`/app/agents/${encodeURIComponent(agent.id)}/playground`}
                         aria-label="대화 테스트"
