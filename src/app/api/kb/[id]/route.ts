@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
+import { createEmbedding } from "@/lib/embeddings";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -221,12 +222,20 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const versionChanged = contentChanged || llmChanged;
 
   if (versionChanged) {
+    let embedding: number[] | null = null;
+    try {
+      const embeddingRes = await createEmbedding(String(nextContent || ""));
+      embedding = embeddingRes.embedding as number[];
+    } catch (err) {
+      return NextResponse.json({ error: "EMBEDDING_FAILED" }, { status: 400 });
+    }
     const insertPayload = {
       parent_id: parentId,
       title: nextTitle,
       content: nextContent,
       category: nextCategory,
       llm: nextLlm,
+      embedding,
       version: bumpVersion(existing.version),
       is_active: nextIsActive,
       org_id: existing.org_id ?? serverContext.orgId,

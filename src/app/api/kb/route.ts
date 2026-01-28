@@ -1,6 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import crypto from "crypto";
+import { createEmbedding } from "@/lib/embeddings";
 
 function parseOrder(orderParam: string | null) {
   if (!orderParam) return { field: "created_at", ascending: false };
@@ -76,7 +77,15 @@ export async function POST(req: NextRequest) {
     is_active: body.is_active ?? true,
     llm: llmValue,
     org_id: context.orgId,
+    embedding: null as number[] | null,
   };
+
+  try {
+    const embeddingRes = await createEmbedding(String(body.content || ""));
+    payload.embedding = embeddingRes.embedding as number[];
+  } catch (err) {
+    return NextResponse.json({ error: "EMBEDDING_FAILED" }, { status: 400 });
+  }
 
   const { data, error } = await context.supabase
     .from("knowledge_base")

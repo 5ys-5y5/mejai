@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { apiFetch } from "@/lib/apiClient";
-import { Bot, Send, User } from "lucide-react";
+import { apiFetch, getAccessToken } from "@/lib/apiClient";
+import { Bot, RefreshCw, Send, User } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type AgentItem = {
   id: string;
@@ -57,6 +58,10 @@ export default function AgentPlaygroundPage() {
   ]);
   const [inputValue, setInputValue] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [status, setStatus] = useState("연결 대기");
+  const wsRef = useRef<WebSocket | null>(null);
+  const [reindexing, setReindexing] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -93,20 +98,66 @@ export default function AgentPlaygroundPage() {
     };
   }, [agentId]);
 
+  useEffect(() => {
+    let mounted = true;
+    async function connect() {
+      const wsUrl = process.env.NEXT_PUBLIC_CALL_WS_URL || "";
+      if (!wsUrl) {
+        if (mounted) setStatus("WS URL 미설정");
+        return;
+      }
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      ws.addEventListener("open", () => {
+        if (!mounted) return;
+        setStatus("연결됨");
+        ws.send(JSON.stringify({ type: "join" }));
+      });
+      ws.addEventListener("message", (event) => {
+        let payload: any = null;
+        try {
+          payload = JSON.parse(event.data);
+        } catch {
+          payload = { type: "assistant_message", text: String(event.data) };
+        }
+        if (payload.type === "assistant_message") {
+          if (payload.session_id && mounted) {
+            setSessionId(String(payload.session_id));
+          }
+          setMessages((prev) => [
+            ...prev,
+            { id: makeId(), role: "bot", content: String(payload.text || "") },
+          ]);
+        }
+        if (payload.type === "error" && mounted) {
+          setMessages((prev) => [
+            ...prev,
+            { id: makeId(), role: "bot", content: `오류: ${payload.error || "UNKNOWN"}` },
+          ]);
+        }
+      });
+      ws.addEventListener("close", () => {
+        if (mounted) setStatus("연결 종료");
+      });
+      ws.addEventListener("error", () => {
+        if (mounted) setStatus("연결 오류");
+      });
+    }
+    connect();
+    return () => {
+      mounted = false;
+      const ws = wsRef.current;
+      if (ws) ws.close();
+    };
+  }, []);
+
   const toolNames = useMemo(() => {
     if (!agent?.mcp_tool_ids?.length) return [];
     const map = new Map(tools.map((t) => [t.id, t.name]));
     return agent.mcp_tool_ids.map((id) => map.get(id)).filter(Boolean) as string[];
   }, [agent, tools]);
 
-  const kbSnippet = useMemo(() => {
-    if (!kb?.content) return "";
-    const trimmed = kb.content.trim();
-    if (!trimmed) return "";
-    return trimmed.length > 220 ? `${trimmed.slice(0, 220)}...` : trimmed;
-  }, [kb]);
-
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     const text = inputValue.trim();
     if (!text) return;
@@ -115,26 +166,55 @@ export default function AgentPlaygroundPage() {
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
 
-    const agentName = agent?.name || "에이전트";
-    const replyParts = [
-      `${agentName} 테스트 응답입니다.`,
-      `LLM: ${agent?.llm || "-"}`,
-      `KB: ${kb?.title || "-"}${kb?.version ? ` (${kb.version})` : ""}`,
-      `MCP: ${toolNames.length ? toolNames.join(", ") : "-"}`,
-    ];
-    if (kbSnippet) {
-      replyParts.push(`KB 참고: ${kbSnippet}`);
-    } else {
-      replyParts.push("KB 콘텐츠가 없습니다.");
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      setMessages((prev) => [
+        ...prev,
+        { id: makeId(), role: "bot", content: "WebSocket 연결이 없습니다." },
+      ]);
+      return;
     }
 
-    const botMessage: ChatMessage = {
-      id: makeId(),
-      role: "bot",
-      content: replyParts.join("\n"),
-    };
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      setMessages((prev) => [
+        ...prev,
+        { id: makeId(), role: "bot", content: "인증 토큰이 없습니다." },
+      ]);
+      return;
+    }
 
-    setMessages((prev) => [...prev, botMessage]);
+    ws.send(
+      JSON.stringify({
+        type: "user_message",
+        access_token: accessToken,
+        agent_id: agentId,
+        session_id: sessionId,
+        text,
+      })
+    );
+  };
+
+  const handleReindex = async () => {
+    if (reindexing) return;
+    setReindexing(true);
+    try {
+      const res = await apiFetch<{ ok: boolean; total: number; updated: number }>("/api/kb/reindex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ limit: 200 }),
+      });
+      if (res.ok) {
+        toast.success(`KB 임베딩 재생성 완료 (${res.updated}/${res.total})`);
+      } else {
+        toast.error("KB 임베딩 재생성 실패");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "KB 임베딩 재생성 실패";
+      toast.error(message || "KB 임베딩 재생성 실패");
+    } finally {
+      setReindexing(false);
+    }
   };
 
   return (
@@ -159,19 +239,36 @@ export default function AgentPlaygroundPage() {
           {loading ? (
             <div className="text-sm text-slate-500">에이전트 정보를 불러오는 중...</div>
           ) : (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                이름: {agent?.name || "-"}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                LLM: {agent?.llm || "-"}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                KB: {kb?.title || "-"}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                MCP: {toolNames.length ? `${toolNames[0]}${toolNames.length > 1 ? `+${toolNames.length - 1}` : ""}` : "-"}
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                  이름: {agent?.name || "-"}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                  LLM: {agent?.llm || "-"}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                  KB: {kb?.title || "-"}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                  MCP: {toolNames.length ? `${toolNames[0]}${toolNames.length > 1 ? `+${toolNames.length - 1}` : ""}` : "-"}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
+                  WS: {status}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleReindex}
+                disabled={reindexing}
+                aria-label="KB 임베딩 재생성"
+                className={cn(
+                  "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  reindexing ? "cursor-not-allowed opacity-60" : ""
+                )}
+              >
+                <RefreshCw className={cn("h-4 w-4", reindexing ? "animate-spin" : "")} />
+              </button>
             </div>
           )}
         </Card>

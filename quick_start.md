@@ -18,6 +18,11 @@ npm run ws
 ```
 
 WS 서버는 `process.env.PORT`로 listen 하며, 기본값은 8080입니다.
+WS 서버에서 Next.js API를 호출하려면 아래 환경 변수를 설정합니다.
+
+```
+APP_BASE_URL=http://localhost:3000
+```
 
 브라우저에서 `http://localhost:3000` 접속
 

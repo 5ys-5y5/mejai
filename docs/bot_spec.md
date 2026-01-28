@@ -11,6 +11,8 @@
 - 버전 추적: 성능 차이가 크지 않다면 metadata(jsonb) 중심으로 기록
 - DB 마이그레이션: SQL 쿼리 제공 → 사용자가 Supabase 콘솔에서 수동 적용
 - WS 서버: 별도 서비스(railway)로 분리 운영, same repo에서 `npm run ws`로 실행
+- 주문 조치 범위: 현재 MCP로 실행 가능한 범위로 한정
+- KB 임베딩: OpenAI `text-embedding-3-small` 사용(임베딩 전용 호출은 OpenAI만)
 
 ## 모델 라우팅
 - 기본 응답: OpenAI `gpt-4.1-mini`
@@ -25,13 +27,14 @@
 - 로그에 Authorization/키 출력 금지
 
 ## RAG 기본 정책
-- 임베딩: OpenAI `text-embedding-3-small(1536)` 또는 `text-embedding-3-large(3072)`
+- 임베딩: OpenAI `text-embedding-3-small(1536)` 고정
 - chunk_size: 800~1200 tokens
 - overlap: 120~200 tokens
 - top-k: 6~10 (초기 8)
 - rerank: 가능하면 ON
 - 근거 부족 시 답변 보류/추가 질문
 - 답변 포맷: 요약 → 근거(출처) → 상세 → 다음 액션
+- 에이전트에 연결되지 않은 KB 사용 금지
 
 ## MCP 실행 규칙
 1) JSON schema validation
@@ -41,6 +44,7 @@
 5) 정책/세션 상태 체크
 6) 서버에서만 호출
 7) mcp_tool_audit_logs에 요청/응답/결정/지연 기록
+8) 에이전트에 연결된 MCP 도구만 실행
 
 ## 대화 기록 (mejai_Guideline 1~8)
 1. 고객 발화 기록: turns.transcript_text
@@ -69,3 +73,4 @@
 - 실행 스크립트: `npm run ws`
 - Railway 환경: `PORT`는 자동 주입(문자열 `${PORT}` 수동 입력 금지)
 - 프론트 연결: `NEXT_PUBLIC_CALL_WS_URL`에 WSS 주소 설정
+- WS → API 호출: `APP_BASE_URL`에 Next.js API 베이스 URL 설정

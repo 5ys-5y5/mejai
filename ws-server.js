@@ -3,6 +3,7 @@ const http = require("http");
 const WebSocket = require("ws");
 
 const PORT = Number(process.env.PORT || 8080);
+const APP_BASE_URL = (process.env.APP_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
 
 const server = http.createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });
@@ -44,13 +45,49 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    // TODO: connect to LLM/MCP/KB pipeline and stream responses
     if (message.type === "user_message") {
-      sendJson(ws, {
-        type: "assistant_message",
-        role: "bot",
-        text: "WebSocket 연결은 정상입니다. LLM/MCP/KB 연동은 다음 단계에서 연결됩니다.",
-      });
+      const accessToken = message.access_token || "";
+      const agentId = message.agent_id || "";
+      const text = message.text || "";
+      const sessionId = message.session_id || "";
+      if (!accessToken || !agentId || !text) {
+        sendJson(ws, { type: "error", error: "MISSING_FIELDS" });
+        return;
+      }
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 60_000);
+      fetch(`${APP_BASE_URL}/api/playground/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          agent_id: agentId,
+          message: String(text),
+          session_id: sessionId || null,
+        }),
+        signal: controller.signal,
+      })
+        .then(async (res) => {
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            sendJson(ws, { type: "error", error: payload.error || "REQUEST_FAILED" });
+            return;
+          }
+          sendJson(ws, {
+            type: "assistant_message",
+            role: "bot",
+            text: payload.message || "",
+            step: payload.step || "final",
+            session_id: payload.session_id || sessionId || null,
+            mcp_actions: payload.mcp_actions || [],
+          });
+        })
+        .catch((err) => {
+          sendJson(ws, { type: "error", error: err?.message || "REQUEST_FAILED" });
+        })
+        .finally(() => clearTimeout(timeout));
       return;
     }
 
