@@ -313,7 +313,7 @@ export default function KbPage() {
                   </div>
                   <div className="flex min-h-[44px] items-center px-0 py-3 text-left text-sm">
                     <Link
-                      href={`/app/kb/${encodeURIComponent(d.parent_id ?? safeId)}`}
+                      href={`/app/kb/${encodeURIComponent(d.parent_id ?? safeId)}?redirect=active`}
                       aria-label="수정"
                       className="inline-flex items-center rounded-lg border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50"
                     >

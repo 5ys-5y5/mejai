@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Card } from "@/components/ui/Card";
 import RagStorageBadge from "@/components/RagStorageBadge";
 import { cn } from "@/lib/utils";
@@ -79,6 +79,14 @@ function compareAgentVersions(a: AgentItem, b: AgentItem) {
   const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
   const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
   return bTime - aTime;
+}
+
+function getParentKey(item: { id: string; parent_id?: string | null }) {
+  return item.parent_id ?? item.id;
+}
+
+function findActiveKbByKey(items: KbItem[], key: string) {
+  return items.find((item) => getParentKey(item) === key && item.is_active);
 }
 
 function getActiveAgents(items: AgentItem[]) {
@@ -186,6 +194,7 @@ export default function EditKbPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const kbId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const searchParams = useSearchParams();
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -231,6 +240,16 @@ export default function EditKbPage() {
     let mounted = true;
     async function loadItem() {
       if (!kbId) return;
+      const shouldRedirect = searchParams?.get("redirect") === "active";
+      if (shouldRedirect && allItems.length > 0) {
+        const current = allItems.find((item) => item.id === kbId);
+        const parentKey = current ? getParentKey(current) : kbId;
+        const activeItem = findActiveKbByKey(allItems, parentKey);
+        if (activeItem && activeItem.id !== kbId) {
+          router.replace(`/app/kb/${activeItem.id}`);
+          return;
+        }
+      }
       setLoading(true);
       setError(null);
       try {
@@ -257,7 +276,7 @@ export default function EditKbPage() {
     return () => {
       mounted = false;
     };
-  }, [kbId]);
+  }, [kbId, allItems, router, searchParams]);
 
   useEffect(() => {
     let mounted = true;

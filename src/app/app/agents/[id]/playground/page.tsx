@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
@@ -370,59 +370,61 @@ export default function AgentPlaygroundPage() {
     setAwaitingResponse(false);
   }, [selectedAgentId]);
 
-  useEffect(() => {
-    let mounted = true;
-    async function connect() {
-      if (!WS_URL) {
-        if (mounted) setStatus("WS URL 미설정");
-        return;
-      }
-      const ws = new WebSocket(WS_URL);
-      wsRef.current = ws;
-      ws.addEventListener("open", () => {
-        if (!mounted) return;
-        setStatus("연결됨");
-        ws.send(JSON.stringify({ type: "join" }));
-      });
-      ws.addEventListener("message", (event) => {
-        let payload: any = null;
-        try {
-          payload = JSON.parse(event.data);
-        } catch {
-          payload = { type: "assistant_message", text: String(event.data) };
-        }
-        if (payload.type === "assistant_message") {
-          if (payload.session_id && mounted) {
-            setSessionId(String(payload.session_id));
-          }
-          if (mounted) setAwaitingResponse(false);
-          setMessages((prev) => [
-            ...prev,
-            { id: makeId(), role: "bot", content: String(payload.text || "") },
-          ]);
-        }
-        if (payload.type === "error" && mounted) {
-          setAwaitingResponse(false);
-          setMessages((prev) => [
-            ...prev,
-            { id: makeId(), role: "bot", content: `오류: ${payload.error || "UNKNOWN"}` },
-          ]);
-        }
-      });
-      ws.addEventListener("close", () => {
-        if (mounted) setStatus("연결 종료");
-      });
-      ws.addEventListener("error", () => {
-        if (mounted) setStatus("연결 오류");
-      });
+  const connectWs = useCallback(() => {
+    if (!WS_URL) {
+      setStatus("WS URL 미설정");
+      return;
     }
-    connect();
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+    setStatus("연결 중");
+    const ws = new WebSocket(WS_URL);
+    wsRef.current = ws;
+    ws.addEventListener("open", () => {
+      setStatus("연결됨");
+      ws.send(JSON.stringify({ type: "join" }));
+    });
+    ws.addEventListener("message", (event) => {
+      let payload: any = null;
+      try {
+        payload = JSON.parse(event.data);
+      } catch {
+        payload = { type: "assistant_message", text: String(event.data) };
+      }
+      if (payload.type === "assistant_message") {
+        if (payload.session_id) {
+          setSessionId(String(payload.session_id));
+        }
+        setAwaitingResponse(false);
+        setMessages((prev) => [
+          ...prev,
+          { id: makeId(), role: "bot", content: String(payload.text || "") },
+        ]);
+      }
+      if (payload.type === "error") {
+        setAwaitingResponse(false);
+        setMessages((prev) => [
+          ...prev,
+          { id: makeId(), role: "bot", content: `오류: ${payload.error || "UNKNOWN"}` },
+        ]);
+      }
+    });
+    ws.addEventListener("close", () => {
+      setStatus("연결 종료");
+    });
+    ws.addEventListener("error", () => {
+      setStatus("연결 오류");
+    });
+  }, []);
+
+  useEffect(() => {
+    connectWs();
     return () => {
-      mounted = false;
       const ws = wsRef.current;
       if (ws) ws.close();
     };
-  }, []);
+  }, [connectWs]);
 
   const toolNames = useMemo(() => {
     if (!agent?.mcp_tool_ids?.length) return [];
@@ -492,6 +494,13 @@ export default function AgentPlaygroundPage() {
     if (loading) return [];
     return getConnectionIssues({ agent, kb, toolNames, wsStatus: status });
   }, [agent, kb, toolNames, status, loading]);
+
+  const wsStatusDot = useMemo(() => {
+    if (status === "연결됨") return "bg-emerald-500";
+    if (status === "연결 중") return "bg-amber-400";
+    if (status === "연결 종료" || status === "연결 오류") return "bg-rose-500";
+    return "bg-slate-400";
+  }, [status]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -570,6 +579,19 @@ export default function AgentPlaygroundPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <div className="max-w-full w-max flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700">
+              <span className={cn("h-2 w-2 rounded-full", wsStatusDot)} />
+              <span>WS {status}</span>
+              <button
+                type="button"
+                onClick={connectWs}
+                title="새로 고침"
+                aria-label="웹소켓 새로 고침"
+                className="ml-1 inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => setMode("history")}
