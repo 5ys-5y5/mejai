@@ -667,8 +667,9 @@ export default function AgentPlaygroundPage() {
           ) : null}
           {agentVersions.length > 0 ? (
             <div className="mt-3">
-                <div className="grid grid-cols-[70px_90px_80px_minmax(160px,1fr)_minmax(200px,1fr)_60px] gap-3 border-b border-slate-200 pb-2 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
+                <div className="grid grid-cols-[70px_60px_90px_80px_minmax(160px,1fr)_minmax(200px,1fr)_60px] gap-3 border-b border-slate-200 pb-2 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
                   <div className="px-1">세션 수</div>
+                  <div className="px-1">상태</div>
                   <div className="px-1">에이전트 버전</div>
                   <div className="px-1">LLM</div>
                   <div className="px-1">MCP</div>
@@ -701,18 +702,25 @@ export default function AgentPlaygroundPage() {
                           }
                         }}
                         className={cn(
-                          "grid grid-cols-[70px_90px_80px_minmax(160px,1fr)_minmax(200px,1fr)_60px] gap-3 px-1 py-2 text-xs whitespace-nowrap cursor-pointer",
+                          "grid grid-cols-[70px_60px_90px_80px_minmax(160px,1fr)_minmax(200px,1fr)_60px] gap-3 px-1 py-2 text-xs whitespace-nowrap cursor-pointer",
                           isCurrent ? "bg-slate-100" : "hover:bg-slate-50"
                         )}
                       >
                         <div className="text-slate-600">{sessionCounts[item.id] ?? 0}</div>
+                        <div className="text-slate-600">
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                              item.is_active
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 text-slate-500"
+                            )}
+                          >
+                            {item.is_active ? "ON" : "OFF"}
+                          </span>
+                        </div>
                         <div className="text-slate-900 font-semibold">
                           {item.version || "-"}
-                          {item.is_active ? (
-                            <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                              ON
-                            </span>
-                          ) : null}
                         </div>
                         <div className="text-slate-600">{item.llm || "-"}</div>
                         <div className="text-slate-600 truncate">{mcpLabel}</div>
