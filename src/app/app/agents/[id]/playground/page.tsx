@@ -16,11 +16,14 @@ const WS_URL = process.env.NEXT_PUBLIC_CALL_WS_URL || "";
 
 type AgentItem = {
   id: string;
+  parent_id?: string | null;
   name: string;
   llm: string | null;
   kb_id: string | null;
   mcp_tool_ids?: string[] | null;
   version: string | null;
+  is_active?: boolean | null;
+  created_at?: string | null;
 };
 
 type KbItem = {
@@ -72,6 +75,34 @@ type ConnectionIssue = {
   detail: string;
   action: string;
 };
+
+function parseVersionParts(value?: string | null) {
+  if (!value) return null;
+  const raw = value.trim();
+  const match = raw.match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$/i);
+  if (!match) return null;
+  const major = Number(match[1] || 0);
+  const minor = Number(match[2] || 0);
+  const patch = Number(match[3] || 0);
+  return [major, minor, patch];
+}
+
+function compareAgentVersions(a: AgentItem, b: AgentItem) {
+  const aParts = parseVersionParts(a.version);
+  const bParts = parseVersionParts(b.version);
+  if (aParts && bParts) {
+    for (let i = 0; i < 3; i += 1) {
+      if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
+    }
+  } else if (aParts && !bParts) {
+    return -1;
+  } else if (!aParts && bParts) {
+    return 1;
+  }
+  const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+  return bTime - aTime;
+}
 
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -148,10 +179,15 @@ function getConnectionIssues({
 export default function AgentPlaygroundPage() {
   const params = useParams<{ id: string }>();
   const agentId = Array.isArray(params.id) ? params.id[0] : params.id;
+  const [selectedAgentId, setSelectedAgentId] = useState<string>(agentId || "");
 
   const [agent, setAgent] = useState<AgentItem | null>(null);
   const [kb, setKb] = useState<KbItem | null>(null);
   const [tools, setTools] = useState<MpcTool[]>([]);
+  const [agentVersions, setAgentVersions] = useState<AgentItem[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [kbItems, setKbItems] = useState<KbItem[]>([]);
+  const [sessionCounts, setSessionCounts] = useState<Record<string, number>>({});
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [loading, setLoading] = useState(true);
@@ -168,15 +204,20 @@ export default function AgentPlaygroundPage() {
   const [turnsLoading, setTurnsLoading] = useState(false);
   const [turnsError, setTurnsError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [mode, setMode] = useState<"history" | "edit">("history");
+  const [mode, setMode] = useState<"history" | "edit" | "new">("history");
+
+  useEffect(() => {
+    if (!agentId) return;
+    setSelectedAgentId(agentId);
+  }, [agentId]);
 
   useEffect(() => {
     let mounted = true;
     async function load() {
-      if (!agentId) return;
+      if (!selectedAgentId) return;
       setLoading(true);
       try {
-        const agentRes = await apiFetch<AgentItem>(`/api/agents/${agentId}`);
+        const agentRes = await apiFetch<AgentItem>(`/api/agents/${selectedAgentId}`);
         if (!mounted) return;
         setAgent(agentRes);
         if (agentRes.kb_id) {
@@ -203,7 +244,48 @@ export default function AgentPlaygroundPage() {
     return () => {
       mounted = false;
     };
-  }, [agentId]);
+  }, [selectedAgentId]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadVersions() {
+      if (!agent) return;
+      setVersionsLoading(true);
+      try {
+        const [agentRes, kbRes, sessionRes] = await Promise.all([
+          apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200"),
+          apiFetch<{ items: KbItem[] }>("/api/kb?limit=200").catch(() => ({ items: [] })),
+          apiFetch<{ items: SessionItem[] }>("/api/sessions?limit=500&order=started_at.desc").catch(() => ({
+            items: [],
+          })),
+        ]);
+        if (!mounted) return;
+        const parentId = agent.parent_id ?? agent.id;
+        const versions = (agentRes.items || [])
+          .filter((item) => (item.parent_id ?? item.id) === parentId)
+          .sort(compareAgentVersions);
+        const nextCounts: Record<string, number> = {};
+        (sessionRes.items || []).forEach((item) => {
+          if (!item.agent_id) return;
+          nextCounts[item.agent_id] = (nextCounts[item.agent_id] || 0) + 1;
+        });
+        setAgentVersions(versions);
+        setKbItems(kbRes.items || []);
+        setSessionCounts(nextCounts);
+      } catch {
+        if (!mounted) return;
+        setAgentVersions([]);
+        setKbItems([]);
+        setSessionCounts({});
+      } finally {
+        if (mounted) setVersionsLoading(false);
+      }
+    }
+    loadVersions();
+    return () => {
+      mounted = false;
+    };
+  }, [agent]);
 
   useEffect(() => {
     let mounted = true;
@@ -224,13 +306,13 @@ export default function AgentPlaygroundPage() {
   useEffect(() => {
     let mounted = true;
     async function loadSessions() {
-      if (!agentId) return;
+      if (!selectedAgentId) return;
       setSessionsLoading(true);
       setSessionsError(null);
       try {
         const res = await apiFetch<{ items: SessionItem[] }>("/api/sessions?limit=100&order=started_at.desc");
         if (!mounted) return;
-        const filtered = (res.items || []).filter((s) => s.agent_id === agentId);
+        const filtered = (res.items || []).filter((s) => s.agent_id === selectedAgentId);
         setSessions(filtered);
         setSelectedSessionId((prev) => prev || filtered[0]?.id || null);
       } catch (err) {
@@ -246,7 +328,7 @@ export default function AgentPlaygroundPage() {
     return () => {
       mounted = false;
     };
-  }, [agentId]);
+  }, [selectedAgentId]);
 
   useEffect(() => {
     let mounted = true;
@@ -279,6 +361,14 @@ export default function AgentPlaygroundPage() {
     setMessages([]);
     setAwaitingResponse(false);
   }, [selectedSessionId, mode]);
+
+  useEffect(() => {
+    setSelectedSessionId(null);
+    setSessionId(null);
+    setTurns([]);
+    setMessages([]);
+    setAwaitingResponse(false);
+  }, [selectedAgentId]);
 
   useEffect(() => {
     let mounted = true;
@@ -340,6 +430,14 @@ export default function AgentPlaygroundPage() {
     return agent.mcp_tool_ids.map((id) => map.get(id)).filter(Boolean) as string[];
   }, [agent, tools]);
 
+  const toolNameById = useMemo(() => new Map(tools.map((t) => [t.id, t.name])), [tools]);
+
+  const kbById = useMemo(() => {
+    const map = new Map<string, KbItem>();
+    kbItems.forEach((item) => map.set(item.id, item));
+    return map;
+  }, [kbItems]);
+
   const historyMessages = useMemo(() => {
     const acc: ChatMessage[] = [];
     turns.forEach((turn) => {
@@ -399,8 +497,8 @@ export default function AgentPlaygroundPage() {
     e.preventDefault();
     const text = inputValue.trim();
     if (!text) return;
-    if (mode !== "edit") return;
-    if (!isAdmin) {
+    if (mode === "history") return;
+    if (mode === "edit" && !isAdmin) {
       toast.error("수정 모드는 관리자만 사용할 수 있습니다.");
       return;
     }
@@ -431,8 +529,8 @@ export default function AgentPlaygroundPage() {
       JSON.stringify({
         type: "user_message",
         access_token: accessToken,
-        agent_id: agentId,
-        session_id: selectedSessionId || sessionId,
+        agent_id: selectedAgentId,
+        session_id: mode === "new" ? sessionId : selectedSessionId || sessionId,
         text,
       })
     );
@@ -471,12 +569,59 @@ export default function AgentPlaygroundPage() {
               LLM, MCP, KB 설정을 확인하기 위한 테스트 채팅입니다.
             </p>
           </div>
-          <Link
-            href={`/app/agents/${encodeURIComponent(agentId)}`}
-            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-          >
-            옵션으로
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMode("history")}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-xs font-semibold",
+                mode === "history"
+                  ? "border-slate-300 bg-slate-100 text-slate-900"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              히스토리 모드
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMode("new");
+                setSelectedSessionId(null);
+                setSessionId(null);
+                setMessages([]);
+                setAwaitingResponse(false);
+              }}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-xs font-semibold",
+                mode === "new"
+                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              신규 대화 테스트
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!isAdmin) {
+                  toast.error("수정 모드는 관리자만 사용할 수 있습니다.");
+                  return;
+                }
+                setMode("edit");
+              }}
+              disabled={!isAdmin}
+              className={cn(
+                "rounded-xl border px-3 py-2 text-xs font-semibold",
+                mode === "edit"
+                  ? "border-amber-300 bg-amber-50 text-amber-800"
+                  : isAdmin
+                  ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+              )}
+            >
+              수정 모드
+            </button>
+          </div>
         </div>
 
         {!loading && connectionIssues.length > 0 ? (
@@ -492,7 +637,104 @@ export default function AgentPlaygroundPage() {
           </div>
         ) : null}
 
-        <Card className="mt-6 p-5">
+        <Card className="mt-4 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">버전 목록</div>
+              <div className="mt-1 text-xs text-slate-500">
+                동일한 parent_id를 공유하는 에이전트 버전입니다.
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {versionsLoading ? <div className="text-xs text-slate-500">불러오는 중...</div> : null}
+              <button
+                type="button"
+                onClick={handleReindex}
+                disabled={reindexing}
+                aria-label="KB 임베딩 재생성"
+                title="KB 임베딩 재생성"
+                className={cn(
+                  "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                  reindexing ? "cursor-not-allowed opacity-60" : ""
+                )}
+              >
+                <RefreshCw className={cn("h-4 w-4", reindexing ? "animate-spin" : "")} />
+              </button>
+            </div>
+          </div>
+          {!versionsLoading && agentVersions.length === 0 ? (
+            <div className="mt-3 text-xs text-slate-500">표시할 버전이 없습니다.</div>
+          ) : null}
+          {agentVersions.length > 0 ? (
+            <div className="mt-3">
+                <div className="grid grid-cols-[70px_90px_80px_minmax(160px,1fr)_minmax(200px,1fr)_60px] gap-3 border-b border-slate-200 pb-2 text-[11px] font-semibold text-slate-500 whitespace-nowrap">
+                  <div className="px-1">세션 수</div>
+                  <div className="px-1">에이전트 버전</div>
+                  <div className="px-1">LLM</div>
+                  <div className="px-1">MCP</div>
+                  <div className="px-1">KB</div>
+                  <div className="px-1 text-right">수정</div>
+                </div>
+                <div className="divide-y divide-slate-200">
+                  {agentVersions.map((item) => {
+                    const isCurrent = item.id === selectedAgentId;
+                    const mcpNames = (item.mcp_tool_ids || [])
+                      .map((id) => toolNameById.get(id))
+                      .filter(Boolean)
+                      .join(", ");
+                    const mcpCount = item.mcp_tool_ids?.length ?? 0;
+                    const mcpLabel = mcpCount > 0 ? `${mcpCount}개${mcpNames ? ` (${mcpNames})` : ""}` : "-";
+                    const kbInfo = item.kb_id ? kbById.get(item.kb_id) ?? null : null;
+                    const kbLabel = kbInfo
+                      ? `${kbInfo.title}${kbInfo.version ? ` (${kbInfo.version})` : ""}`
+                      : "-";
+                    return (
+                      <div
+                        key={item.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSelectedAgentId(item.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setSelectedAgentId(item.id);
+                          }
+                        }}
+                        className={cn(
+                          "grid grid-cols-[70px_90px_80px_minmax(160px,1fr)_minmax(200px,1fr)_60px] gap-3 px-1 py-2 text-xs whitespace-nowrap cursor-pointer",
+                          isCurrent ? "bg-slate-100" : "hover:bg-slate-50"
+                        )}
+                      >
+                        <div className="text-slate-600">{sessionCounts[item.id] ?? 0}</div>
+                        <div className="text-slate-900 font-semibold">
+                          {item.version || "-"}
+                          {item.is_active ? (
+                            <span className="ml-2 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                              ON
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="text-slate-600">{item.llm || "-"}</div>
+                        <div className="text-slate-600 truncate">{mcpLabel}</div>
+                        <div className="text-slate-600 truncate">{kbLabel}</div>
+                        <div className="flex justify-end">
+                          <Link
+                            href={`/app/agents/${encodeURIComponent(item.id)}`}
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
+                          >
+                            수정
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+            </div>
+          ) : null}
+        </Card>
+
+        {mode !== "new" ? (
+          <Card className="mt-6 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-slate-900">세션 선택</div>
@@ -550,106 +792,27 @@ export default function AgentPlaygroundPage() {
                 )}
               </div>
             </div>
-          ) : null}
-        </Card>
-
-        <Card className="mt-4 p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-slate-900">세션 모드</div>
-              <div className="mt-1 text-xs text-slate-500">
-                히스토리 모드는 읽기 전용입니다. 수정 모드는 관리자만 사용 가능합니다.
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setMode("history")}
-                className={cn(
-                  "rounded-xl border px-3 py-2 text-xs font-semibold",
-                  mode === "history"
-                    ? "border-slate-300 bg-slate-100 text-slate-900"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                히스토리 모드
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isAdmin) {
-                    toast.error("수정 모드는 관리자만 사용할 수 있습니다.");
-                    return;
-                  }
-                  setMode("edit");
-                }}
-                disabled={!isAdmin}
-                className={cn(
-                  "rounded-xl border px-3 py-2 text-xs font-semibold",
-                  mode === "edit"
-                    ? "border-amber-300 bg-amber-50 text-amber-800"
-                    : isAdmin
-                    ? "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                    : "border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
-                )}
-              >
-                수정 모드
-              </button>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="mt-4 p-5">
-          {loading ? (
-            <div className="text-sm text-slate-500">에이전트 정보를 불러오는 중...</div>
-          ) : (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                  이름: {agent?.name || "-"}
-                </span>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                  LLM: {agent?.llm || "-"}
-                </span>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                  KB: {kb?.title || "-"}
-                </span>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                  MCP: {toolNames.length ? `${toolNames[0]}${toolNames.length > 1 ? `+${toolNames.length - 1}` : ""}` : "-"}
-                </span>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
-                  WS: {status}
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={handleReindex}
-                disabled={reindexing}
-                aria-label="KB 임베딩 재생성"
-                className={cn(
-                  "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-                  reindexing ? "cursor-not-allowed opacity-60" : ""
-                )}
-              >
-                <RefreshCw className={cn("h-4 w-4", reindexing ? "animate-spin" : "")} />
-              </button>
-            </div>
-          )}
-        </Card>
+            ) : null}
+          </Card>
+        ) : null}
 
         <Card className="mt-4 p-5">
           <div className="flex items-center justify-between">
             <div className="text-sm font-semibold text-slate-900">
-              {mode === "history" ? "세션 히스토리" : "세션 수정 대화"}
+              {mode === "history" ? "세션 히스토리" : mode === "edit" ? "세션 수정 대화" : "신규 대화 테스트"}
             </div>
             {turnsLoading ? <div className="text-xs text-slate-500">불러오는 중...</div> : null}
           </div>
           {turnsError ? <div className="mt-3 text-xs text-rose-600">{turnsError}</div> : null}
-          {!turnsLoading && historyMessages.length === 0 ? (
+          {!turnsLoading && mode !== "new" && historyMessages.length === 0 ? (
             <div className="mt-3 text-xs text-slate-500">표시할 대화 기록이 없습니다.</div>
           ) : null}
           <div className="mt-4 space-y-4">
-            {[...historyMessages, ...(mode === "edit" ? messages : [])].map((msg) => (
+            {[
+              ...(mode === "history" ? historyMessages : []),
+              ...(mode === "edit" ? [...historyMessages, ...messages] : []),
+              ...(mode === "new" ? messages : []),
+            ].map((msg) => (
               <div
                 key={msg.id}
                 className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}
@@ -676,7 +839,7 @@ export default function AgentPlaygroundPage() {
                 ) : null}
               </div>
             ))}
-            {mode === "edit" && awaitingResponse ? (
+            {mode !== "history" && awaitingResponse ? (
               <div className="flex gap-3 justify-start">
                 <div className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
                   <Bot className="h-4 w-4 text-slate-500" />
@@ -687,16 +850,19 @@ export default function AgentPlaygroundPage() {
               </div>
             ) : null}
           </div>
-          {mode === "edit" ? (
+          {mode !== "history" ? (
             <form onSubmit={handleSend} className="mt-6 flex gap-2">
               <Input
-                placeholder="맥락을 이어서 메시지를 입력하세요."
+                placeholder={mode === "new" ? "새 대화를 시작하세요." : "맥락을 이어서 메시지를 입력하세요."}
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 className="flex-1"
-                disabled={!isAdmin}
+                disabled={mode === "edit" && !isAdmin}
               />
-              <Button type="submit" disabled={!inputValue.trim() || !isAdmin}>
+              <Button
+                type="submit"
+                disabled={!inputValue.trim() || (mode === "edit" && !isAdmin)}
+              >
                 <Send className="mr-2 h-4 w-4" />
                 전송
               </Button>

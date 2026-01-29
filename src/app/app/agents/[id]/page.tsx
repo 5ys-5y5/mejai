@@ -27,6 +27,7 @@ type AgentItem = {
 
 type KbItem = {
   id: string;
+  parent_id?: string | null;
   title: string;
   version: string | null;
   is_active: boolean | null;

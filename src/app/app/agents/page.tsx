@@ -137,7 +137,7 @@ function getAgentIssues({
   mcpCount: number;
 }) {
   const issues: ConnectionIssue[] = [];
-  const agentSettingsHref = `/app/agents/${encodeURIComponent(agent.parent_id ?? agent.id)}`;
+  const agentSettingsHref = `/app/agents/${encodeURIComponent(agent.id)}`;
   if (!agent.llm) {
     issues.push({
       key: "llm",
@@ -361,7 +361,7 @@ export default function AgentsPage() {
                         <div className="mt-1 text-xs text-amber-700">
                           KB 업데이트 있음 ({kb?.version || "-"} → {latestKb?.version || "-"})
                           <Link
-                            href={`/app/agents/${encodeURIComponent(agent.parent_id ?? agent.id)}?issue=kb_update`}
+                            href={`/app/agents/${encodeURIComponent(agent.id)}?issue=kb_update`}
                             className="ml-2 underline underline-offset-2"
                           >
                             업데이트
@@ -396,10 +396,10 @@ export default function AgentsPage() {
                         <Bot className="h-4 w-4" />
                       </Link>
                       <Link
-                        href={`/app/agents/${encodeURIComponent(agent.parent_id ?? agent.id)}`}
+                        href={`/app/agents/${encodeURIComponent(agent.id)}`}
                         className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                       >
-                        옵션
+                        수정
                       </Link>
                     </div>
                   </div>
