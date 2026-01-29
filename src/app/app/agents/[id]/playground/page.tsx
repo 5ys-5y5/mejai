@@ -211,6 +211,14 @@ export default function AgentPlaygroundPage() {
     setSelectedAgentId(agentId);
   }, [agentId]);
 
+  const handleSelectVersion = useCallback(
+    (id: string) => {
+      if (!id || id === selectedAgentId) return;
+      setSelectedAgentId(id);
+    },
+    [selectedAgentId]
+  );
+
   useEffect(() => {
     let mounted = true;
     async function load() {
@@ -716,11 +724,11 @@ export default function AgentPlaygroundPage() {
                         key={item.id}
                         role="button"
                         tabIndex={0}
-                        onClick={() => setSelectedAgentId(item.id)}
+                        onClick={() => handleSelectVersion(item.id)}
                         onKeyDown={(event) => {
                           if (event.key === "Enter" || event.key === " ") {
                             event.preventDefault();
-                            setSelectedAgentId(item.id);
+                            handleSelectVersion(item.id);
                           }
                         }}
                         className={cn(
