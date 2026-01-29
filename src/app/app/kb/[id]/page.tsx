@@ -26,6 +26,16 @@ type KbItem = {
   created_at?: string | null;
 };
 
+type AgentItem = {
+  id: string;
+  parent_id?: string | null;
+  name: string;
+  kb_id: string | null;
+  version: string | null;
+  is_active: boolean | null;
+  created_at?: string | null;
+};
+
 function parseVersionParts(value?: string | null) {
   if (!value) return null;
   const raw = value.trim();
@@ -52,6 +62,44 @@ function compareVersions(a: KbItem, b: KbItem) {
   const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
   const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
   return bTime - aTime;
+}
+
+function compareAgentVersions(a: AgentItem, b: AgentItem) {
+  const aParts = parseVersionParts(a.version);
+  const bParts = parseVersionParts(b.version);
+  if (aParts && bParts) {
+    for (let i = 0; i < 3; i += 1) {
+      if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
+    }
+  } else if (aParts && !bParts) {
+    return -1;
+  } else if (!aParts && bParts) {
+    return 1;
+  }
+  const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+  return bTime - aTime;
+}
+
+function getActiveAgents(items: AgentItem[]) {
+  const map = new Map<string, AgentItem>();
+  items.forEach((item) => {
+    const key = item.parent_id ?? item.id;
+    if (item.is_active) {
+      map.set(key, item);
+      return;
+    }
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, item);
+      return;
+    }
+    if (!existing.is_active) {
+      const newer = compareAgentVersions(item, existing) < 0 ? item : existing;
+      map.set(key, newer);
+    }
+  });
+  return Array.from(map.values()).sort(compareAgentVersions);
 }
 
 function buildChangeSummary(current: KbItem, prev?: KbItem | null) {
@@ -157,6 +205,8 @@ export default function EditKbPage() {
   const [isAdminKb, setIsAdminKb] = useState(false);
   const [applyGroups, setApplyGroups] = useState<Array<{ path: string; values: string[] }>>([]);
   const [applyGroupsMode, setApplyGroupsMode] = useState<"all" | "any" | null>(null);
+  const [agentItems, setAgentItems] = useState<AgentItem[]>([]);
+  const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
   const metaChanged = useMemo(() => {
     const nextTitle = title.trim();
     const nextCategory = category.trim();
@@ -213,14 +263,16 @@ export default function EditKbPage() {
     let mounted = true;
     async function loadUsage() {
       try {
-        const [res, profile] = await Promise.all([
+        const [res, profile, agents] = await Promise.all([
           apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
           apiFetch<{ plan?: string }>("/api/user-profile").catch(() => null),
+          apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200").catch(() => ({ items: [] })),
         ]);
         if (!mounted) return;
         const rawItems = res.items || [];
         setAllItems(rawItems);
         setUsedBytes(calcRagUsageBytes(rawItems));
+        setAgentItems(agents.items || []);
         if (profile?.plan) {
           setLimitBytes(getRagLimitBytes(profile.plan));
         }
@@ -234,12 +286,25 @@ export default function EditKbPage() {
     };
   }, []);
 
+  useEffect(() => {
+    setSelectedAgentIds([]);
+  }, [kbId]);
+
   const refreshItems = async () => {
     try {
       const res = await apiFetch<{ items: KbItem[] }>("/api/kb?limit=200");
       const rawItems = res.items || [];
       setAllItems(rawItems);
       setUsedBytes(calcRagUsageBytes(rawItems));
+    } catch {
+      // ignore refresh errors
+    }
+  };
+
+  const refreshAgents = async () => {
+    try {
+      const res = await apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200");
+      setAgentItems(res.items || []);
     } catch {
       // ignore refresh errors
     }
@@ -297,7 +362,10 @@ export default function EditKbPage() {
     }
     setSavingContent(true);
     try {
-      const payload = { content: content.trim() };
+      const payload = {
+        content: content.trim(),
+        update_agent_ids: selectedAgentIds,
+      };
       const saved = await apiFetch<KbItem>(`/api/kb/${kbId}`, {
         method: "PATCH",
         headers: {
@@ -311,6 +379,8 @@ export default function EditKbPage() {
       setContent(saved.content || "");
       setCurrentVersion(saved.version || "");
       await refreshItems();
+      await refreshAgents();
+      setSelectedAgentIds([]);
       if (saved?.id && saved.id !== kbId) {
         router.replace(`/app/kb/${saved.id}`);
       }
@@ -369,6 +439,13 @@ export default function EditKbPage() {
     if (!parentId) return [];
     return allItems.filter((item) => (item.parent_id ?? item.id) === parentId).sort(compareVersions);
   }, [allItems, kbId]);
+
+  const activeAgents = useMemo(() => getActiveAgents(agentItems), [agentItems]);
+  const agentsUsingKb = useMemo(() => {
+    if (!kbId) return [];
+    return activeAgents.filter((agent) => agent.kb_id === kbId);
+  }, [activeAgents, kbId]);
+  const allAgentsSelected = agentsUsingKb.length > 0 && selectedAgentIds.length === agentsUsingKb.length;
 
   const currentItem = useMemo(() => {
     const active = versionItems.find((item) => item.is_active);
@@ -535,6 +612,63 @@ export default function EditKbPage() {
                   className="min-h-[220px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
+              {!isAdminKb ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">KB 업데이트 적용 에이전트 선택</div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        내용 저장 시 선택한 에이전트만 새 버전으로 생성됩니다.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (allAgentsSelected) {
+                          setSelectedAgentIds([]);
+                        } else {
+                          setSelectedAgentIds(agentsUsingKb.map((agent) => agent.id));
+                        }
+                      }}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 hover:bg-slate-100"
+                      disabled={agentsUsingKb.length === 0}
+                    >
+                      {allAgentsSelected ? "전체 해제" : "전체 선택"}
+                    </button>
+                  </div>
+                  {agentsUsingKb.length === 0 ? (
+                    <div className="mt-3 text-xs text-slate-500">이 KB 버전을 사용하는 에이전트가 없습니다.</div>
+                  ) : (
+                    <div className="mt-3 grid gap-2">
+                      {agentsUsingKb.map((agent) => {
+                        const checked = selectedAgentIds.includes(agent.id);
+                        return (
+                          <label
+                            key={agent.id}
+                            className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
+                          >
+                            <span className="font-medium text-slate-900">{agent.name}</span>
+                            <span className="text-slate-400">버전 {agent.version || "-"}</span>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                setSelectedAgentIds((prev) => {
+                                  if (prev.includes(agent.id)) {
+                                    return prev.filter((id) => id !== agent.id);
+                                  }
+                                  return [...prev, agent.id];
+                                });
+                              }}
+                              className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
           )}
         </Card>

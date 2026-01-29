@@ -185,36 +185,36 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const nextUseCase = payload.use_case ?? existing.use_case ?? null;
   const nextWebsite = payload.website ?? existing.website ?? null;
   const nextGoal = payload.goal ?? existing.goal ?? null;
-  const nextIsActive = payload.is_active ?? existing.is_active ?? true;
+  const shouldActivate = payload.is_active === true;
+  const shouldDeactivate = payload.is_active === false;
 
   const mcpChanged =
     JSON.stringify(nextMcpToolIds ?? []) !== JSON.stringify(existing.mcp_tool_ids ?? []);
-  const versionChanged =
+  const configChanged =
+    nextLlm !== existing.llm || nextKbId !== existing.kb_id || mcpChanged;
+  const metaChanged =
     nextName !== existing.name ||
-    nextLlm !== existing.llm ||
-    nextKbId !== existing.kb_id ||
     nextAgentType !== (existing.agent_type ?? null) ||
     nextIndustry !== (existing.industry ?? null) ||
     nextUseCase !== (existing.use_case ?? null) ||
     nextWebsite !== (existing.website ?? null) ||
-    nextGoal !== (existing.goal ?? null) ||
-    mcpChanged;
-
-  if (nextIsActive) {
-    const { error: deactivateError } = await serverContext.supabase
-      .from("agent")
-      .update({ is_active: false })
-      .eq("parent_id", parentId)
-      .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
-    if (deactivateError) {
-      return NextResponse.json({ error: deactivateError.message }, { status: 400 });
-    }
-  }
+    nextGoal !== (existing.goal ?? null);
 
   let data = existing as typeof existing;
   let error: { message: string } | null = null;
 
-  if (versionChanged) {
+  if (configChanged) {
+    const nextIsActive = payload.is_active ?? existing.is_active ?? true;
+    if (nextIsActive) {
+      const { error: deactivateError } = await serverContext.supabase
+        .from("agent")
+        .update({ is_active: false })
+        .eq("parent_id", parentId)
+        .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+      if (deactivateError) {
+        return NextResponse.json({ error: deactivateError.message }, { status: 400 });
+      }
+    }
     const insertPayload = {
       parent_id: parentId,
       name: nextName,
@@ -239,18 +239,41 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       .single();
     data = inserted as typeof existing;
     error = insertError ? { message: insertError.message } : null;
-  } else if (payload.is_active !== undefined) {
-    const { data: updated, error: updateError } = await serverContext.supabase
-      .from("agent")
-      .update({
-        is_active: nextIsActive,
-      })
-      .eq("id", existing.id)
-      .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)
-      .select("*")
-      .maybeSingle();
-    data = updated as typeof existing;
-    error = updateError ? { message: updateError.message } : null;
+  } else {
+    const updatePayload: Record<string, unknown> = {};
+    if (metaChanged) {
+      updatePayload.name = nextName;
+      updatePayload.agent_type = nextAgentType;
+      updatePayload.industry = nextIndustry;
+      updatePayload.use_case = nextUseCase;
+      updatePayload.website = nextWebsite;
+      updatePayload.goal = nextGoal;
+    }
+    if (shouldActivate) updatePayload.is_active = true;
+    if (shouldDeactivate) updatePayload.is_active = false;
+
+    if (shouldActivate) {
+      const { error: deactivateError } = await serverContext.supabase
+        .from("agent")
+        .update({ is_active: false })
+        .eq("parent_id", parentId)
+        .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+      if (deactivateError) {
+        return NextResponse.json({ error: deactivateError.message }, { status: 400 });
+      }
+    }
+
+    if (Object.keys(updatePayload).length > 0) {
+      const { data: updated, error: updateError } = await serverContext.supabase
+        .from("agent")
+        .update(updatePayload)
+        .eq("id", existing.id)
+        .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)
+        .select("*")
+        .maybeSingle();
+      data = updated as typeof existing;
+      error = updateError ? { message: updateError.message } : null;
+    }
   }
 
   if (error) {

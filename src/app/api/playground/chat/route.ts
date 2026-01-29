@@ -344,8 +344,8 @@ export async function POST(req: NextRequest) {
   }
 
   const kbRes = await fetchKb(context, agent.kb_id);
-  if (!kbRes.data || !kbRes.data.is_active) {
-    return NextResponse.json({ error: "KB_NOT_ACTIVE" }, { status: 400 });
+  if (!kbRes.data) {
+    return NextResponse.json({ error: "KB_NOT_FOUND" }, { status: 404 });
   }
   const kb = kbRes.data;
   const { data: accessRow } = await context.supabase
@@ -370,6 +370,7 @@ export async function POST(req: NextRequest) {
     agent_version_id: agent.id,
     kb_version_id: kb.id,
     kb_version: kb.version,
+    kb_is_active: kb.is_active ?? null,
     admin_kb_ids: adminKbs.map((item) => item.id),
     llm_provider: agent.llm,
     mcp_tool_ids: agent.mcp_tool_ids ?? [],

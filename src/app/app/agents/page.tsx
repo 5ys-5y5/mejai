@@ -68,6 +68,23 @@ function compareVersions(a: AgentItem, b: AgentItem) {
   return bTime - aTime;
 }
 
+function compareKbVersions(a: KbItem, b: KbItem) {
+  const aParts = parseVersionParts(a.version);
+  const bParts = parseVersionParts(b.version);
+  if (aParts && bParts) {
+    for (let i = 0; i < 3; i += 1) {
+      if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
+    }
+  } else if (aParts && !bParts) {
+    return -1;
+  } else if (!aParts && bParts) {
+    return 1;
+  }
+  const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+  return bTime - aTime;
+}
+
 function getActiveAgents(items: AgentItem[]) {
   const map = new Map<string, AgentItem>();
   items.forEach((item) => {
@@ -87,6 +104,27 @@ function getActiveAgents(items: AgentItem[]) {
     }
   });
   return Array.from(map.values()).sort(compareVersions);
+}
+
+function getActiveKbByParent(items: KbItem[]) {
+  const map = new Map<string, KbItem>();
+  items.forEach((item) => {
+    const key = item.parent_id ?? item.id;
+    const existing = map.get(key);
+    if (item.is_active) {
+      map.set(key, item);
+      return;
+    }
+    if (!existing) {
+      map.set(key, item);
+      return;
+    }
+    if (!existing.is_active) {
+      const newer = compareKbVersions(item, existing) < 0 ? item : existing;
+      map.set(key, newer);
+    }
+  });
+  return map;
 }
 
 function getAgentIssues({
@@ -217,6 +255,8 @@ export default function AgentsPage() {
     return map;
   }, [kbItems]);
 
+  const activeKbByParent = useMemo(() => getActiveKbByParent(kbItems), [kbItems]);
+
   return (
     <div className="px-5 md:px-8 py-6">
       <div className="mx-auto w-full max-w-6xl">
@@ -304,6 +344,9 @@ export default function AgentsPage() {
           <div className="divide-y divide-slate-200">
             {activeAgents.map((agent) => {
               const kb = agent.kb_id ? kbById.get(agent.kb_id) ?? null : null;
+              const kbParentId = kb ? kb.parent_id ?? kb.id : null;
+              const latestKb = kbParentId ? activeKbByParent.get(kbParentId) ?? null : null;
+              const kbUpdateAvailable = Boolean(kb && latestKb && latestKb.id !== kb.id);
               const mcpCount = Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0;
               const issues = getAgentIssues({ agent, kb, mcpCount });
               return (
@@ -314,6 +357,17 @@ export default function AgentsPage() {
                       <div className="mt-1 text-xs text-slate-500">
                         LLM {agent.llm || "-"} · KB {kb?.title || "-"} · MCP {mcpCount}개
                       </div>
+                      {kbUpdateAvailable ? (
+                        <div className="mt-1 text-xs text-amber-700">
+                          KB 업데이트 있음 ({kb?.version || "-"} → {latestKb?.version || "-"})
+                          <Link
+                            href={`/app/agents/${encodeURIComponent(agent.parent_id ?? agent.id)}?issue=kb_update`}
+                            className="ml-2 underline underline-offset-2"
+                          >
+                            업데이트
+                          </Link>
+                        </div>
+                      ) : null}
                       <div className="mt-1 text-xs text-slate-400">
                         버전 {agent.version || "-"} · {formatKstDateTime(agent.created_at)}
                       </div>

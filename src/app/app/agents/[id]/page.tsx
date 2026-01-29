@@ -91,6 +91,44 @@ function compareVersions(a: AgentItem, b: AgentItem) {
   return bTime - aTime;
 }
 
+function compareKbVersions(a: KbItem, b: KbItem) {
+  const aParts = parseVersionParts(a.version);
+  const bParts = parseVersionParts(b.version);
+  if (aParts && bParts) {
+    for (let i = 0; i < 3; i += 1) {
+      if (aParts[i] !== bParts[i]) return bParts[i] - aParts[i];
+    }
+  } else if (aParts && !bParts) {
+    return -1;
+  } else if (!aParts && bParts) {
+    return 1;
+  }
+  const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+  return bTime - aTime;
+}
+
+function getActiveKbByParent(items: KbItem[]) {
+  const map = new Map<string, KbItem>();
+  items.forEach((item) => {
+    const key = item.parent_id ?? item.id;
+    const existing = map.get(key);
+    if (item.is_active) {
+      map.set(key, item);
+      return;
+    }
+    if (!existing) {
+      map.set(key, item);
+      return;
+    }
+    if (!existing.is_active) {
+      const newer = compareKbVersions(item, existing) < 0 ? item : existing;
+      map.set(key, newer);
+    }
+  });
+  return map;
+}
+
 function normalizeIds(ids?: string[] | null) {
   return [...(ids ?? [])].sort();
 }
@@ -235,6 +273,18 @@ export default function AgentDetailPage() {
     };
   }, []);
 
+  const kbById = useMemo(() => {
+    const map = new Map<string, KbItem>();
+    kbItems.forEach((item) => map.set(item.id, item));
+    return map;
+  }, [kbItems]);
+
+  const activeKbByParent = useMemo(() => getActiveKbByParent(kbItems), [kbItems]);
+  const selectedKb = kbId ? kbById.get(kbId) ?? null : null;
+  const selectedKbParentId = selectedKb ? selectedKb.parent_id ?? selectedKb.id : null;
+  const activeKb = selectedKbParentId ? activeKbByParent.get(selectedKbParentId) ?? null : null;
+  const kbUpdateAvailable = Boolean(selectedKb && activeKb && activeKb.id !== selectedKb.id);
+
   const kbOptions = useMemo(() => {
     return [...kbItems]
       .sort((a, b) => {
@@ -262,17 +312,22 @@ export default function AgentDetailPage() {
   );
 
   const configChanged = useMemo(() => {
-    if (name.trim() !== baseName.trim()) return true;
     if (llm !== baseLlm) return true;
     if ((kbId || "") !== (baseKbId || "")) return true;
-    if (website.trim() !== baseWebsite.trim()) return true;
-    if (goal.trim() !== baseGoal.trim()) return true;
     return JSON.stringify(normalizeIds(mcpToolIds)) !== JSON.stringify(normalizeIds(baseMcpToolIds));
-  }, [name, llm, kbId, mcpToolIds, website, goal, baseName, baseLlm, baseKbId, baseMcpToolIds, baseWebsite, baseGoal]);
+  }, [llm, kbId, mcpToolIds, baseLlm, baseKbId, baseMcpToolIds]);
+
+  const metaChanged = useMemo(() => {
+    if (name.trim() !== baseName.trim()) return true;
+    if (website.trim() !== baseWebsite.trim()) return true;
+    return goal.trim() !== baseGoal.trim();
+  }, [name, website, goal, baseName, baseWebsite, baseGoal]);
+
+  const hasChanges = configChanged || metaChanged;
 
   const canSave = useMemo(() => {
-    return name.trim().length > 0 && goal.trim().length > 0 && kbId && configChanged && !saving;
-  }, [name, goal, kbId, configChanged, saving]);
+    return name.trim().length > 0 && goal.trim().length > 0 && kbId && hasChanges && !saving;
+  }, [name, goal, kbId, hasChanges, saving]);
 
   const refreshAgents = async () => {
     try {
@@ -448,7 +503,7 @@ export default function AgentDetailPage() {
             <div>
               <div className="text-sm font-semibold text-slate-900">에이전트 구성</div>
               <p className="mt-1 text-xs text-slate-500">
-                현재 버전 {currentVersion || "-"} · 설정을 저장하면 새 버전이 생성됩니다.
+                현재 버전 {currentVersion || "-"} · LLM/MCP/KB 변경 시 새 버전이 생성됩니다.
               </p>
             </div>
             <button
@@ -496,7 +551,9 @@ export default function AgentDetailPage() {
                 <div
                   className={cn(
                     "grid gap-2 rounded-xl",
-                    issueSet.has("kb") ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-white" : ""
+                    issueSet.has("kb") || issueSet.has("kb_update")
+                      ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-white"
+                      : ""
                   )}
                 >
                   <label className="text-sm font-medium text-slate-900">KB 버전 *</label>
@@ -507,6 +564,20 @@ export default function AgentDetailPage() {
                     placeholder="KB 선택"
                     searchable
                   />
+                  {kbUpdateAvailable ? (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                      최신 KB 버전이 있습니다 ({selectedKb?.version || "-"} → {activeKb?.version || "-"}).
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (activeKb) setKbId(activeKb.id);
+                        }}
+                        className="ml-2 underline underline-offset-2"
+                      >
+                        최신으로 선택
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
 

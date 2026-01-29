@@ -146,6 +146,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   if (typeof body.content === "string") payload.content = body.content;
   if (body.category === null || typeof body.category === "string") payload.category = body.category;
   if (typeof body.is_active === "boolean") payload.is_active = body.is_active;
+  const updateAgentIds = Array.isArray(body.update_agent_ids)
+    ? body.update_agent_ids.filter((id: unknown): id is string => typeof id === "string" && isUuid(id))
+    : [];
 
   if (payload.title !== undefined && payload.title.trim().length === 0) {
     return NextResponse.json({ error: "INVALID_TITLE" }, { status: 400 });
@@ -181,10 +184,11 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const nextTitle = payload.title ?? existing.title;
   const nextCategory = payload.category ?? existing.category ?? null;
   const nextContent = payload.content ?? existing.content;
-  const nextIsActive = payload.is_active ?? existing.is_active ?? true;
   const nextIsAdmin = (existing as { is_admin?: boolean | null }).is_admin ?? false;
   const nextApplyGroups = (existing as { apply_groups?: unknown }).apply_groups ?? null;
   const nextApplyGroupsMode = (existing as { apply_groups_mode?: string | null }).apply_groups_mode ?? null;
+  const shouldActivate = payload.is_active === true;
+  const shouldDeactivate = payload.is_active === false;
   const contentChanged = nextContent !== (existing.content ?? "");
   const titleChanged = nextTitle !== (existing.title ?? "");
   const categoryChanged = (nextCategory ?? "") !== (existing.category ?? "");
@@ -197,17 +201,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
     if (updateMetaError) {
       return NextResponse.json({ error: updateMetaError.message }, { status: 400 });
-    }
-  }
-
-  if (nextIsActive) {
-    const { error: deactivateError } = await serverContext.supabase
-      .from("knowledge_base")
-      .update({ is_active: false })
-      .eq("parent_id", parentId)
-      .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
-    if (deactivateError) {
-      return NextResponse.json({ error: deactivateError.message }, { status: 400 });
     }
   }
 
@@ -227,6 +220,17 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       embedding = embeddingRes.embedding as number[];
     } catch (err) {
       return NextResponse.json({ error: "EMBEDDING_FAILED" }, { status: 400 });
+    }
+    const nextIsActive = payload.is_active ?? existing.is_active ?? true;
+    if (nextIsActive) {
+      const { error: deactivateError } = await serverContext.supabase
+        .from("knowledge_base")
+        .update({ is_active: false })
+        .eq("parent_id", parentId)
+        .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+      if (deactivateError) {
+        return NextResponse.json({ error: deactivateError.message }, { status: 400 });
+      }
     }
     const insertPayload = {
       parent_id: parentId,
@@ -250,13 +254,26 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     data = inserted as typeof existing;
     error = insertError ? { message: insertError.message } : null;
   } else if (payload.is_active !== undefined || titleChanged || categoryChanged) {
+    const updatePayload: Record<string, unknown> = {};
+    if (titleChanged) updatePayload.title = nextTitle;
+    if (categoryChanged) updatePayload.category = nextCategory;
+    if (shouldActivate) updatePayload.is_active = true;
+    if (shouldDeactivate) updatePayload.is_active = false;
+
+    if (shouldActivate) {
+      const { error: deactivateError } = await serverContext.supabase
+        .from("knowledge_base")
+        .update({ is_active: false })
+        .eq("parent_id", parentId)
+        .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+      if (deactivateError) {
+        return NextResponse.json({ error: deactivateError.message }, { status: 400 });
+      }
+    }
+
     const { data: updated, error: updateError } = await serverContext.supabase
       .from("knowledge_base")
-      .update({
-        title: nextTitle,
-        category: nextCategory,
-        is_active: nextIsActive,
-      })
+      .update(updatePayload)
       .eq("id", existing.id)
       .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)
       .select("*")
@@ -269,10 +286,11 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  if (data?.id && data.id !== existing.id) {
+  if (data?.id && data.id !== existing.id && updateAgentIds.length > 0 && !nextIsAdmin) {
     const { data: agents, error: agentError } = await serverContext.supabase
       .from("agent")
       .select("*")
+      .in("id", updateAgentIds)
       .eq("kb_id", existing.id)
       .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
 
