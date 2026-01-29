@@ -140,12 +140,14 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     content?: string;
     category?: string | null;
     is_active?: boolean;
+    content_json?: unknown;
   } = {};
 
   if (typeof body.title === "string") payload.title = body.title;
   if (typeof body.content === "string") payload.content = body.content;
   if (body.category === null || typeof body.category === "string") payload.category = body.category;
   if (typeof body.is_active === "boolean") payload.is_active = body.is_active;
+  if (body.content_json !== undefined) payload.content_json = body.content_json;
   const updateAgentIds = Array.isArray(body.update_agent_ids)
     ? body.update_agent_ids.filter((id: unknown): id is string => typeof id === "string" && isUuid(id))
     : [];
@@ -184,12 +186,17 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const nextTitle = payload.title ?? existing.title;
   const nextCategory = payload.category ?? existing.category ?? null;
   const nextContent = payload.content ?? existing.content;
+  const nextContentJson =
+    payload.content_json !== undefined
+      ? payload.content_json
+      : (existing as { content_json?: unknown }).content_json ?? null;
   const nextIsAdmin = (existing as { is_admin?: boolean | null }).is_admin ?? false;
   const nextApplyGroups = (existing as { apply_groups?: unknown }).apply_groups ?? null;
   const nextApplyGroupsMode = (existing as { apply_groups_mode?: string | null }).apply_groups_mode ?? null;
   const shouldActivate = payload.is_active === true;
   const shouldDeactivate = payload.is_active === false;
   const contentChanged = nextContent !== (existing.content ?? "");
+  const contentJsonChanged = nextContentJson !== (existing as { content_json?: unknown }).content_json;
   const titleChanged = nextTitle !== (existing.title ?? "");
   const categoryChanged = (nextCategory ?? "") !== (existing.category ?? "");
 
@@ -207,7 +214,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   let data = existing as typeof existing;
   let error: { message: string } | null = null;
 
-  const versionChanged = contentChanged;
+  const versionChanged = contentChanged || contentJsonChanged;
 
   if (versionChanged) {
     let nextVersion = bumpVersion(existing.version);
@@ -237,6 +244,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       title: nextTitle,
       content: nextContent,
       category: nextCategory,
+      content_json: nextContentJson,
       embedding,
       version: nextVersion,
       is_active: nextIsActive,

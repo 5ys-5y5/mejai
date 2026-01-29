@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import { runLlm } from "@/lib/llm";
+import { compilePolicy, formatOutputDefault, runPolicyStage, validateToolArgs, type PolicyPack, type PolicyEvalContext } from "@/lib/policyEngine";
 
 type Body = {
   agent_id?: string;
@@ -26,6 +27,8 @@ type KbRow = {
   is_admin?: boolean | null;
   apply_groups?: Array<{ path: string; values: string[] }> | null;
   apply_groups_mode?: "all" | "any" | null;
+  kb_kind?: string | null;
+  content_json?: PolicyPack | null;
 };
 
 const YES_PATTERNS = [/^네/, /^예/, /^맞/, /^응/, /^확인/, /^yes/i, /^y$/i];
@@ -163,7 +166,7 @@ async function fetchAgent(context: any, agentId: string) {
 async function fetchKb(context: any, kbId: string) {
   const { data, error } = await context.supabase
     .from("knowledge_base")
-    .select("id, title, content, is_active, version, is_admin, apply_groups")
+    .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, kb_kind, content_json")
     .eq("id", kbId)
     .or(`org_id.eq.${context.orgId},org_id.is.null`)
     .maybeSingle();
@@ -174,7 +177,7 @@ async function fetchKb(context: any, kbId: string) {
 async function fetchAdminKbs(context: any) {
   const { data, error } = await context.supabase
     .from("knowledge_base")
-    .select("id, title, content, is_active, version, is_admin, apply_groups")
+    .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, kb_kind, content_json")
     .eq("is_admin", true)
     .eq("is_active", true)
     .or(`org_id.eq.${context.orgId},org_id.is.null`);
@@ -362,6 +365,10 @@ export async function POST(req: NextRequest) {
       item.apply_groups_mode === "any" ? "any" : "all"
     )
   );
+  const policyPacks = adminKbs
+    .filter((item) => item.content_json)
+    .map((item) => item.content_json as PolicyPack);
+  const compiledPolicy = compilePolicy(policyPacks);
   const adminKbText = adminKbs
     .map((item) => `[ADMIN KB] ${item.title}\n${item.content || ""}`)
     .join("\n\n");
@@ -408,9 +415,38 @@ export async function POST(req: NextRequest) {
   const derivedAddress = derived.address;
   const derivedPhone = derived.phone;
   const derivedIntent = derived.intent;
+  const repeatCount = recentTurns.filter((turn) =>
+    isRepeatRequest(turn?.transcript_text || "", message)
+  ).length;
 
   const hasPendingConfirm =
     lastTurn && lastTurn.confirm_prompt && lastTurn.user_confirmed === null && !lastTurn.final_answer;
+
+  const policyContext: PolicyEvalContext = {
+    input: { text: message },
+    intent: { name: derivedIntent },
+    entity: { order_id: derivedOrderId, address: derivedAddress, phone: derivedPhone },
+    user: { confirmed: Boolean(lastTurn?.user_confirmed) },
+    conversation: { repeat_count: repeatCount, flags: {} },
+  };
+
+  const inputGate = runPolicyStage(compiledPolicy, "input", policyContext);
+  if (inputGate.actions.forcedResponse) {
+    const reply = inputGate.actions.forcedResponse;
+    await context.supabase.from("turns").insert({
+      session_id: sessionId,
+      seq: nextSeq,
+      transcript_text: message,
+      answer_text: reply,
+      final_answer: reply,
+      bot_context: {
+        ...botContext,
+        policy_matched: inputGate.matched.map((rule) => rule.id),
+      },
+    });
+    await insertEvent(context, sessionId, "POLICY_DECISION", { stage: "input", matched: inputGate.matched.map((r) => r.id) }, botContext);
+    return NextResponse.json({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+  }
 
   if (hasPendingConfirm) {
     const confirmed = isYes(message) || isOrderOnlyMessage(message);
@@ -482,7 +518,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (isAbusive(message)) {
+  if (isAbusive(message) && compiledPolicy.rules.length === 0) {
     const reply = "불편을 드려 죄송합니다. 주문번호나 휴대폰 번호를 알려주시면 바로 확인해 도와드리겠습니다.";
     await context.supabase.from("turns").insert({
       session_id: sessionId,
@@ -622,61 +658,89 @@ export async function POST(req: NextRequest) {
   const orderId = derivedOrderId || extractOrderId(questionText);
   let mcpSummary = "";
   const mcpActions: string[] = [];
+  const candidateCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
   if (orderId) {
-    const lookup = await callMcpTool(
+    candidateCalls.push({ name: "lookup_order", args: { order_id: orderId } });
+    if (needsShipmentAction(questionText)) {
+      candidateCalls.push({ name: "track_shipment", args: { order_id: orderId } });
+    }
+    if (derivedIntent === "change" && derivedAddress) {
+      candidateCalls.push({
+        name: "create_ticket",
+        args: {
+          title: `배송지 변경 요청 - ${orderId}`,
+          content: `배송지 변경 요청: ${derivedAddress}\n주문번호: ${orderId}`,
+        },
+      });
+    } else if (needsTicketAction(questionText)) {
+      candidateCalls.push({
+        name: "create_ticket",
+        args: { title: `주문 ${orderId} 문의`, content: questionText },
+      });
+    }
+  }
+
+  const toolGate = runPolicyStage(compiledPolicy, "tool", policyContext);
+  const denied = new Set(toolGate.actions.denyTools || []);
+  const allowed = new Set(toolGate.actions.allowTools || []);
+  const forcedCalls = toolGate.actions.forcedToolCalls || [];
+  let finalCalls = [...candidateCalls, ...forcedCalls].filter((call) => {
+    if (denied.has("*") || denied.has(call.name)) return false;
+    if (allowed.size > 0 && !allowed.has(call.name)) return false;
+    return true;
+  });
+
+  finalCalls = finalCalls.filter((call) => {
+    const validation = validateToolArgs(call.name, call.args, compiledPolicy);
+    return validation.ok;
+  });
+
+  if (toolGate.actions.forcedResponse) {
+    const reply = toolGate.actions.forcedResponse;
+    await context.supabase.from("turns").insert({
+      session_id: sessionId,
+      seq: nextSeq,
+      transcript_text: message,
+      answer_text: reply,
+      final_answer: reply,
+      bot_context: {
+        ...botContext,
+        policy_matched: toolGate.matched.map((rule) => rule.id),
+      },
+    });
+    await insertEvent(context, sessionId, "POLICY_DECISION", { stage: "tool", matched: toolGate.matched.map((r) => r.id) }, botContext);
+    return NextResponse.json({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+  }
+
+  for (const call of finalCalls) {
+    if (!allowedToolNames.has(call.name)) continue;
+    const result = await callMcpTool(
       context,
-      "lookup_order",
-      { order_id: orderId },
+      call.name,
+      call.args,
       sessionId,
       botContext,
       allowedToolNames
     );
-    if (lookup.ok) {
-      const order = (lookup.data as any)?.order || {};
-      const orderInfo = [
-        order.order_id || order.order_no || orderId,
-        order.order_date,
-        order.order_summary?.total_amount_due,
-        order.order_summary?.shipping_status,
-      ].filter(Boolean).join(", ");
-      mcpSummary += `주문 조회 성공 (${orderInfo || orderId}). `;
-      if (needsShipmentAction(questionText)) {
-        const shipment = await callMcpTool(
-          context,
-          "track_shipment",
-          { order_id: orderId },
-          sessionId,
-          botContext,
-          allowedToolNames
-        );
-        if (shipment.ok) mcpActions.push("배송 조회");
+    if (call.name === "lookup_order") {
+      if (result.ok) {
+        const order = (result.data as any)?.order || {};
+        const orderInfo = [
+          order.order_id || order.order_no || orderId,
+          order.order_date,
+          order.order_summary?.total_amount_due,
+          order.order_summary?.shipping_status,
+        ].filter(Boolean).join(", ");
+        mcpSummary += `주문 조회 성공 (${orderInfo || orderId}). `;
+      } else {
+        mcpSummary += `주문 조회 실패: ${result.error || "UNKNOWN"}. `;
       }
-      if (derivedIntent === "change" && derivedAddress) {
-        const ticket = await callMcpTool(
-          context,
-          "create_ticket",
-          {
-            title: `배송지 변경 요청 - ${orderId}`,
-            content: `배송지 변경 요청: ${derivedAddress}\n주문번호: ${orderId}`,
-          },
-          sessionId,
-          botContext,
-          allowedToolNames
-        );
-        if (ticket.ok) mcpActions.push("배송지 변경 문의 티켓 생성");
-      } else if (needsTicketAction(questionText)) {
-        const ticket = await callMcpTool(
-          context,
-          "create_ticket",
-          { title: `주문 ${orderId} 문의`, content: questionText },
-          sessionId,
-          botContext,
-          allowedToolNames
-        );
-        if (ticket.ok) mcpActions.push("문의 티켓 생성");
-      }
-    } else {
-      mcpSummary += `주문 조회 실패: ${lookup.error || "UNKNOWN"}. `;
+    }
+    if (call.name === "track_shipment" && result.ok) {
+      mcpActions.push("배송 조회");
+    }
+    if (call.name === "create_ticket" && result.ok) {
+      mcpActions.push(derivedIntent === "change" ? "배송지 변경 문의 티켓 생성" : "문의 티켓 생성");
     }
   }
 
@@ -704,7 +768,24 @@ ${mcpSummary}
 ${mcpActions.length ? mcpActions.join(", ") : "없음"}`;
 
   const answerRes = await runLlm(agent.llm, systemPrompt, userPrompt);
-  const finalAnswer = answerRes.text.trim();
+  let finalAnswer = answerRes.text.trim();
+
+  const outputGate = runPolicyStage(compiledPolicy, "output", policyContext);
+  if (outputGate.actions.outputFormat) {
+    finalAnswer = formatOutputDefault(finalAnswer);
+  }
+  if (outputGate.actions.forcedResponse) {
+    finalAnswer = outputGate.actions.forcedResponse;
+  }
+  if (outputGate.matched.length > 0) {
+    await insertEvent(
+      context,
+      sessionId,
+      "POLICY_DECISION",
+      { stage: "output", matched: outputGate.matched.map((rule) => rule.id) },
+      botContext
+    );
+  }
 
   await context.supabase.from("turns").insert({
     session_id: sessionId,

@@ -97,6 +97,7 @@ export async function POST(req: NextRequest) {
     is_admin: isAdmin,
     apply_groups: applyGroups,
     apply_groups_mode: applyGroupsMode,
+    content_json: isAdmin ? (body.content_json ?? null) : null,
   };
 
   try {
