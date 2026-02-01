@@ -6,6 +6,9 @@ type ToolCallResult = {
 };
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { isTokenExpired, refreshCafe24Token } from "@/lib/cafe24Tokens";
 
 type AdapterContext = {
@@ -24,6 +27,41 @@ function maskValue(value: string) {
 function maskOptional(value: unknown) {
   if (typeof value !== "string") return value;
   return maskValue(value);
+}
+
+function normalizeMatchText(text: string) {
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function matchAliasText(text: string, alias: string, matchType: string) {
+  const hay = normalizeMatchText(text);
+  const needle = normalizeMatchText(alias);
+  if (!needle) return false;
+  if (matchType === "exact") return hay === needle;
+  if (matchType === "contains") return hay.includes(needle);
+  if (matchType === "regex") {
+    try {
+      return new RegExp(alias, "i").test(text);
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+function chooseBestAlias(
+  text: string,
+  aliases: Array<{ alias: string; match_type: string; priority?: number | null }>
+) {
+  const candidates = aliases.filter((row) => matchAliasText(text, row.alias, row.match_type));
+  if (candidates.length === 0) return null;
+  const scored = candidates.map((row) => ({
+    row,
+    priority: row.priority ?? 0,
+    length: row.alias.length,
+  }));
+  scored.sort((a, b) => b.priority - a.priority || b.length - a.length);
+  return scored[0].row;
 }
 
 function addOrderSummary(order: Record<string, unknown>) {
@@ -86,8 +124,94 @@ type AuthSettingsRow = {
   providers: Record<string, Cafe24ProviderConfig | undefined>;
 };
 
+let cachedEnvFile: Record<string, string> | null = null;
+
+function parseEnvContent(content: string) {
+  const lines = content.split(/\r?\n/);
+  const result: Record<string, string> = {};
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
+    if (idx === -1) continue;
+    const key = trimmed.slice(0, idx).trim();
+    let value = trimmed.slice(idx + 1).trim();
+    if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+      value = value.slice(1, -1);
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
+function loadEnvFromFiles() {
+  if (cachedEnvFile) return cachedEnvFile;
+  const cwd = process.cwd();
+  const envPaths = [path.join(cwd, ".env.local"), path.join(cwd, ".env")];
+  const merged: Record<string, string> = {};
+  for (const envPath of envPaths) {
+    if (!fs.existsSync(envPath)) continue;
+    try {
+      const content = fs.readFileSync(envPath, "utf8");
+      Object.assign(merged, parseEnvContent(content));
+    } catch {
+      // Ignore file read errors and keep best-effort behavior.
+    }
+  }
+  cachedEnvFile = merged;
+  return merged;
+}
+
 function readEnv(name: string) {
-  return (process.env[name] || "").trim();
+  const value = (process.env[name] || "").trim();
+  if (value) return value;
+  const fallback = loadEnvFromFiles();
+  return (fallback[name] || "").trim();
+}
+
+function buildSolapiAuthHeader(apiKey: string, apiSecret: string) {
+  const date = new Date().toISOString();
+  const salt = crypto.randomBytes(16).toString("hex");
+  const signature = crypto
+    .createHmac("sha256", apiSecret)
+    .update(date + salt)
+    .digest("hex");
+  return `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
+}
+
+async function solapiSendMessage(params: { to: string; text: string; from: string }) {
+  const apiKey = readEnv("SOLAPI_API_KEY");
+  const apiSecret = readEnv("SOLAPI_API_SECRET");
+  if (!apiKey || !apiSecret) {
+    return { ok: false as const, error: "SOLAPI_CONFIG_MISSING" };
+  }
+  const auth = buildSolapiAuthHeader(apiKey, apiSecret);
+    const res = await fetch("https://api.solapi.com/messages/v4/send-many/detail", {
+      method: "POST",
+      headers: {
+        Authorization: auth,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            to: params.to,
+            from: params.from,
+            text: params.text,
+          },
+        ],
+      }),
+    });
+  const text = await res.text();
+  if (!res.ok) {
+    return { ok: false as const, error: `SOLAPI_ERROR_${res.status}: ${text || res.statusText}` };
+  }
+  try {
+    return { ok: true as const, data: text ? JSON.parse(text) : {} };
+  } catch {
+    return { ok: true as const, data: { raw: text } };
+  }
 }
 
 async function bootstrapCafe24FromEnv(ctx: AdapterContext, row: AuthSettingsRow) {
@@ -343,6 +467,60 @@ const adapters: Record<string, ToolAdapter> = {
     query.end_date = endDate;
     if (params.limit) query.limit = String(params.limit);
     if (params.offset) query.offset = String(params.offset);
+    if (params.member_id) query.member_id = String(params.member_id);
+    if (params.memberId) query.member_id = String(params.memberId);
+
+    const readCustomers = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return [];
+      const asObj = payload as Record<string, unknown>;
+      const list =
+        (Array.isArray(asObj.customers) ? asObj.customers : null) ??
+        (Array.isArray(asObj.customersprivacy) ? asObj.customersprivacy : null) ??
+        [];
+      return Array.isArray(list) ? (list as Array<Record<string, unknown>>) : [];
+    };
+
+    const cellphoneRaw = String(params.cellphone || "").trim();
+    if (!query.member_id && cellphoneRaw) {
+      const customerResult = await cafe24Request(cfg, `/customers`, {
+        query: { shop_no: cfg.shopNo, cellphone: cellphoneRaw },
+      });
+      if (!customerResult.ok && customerResult.error.includes("401")) {
+        const refreshed = await refreshCafe24Token({
+          settingsId: cfg.settingsId,
+          mallId: cfg.mallId,
+          refreshToken: cfg.refreshToken,
+          supabase: ctx!.supabase,
+        });
+        if (refreshed.ok) {
+          const retry = await cafe24Request(
+            { ...cfg, accessToken: refreshed.accessToken },
+            `/customers`,
+            { query: { shop_no: cfg.shopNo, cellphone: cellphoneRaw } }
+          );
+          if (retry.ok) {
+            customerResult.data = retry.data;
+            customerResult.ok = true;
+          }
+        }
+      }
+      if (!customerResult.ok) {
+        return { status: "error", error: { code: "CAFE24_ERROR", message: customerResult.error } };
+      }
+      const customers = readCustomers(customerResult.data);
+      if (customers.length === 0) {
+        return { status: "error", error: { code: "CUSTOMER_NOT_FOUND", message: "no customer for cellphone" } };
+      }
+      if (customers.length > 1) {
+        return { status: "error", error: { code: "CUSTOMER_AMBIGUOUS", message: "multiple customers for cellphone" } };
+      }
+      const memberId =
+        String(customers[0]?.member_id || customers[0]?.memberId || "").trim();
+      if (!memberId) {
+        return { status: "error", error: { code: "CUSTOMER_MEMBER_ID_MISSING", message: "member_id missing" } };
+      }
+      query.member_id = memberId;
+    }
     const result = await cafe24Request(cfg, `/orders`, { query });
     if (!result.ok && result.error.includes("401")) {
       const refreshed = await refreshCafe24Token({
@@ -616,6 +794,134 @@ const adapters: Record<string, ToolAdapter> = {
     }
     return { status: "success", data: result.data };
   },
+  update_order_shipping_address: async (params, ctx) => {
+    const orderId = String(params.order_id || "").trim();
+    if (!orderId) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "order_id is required" } };
+    }
+    const cfg = await getCafe24Config(ctx);
+    if (!cfg.ok) {
+      return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
+    }
+    const shippingCode = String(params.shipping_code || "").trim();
+    const address1 = String(params.address1 || params.address_full || params.address || "").trim();
+    const address2 = String(params.address2 || "").trim();
+    const zipcode = String(params.zipcode || "").trim();
+    const receiverName = String(params.receiver_name || params.name || "").trim();
+    const receiverPhone = String(params.receiver_phone || params.phone || "").trim();
+    const receiverCellphone = String(params.receiver_cellphone || params.cellphone || params.phone || "").trim();
+    const shippingMessage = String(params.shipping_message || "").trim();
+    const changeDefault = params.change_default_shipping_address ?? params.change_default ?? null;
+
+    if (!address1 && !address2 && !zipcode && !receiverName && !receiverPhone && !receiverCellphone && !shippingMessage) {
+      return {
+        status: "error",
+        error: { code: "INVALID_INPUT", message: "address or receiver info is required" },
+      };
+    }
+
+    const requestPayload: Record<string, unknown> = {};
+    if (address1) requestPayload.address1 = address1;
+    if (address2) requestPayload.address2 = address2;
+    if (zipcode) requestPayload.zipcode = zipcode;
+    if (receiverName) requestPayload.name = receiverName;
+    if (receiverPhone) requestPayload.phone = receiverPhone;
+    if (receiverCellphone) requestPayload.cellphone = receiverCellphone;
+    if (shippingMessage) requestPayload.shipping_message = shippingMessage;
+    if (changeDefault !== null && changeDefault !== undefined && changeDefault !== "") {
+      requestPayload.change_default_shipping_address = changeDefault;
+    }
+
+    if (isTokenExpired(cfg.expiresAt)) {
+      const refreshed = await refreshCafe24Token({
+        settingsId: cfg.settingsId,
+        mallId: cfg.mallId,
+        refreshToken: cfg.refreshToken,
+        supabase: ctx!.supabase,
+      });
+      if (refreshed.ok) {
+        cfg.accessToken = refreshed.accessToken;
+      } else {
+        return { status: "error", error: { code: "TOKEN_REFRESH_FAILED", message: refreshed.error } };
+      }
+    }
+
+    let resolvedShippingCode = shippingCode;
+    if (!resolvedShippingCode) {
+      const fetchReceivers = async () => {
+        const receiversRes = await cafe24Request(cfg, `/orders/${encodeURIComponent(orderId)}/receivers`, {
+          query: { shop_no: cfg.shopNo },
+        });
+        if (!receiversRes.ok && receiversRes.error.includes("401")) {
+          const refreshed = await refreshCafe24Token({
+            settingsId: cfg.settingsId,
+            mallId: cfg.mallId,
+            refreshToken: cfg.refreshToken,
+            supabase: ctx!.supabase,
+          });
+          if (refreshed.ok) {
+            return cafe24Request(
+              { ...cfg, accessToken: refreshed.accessToken },
+              `/orders/${encodeURIComponent(orderId)}/receivers`,
+              { query: { shop_no: cfg.shopNo } }
+            );
+          }
+        }
+        return receiversRes;
+      };
+      const receiversRes = await fetchReceivers();
+      if (receiversRes.ok) {
+        const payload = receiversRes.data as { receivers?: unknown } | undefined;
+        const receiversNode = payload?.receivers as { receiver?: unknown } | undefined;
+        const list = Array.isArray(payload?.receivers)
+          ? (payload?.receivers as Array<Record<string, unknown>>)
+          : Array.isArray(receiversNode?.receiver)
+            ? (receiversNode?.receiver as Array<Record<string, unknown>>)
+            : [];
+        const first = list[0];
+        const firstCode = first ? String(first.shipping_code || "") : "";
+        if (firstCode) resolvedShippingCode = firstCode;
+      }
+    }
+
+    if (!resolvedShippingCode) {
+      return {
+        status: "error",
+        error: { code: "INVALID_INPUT", message: "shipping_code is required (receiver lookup failed)" },
+      };
+    }
+
+    const endpoint = resolvedShippingCode
+      ? `/orders/${encodeURIComponent(orderId)}/receivers/${encodeURIComponent(resolvedShippingCode)}`
+      : `/orders/${encodeURIComponent(orderId)}/receivers`;
+    const body: Record<string, unknown> = { request: [requestPayload] };
+    if (cfg.shopNo) body.shop_no = cfg.shopNo;
+
+    const result = await cafe24Request(cfg, endpoint, {
+      method: "PUT",
+      body,
+    });
+    if (!result.ok && result.error.includes("401")) {
+      const refreshed = await refreshCafe24Token({
+        settingsId: cfg.settingsId,
+        mallId: cfg.mallId,
+        refreshToken: cfg.refreshToken,
+        supabase: ctx!.supabase,
+      });
+      if (refreshed.ok) {
+        const retry = await cafe24Request(
+          { ...cfg, accessToken: refreshed.accessToken },
+          endpoint,
+          { method: "PUT", body }
+        );
+        if (retry.ok) return { status: "success", data: retry.data };
+      }
+    }
+    if (!result.ok) {
+      return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
+    }
+    return { status: "success", data: result.data };
+  },
   create_ticket: async (params, ctx) => {
     const cfg = await getCafe24Config(ctx);
     if (!cfg.ok) {
@@ -692,24 +998,336 @@ const adapters: Record<string, ToolAdapter> = {
     }
     return { status: "success", data: result.data };
   },
-  send_otp: async (params) => {
-    const destination = String(params.destination || "");
-    if (!destination) {
-      return { status: "error", error: { code: "INVALID_INPUT", message: "destination is required" } };
+  resolve_product: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const query = String(params.query || "").trim();
+    if (!query) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "query is required" } };
+    }
+    const { data, error } = await ctx.supabase
+      .from("product_alias")
+      .select("org_id, alias, product_id, match_type, priority, is_active")
+      .eq("is_active", true)
+      .or(`org_id.eq.${ctx.orgId},org_id.is.null`);
+    if (error) {
+      return { status: "error", error: { code: "DB_ERROR", message: error.message } };
+    }
+    const aliases = (data || []) as Array<{
+      org_id: string | null;
+      alias: string;
+      product_id: string;
+      match_type: string;
+      priority?: number | null;
+    }>;
+    const best = chooseBestAlias(query, aliases);
+    if (!best) {
+      return { status: "success", data: { matched: false } };
     }
     return {
       status: "success",
-      data: { delivery: "sms", destination: maskValue(destination), otp_ref: "otp_ref_001" },
+      data: {
+        matched: true,
+        product_id: best.product_id,
+        alias: best.alias,
+        match_type: best.match_type,
+      },
     };
   },
-  verify_otp: async (params) => {
-    const code = String(params.code || "");
+  read_product: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const productNo = String(params.product_no || params.product_id || "").trim();
+    if (!productNo) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "product_no is required" } };
+    }
+    const cfg = await getCafe24Config(ctx);
+    if (!cfg.ok) {
+      return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
+    }
+    const embed = String(params.embed || "").trim();
+    const fields = String(params.fields || "").trim();
+    const query: Record<string, string> = { shop_no: cfg.shopNo };
+    if (embed) query.embed = embed;
+    if (fields) query.fields = fields;
+    if (isTokenExpired(cfg.expiresAt)) {
+      const refreshed = await refreshCafe24Token({
+        settingsId: cfg.settingsId,
+        mallId: cfg.mallId,
+        refreshToken: cfg.refreshToken,
+        supabase: ctx!.supabase,
+      });
+      if (refreshed.ok) {
+        cfg.accessToken = refreshed.accessToken;
+      } else {
+        return { status: "error", error: { code: "TOKEN_REFRESH_FAILED", message: refreshed.error } };
+      }
+    }
+    const result = await cafe24Request(cfg, `/products/${encodeURIComponent(productNo)}`, { query });
+    if (!result.ok && result.error.includes("401")) {
+      const refreshed = await refreshCafe24Token({
+        settingsId: cfg.settingsId,
+        mallId: cfg.mallId,
+        refreshToken: cfg.refreshToken,
+        supabase: ctx!.supabase,
+      });
+      if (refreshed.ok) {
+        const retry = await cafe24Request(
+          { ...cfg, accessToken: refreshed.accessToken },
+          `/products/${encodeURIComponent(productNo)}`,
+          { query }
+        );
+        if (retry.ok) return { status: "success", data: retry.data };
+      }
+    }
+    if (!result.ok) {
+      return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
+    }
+    return { status: "success", data: result.data };
+  },
+  read_supply: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const supplierCode = String(params.supplier_code || "").trim();
+    const supplierName = String(params.supplier_name || "").trim();
+    const cfg = await getCafe24Config(ctx);
+    if (!cfg.ok) {
+      return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
+    }
+    if (isTokenExpired(cfg.expiresAt)) {
+      const refreshed = await refreshCafe24Token({
+        settingsId: cfg.settingsId,
+        mallId: cfg.mallId,
+        refreshToken: cfg.refreshToken,
+        supabase: ctx!.supabase,
+      });
+      if (refreshed.ok) {
+        cfg.accessToken = refreshed.accessToken;
+      } else {
+        return { status: "error", error: { code: "TOKEN_REFRESH_FAILED", message: refreshed.error } };
+      }
+    }
+    const query: Record<string, string> = { shop_no: cfg.shopNo };
+    if (supplierName) query.supplier_name = supplierName;
+    if (params.limit) query.limit = String(params.limit);
+    if (params.offset) query.offset = String(params.offset);
+    const endpoint = supplierCode
+      ? `/suppliers/${encodeURIComponent(supplierCode)}`
+      : "/suppliers";
+    const result = await cafe24Request(cfg, endpoint, { query });
+    if (!result.ok && result.error.includes("401")) {
+      const refreshed = await refreshCafe24Token({
+        settingsId: cfg.settingsId,
+        mallId: cfg.mallId,
+        refreshToken: cfg.refreshToken,
+        supabase: ctx!.supabase,
+      });
+      if (refreshed.ok) {
+        const retry = await cafe24Request(
+          { ...cfg, accessToken: refreshed.accessToken },
+          endpoint,
+          { query }
+        );
+        if (retry.ok) return { status: "success", data: retry.data };
+      }
+    }
+    if (!result.ok) {
+      return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
+    }
+    return { status: "success", data: result.data };
+  },
+  read_shipping: async (_params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const cfg = await getCafe24Config(ctx);
+    if (!cfg.ok) {
+      return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
+    }
+    if (isTokenExpired(cfg.expiresAt)) {
+      const refreshed = await refreshCafe24Token({
+        settingsId: cfg.settingsId,
+        mallId: cfg.mallId,
+        refreshToken: cfg.refreshToken,
+        supabase: ctx!.supabase,
+      });
+      if (refreshed.ok) {
+        cfg.accessToken = refreshed.accessToken;
+      } else {
+        return { status: "error", error: { code: "TOKEN_REFRESH_FAILED", message: refreshed.error } };
+      }
+    }
+    const result = await cafe24Request(cfg, "/shipping", { query: { shop_no: cfg.shopNo } });
+    if (!result.ok && result.error.includes("401")) {
+      const refreshed = await refreshCafe24Token({
+        settingsId: cfg.settingsId,
+        mallId: cfg.mallId,
+        refreshToken: cfg.refreshToken,
+        supabase: ctx!.supabase,
+      });
+      if (refreshed.ok) {
+        const retry = await cafe24Request(
+          { ...cfg, accessToken: refreshed.accessToken },
+          "/shipping",
+          { query: { shop_no: cfg.shopNo } }
+        );
+        if (retry.ok) return { status: "success", data: retry.data };
+      }
+    }
+    if (!result.ok) {
+      return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
+    }
+    return { status: "success", data: result.data };
+  },
+  subscribe_restock: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const productId = String(params.product_id || "").trim();
+    const channel = String(params.channel || "").trim();
+    if (!productId || !channel) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "product_id and channel are required" } };
+    }
+    const payload = {
+      org_id: ctx.orgId,
+      product_id: productId,
+      channel,
+      phone: params.phone ? String(params.phone) : null,
+      customer_id: params.customer_id ? String(params.customer_id) : null,
+      trigger_type: params.trigger_type ? String(params.trigger_type) : "status_change",
+      trigger_value: params.trigger_value ?? null,
+      actions: Array.isArray(params.actions) ? params.actions : ["notify_only"],
+      status: "active",
+      created_at: new Date().toISOString(),
+    };
+    const { data, error } = await ctx.supabase.from("restock_subscription").insert(payload).select("id").single();
+    if (error) {
+      return { status: "error", error: { code: "DB_ERROR", message: error.message } };
+    }
+    return { status: "success", data: { subscription_id: data?.id ?? null, ...payload } };
+  },
+  trigger_restock: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const productId = String(params.product_id || "").trim();
+    const triggerType = String(params.trigger_type || "").trim();
+    if (!productId || !triggerType) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "product_id and trigger_type are required" } };
+    }
+    return {
+      status: "success",
+      data: {
+        accepted: true,
+        product_id: productId,
+        trigger_type: triggerType,
+        trigger_value: params.trigger_value ?? null,
+      },
+    };
+  },
+  send_otp: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+      const destination = String(params.destination || "").trim();
+      if (!destination) {
+        return { status: "error", error: { code: "INVALID_INPUT", message: "destination is required" } };
+      }
+      const from = readEnv("SOLAPI_FROM");
+      if (!from) {
+        const processKeys = Object.keys(process.env || {}).filter((key) => key.startsWith("SOLAPI_"));
+        const fallbackKeys = Object.keys(loadEnvFromFiles() || {}).filter((key) => key.startsWith("SOLAPI_"));
+        const envKeys = Array.from(new Set([...processKeys, ...fallbackKeys])).sort();
+        return {
+          status: "error",
+          error: {
+            code: "CONFIG_ERROR",
+            message: "SOLAPI_FROM is required",
+            detail: {
+              cwd: process.cwd(),
+              solapi_from_len: (process.env.SOLAPI_FROM || "").length,
+              solapi_env_keys: envKeys,
+            },
+          },
+        };
+      }
+      const tempCode = readEnv("SOLAPI_TEMP");
+      const code = tempCode ? tempCode : String(Math.floor(100000 + Math.random() * 900000));
+      const testMode = Boolean(tempCode);
+    const otpRef = crypto.randomUUID();
+    const text = String(params.text || `인증번호는 ${code} 입니다.`);
+    const sendResult = await solapiSendMessage({ to: destination, from, text });
+    if (!sendResult.ok) {
+      return { status: "error", error: { code: "SOLAPI_ERROR", message: sendResult.error } };
+    }
+    const codeHash = crypto.createHash("sha256").update(code + otpRef).digest("hex");
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const recordId = crypto.randomUUID();
+    const { error } = await ctx.supabase.from("otp_verifications").insert({
+      id: recordId,
+      org_id: ctx.orgId,
+      user_id: ctx.userId,
+      destination,
+      otp_ref: otpRef,
+      code_hash: codeHash,
+      expires_at: expiresAt,
+    });
+    if (error) {
+      return { status: "error", error: { code: "DB_ERROR", message: error.message } };
+    }
+      return {
+        status: "success",
+        data: {
+          delivery: "sms",
+          destination: maskValue(destination),
+          otp_ref: otpRef,
+          expires_at: expiresAt,
+          test_mode: testMode,
+          test_code: testMode ? code : undefined,
+        },
+      };
+  },
+  verify_otp: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const code = String(params.code || "").trim();
+    const otpRef = String(params.otp_ref || "").trim();
     if (!code) {
       return { status: "error", error: { code: "INVALID_INPUT", message: "code is required" } };
     }
+    if (!otpRef) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "otp_ref is required" } };
+    }
+    const { data, error } = await ctx.supabase
+      .from("otp_verifications")
+      .select("id, code_hash, expires_at, verified_at")
+      .eq("otp_ref", otpRef)
+      .maybeSingle();
+    if (error || !data) {
+      return { status: "error", error: { code: "OTP_NOT_FOUND", message: "otp_ref not found" } };
+    }
+    if (data.verified_at) {
+      return { status: "error", error: { code: "OTP_ALREADY_USED", message: "otp already verified" } };
+    }
+    if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) {
+      return { status: "error", error: { code: "OTP_EXPIRED", message: "otp expired" } };
+    }
+    const codeHash = crypto.createHash("sha256").update(code + otpRef).digest("hex");
+    if (codeHash !== data.code_hash) {
+      return { status: "error", error: { code: "OTP_INVALID", message: "invalid code" } };
+    }
+    const verificationToken = crypto.randomUUID();
+    await ctx.supabase
+      .from("otp_verifications")
+      .update({ verified_at: new Date().toISOString(), verification_token: verificationToken })
+      .eq("id", data.id);
     return {
       status: "success",
-      data: { verified: true, customer_verification_token: "cvt_001" },
+      data: { verified: true, customer_verification_token: verificationToken },
     };
   },
 };

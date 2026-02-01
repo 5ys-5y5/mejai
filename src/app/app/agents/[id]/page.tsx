@@ -32,6 +32,8 @@ type KbItem = {
   version: string | null;
   is_active: boolean | null;
   created_at?: string | null;
+  is_admin?: boolean | null;
+  org_id?: string | null;
 };
 
 type MpcTool = {
@@ -208,6 +210,8 @@ export default function AgentDetailPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeUpdateId, setActiveUpdateId] = useState<string | null>(null);
+  const [userOrgId, setUserOrgId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -249,23 +253,28 @@ export default function AgentDetailPage() {
     let mounted = true;
     async function loadLists() {
       try {
-        const [agentRes, kbRes, toolRes, sessionRes] = await Promise.all([
+        const [agentRes, kbRes, toolRes, sessionRes, profileRes] = await Promise.all([
           apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200"),
           apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
           apiFetch<{ items: MpcTool[] }>("/api/mcp/tools").catch(() => ({ items: [] })),
           apiFetch<{ items: SessionRow[] }>("/api/sessions?limit=500").catch(() => ({ items: [] })),
+          apiFetch<{ is_admin?: boolean; org_id?: string | null }>("/api/user-profile").catch(() => ({})),
         ]);
         if (!mounted) return;
         setAllAgents(agentRes.items || []);
         setKbItems(kbRes.items || []);
         setMcpTools(toolRes.items || []);
         setSessions(sessionRes.items || []);
+        setUserOrgId(profileRes.org_id ?? null);
+        setIsAdmin(Boolean(profileRes.is_admin));
       } catch {
         if (!mounted) return;
         setAllAgents([]);
         setKbItems([]);
         setMcpTools([]);
         setSessions([]);
+        setUserOrgId(null);
+        setIsAdmin(false);
       }
     }
     loadLists();
@@ -280,14 +289,24 @@ export default function AgentDetailPage() {
     return map;
   }, [kbItems]);
 
-  const activeKbByParent = useMemo(() => getActiveKbByParent(kbItems), [kbItems]);
+  const scopedKbItems = useMemo(() => {
+    if (!userOrgId) return [];
+    return kbItems.filter((item) => !item.is_admin && item.org_id === userOrgId);
+  }, [kbItems, userOrgId]);
+
+  const adminKbItems = useMemo(() => {
+    if (!isAdmin || !userOrgId) return [];
+    return kbItems.filter((item) => item.is_admin && item.org_id === userOrgId);
+  }, [kbItems, isAdmin, userOrgId]);
+
+  const activeKbByParent = useMemo(() => getActiveKbByParent(scopedKbItems), [scopedKbItems]);
   const selectedKb = kbId ? kbById.get(kbId) ?? null : null;
   const selectedKbParentId = selectedKb ? selectedKb.parent_id ?? selectedKb.id : null;
   const activeKb = selectedKbParentId ? activeKbByParent.get(selectedKbParentId) ?? null : null;
   const kbUpdateAvailable = Boolean(selectedKb && activeKb && activeKb.id !== selectedKb.id);
 
   const kbOptions = useMemo(() => {
-    return [...kbItems]
+    return [...scopedKbItems]
       .sort((a, b) => {
         if (a.title !== b.title) return a.title.localeCompare(b.title);
         return compareVersions(
@@ -300,7 +319,7 @@ export default function AgentDetailPage() {
         label: `${item.title}${item.version ? ` (${item.version})` : ""}`,
         description: item.is_active ? "배포" : "비활성",
       }));
-  }, [kbItems]);
+  }, [scopedKbItems]);
 
   const mcpOptions = useMemo(
     () =>
@@ -489,6 +508,13 @@ export default function AgentDetailPage() {
               <Bot className="h-4 w-4" />
               대화 테스트
             </Link>
+            <Link
+              href={`/app/agents/${encodeURIComponent(agentId)}/playground-compare`}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              <Bot className="h-4 w-4" />
+              비교 테스트
+            </Link>
             <button
               type="button"
               onClick={() => router.push("/app/agents")}
@@ -564,6 +590,47 @@ export default function AgentDetailPage() {
                     options={kbOptions}
                     placeholder="KB 선택"
                     searchable
+                    renderValue={(selected) => (
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 truncate">
+                          {selected?.id ? (
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                scopedKbItems.find((kb) => kb.id === selected.id)?.is_active
+                                  ? "bg-emerald-500"
+                                  : "bg-slate-300"
+                              )}
+                            />
+                          ) : null}
+                          <span className="truncate">{selected?.label || "KB 선택"}</span>
+                        </div>
+                        {selected?.id ? (
+                          <div className="text-[11px] text-slate-500 truncate">ID: {selected.id}</div>
+                        ) : null}
+                      </div>
+                    )}
+                    renderOption={(option) => {
+                      const item = scopedKbItems.find((kb) => kb.id === option.id);
+                      const isActive = Boolean(item?.is_active);
+                      return (
+                        <div className="min-w-0 text-left">
+                          <div className="flex items-center gap-2 truncate">
+                            <span
+                              className={cn(
+                                "h-2 w-2 rounded-full",
+                                isActive ? "bg-emerald-500" : "bg-slate-300"
+                              )}
+                            />
+                            <span className="text-slate-900">{option.label}</span>
+                            {option.description ? (
+                              <span className="text-[10px] text-slate-500 whitespace-nowrap">{option.description}</span>
+                            ) : null}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate">ID: {option.id}</div>
+                        </div>
+                      );
+                    }}
                   />
                   {kbUpdateAvailable ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -577,6 +644,23 @@ export default function AgentDetailPage() {
                       >
                         최신으로 선택
                       </button>
+                    </div>
+                  ) : null}
+                  {isAdmin ? (
+                    <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                      <div className="text-[11px] font-semibold text-slate-600">admin KB</div>
+                      {adminKbItems.length > 0 ? (
+                        <div className="mt-2 space-y-1">
+                          {adminKbItems.map((item) => (
+                            <div key={item.id} className="flex items-center justify-between gap-2">
+                              <span className="truncate">{item.title}{item.version ? ` (${item.version})` : ""}</span>
+                              <span className="text-[10px] text-slate-500">ID: {item.id}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-2 text-[11px] text-slate-500">적용 가능한 admin KB가 없습니다.</div>
+                      )}
                     </div>
                   ) : null}
                 </div>

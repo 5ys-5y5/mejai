@@ -28,7 +28,20 @@ export type PolicyPack = {
 export type PolicyEvalContext = {
   input: { text: string };
   intent?: { name?: string };
-  entity?: { order_id?: string | null; address?: string | null; phone?: string | null };
+  entity?: {
+    order_id?: string | null;
+    address?: string | null;
+    zipcode?: string | null;
+    phone?: string | null;
+    channel?: string | null;
+  };
+  product?: {
+    id?: string | null;
+    answerable?: boolean | null;
+    restock_known?: boolean | null;
+    restock_policy?: string | null;
+    restock_at?: string | null;
+  };
   user?: { confirmed?: boolean };
   conversation?: { repeat_count?: number; flags?: Record<string, unknown> };
 };
@@ -45,6 +58,8 @@ export type PolicyActionResult = {
 const ABUSE_PATTERN = /(미친|병신|새끼|욕|꺼져|좆)/;
 const PHONE_PATTERN = /\b01[016789]-?\d{3,4}-?\d{4}\b/;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
+const RESTOCK_PATTERN = /재입고|입고|재고|품절|다시\s*입고|다시\s*들어|재판매/;
+const RESTOCK_SUBSCRIBE_PATTERN = /(알림|알려|입고되면|재입고되면|문자|카카오|카톡|이메일|메일)/;
 
 function matchPredicate(predicate: string, ctx: PolicyEvalContext, args?: PredicateArgs) {
   switch (predicate) {
@@ -60,6 +75,10 @@ function matchPredicate(predicate: string, ctx: PolicyEvalContext, args?: Predic
       return Boolean(ctx.entity?.order_id);
     case "entity.order_id.missing":
       return !ctx.entity?.order_id;
+    case "entity.phone.present":
+      return Boolean(ctx.entity?.phone);
+    case "entity.phone.missing":
+      return !ctx.entity?.phone;
     case "entity.address.present":
       return Boolean(ctx.entity?.address);
     case "entity.address.missing":
@@ -68,6 +87,26 @@ function matchPredicate(predicate: string, ctx: PolicyEvalContext, args?: Predic
       return Boolean(ctx.user?.confirmed) === Boolean(args?.value);
     case "conversation.repeat_over":
       return (ctx.conversation?.repeat_count || 0) > Number(args?.count || 0);
+    case "text.matches": {
+      const pattern = String(args?.regex || "");
+      const flags = String(args?.flags || "i");
+      if (!pattern) return false;
+      try {
+        return new RegExp(pattern, flags).test(ctx.input.text);
+      } catch {
+        return false;
+      }
+    }
+    case "text.restock_inquiry":
+      return RESTOCK_PATTERN.test(ctx.input.text) && !RESTOCK_SUBSCRIBE_PATTERN.test(ctx.input.text);
+    case "text.restock_subscribe":
+      return RESTOCK_PATTERN.test(ctx.input.text) && RESTOCK_SUBSCRIBE_PATTERN.test(ctx.input.text);
+    case "product.answerable":
+      if (!ctx.product?.id) return false;
+      return Boolean(ctx.product?.answerable) === Boolean(args?.value);
+    case "product.restock_known":
+      if (!ctx.product?.id) return false;
+      return Boolean(ctx.product?.restock_known) === Boolean(args?.value);
     default:
       return false;
   }
@@ -82,9 +121,47 @@ function whenMatches(rule: PolicyRule, ctx: PolicyEvalContext) {
   return anyPass && allPass;
 }
 
+function readPathValue(ctx: PolicyEvalContext, path: string) {
+  const keys = path.split(".").filter(Boolean);
+  let current: unknown = ctx;
+  for (const key of keys) {
+    if (typeof current !== "object" || current === null) return undefined;
+    current = (current as Record<string, unknown>)[key];
+  }
+  return current;
+}
+
+function resolveTemplateString(value: string, ctx: PolicyEvalContext) {
+  return value.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_match, rawPath) => {
+    const path = String(rawPath || "").trim();
+    if (!path) return "";
+    const resolved = readPathValue(ctx, path);
+    if (resolved === undefined || resolved === null) return "";
+    return String(resolved);
+  });
+}
+
+function resolveTemplateArgs(input: unknown, ctx: PolicyEvalContext): unknown {
+  if (typeof input === "string") {
+    return resolveTemplateString(input, ctx);
+  }
+  if (Array.isArray(input)) {
+    return input.map((item) => resolveTemplateArgs(item, ctx));
+  }
+  if (input && typeof input === "object") {
+    const next: Record<string, unknown> = {};
+    Object.entries(input as Record<string, unknown>).forEach(([key, value]) => {
+      next[key] = resolveTemplateArgs(value, ctx);
+    });
+    return next;
+  }
+  return input;
+}
+
 function applyActions(
   actions: Array<Record<string, unknown>>,
-  templates: Record<string, string>
+  templates: Record<string, string>,
+  ctx: PolicyEvalContext
 ): PolicyActionResult {
   const result: PolicyActionResult = {
     denyTools: [],
@@ -118,7 +195,8 @@ function applyActions(
     if (type === "force_tool_call") {
       const tool = String(action.tool || "");
       const argsTemplate = (action.args_template || {}) as Record<string, unknown>;
-      if (tool) result.forcedToolCalls!.push({ name: tool, args: argsTemplate });
+      const resolvedArgs = resolveTemplateArgs(argsTemplate, ctx) as Record<string, unknown>;
+      if (tool) result.forcedToolCalls!.push({ name: tool, args: resolvedArgs });
     }
     if (type === "format_output") {
       result.outputFormat = "default";
@@ -154,7 +232,7 @@ export function runPolicyStage(
   ctx: PolicyEvalContext
 ) {
   const matched = compiled.rules.filter((rule) => rule.stage === stage && whenMatches(rule, ctx));
-  const actionResults = matched.map((rule) => applyActions(rule.enforce.actions || [], compiled.templates));
+  const actionResults = matched.map((rule) => applyActions(rule.enforce.actions || [], compiled.templates, ctx));
   const merged: PolicyActionResult = {
     denyTools: [],
     allowTools: [],
@@ -162,7 +240,7 @@ export function runPolicyStage(
     flags: {},
   };
   actionResults.forEach((res) => {
-    if (res.forcedResponse) merged.forcedResponse = res.forcedResponse;
+    if (res.forcedResponse && !merged.forcedResponse) merged.forcedResponse = res.forcedResponse;
     if (res.outputFormat) merged.outputFormat = res.outputFormat;
     merged.denyTools!.push(...(res.denyTools || []));
     merged.allowTools!.push(...(res.allowTools || []));

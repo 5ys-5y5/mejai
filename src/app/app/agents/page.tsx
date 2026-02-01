@@ -389,6 +389,13 @@ export default function AgentsPage() {
                         </button>
                       ) : null}
                       <Link
+                        href={`/app/agents/${encodeURIComponent(agent.id)}/playground-compare`}
+                        aria-label="비교 테스트"
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                      >
+                        <Bot className="h-4 w-4" />
+                      </Link>
+                      <Link
                         href={`/app/agents/${encodeURIComponent(agent.id)}/playground`}
                         aria-label="대화 테스트"
                         className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"

@@ -9,6 +9,28 @@ function parseOrder(orderParam: string | null) {
   return { field: field || "created_at", ascending: dir === "asc" };
 }
 
+function readGroupValue(group: Record<string, unknown> | null, path: string) {
+  if (!group) return null;
+  return path.split(".").reduce((acc: unknown, key) => {
+    if (!acc || typeof acc !== "object") return null;
+    return (acc as Record<string, unknown>)[key];
+  }, group as unknown);
+}
+
+function matchesAdminGroup(
+  applyGroups: Array<{ path: string; values: string[] }> | null | undefined,
+  group: Record<string, unknown> | null,
+  mode: "all" | "any" | null | undefined
+) {
+  if (!applyGroups || applyGroups.length === 0) return true;
+  const matcher = mode === "any" ? "some" : "every";
+  return applyGroups[matcher]((rule) => {
+    const value = readGroupValue(group, rule.path);
+    if (value === null || value === undefined) return false;
+    return rule.values.map(String).includes(String(value));
+  });
+}
+
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
@@ -40,13 +62,28 @@ export async function GET(req: NextRequest) {
     if (isActive === "false") query = query.eq("is_active", false);
   }
 
+  const { data: accessRow } = await context.supabase
+    .from("user_access")
+    .select("group")
+    .eq("user_id", context.user.id)
+    .maybeSingle();
+  const userGroup = (accessRow?.group as Record<string, unknown> | null) ?? null;
+
   const { data, error, count } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  return NextResponse.json({ items: data || [], total: count || 0 });
+  const items = (data || []).map((row: any) => {
+    const applies =
+      row?.is_admin
+        ? matchesAdminGroup(row?.apply_groups || null, userGroup, row?.apply_groups_mode || null)
+        : true;
+    return { ...row, applies_to_user: applies };
+  });
+
+  return NextResponse.json({ items, total: count || 0 });
 }
 
 export async function POST(req: NextRequest) {

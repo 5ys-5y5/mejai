@@ -50,6 +50,7 @@ wss.on("connection", (ws) => {
       const agentId = message.agent_id || "";
       const text = message.text || "";
       const sessionId = message.session_id || "";
+      const mode = message.mode || "";
       if (!accessToken || !agentId || !text) {
         sendJson(ws, { type: "error", error: "MISSING_FIELDS" });
         return;
@@ -66,13 +67,19 @@ wss.on("connection", (ws) => {
           agent_id: agentId,
           message: String(text),
           session_id: sessionId || null,
+          mode: mode || "guided",
         }),
         signal: controller.signal,
       })
         .then(async (res) => {
           const payload = await res.json().catch(() => ({}));
           if (!res.ok) {
-            sendJson(ws, { type: "error", error: payload.error || "REQUEST_FAILED" });
+            sendJson(ws, {
+              type: "error",
+              error: payload.error || "REQUEST_FAILED",
+              detail: payload,
+              status: res.status,
+            });
             return;
           }
           sendJson(ws, {
@@ -85,7 +92,10 @@ wss.on("connection", (ws) => {
           });
         })
         .catch((err) => {
-          sendJson(ws, { type: "error", error: err?.message || "REQUEST_FAILED" });
+          sendJson(ws, {
+            type: "error",
+            error: err?.message || "REQUEST_FAILED",
+          });
         })
         .finally(() => clearTimeout(timeout));
       return;

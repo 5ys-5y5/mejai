@@ -22,6 +22,7 @@ type SelectPopoverProps = {
   searchable?: boolean;
   disabled?: boolean;
   renderValue?: (selected: SelectOption | undefined) => React.ReactNode;
+  renderOption?: (option: SelectOption, active: boolean) => React.ReactNode;
 };
 
 export function SelectPopover({
@@ -35,6 +36,7 @@ export function SelectPopover({
   searchable = false,
   disabled = false,
   renderValue,
+  renderOption,
 }: SelectPopoverProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -130,14 +132,18 @@ export function SelectPopover({
                       active ? "bg-slate-100 text-slate-900" : "text-slate-700 hover:bg-slate-50"
                     )}
                   >
-                    <div className="min-w-0 text-left">
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="text-slate-900">{o.label}</span>
-                        {o.description ? (
-                          <span className="text-[10px] text-slate-500 whitespace-nowrap">{o.description}</span>
-                        ) : null}
+                    {renderOption ? (
+                      renderOption(o, active)
+                    ) : (
+                      <div className="min-w-0 text-left">
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="text-slate-900">{o.label}</span>
+                          {o.description ? (
+                            <span className="text-[10px] text-slate-500 whitespace-nowrap">{o.description}</span>
+                          ) : null}
+                        </div>
                       </div>
-                    </div>
+                    )}
                     {active ? <CheckCircle2 className="h-4 w-4 text-slate-900" /> : null}
                   </button>
                 );

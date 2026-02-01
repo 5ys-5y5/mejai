@@ -128,3 +128,19 @@ h4 {
   backface-visibility: hidden;
   transform: translateZ(0);
 }
+
+.debug_prefix {
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px dashed #cbd5f5;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.5;
+  border-radius: 10px;
+  white-space: normal;
+}
+
+.debug_answer {
+  white-space: pre-wrap;
+}

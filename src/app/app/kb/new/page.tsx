@@ -276,6 +276,7 @@ export default function NewKbPage() {
   const [groupMatchMode, setGroupMatchMode] = useState<"all" | "any">("all");
   const [policyJson, setPolicyJson] = useState("");
   const [policyError, setPolicyError] = useState<string | null>(null);
+  const [adminInputMode, setAdminInputMode] = useState<"builder" | "manual">("builder");
   const [selectedRules, setSelectedRules] = useState<Record<string, boolean>>({});
   const [selectedTemplates, setSelectedTemplates] = useState<Record<string, boolean>>({});
   const [selectedToolPolicies, setSelectedToolPolicies] = useState<Record<string, boolean>>({});
@@ -327,7 +328,7 @@ export default function NewKbPage() {
   }, [title, category, userContent, kbItems, kbType]);
 
   useEffect(() => {
-    if (kbType !== "admin") return;
+    if (kbType !== "admin" || adminInputMode !== "builder") return;
     if (!policyJson.trim()) {
       const seed = {
         rules: [],
@@ -337,7 +338,7 @@ export default function NewKbPage() {
       const seedText = JSON.stringify(seed, null, 2);
       setPolicyJson(seedText);
     }
-  }, [kbType, policyJson]);
+  }, [kbType, policyJson, adminInputMode]);
 
 
   const rulePresets: PolicyRulePreset[] = [
@@ -484,7 +485,7 @@ export default function NewKbPage() {
   ];
 
   useEffect(() => {
-    if (kbType !== "admin") return;
+    if (kbType !== "admin" || adminInputMode !== "builder") return;
     if (Object.keys(selectedRules).length === 0 && rulePresets.length > 0) {
       setSelectedRules(Object.fromEntries(rulePresets.map((r) => [r.id, true])));
     }
@@ -494,7 +495,16 @@ export default function NewKbPage() {
     if (Object.keys(selectedToolPolicies).length === 0 && toolPolicyPresets.length > 0) {
       setSelectedToolPolicies(Object.fromEntries(toolPolicyPresets.map((t) => [t.id, true])));
     }
-  }, [kbType, rulePresets, templatePresets, toolPolicyPresets, selectedRules, selectedTemplates, selectedToolPolicies]);
+  }, [
+    kbType,
+    adminInputMode,
+    rulePresets,
+    templatePresets,
+    toolPolicyPresets,
+    selectedRules,
+    selectedTemplates,
+    selectedToolPolicies,
+  ]);
 
   const selectedRecoText = useMemo(() => {
     return recommendations
@@ -547,11 +557,11 @@ export default function NewKbPage() {
   };
 
   useEffect(() => {
-    if (kbType !== "admin") return;
+    if (kbType !== "admin" || adminInputMode !== "builder") return;
     const next = buildPolicyFromSelection();
     const nextText = JSON.stringify(next, null, 2);
     setPolicyJson(nextText);
-  }, [kbType, customRules, selectedRules, selectedTemplates, selectedToolPolicies]);
+  }, [kbType, adminInputMode, customRules, selectedRules, selectedTemplates, selectedToolPolicies]);
 
   const handleAddCustomRule = () => {
     const title = customRuleTitle.trim() || "CUSTOM_RULE";
@@ -793,102 +803,133 @@ export default function NewKbPage() {
               ) : (
                 <div className="grid gap-2">
                   <label className="text-sm font-medium text-slate-900">내용 *</label>
-                  <InlineSelectBox
-                    label={`규칙/템플릿/툴 정책 선택`}
-                    sections={[
-                      {
-                        title: `규칙 (${Object.values(selectedRules).filter(Boolean).length}/${rulePresets.length})`,
-                        items: rulePresets.map((item) => ({
-                          id: item.id,
-                          title: item.title,
-                          summary: item.summary,
-                        })),
-                      },
-                      {
-                        title: `템플릿 (${Object.values(selectedTemplates).filter(Boolean).length}/${templatePresets.length})`,
-                        items: templatePresets.map((item) => ({
-                          id: item.id,
-                          title: item.title,
-                          summary: item.summary,
-                        })),
-                      },
-                      {
-                        title: `툴 정책 (${Object.values(selectedToolPolicies).filter(Boolean).length}/${toolPolicyPresets.length})`,
-                        items: toolPolicyPresets.map((item) => ({
-                          id: item.id,
-                          title: item.title,
-                          summary: item.summary,
-                        })),
-                      },
-                    ]}
-                    selected={{ ...selectedRules, ...selectedTemplates, ...selectedToolPolicies }}
-                    onToggle={(id) => {
-                      if (selectedRules[id] !== undefined) {
-                        setSelectedRules((prev) => ({ ...prev, [id]: !prev[id] }));
-                        return;
-                      }
-                      if (selectedTemplates[id] !== undefined) {
-                        setSelectedTemplates((prev) => ({ ...prev, [id]: !prev[id] }));
-                        return;
-                      }
-                      setSelectedToolPolicies((prev) => ({ ...prev, [id]: !prev[id] }));
-                    }}
-                    footer={
-                      <div className="grid gap-4">
-                        <div className="text-xs font-semibold text-slate-700">새 규칙 추가</div>
-                        <div className="grid gap-4 text-xs text-slate-600">
-                          <div className="grid gap-4 md:grid-cols-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
+                    <span>정책 입력 방식</span>
+                    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="admin-input-mode"
+                          checked={adminInputMode === "builder"}
+                          onChange={() => setAdminInputMode("builder")}
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
+                        />
+                        선택 입력
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="admin-input-mode"
+                          checked={adminInputMode === "manual"}
+                          onChange={() => setAdminInputMode("manual")}
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
+                        />
+                        수동 입력
+                      </label>
+                    </div>
+                  </div>
+                  {adminInputMode === "builder" ? (
+                    <InlineSelectBox
+                      label={`규칙/템플릿/툴 정책 선택`}
+                      sections={[
+                        {
+                          title: `규칙 (${Object.values(selectedRules).filter(Boolean).length}/${rulePresets.length})`,
+                          items: rulePresets.map((item) => ({
+                            id: item.id,
+                            title: item.title,
+                            summary: item.summary,
+                          })),
+                        },
+                        {
+                          title: `템플릿 (${Object.values(selectedTemplates).filter(Boolean).length}/${templatePresets.length})`,
+                          items: templatePresets.map((item) => ({
+                            id: item.id,
+                            title: item.title,
+                            summary: item.summary,
+                          })),
+                        },
+                        {
+                          title: `툴 정책 (${Object.values(selectedToolPolicies).filter(Boolean).length}/${toolPolicyPresets.length})`,
+                          items: toolPolicyPresets.map((item) => ({
+                            id: item.id,
+                            title: item.title,
+                            summary: item.summary,
+                          })),
+                        },
+                      ]}
+                      selected={{ ...selectedRules, ...selectedTemplates, ...selectedToolPolicies }}
+                      onToggle={(id) => {
+                        if (selectedRules[id] !== undefined) {
+                          setSelectedRules((prev) => ({ ...prev, [id]: !prev[id] }));
+                          return;
+                        }
+                        if (selectedTemplates[id] !== undefined) {
+                          setSelectedTemplates((prev) => ({ ...prev, [id]: !prev[id] }));
+                          return;
+                        }
+                        setSelectedToolPolicies((prev) => ({ ...prev, [id]: !prev[id] }));
+                      }}
+                      footer={
+                        <div className="grid gap-4">
+                          <div className="text-xs font-semibold text-slate-700">새 규칙 추가</div>
+                          <div className="grid gap-4 text-xs text-slate-600">
+                            <div className="grid gap-4 md:grid-cols-2">
+                              <input
+                                value={customRuleTitle}
+                                onChange={(e) => setCustomRuleTitle(e.target.value)}
+                                placeholder="규칙 이름 예시: R050_custom_rule"
+                                className="h-8 rounded-lg border border-slate-200 px-2"
+                              />
+                              <select
+                                value={customRuleStage}
+                                onChange={(e) => setCustomRuleStage(e.target.value as "input" | "tool" | "output")}
+                                className="h-8 rounded-lg border border-slate-200 px-2"
+                              >
+                                <option value="input">input</option>
+                                <option value="tool">tool</option>
+                                <option value="output">output</option>
+                              </select>
+                            </div>
                             <input
-                              value={customRuleTitle}
-                              onChange={(e) => setCustomRuleTitle(e.target.value)}
-                              placeholder="규칙 이름 예시: R050_custom_rule"
+                              value={customRulePredicate}
+                              onChange={(e) => setCustomRulePredicate(e.target.value)}
+                              placeholder="predicate 예시: text.contains_abuse"
                               className="h-8 rounded-lg border border-slate-200 px-2"
                             />
-                            <select
-                              value={customRuleStage}
-                              onChange={(e) => setCustomRuleStage(e.target.value as "input" | "tool" | "output")}
+                            <input
+                              value={customRuleAction}
+                              onChange={(e) => setCustomRuleAction(e.target.value)}
+                              placeholder="action 예시: force_response_template"
                               className="h-8 rounded-lg border border-slate-200 px-2"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddCustomRule}
+                              className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
                             >
-                              <option value="input">input</option>
-                              <option value="tool">tool</option>
-                              <option value="output">output</option>
-                            </select>
+                              <Plus className="h-3 w-3" />
+                              규칙 추가
+                            </button>
+                            {customRules.length > 0 ? (
+                              <div className="grid gap-2">
+                                {customRules.map((rule) => (
+                                  <div key={rule.id} className="flex items-center gap-2 text-xs text-slate-600">
+                                    {rule.needsCode ? <AlertTriangle className="h-3 w-3 text-amber-500" /> : null}
+                                    <span>{rule.id}</span>
+                                    {rule.needsCode ? <span className="text-amber-600">하드코딩 필요</span> : null}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
                           </div>
-                          <input
-                            value={customRulePredicate}
-                            onChange={(e) => setCustomRulePredicate(e.target.value)}
-                            placeholder="predicate 예시: text.contains_abuse"
-                            className="h-8 rounded-lg border border-slate-200 px-2"
-                          />
-                          <input
-                            value={customRuleAction}
-                            onChange={(e) => setCustomRuleAction(e.target.value)}
-                            placeholder="action 예시: force_response_template"
-                            className="h-8 rounded-lg border border-slate-200 px-2"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleAddCustomRule}
-                            className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
-                          >
-                            <Plus className="h-3 w-3" />
-                            규칙 추가
-                          </button>
-                          {customRules.length > 0 ? (
-                            <div className="grid gap-2">
-                              {customRules.map((rule) => (
-                                <div key={rule.id} className="flex items-center gap-2 text-xs text-slate-600">
-                                  {rule.needsCode ? <AlertTriangle className="h-3 w-3 text-amber-500" /> : null}
-                                  <span>{rule.id}</span>
-                                  {rule.needsCode ? <span className="text-amber-600">하드코딩 필요</span> : null}
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
                         </div>
-                      </div>
-                    }
-                  />
+                      }
+                    />
+                  ) : (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                      규칙/템플릿/툴 정책 선택 없이 직접 JSON을 입력합니다.
+                    </div>
+                  )}
                   <textarea
                     value={policyJson}
                     onChange={(e) => {
@@ -896,8 +937,12 @@ export default function NewKbPage() {
                       setPolicyError(null);
                     }}
                     placeholder="Policy JSON을 입력하세요."
-                    className="min-h-[260px] w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 font-mono text-xs text-slate-700"
-                    disabled
+                    className={cn(
+                      "min-h-[260px] w-full rounded-xl border px-3 py-2 font-mono text-xs",
+                      adminInputMode === "manual"
+                        ? "border-slate-200 bg-white text-slate-800"
+                        : "border-slate-200 bg-slate-100 text-slate-700"
+                    )}
                   />
                   {policyError ? <div className="text-xs text-rose-600">{policyError}</div> : null}
                   <div className="grid gap-2 text-xs text-slate-500">

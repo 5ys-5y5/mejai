@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Book,
+  Bot,
   ClipboardCheck,
   CreditCard,
   HomeIcon,
@@ -150,6 +151,13 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
 
         <SidebarGroup header="구성" collapsed={collapsed}>
           <SidebarLink to="/app/agents" icon={Users} label="에이전트" collapsed={collapsed} onClick={onNavigate} />
+          <SidebarLink
+            to="/app/labolatory"
+            icon={Bot}
+            label="실험실"
+            collapsed={collapsed}
+            onClick={onNavigate}
+          />
           <SidebarLink to="/app/eval" icon={ClipboardCheck} label="평가/관리" collapsed={collapsed} onClick={onNavigate} />
           <SidebarLink to="/app/kb" icon={Book} label="지식 베이스" collapsed={collapsed} onClick={onNavigate} />
           <SidebarLink to="/app/rules" icon={RouteIcon} label="규칙" collapsed={collapsed} onClick={onNavigate} />
