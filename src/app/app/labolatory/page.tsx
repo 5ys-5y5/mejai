@@ -404,6 +404,9 @@ function describeRoute(route: string) {
   if (route === "legacy") {
     return "기존 /api/playground/chat 파이프라인 (llm.ts, 확인/요약 흐름 포함).";
   }
+  if (route === "v3") {
+    return "V3 /api/playground/chat_v3 (natural 모드 기반, 파이프라인 강제 최소화 실험 라우트).";
+  }
   return "신규 /api/playground/chat_mk2 파이프라인 (llm_mk2, 정책 기반 단순 흐름).";
 }
 
@@ -528,6 +531,7 @@ export default function LabolatoryPage() {
     () => [
       { id: "legacy", label: "Legacy", description: "/api/playground/chat" },
       { id: "mk2", label: "MK2", description: "/api/playground/chat_mk2" },
+      { id: "v3", label: "V3", description: "/api/playground/chat_v3 (natural)" },
     ],
     []
   );

@@ -18,6 +18,7 @@ type Body = {
   kb_id?: string;
   admin_kb_ids?: string[];
   mcp_tool_ids?: string[];
+  mode?: string;
 };
 
 type AgentRow = {
@@ -1015,6 +1016,13 @@ function normalizeOrderChangeAddressPrompt(intent: string, text: string) {
   return "배송지 변경을 위해 새 주소를 알려주세요. 예) 주소: 서울시 ...";
 }
 
+function isOrderChangeZipcodeTemplateText(text: string) {
+  const v = normalizeAddressText(text);
+  if (!v) return false;
+  if (!/배송지\s*변경/.test(v)) return false;
+  return /우편번호/.test(v) || /새\s*주소/.test(v);
+}
+
 async function extractEntitiesWithLlm(text: string, model: "chatgpt" | "gemini") {
   const prompt = `Extract entities from the text. Return JSON only.
 Text: "${text}"
@@ -1161,6 +1169,7 @@ export async function POST(req: NextRequest) {
     const body = (await req.json().catch(() => null)) as Body | null;
     const agentId = String(body?.agent_id || "").trim();
     const message = String(body?.message || "").trim();
+    const conversationMode = String(body?.mode || "").trim().toLowerCase() === "natural" ? "natural" : "mk2";
     const overrideLlm = body?.llm;
     const overrideKbId = body?.kb_id;
     const overrideAdminKbIds = Array.isArray(body?.admin_kb_ids)
@@ -2076,7 +2085,7 @@ export async function POST(req: NextRequest) {
         policyInputRules: inputRuleIds,
         policyToolRules: toolRuleIds,
         contextContamination: contaminationSummaries,
-        conversationMode: "mk2",
+        conversationMode,
       };
       lastDebugPrefixJson = { entries: buildDebugEntries(debugPayload) };
       return text;
@@ -2116,7 +2125,7 @@ export async function POST(req: NextRequest) {
           policyInputRules: inputRuleIds,
           policyToolRules: toolRuleIds,
           contextContamination: contaminationSummaries,
-          conversationMode: "mk2",
+          conversationMode,
         };
         lastDebugPrefixJson = { entries: buildDebugEntries(debugPayload) };
       }
@@ -2781,17 +2790,34 @@ export async function POST(req: NextRequest) {
     }
 
     if (toolGate.actions.forcedResponse) {
-      const forcedText = normalizeOrderChangeAddressPrompt(resolvedIntent, toolGate.actions.forcedResponse);
+      if (conversationMode === "natural" && resolvedIntent === "order_change") {
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          {
+            stage: "tool",
+            action: "DEFER_FORCE_RESPONSE_TEMPLATE",
+            reason: "NATURAL_MODE_ORDER_CHANGE",
+          },
+          { intent_name: resolvedIntent }
+        );
+      } else {
+      const rawForcedText = String(toolGate.actions.forcedResponse || "");
+      const forcedText = normalizeOrderChangeAddressPrompt(resolvedIntent, rawForcedText);
       const isNeedZipcodeTemplate =
+        rawForcedText === (compiledPolicy.templates?.order_change_need_zipcode || "") ||
         forcedText === (compiledPolicy.templates?.order_change_need_zipcode || "") ||
-        usedTemplateIds.includes("order_change_need_zipcode");
+        usedTemplateIds.includes("order_change_need_zipcode") ||
+        isOrderChangeZipcodeTemplateText(rawForcedText) ||
+        isOrderChangeZipcodeTemplateText(forcedText);
       const currentAddress =
         typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
       const shouldDeferZipcodeTemplate =
         isNeedZipcodeTemplate &&
         resolvedIntent === "order_change" &&
-        Boolean(currentAddress) &&
-        Boolean(resolvedOrderId);
+        Boolean(currentAddress);
       if (shouldDeferZipcodeTemplate) {
         await insertEvent(
           context,
@@ -2915,6 +2941,7 @@ export async function POST(req: NextRequest) {
         });
         await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "tool" }, { intent_name: resolvedIntent });
         return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+      }
       }
     }
 
@@ -3126,6 +3153,8 @@ export async function POST(req: NextRequest) {
 
     const currentAddress =
       typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
+    const phoneFromSlotForUpdate =
+      typeof policyContext.entity?.phone === "string" ? normalizePhoneDigits(policyContext.entity.phone) : "";
 
     if (
       resolvedIntent === "order_change" &&
@@ -3141,6 +3170,45 @@ export async function POST(req: NextRequest) {
         : {};
       const lookupReceivers = Array.isArray((lookupOrder as any)?.receivers) ? (lookupOrder as any).receivers : [];
       const receiver = lookupReceivers[0] || {};
+      const receiverPhoneForUpdate = normalizePhoneDigits(String(receiver?.cellphone || receiver?.phone || ""));
+      const phoneOrderMismatch =
+        Boolean(phoneFromSlotForUpdate) &&
+        Boolean(receiverPhoneForUpdate) &&
+        phoneFromSlotForUpdate !== receiverPhoneForUpdate;
+      if (phoneOrderMismatch) {
+        const reply = makeReply("인증한 휴대폰 번호와 주문 수신자 정보가 달라서 변경을 진행할 수 없습니다. 주문번호를 다시 확인해 주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: null,
+            order_choices: listOrdersChoices,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "MCP_CALL_SKIPPED",
+          {
+            tool: "update_order_shipping_address",
+            reason: "PHONE_ORDER_MISMATCH",
+            detail: {
+              phone_masked: maskPhone(phoneFromSlotForUpdate),
+              receiver_phone_masked: maskPhone(receiverPhoneForUpdate),
+              order_id: resolvedOrderId,
+            },
+          },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+      }
       const receiverAddress1 = normalizeAddressText(String(receiver?.address1 || ""));
       const receiverZipcode = isLikelyZipcode(String(receiver?.zipcode || ""))
         ? String(receiver?.zipcode || "").trim()
@@ -3160,6 +3228,46 @@ export async function POST(req: NextRequest) {
         baseAddress: baseAddressCandidate || null,
         fallbackBaseAddress: receiverAddress1 || null,
       });
+      const suspiciousFallbackToReceiver =
+        Boolean(receiverAddress1) &&
+        !addressLooksDetailOnly &&
+        normalizeAddressText(address1 || "") === receiverAddress1 &&
+        normalizeAddressText(currentAddress) !== receiverAddress1 &&
+        !normalizeAddressText(currentAddress).startsWith(receiverAddress1);
+      if (suspiciousFallbackToReceiver) {
+        const prompt = "입력하신 주소를 현재 배송지와 다르게 인식하지 못했습니다. 도로명/지번을 포함해 주소를 다시 입력해 주세요.";
+        const reply = makeReply(prompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+            address_pending: true,
+            address_stage: "awaiting_address",
+            pending_order_id: isLikelyOrderId(resolvedOrderId) ? resolvedOrderId : null,
+            customer_verification_token: customerVerificationToken || null,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          {
+            stage: "tool",
+            action: "ASK_ADDRESS_RETRY",
+            reason: "ADDRESS_PARSE_SUSPICIOUS_FALLBACK",
+            order_id: resolvedOrderId,
+          },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+      }
       const normalizedCurrentAddress = normalizeAddressText(currentAddress);
       const normalizedAddress1 = normalizeAddressText(address1 || "");
       const canTrustPendingZip =
@@ -3257,8 +3365,10 @@ export async function POST(req: NextRequest) {
       const beforeAddress = normalizeAddressText(
         String(receiver?.address_full || [receiver?.address1, receiver?.address2].filter(Boolean).join(" "))
       );
+      const receiverName = normalizeAddressText(String(receiver?.name || ""));
+      const receiverPhoneMasked = maskPhone(receiverPhoneForUpdate);
       if (!updateConfirmAcceptedThisTurn) {
-        const confirmPrompt = `아래 내용으로 배송지를 변경할까요?\n- 주문번호: ${resolvedOrderId}\n- 현재 배송지: ${beforeAddress || "-"}\n- 변경 배송지: ${normalizeAddressText([address1, address2].filter(Boolean).join(" ")) || currentAddress}\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+        const confirmPrompt = `아래 내용으로 배송지를 변경할까요?\n- 주문번호: ${resolvedOrderId}\n- 수령인: ${receiverName || "-"} / 연락처: ${receiverPhoneMasked}\n- 현재 배송지: ${beforeAddress || "-"}\n- 변경 배송지: ${normalizeAddressText([address1, address2].filter(Boolean).join(" ")) || currentAddress}\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
         const reply = makeReply(confirmPrompt);
         await insertTurn({
           session_id: sessionId,
