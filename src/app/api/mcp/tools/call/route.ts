@@ -29,26 +29,41 @@ export async function POST(req: NextRequest) {
   const params = body.params || {};
   const toolName = body.tool;
 
-  const { data: tool, error: toolError } = await context.supabase
-    .from("C_mcp_tools")
-    .select("id, name, schema_json, version, is_active")
-    .eq("name", toolName)
-    .eq("is_active", true)
-    .maybeSingle();
+  let tool: { id: string; name: string; schema_json: unknown; version: string; is_active: boolean } | null = null;
+  let policy: { is_allowed: boolean; allowed_scopes: string[] | null; rate_limit_per_min: number | null; masking_rules: unknown; conditions: unknown; adapter_key: string | null } | null = null;
 
-  if (toolError || !tool) {
-    return NextResponse.json({ error: "TOOL_NOT_FOUND" }, { status: 404 });
-  }
+  // Manual Whitelist for Code-only Tools
+  if (toolName === "search_address") {
+    tool = { id: "search-address", name: "search_address", schema_json: {}, version: "v1", is_active: true };
+    policy = { is_allowed: true, allowed_scopes: [], rate_limit_per_min: 60, masking_rules: null, conditions: null, adapter_key: "search_address" };
+  } else if (toolName === "debug_cafe24_order") {
+    tool = { id: "debug-cafe24-order", name: "debug_cafe24_order", schema_json: {}, version: "v1", is_active: true };
+    policy = { is_allowed: true, allowed_scopes: [], rate_limit_per_min: 60, masking_rules: null, conditions: null, adapter_key: "debug_cafe24_order" };
+  } else {
+    // Database Lookup
+    const { data: dbTool, error: toolError } = await context.supabase
+      .from("C_mcp_tools")
+      .select("id, name, schema_json, version, is_active")
+      .eq("name", toolName)
+      .eq("is_active", true)
+      .maybeSingle();
 
-  const { data: policy, error: policyError } = await context.supabase
-    .from("C_mcp_tool_policies")
-    .select("is_allowed, allowed_scopes, rate_limit_per_min, masking_rules, conditions, adapter_key")
-    .eq("org_id", context.orgId)
-    .eq("tool_id", tool.id)
-    .maybeSingle();
+    if (toolError || !dbTool) {
+      return NextResponse.json({ error: "TOOL_NOT_FOUND" }, { status: 404 });
+    }
+    tool = dbTool;
 
-  if (policyError || !policy) {
-    return NextResponse.json({ error: "POLICY_NOT_FOUND" }, { status: 403 });
+    const { data: dbPolicy, error: policyError } = await context.supabase
+      .from("C_mcp_tool_policies")
+      .select("is_allowed, allowed_scopes, rate_limit_per_min, masking_rules, conditions, adapter_key")
+      .eq("org_id", context.orgId)
+      .eq("tool_id", tool.id)
+      .maybeSingle();
+
+    if (policyError || !dbPolicy) {
+      return NextResponse.json({ error: "POLICY_NOT_FOUND" }, { status: 403 });
+    }
+    policy = dbPolicy;
   }
 
   if (!policy.is_allowed) {
@@ -74,7 +89,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "INVALID_PARAMS", message: validation.error }, { status: 400 });
   }
 
-  const conditionCheck = checkPolicyConditions(policy.conditions, params);
+  const conditionCheck = checkPolicyConditions(policy.conditions as any, params);
   if (!conditionCheck.ok) {
     return NextResponse.json({ error: conditionCheck.error }, { status: 403 });
   }
@@ -115,7 +130,7 @@ export async function POST(req: NextRequest) {
   const latency = Date.now() - start;
 
   const responsePayload = result.data ? { ...result.data } : {};
-  const masked = applyMasking(responsePayload, policy.masking_rules);
+  const masked = applyMasking(responsePayload, policy.masking_rules as any);
 
   await context.supabase.from("F_audit_mcp_tools").insert({
     org_id: context.orgId,

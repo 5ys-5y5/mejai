@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Bot, Copy, ExternalLink, Info, Plus, Send, Trash2, User, X } from "lucide-react";
+import { AlertTriangle, Bot, Copy, ExternalLink, Info, Minus, Plus, Send, Trash2, User, X } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -88,6 +88,7 @@ type ModelState = {
   messages: ChatMessage[];
   messageLogs: Record<string, MessageLogBundle>;
   lastLogAt: string | null;
+  chatExpanded: boolean;
   detailsOpen: {
     llm: boolean;
     kb: boolean;
@@ -100,7 +101,6 @@ type ModelState = {
 };
 
 const MAX_MODELS = 5;
-
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -377,6 +377,7 @@ function createDefaultModel(): ModelState {
     messages: [],
     messageLogs: {},
     lastLogAt: null,
+    chatExpanded: false,
     detailsOpen: {
       llm: false,
       kb: false,
@@ -536,6 +537,13 @@ export default function LabolatoryPage() {
 
   const updateModel = (id: string, updater: (model: ModelState) => ModelState) => {
     setModels((prev) => prev.map((model) => (model.id === id ? updater(model) : model)));
+  };
+
+  const toggleChatExpanded = (id: string) => {
+    updateModel(id, (model) => ({
+      ...model,
+      chatExpanded: !model.chatExpanded,
+    }));
   };
 
   const resetModel = (id: string) => {
@@ -1263,13 +1271,18 @@ export default function LabolatoryPage() {
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-200 p-4 lg:border-l lg:border-t-0 flex max-h-[270px] flex-col overflow-hidden">
+                    <div
+                      className={cn(
+                        "relative border-t border-slate-200 p-4 lg:border-l lg:border-t-0 flex flex-col overflow-visible",
+                        model.chatExpanded ? "max-h-[600px]" : "max-h-[270px]"
+                      )}
+                    >
                       <div className="relative flex-1 min-h-0 overflow-hidden">
                         <div
                           ref={(el) => {
                             chatScrollRefs.current[model.id] = el;
                           }}
-                          className="relative z-0 h-full space-y-4 overflow-auto pr-2 pl-2 pt-2 pb-12 scrollbar-hide bg-slate-50 rounded-xl"
+                          className="relative z-0 h-full space-y-4 overflow-auto pr-2 pl-2 pt-2 pb-4 scrollbar-hide bg-slate-50 rounded-xl"
                         >
                           {model.messages.map((msg) => {
                             const hasDebug = msg.role === "bot" && msg.content.includes("debug_prefix");
@@ -1313,8 +1326,17 @@ export default function LabolatoryPage() {
                             );
                           })}
                         </div>
-                        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 h-8 bg-gradient-to-t from-white to-transparent" />
-                        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-white" />
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-gradient-to-t from-white to-transparent" />
+                      </div>
+                      <div className="pointer-events-none absolute left-1/2 bottom-0 z-20 -translate-x-1/2 translate-y-1/2">
+                        <button
+                          type="button"
+                          onClick={() => toggleChatExpanded(model.id)}
+                          className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-400 bg-white text-slate-600 hover:bg-slate-50"
+                          aria-label={model.chatExpanded ? "채팅 높이 줄이기" : "채팅 높이 늘리기"}
+                        >
+                          {model.chatExpanded ? <Minus className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
+                        </button>
                       </div>
                       <form onSubmit={(e) => handleSend(e, model.id)} className="relative z-20 flex gap-2 bg-white">
                         <Input

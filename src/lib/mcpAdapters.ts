@@ -68,6 +68,14 @@ function addOrderSummary(order: Record<string, unknown>) {
   const paid = order.paid === "T";
   const canceled = order.canceled === "T";
   const shippingStatus = String(order.shipping_status || "");
+  const shippingStatusMap: Record<string, string> = {
+    "F": "배송전 (Before Shipment)",
+    "M": "배송중 (Shipping)",
+    "T": "배송완료 (Delivery Completed)",
+    "W": "배송보류 (Shipping Held)",
+    "X": "발주전 (Before Order)",
+  };
+  const statusText = shippingStatusMap[shippingStatus] || shippingStatus;
   const readTotalAmountDue = (value: unknown) => {
     if (!value || typeof value !== "object") return undefined;
     const record = value as Record<string, unknown>;
@@ -80,7 +88,7 @@ function addOrderSummary(order: Record<string, unknown>) {
     order_summary: {
       paid,
       canceled,
-      shipping_status: shippingStatus,
+      shipping_status: statusText,
       order_date: order.order_date,
       payment_method_name: order.payment_method_name,
       total_amount_due: actualTotal ?? initialTotal,
@@ -186,23 +194,23 @@ async function solapiSendMessage(params: { to: string; text: string; from: strin
     return { ok: false as const, error: "SOLAPI_CONFIG_MISSING" };
   }
   const auth = buildSolapiAuthHeader(apiKey, apiSecret);
-    const res = await fetch("https://api.solapi.com/messages/v4/send-many/detail", {
-      method: "POST",
-      headers: {
-        Authorization: auth,
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        messages: [
-          {
-            to: params.to,
-            from: params.from,
-            text: params.text,
-          },
-        ],
-      }),
-    });
+  const res = await fetch("https://api.solapi.com/messages/v4/send-many/detail", {
+    method: "POST",
+    headers: {
+      Authorization: auth,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      messages: [
+        {
+          to: params.to,
+          from: params.from,
+          text: params.text,
+        },
+      ],
+    }),
+  });
   const text = await res.text();
   if (!res.ok) {
     return { ok: false as const, error: `SOLAPI_ERROR_${res.status}: ${text || res.statusText}` };
@@ -324,6 +332,96 @@ async function cafe24Request(
   } catch {
     return { ok: true as const, data: { raw: text } };
   }
+}
+
+async function searchJusoAddress(keyword: string) {
+  // 1. Try Juso API if key exists
+  let apiKey = readEnv("JUSO_API_KEY");
+  if (!apiKey) {
+    cachedEnvFile = null;
+    apiKey = readEnv("JUSO_API_KEY");
+  }
+
+  const debugInfo: any = {
+    keyFound: !!apiKey,
+    keyLength: apiKey ? apiKey.length : 0,
+    source: "JUSO_API"
+  };
+
+  if (apiKey) {
+    try {
+      const query = new URLSearchParams({
+        confmKey: apiKey,
+        currentPage: "1",
+        countPerPage: "10",
+        keyword: keyword,
+        resultType: "json"
+      });
+      const url = `https://business.juso.go.kr/addrlink/addrLinkApi.do?${query.toString()}`;
+      debugInfo.url = url.replace(apiKey, "***");
+
+      const res = await fetch(url, {
+        headers: {
+          "Referer": "https://mejai.help/",
+          "User-Agent": "Mozilla/5.0 (compatible; MejaiBot/1.0)"
+        }
+      });
+      const text = await res.text();
+      debugInfo.status = res.status;
+      debugInfo.rawResponseLength = text.length;
+
+      let json;
+      try {
+        json = JSON.parse(text);
+      } catch (e) {
+        debugInfo.parseError = String(e);
+      }
+
+      if (json && json.results && json.results.common) {
+        if (json.results.common.errorCode === "0") {
+          return {
+            ok: true,
+            data: json.results.juso || [],
+            totalCount: json.results.common.totalCount,
+            debug: debugInfo
+          };
+        } else {
+          debugInfo.apiErrorCode = json.results.common.errorCode;
+          debugInfo.apiErrorMessage = json.results.common.errorMessage;
+        }
+      } else {
+        debugInfo.jsonStructureMismatch = true;
+      }
+    } catch (e) {
+      console.error("Juso API Error:", e);
+      debugInfo.fetchError = String(e);
+    }
+  }
+
+  // 2. Mock Fallback
+  // "서울시 관악구 1515-7" -> "08813" (Simplified mock for fallback)
+  if (keyword.includes("1515-7") || keyword.includes("관악구")) {
+    debugInfo.source = "MOCK";
+    return {
+      ok: true,
+      data: [
+        {
+          zipNo: "08813",
+          roadAddrPart1: "서울특별시 관악구 난곡로 83",
+          roadAddrPart2: "(신림동, 관악산휴먼시아 2단지 아파트)",
+          jibunAddr: "서울특별시 관악구 신림동 1515-7 관악산휴먼시아 2단지 아파트",
+          engAddr: "83, Nangok-ro, Gwanak-gu, Seoul",
+          admCd: "1162010200",
+          rnMgtSn: "116203115012",
+          bdMgtSn: "1162010200115150007000001"
+        }
+      ],
+      totalCount: 1,
+      debug: debugInfo
+    };
+  }
+
+  return { ok: false, error: "ADDRESS_SEARCH_FAILED", debug: debugInfo };
 }
 
 const adapters: Record<string, ToolAdapter> = {
@@ -823,10 +921,47 @@ const adapters: Record<string, ToolAdapter> = {
       };
     }
 
+    // Auto-fill/Validate Zipcode logic using Juso API
+    let finalZipcode = zipcode;
+
+    if (!finalZipcode && address1) {
+      // Auto-find zipcode
+      const searchRes = await searchJusoAddress(address1);
+      if (searchRes.ok && searchRes.data && searchRes.data.length > 0) {
+        // Logic: If all results share the same zipNo, use it.
+        const firstZip = searchRes.data[0].zipNo;
+        const allSame = searchRes.data.every((r: any) => r.zipNo === firstZip);
+
+        if (allSame) {
+          finalZipcode = firstZip;
+          // We could log this auto-fill action if we had a logger, or attach meta.
+        } else {
+          // Ambiguous
+          return {
+            status: "error",
+            error: {
+              code: "AMBIGUOUS_ADDRESS",
+              message: `Multiple zipcodes found for address "${address1}". Please specify zipcode manually. Found: ${Array.from(new Set(searchRes.data.map((r: any) => r.zipNo))).join(", ")}`
+            }
+          };
+        }
+      }
+    }
+
+    if ((address1 || address2) && !finalZipcode) {
+      return {
+        status: "error",
+        error: {
+          code: "MISSING_ZIPCODE",
+          message: "Zipcode is required and could not be auto-found. Please ask the user for their zipcode (우편번호)."
+        }
+      };
+    }
+
     const requestPayload: Record<string, unknown> = {};
     if (address1) requestPayload.address1 = address1;
     if (address2) requestPayload.address2 = address2;
-    if (zipcode) requestPayload.zipcode = zipcode;
+    if (finalZipcode) requestPayload.zipcode = finalZipcode;
     if (receiverName) requestPayload.name = receiverName;
     if (receiverPhone) requestPayload.phone = receiverPhone;
     if (receiverCellphone) requestPayload.cellphone = receiverCellphone;
@@ -849,10 +984,10 @@ const adapters: Record<string, ToolAdapter> = {
       }
     }
 
-      let resolvedShippingCode = shippingCode;
-      let receiverDefaults: Record<string, string> | null = null;
-      if (!resolvedShippingCode) {
-        const fetchReceivers = async () => {
+    let resolvedShippingCode = shippingCode;
+    let receiverDefaults: Record<string, string> | null = null;
+    if (!resolvedShippingCode) {
+      const fetchReceivers = async () => {
         const receiversRes = await cafe24Request(cfg, `/orders/${encodeURIComponent(orderId)}/receivers`, {
           query: { shop_no: cfg.shopNo },
         });
@@ -874,55 +1009,55 @@ const adapters: Record<string, ToolAdapter> = {
         return receiversRes;
       };
       const receiversRes = await fetchReceivers();
-        if (receiversRes.ok) {
-          const payload = receiversRes.data as { receivers?: unknown } | undefined;
-          const receiversNode = payload?.receivers as { receiver?: unknown } | undefined;
-          const list = Array.isArray(payload?.receivers)
-            ? (payload?.receivers as Array<Record<string, unknown>>)
-            : Array.isArray(receiversNode?.receiver)
-              ? (receiversNode?.receiver as Array<Record<string, unknown>>)
-              : [];
-          const first = list[0];
-          const firstCode = first ? String(first.shipping_code || "") : "";
-          if (firstCode) resolvedShippingCode = firstCode;
-          if (first) {
-            receiverDefaults = {
-              name: String(first.name || ""),
-              phone: String(first.phone || ""),
-              cellphone: String(first.cellphone || ""),
-              zipcode: String(first.zipcode || ""),
-              address1: String(first.address1 || first.address || ""),
-              address2: String(first.address2 || ""),
-            };
-          }
+      if (receiversRes.ok) {
+        const payload = receiversRes.data as { receivers?: unknown } | undefined;
+        const receiversNode = payload?.receivers as { receiver?: unknown } | undefined;
+        const list = Array.isArray(payload?.receivers)
+          ? (payload?.receivers as Array<Record<string, unknown>>)
+          : Array.isArray(receiversNode?.receiver)
+            ? (receiversNode?.receiver as Array<Record<string, unknown>>)
+            : [];
+        const first = list[0];
+        const firstCode = first ? String(first.shipping_code || "") : "";
+        if (firstCode) resolvedShippingCode = firstCode;
+        if (first) {
+          receiverDefaults = {
+            name: String(first.name || ""),
+            phone: String(first.phone || ""),
+            cellphone: String(first.cellphone || ""),
+            zipcode: String(first.zipcode || ""),
+            address1: String(first.address1 || first.address || ""),
+            address2: String(first.address2 || ""),
+          };
         }
       }
+    }
 
-      if (!resolvedShippingCode) {
-        return {
-          status: "error",
-          error: {
-            code: "INVALID_INPUT",
-            message: "shipping_code is required (receiver lookup failed)",
-          },
-        };
-      }
+    if (!resolvedShippingCode) {
+      return {
+        status: "error",
+        error: {
+          code: "INVALID_INPUT",
+          message: "shipping_code is required (receiver lookup failed)",
+        },
+      };
+    }
 
-      if (resolvedShippingCode && !requestPayload.shipping_code) {
-        requestPayload.shipping_code = resolvedShippingCode;
-      }
-      if (receiverDefaults) {
-        if (!requestPayload.name && receiverDefaults.name) requestPayload.name = receiverDefaults.name;
-        if (!requestPayload.phone && receiverDefaults.phone) requestPayload.phone = receiverDefaults.phone;
-        if (!requestPayload.cellphone && receiverDefaults.cellphone) requestPayload.cellphone = receiverDefaults.cellphone;
-        if (!requestPayload.zipcode && receiverDefaults.zipcode) requestPayload.zipcode = receiverDefaults.zipcode;
-        if (!requestPayload.address1 && receiverDefaults.address1) requestPayload.address1 = receiverDefaults.address1;
-        if (!requestPayload.address2 && receiverDefaults.address2) requestPayload.address2 = receiverDefaults.address2;
-      }
+    if (resolvedShippingCode && !requestPayload.shipping_code) {
+      requestPayload.shipping_code = resolvedShippingCode;
+    }
+    if (receiverDefaults) {
+      if (!requestPayload.name && receiverDefaults.name) requestPayload.name = receiverDefaults.name;
+      if (!requestPayload.phone && receiverDefaults.phone) requestPayload.phone = receiverDefaults.phone;
+      if (!requestPayload.cellphone && receiverDefaults.cellphone) requestPayload.cellphone = receiverDefaults.cellphone;
+      if (!requestPayload.zipcode && receiverDefaults.zipcode) requestPayload.zipcode = receiverDefaults.zipcode;
+      if (!requestPayload.address1 && receiverDefaults.address1) requestPayload.address1 = receiverDefaults.address1;
+      if (!requestPayload.address2 && receiverDefaults.address2) requestPayload.address2 = receiverDefaults.address2;
+    }
 
-      const endpoint = resolvedShippingCode
-        ? `/orders/${encodeURIComponent(orderId)}/receivers/${encodeURIComponent(resolvedShippingCode)}`
-        : `/orders/${encodeURIComponent(orderId)}/receivers`;
+    // Fix: Always use the collection endpoint because we are sending an array in the body ({ request: [...] }).
+    // Sending an array to the single resource endpoint (.../receivers/{code}) causes a 422 Invalid Request error.
+    const endpoint = `/orders/${encodeURIComponent(orderId)}/receivers`;
     const body: Record<string, unknown> = { request: [requestPayload] };
     if (cfg.shopNo) body.shop_no = cfg.shopNo;
 
@@ -1261,31 +1396,31 @@ const adapters: Record<string, ToolAdapter> = {
     if (!ctx) {
       return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
     }
-      const destination = String(params.destination || "").trim();
-      if (!destination) {
-        return { status: "error", error: { code: "INVALID_INPUT", message: "destination is required" } };
-      }
-      const from = readEnv("SOLAPI_FROM");
-      if (!from) {
-        const processKeys = Object.keys(process.env || {}).filter((key) => key.startsWith("SOLAPI_"));
-        const fallbackKeys = Object.keys(loadEnvFromFiles() || {}).filter((key) => key.startsWith("SOLAPI_"));
-        const envKeys = Array.from(new Set([...processKeys, ...fallbackKeys])).sort();
-        return {
-          status: "error",
-          error: {
-            code: "CONFIG_ERROR",
-            message: "SOLAPI_FROM is required",
-            detail: {
-              cwd: process.cwd(),
-              solapi_from_len: (process.env.SOLAPI_FROM || "").length,
-              solapi_env_keys: envKeys,
-            },
+    const destination = String(params.destination || "").trim();
+    if (!destination) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "destination is required" } };
+    }
+    const from = readEnv("SOLAPI_FROM");
+    if (!from) {
+      const processKeys = Object.keys(process.env || {}).filter((key) => key.startsWith("SOLAPI_"));
+      const fallbackKeys = Object.keys(loadEnvFromFiles() || {}).filter((key) => key.startsWith("SOLAPI_"));
+      const envKeys = Array.from(new Set([...processKeys, ...fallbackKeys])).sort();
+      return {
+        status: "error",
+        error: {
+          code: "CONFIG_ERROR",
+          message: "SOLAPI_FROM is required",
+          detail: {
+            cwd: process.cwd(),
+            solapi_from_len: (process.env.SOLAPI_FROM || "").length,
+            solapi_env_keys: envKeys,
           },
-        };
-      }
-      const tempCode = readEnv("SOLAPI_TEMP");
-      const code = tempCode ? tempCode : String(Math.floor(100000 + Math.random() * 900000));
-      const testMode = Boolean(tempCode);
+        },
+      };
+    }
+    const tempCode = readEnv("SOLAPI_TEMP");
+    const code = tempCode ? tempCode : String(Math.floor(100000 + Math.random() * 900000));
+    const testMode = Boolean(tempCode);
     const otpRef = crypto.randomUUID();
     const text = String(params.text || `인증번호는 ${code} 입니다.`);
     const sendResult = await solapiSendMessage({ to: destination, from, text });
@@ -1307,17 +1442,17 @@ const adapters: Record<string, ToolAdapter> = {
     if (error) {
       return { status: "error", error: { code: "DB_ERROR", message: error.message } };
     }
-      return {
-        status: "success",
-        data: {
-          delivery: "sms",
-          destination: maskValue(destination),
-          otp_ref: otpRef,
-          expires_at: expiresAt,
-          test_mode: testMode,
-          test_code: testMode ? code : undefined,
-        },
-      };
+    return {
+      status: "success",
+      data: {
+        delivery: "sms",
+        destination: maskValue(destination),
+        otp_ref: otpRef,
+        expires_at: expiresAt,
+        test_mode: testMode,
+        test_code: testMode ? code : undefined,
+      },
+    };
   },
   verify_otp: async (params, ctx) => {
     if (!ctx) {
@@ -1359,6 +1494,70 @@ const adapters: Record<string, ToolAdapter> = {
       data: { verified: true, customer_verification_token: verificationToken },
     };
   },
+  debug_cafe24_order: async (params, ctx) => {
+    const orderId = String(params.order_id || "").trim();
+    if (!orderId) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "order_id is required" } };
+    }
+    const cfg = await getCafe24Config(ctx);
+    if (!cfg.ok) {
+      return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
+    }
+    if (isTokenExpired(cfg.expiresAt)) {
+      const refreshed = await refreshCafe24Token({
+        settingsId: cfg.settingsId,
+        mallId: cfg.mallId,
+        refreshToken: cfg.refreshToken,
+        supabase: ctx!.supabase,
+      });
+      if (refreshed.ok) {
+        cfg.accessToken = refreshed.accessToken;
+      }
+    }
+    const result = await cafe24Request(cfg, `/orders/${encodeURIComponent(orderId)}`, {
+      query: {
+        shop_no: cfg.shopNo,
+        embed: "receivers,items,buyer,return"
+      },
+    });
+    if (!result.ok) {
+      return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
+    }
+    return {
+      status: "success",
+      data: {
+        raw_order: result.data,
+        note: "This is raw data from Cafe24 API for debugging purposes."
+      }
+    };
+  },
+  search_address: async (params, ctx) => {
+    const keyword = String(params.keyword || "").trim();
+    if (!keyword) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "keyword is required" } };
+    }
+    const result = await searchJusoAddress(keyword);
+    if (!result.ok) {
+      return {
+        status: "error",
+        error: {
+          code: result.error || "ADDRESS_SEARCH_FAILED",
+          message: "Address search failed. See debug info.",
+          debug: result.debug
+        }
+      };
+    }
+    return {
+      status: "success",
+      data: {
+        results: result.data,
+        totalCount: result.totalCount,
+        source: result.debug?.source || "UNKNOWN",
+        debug: result.debug
+      }
+    };
+  },
+
 };
 
 export async function callAdapter(

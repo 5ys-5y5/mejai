@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
-import { runLlm } from "@/lib/llm_mk2";
+import { runLlm, type ChatMessage } from "@/lib/llm_mk2";
 import {
   compilePolicy,
   formatOutputDefault,
@@ -175,9 +175,9 @@ function buildDebugEntries(payload: {
     { key: "MCP.provider_config", value: configParts.join(", ") || "-" },
     ...(payload.mcpLogs && payload.mcpLogs.length > 0
       ? payload.mcpLogs.map((line, index) => ({
-          key: `MCP.logs.${index + 1}`,
-          value: line,
-        }))
+        key: `MCP.logs.${index + 1}`,
+        value: line,
+      }))
       : [{ key: "MCP.logs", value: "-" }]),
     { key: "USER.id", value: payload.userId || "-" },
     { key: "ORG.id", value: payload.orgId || "-" },
@@ -390,18 +390,18 @@ async function resolveProductDecision(context: any, text: string) {
     null;
   const decision: ProductDecision = bestRule
     ? {
-        product_id: bestRule.product_id,
-        answerability: bestRule.answerability || "UNKNOWN",
-        restock_policy: bestRule.restock_policy || "UNKNOWN",
-        restock_at: bestRule.restock_at ?? null,
-        source: bestRule.source ?? null,
-      }
+      product_id: bestRule.product_id,
+      answerability: bestRule.answerability || "UNKNOWN",
+      restock_policy: bestRule.restock_policy || "UNKNOWN",
+      restock_at: bestRule.restock_at ?? null,
+      source: bestRule.source ?? null,
+    }
     : {
-        product_id: matchedAlias.product_id,
-        answerability: "UNKNOWN",
-        restock_policy: "UNKNOWN",
-        restock_at: null,
-      };
+      product_id: matchedAlias.product_id,
+      answerability: "UNKNOWN",
+      restock_policy: "UNKNOWN",
+      restock_at: null,
+    };
 
   return { decision, alias: matchedAlias, error: null as string | null };
 }
@@ -604,18 +604,18 @@ async function callMcpTool(
   const responsePayload = result.data ? { ...result.data } : {};
   const masked = applyMasking(responsePayload, policy.data.masking_rules);
 
-    const responsePayloadWithError =
-      result.status === "error"
-        ? { ...(masked.masked as Record<string, unknown>), error: result.error || null }
-        : masked.masked;
-    await context.supabase.from("F_audit_mcp_tools").insert({
+  const responsePayloadWithError =
+    result.status === "error"
+      ? { ...(masked.masked as Record<string, unknown>), error: result.error || null }
+      : masked.masked;
+  await context.supabase.from("F_audit_mcp_tools").insert({
     org_id: context.orgId,
     session_id: sessionId,
     turn_id: turnId,
     tool_id: toolRow.id,
     tool_name: toolRow.name,
     request_payload: params,
-      response_payload: responsePayloadWithError,
+    response_payload: responsePayloadWithError,
     status: result.status,
     latency_ms: latency,
     masked_fields: masked.maskedFields,
@@ -634,6 +634,46 @@ async function callMcpTool(
     return { ok: false, error: typeof err === "string" && err ? err : "MCP_ERROR" };
   }
   return { ok: true, data: masked.masked };
+}
+
+const RESTOCK_KEYWORDS = /재입고|입고|재고|품절|다시\s*입고|다시\s*들어|재판매/;
+
+function isRestockSubscribe(text: string) {
+  return (
+    RESTOCK_KEYWORDS.test(text) &&
+    /(알림|알려|입고되면|재입고되면|문자|카카오|카톡|이메일|메일)/.test(text)
+  );
+}
+
+function isRestockInquiry(text: string) {
+  return RESTOCK_KEYWORDS.test(text) && !isRestockSubscribe(text);
+}
+
+function detectIntent(text: string) {
+  if (isRestockSubscribe(text)) return "restock_subscribe";
+  if (isRestockInquiry(text)) return "restock_inquiry";
+  if (/주소|배송지|수령인|연락처/.test(text)) return "change";
+  if (/조회|확인/.test(text) && /배송|송장|출고|운송장/.test(text)) return "order_lookup";
+  if (/배송|송장|출고|운송장|배송조회/.test(text)) return "shipment";
+  if (/환불|취소|반품|교환/.test(text)) return "refund";
+  return "general";
+}
+
+async function extractEntitiesWithLlm(text: string, model: "chatgpt" | "gemini") {
+  const prompt = `Extract entities from the text. Return JSON only.
+Text: "${text}"
+Output Schema: { "order_id": string | null, "phone": string | null, "address": string | null, "intent": string | null }`;
+
+  try {
+    const res = await runLlm(model, [
+      { role: "system", content: "You are a precise entity extractor. Return valid JSON only. do not use markdown code block." },
+      { role: "user", content: prompt },
+    ]);
+    const cleanJson = res.text.replace(/```json/g, "").replace(/```/g, "").trim();
+    return JSON.parse(cleanJson);
+  } catch (e) {
+    return null;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -766,7 +806,7 @@ export async function POST(req: NextRequest) {
       sessionId = sessionRes.data.id;
     }
 
-    const recentTurnsRes = await getRecentTurns(context, sessionId);
+    const recentTurnsRes = await getRecentTurns(context, sessionId, 15);
     const recentTurns = (recentTurnsRes.data || []) as any[];
     const lastTurn = recentTurns[0] as any;
     const nextSeq = lastTurn?.seq ? Number(lastTurn.seq) + 1 : 1;
@@ -863,6 +903,34 @@ export async function POST(req: NextRequest) {
       } else {
         derivedOrderId = extractOrderId(message);
         derivedPhone = null;
+      }
+    }
+
+    // [Hybrid Extraction] If regex failed to find key entities, try LLM extraction
+    if ((!derivedOrderId && !derivedPhone) && message.length > 8 && !expectedInput) {
+      // Only run if we are not in a specific input mode (expectedInput) 
+      // or if we are, and regex failed?
+      // Actually, expectedInput logic (lines 830-867) sets derivedXXX = null explicitly for specific modes.
+      // So we should only run this if expectedInput is null (General conversation).
+      // Or if expectedInput matched but regex failed?
+      // Let's run it if expectedInput is null.
+      const llmExt = await extractEntitiesWithLlm(message, agent.llm);
+      if (llmExt) {
+        if (llmExt.order_id && !derivedOrderId) derivedOrderId = String(llmExt.order_id).trim();
+        if (llmExt.phone && !derivedPhone) derivedPhone = String(llmExt.phone).trim();
+        if (llmExt.address && !derivedAddress) derivedAddress = String(llmExt.address).trim();
+        // Intent augmentation
+        if (resolvedIntent === "general" && llmExt.intent) {
+          const mappedIntent = detectIntent(llmExt.intent) === "general" ? llmExt.intent : detectIntent(llmExt.intent);
+          // safe mapping?
+          // detectIntent maps Korean to keys. If LLM returns English key, good.
+          // If LLM returns Korean '배송조회', detectIntent handles it.
+          // But detectIntent logic is simple regex.
+          // Let's trust LLM intent if current is general.
+          if (["change", "order_lookup", "shipment", "refund", "restock_subscribe", "restock_inquiry"].includes(llmExt.intent)) {
+            resolvedIntent = llmExt.intent;
+          }
+        }
       }
     }
 
@@ -1600,15 +1668,15 @@ export async function POST(req: NextRequest) {
                 };
               })
               .filter(Boolean) as Array<{
-              index: number;
-              order_id: string;
-              order_date?: string;
-              product_name?: string;
-              option_name?: string;
-              quantity?: string;
-              price?: string;
-              label?: string;
-            }>;
+                index: number;
+                order_id: string;
+                order_date?: string;
+                product_name?: string;
+                option_name?: string;
+                quantity?: string;
+                price?: string;
+                label?: string;
+              }>;
           } else {
             listOrdersEmpty = true;
           }
@@ -1806,15 +1874,15 @@ export async function POST(req: NextRequest) {
         o.label
           ? o.label
           : `- ${[
-              `${o.index}번`,
-              o.order_date,
-              o.product_name,
-              o.option_name,
-              o.quantity,
-              o.price,
-            ]
-              .filter(Boolean)
-              .join(" | ")}`.trim()
+            `${o.index}번`,
+            o.order_date,
+            o.product_name,
+            o.option_name,
+            o.quantity,
+            o.price,
+          ]
+            .filter(Boolean)
+            .join(" | ")}`.trim()
       );
       const header = "(번호 | 날짜 | 상품명 | 옵션 | 수량 | 가격)";
       const replyText = `${prompt}\n${header}\n${lines.join("\n")}`.trim();
@@ -1891,7 +1959,21 @@ ${adminKbs.map((item) => `[ADMIN KB] ${item.title}\n${item.content || ""}`).join
 도구 결과:
 ${mcpSummary || "(없음)"}`;
 
-    const answerRes = await runLlm(agent.llm, systemPrompt, userPrompt);
+    const messages: ChatMessage[] = [
+      { role: "system", content: systemPrompt },
+    ];
+    // recentTurns is DESC (latest first), so reverse it
+    [...recentTurns].reverse().forEach((turn) => {
+      if (turn.transcript_text) {
+        messages.push({ role: "user", content: turn.transcript_text });
+      }
+      if (turn.final_answer || turn.answer_text) {
+        messages.push({ role: "assistant", content: turn.final_answer || turn.answer_text });
+      }
+    });
+    messages.push({ role: "user", content: userPrompt });
+
+    const answerRes = await runLlm(agent.llm, messages);
     let finalAnswer = answerRes.text.trim();
 
     const outputGate = runPolicyStage(compiledPolicy, "output", policyContext);
@@ -1901,7 +1983,28 @@ ${mcpSummary || "(없음)"}`;
       finalAnswer = formatOutputDefault(finalAnswer);
     }
     if (outputGate.actions.forcedResponse) {
-      finalAnswer = outputGate.actions.forcedResponse;
+      let isSoft = outputGate.actions.isSoftForced;
+      const reason = outputGate.actions.forceReason;
+
+      // Heuristic: If we successfully called tools (like track_shipment), 
+      // the LLM likely has better info than a static template. Treat as soft.
+      if (!isSoft && toolResults.some(t => t.ok)) {
+        isSoft = true;
+        if (debugEnabled) {
+          console.log("[playground/chat/mk2] auto-softening template due to successful tools", { reason });
+        }
+      }
+
+      if (isSoft && finalAnswer && finalAnswer.length > 5) {
+        if (debugEnabled) {
+          console.log("[playground/chat/mk2] skipping soft template", { reason, original: finalAnswer });
+        }
+      } else {
+        finalAnswer = outputGate.actions.forcedResponse;
+        if (debugEnabled) {
+          console.log("[playground/chat/mk2] forcing template", { reason });
+        }
+      }
     }
 
     const reply = makeReply(finalAnswer, answerRes.model, mcpActions);

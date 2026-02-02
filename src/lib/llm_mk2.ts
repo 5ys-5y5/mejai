@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
 type LlmResult = {
   text: string;
@@ -48,28 +48,45 @@ export async function runOpenAI(messages: ChatMessage[], userText: string): Prom
   return { text, model };
 }
 
-export async function runGemini(systemPrompt: string, userPrompt: string): Promise<LlmResult> {
-  const model = pickGeminiModel(userPrompt);
+export async function runGemini(messages: ChatMessage[]): Promise<LlmResult> {
+  const systemMessage = messages.find((m) => m.role === "system");
+  const historyMessages = messages.filter((m) => m.role !== "system" && m.role !== "user"); // Actually last user message should be separated
+  // Gemini chat history requires alternating user/model
+  // Simplified: use generateContent with all text if strictly one-shot, or startChat
+
+  // Proper Chat implementation:
+  const userMessages = messages.filter(m => m.role !== "system");
+  const lastUserMsg = userMessages[userMessages.length - 1];
+  const history = userMessages.slice(0, -1).map(m => ({
+    role: m.role === "user" ? "user" : "model",
+    parts: [{ text: m.content }]
+  }));
+
   const client = getGeminiClient();
-  const genModel = client.getGenerativeModel({ model });
-  const result = await genModel.generateContent([systemPrompt, userPrompt]);
+  const modelName = pickGeminiModel(lastUserMsg?.content || "");
+  const genModel = client.getGenerativeModel({
+    model: modelName,
+    systemInstruction: systemMessage ? { role: "system", parts: [{ text: systemMessage.content }] } : undefined
+  });
+
+  const chat = genModel.startChat({
+    history: history as any, // SDK types mismatch sometimes, casting safely
+  });
+
+  const result = await chat.sendMessage(lastUserMsg?.content || "");
   const text = result.response.text();
-  return { text, model };
+  return { text, model: modelName };
 }
 
 export async function runLlm(
   llm: "chatgpt" | "gemini",
-  systemPrompt: string,
-  userPrompt: string
+  messages: ChatMessage[]
 ): Promise<LlmResult> {
+  const lastMsg = messages[messages.length - 1];
+  const userText = lastMsg.role === "user" ? lastMsg.content : "";
+
   if (llm === "gemini") {
-    return runGemini(systemPrompt, userPrompt);
+    return runGemini(messages);
   }
-  return runOpenAI(
-    [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    userPrompt
-  );
+  return runOpenAI(messages, userText);
 }

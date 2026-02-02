@@ -48,6 +48,8 @@ export type PolicyEvalContext = {
 
 export type PolicyActionResult = {
   forcedResponse?: string;
+  forceReason?: string;
+  isSoftForced?: boolean;
   denyTools?: string[];
   allowTools?: string[];
   forcedToolCalls?: Array<{ name: string; args: Record<string, unknown> }>;
@@ -182,6 +184,7 @@ function applyActions(
       const templateId = String(action.template_id || "");
       if (templateId && templates[templateId]) {
         result.forcedResponse = templates[templateId];
+        result.isSoftForced = Boolean(action.soft || action.soft_enforce);
       }
     }
     if (type === "deny_tools") {
@@ -232,7 +235,11 @@ export function runPolicyStage(
   ctx: PolicyEvalContext
 ) {
   const matched = compiled.rules.filter((rule) => rule.stage === stage && whenMatches(rule, ctx));
-  const actionResults = matched.map((rule) => applyActions(rule.enforce.actions || [], compiled.templates, ctx));
+  const actionResults = matched.map((rule) => {
+    const res = applyActions(rule.enforce.actions || [], compiled.templates, ctx);
+    if (res.forcedResponse) res.forceReason = `RULE:${rule.id}`;
+    return res;
+  });
   const merged: PolicyActionResult = {
     denyTools: [],
     allowTools: [],
@@ -240,7 +247,11 @@ export function runPolicyStage(
     flags: {},
   };
   actionResults.forEach((res) => {
-    if (res.forcedResponse && !merged.forcedResponse) merged.forcedResponse = res.forcedResponse;
+    if (res.forcedResponse && !merged.forcedResponse) {
+      merged.forcedResponse = res.forcedResponse;
+      merged.forceReason = res.forceReason;
+      merged.isSoftForced = res.isSoftForced;
+    }
     if (res.outputFormat) merged.outputFormat = res.outputFormat;
     merged.denyTools!.push(...(res.denyTools || []));
     merged.allowTools!.push(...(res.allowTools || []));
