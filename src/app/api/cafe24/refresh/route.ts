@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const { data, error } = await supabase.from("auth_settings").select("id, org_id, user_id, providers");
+  const { data, error } = await supabase.from("A_iam_auth_settings").select("id, org_id, user_id, providers");
   if (error || !data) {
     return NextResponse.json({ error: error?.message || "AUTH_SETTINGS_NOT_FOUND" }, { status: 500 });
   }

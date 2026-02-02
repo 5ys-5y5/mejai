@@ -15,7 +15,7 @@ export async function GET(
   const { id } = await context.params;
 
   const { data, error } = await supabase
-    .from("turns")
+    .from("D_conv_turns")
     .select("*")
     .eq("session_id", id)
     .order("seq", { ascending: true });
@@ -58,7 +58,7 @@ export async function POST(
     asr_confidence: body.asr_confidence ?? null,
   };
 
-  const { data, error } = await supabase.from("turns").insert(payload).select("*").single();
+  const { data, error } = await supabase.from("D_conv_turns").insert(payload).select("*").single();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

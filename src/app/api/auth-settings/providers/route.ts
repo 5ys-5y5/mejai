@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: access } = await context.supabase
-    .from("user_access")
+    .from("A_iam_user_access_maps")
     .select("is_admin")
     .eq("user_id", context.user.id)
     .maybeSingle();
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data, error } = await context.supabase
-    .from("auth_settings")
+    .from("A_iam_auth_settings")
     .select("providers")
     .eq("org_id", context.orgId)
     .eq("user_id", context.user.id)
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: access } = await context.supabase
-    .from("user_access")
+    .from("A_iam_user_access_maps")
     .select("is_admin")
     .eq("user_id", context.user.id)
     .maybeSingle();
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { data, error } = await context.supabase
-    .from("auth_settings")
+    .from("A_iam_auth_settings")
     .select("id, providers")
     .eq("org_id", context.orgId)
     .eq("user_id", context.user.id)
@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
 
   if (!data) {
     const providers = { [provider]: body.values };
-    const { error: insertError } = await context.supabase.from("auth_settings").insert({
+    const { error: insertError } = await context.supabase.from("A_iam_auth_settings").insert({
       org_id: context.orgId,
       user_id: context.user.id,
       providers,
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
   providers[provider] = next;
 
   const { error: updateError } = await context.supabase
-    .from("auth_settings")
+    .from("A_iam_auth_settings")
     .update({ providers, updated_at: new Date().toISOString() })
     .eq("id", data.id);
 

@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: sessionRow, error: sessionError } = await context.supabase
-    .from("sessions")
+    .from("D_conv_sessions")
     .select("id, org_id")
     .eq("id", sessionId)
     .eq("org_id", context.orgId)
@@ -32,20 +32,20 @@ export async function GET(req: NextRequest) {
 
   const [mcpRes, eventRes, debugRes] = await Promise.all([
     context.supabase
-      .from("mcp_tool_audit_logs")
+      .from("F_audit_mcp_tools")
       .select("id, tool_name, status, request_payload, response_payload, policy_decision, latency_ms, created_at, session_id, turn_id")
       .eq("org_id", context.orgId)
       .eq("session_id", sessionId)
       .order("created_at", { ascending: false })
       .limit(limit),
     context.supabase
-      .from("event_logs")
+      .from("F_audit_events")
       .select("id, event_type, payload, created_at, session_id, turn_id")
       .eq("session_id", sessionId)
       .order("created_at", { ascending: false })
       .limit(limit),
     context.supabase
-      .from("debug_log_view")
+      .from("F_audit_turn_specs_view")
       .select("id, session_id, turn_id, seq, prefix_json, prefix_tree, created_at")
       .eq("session_id", sessionId)
       .order("created_at", { ascending: false })

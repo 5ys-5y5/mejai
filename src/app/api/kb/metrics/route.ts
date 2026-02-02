@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
   }));
 
   const { data, error } = await context.supabase
-    .from("kb_version_metrics")
+    .from("B_bot_knowledge_bases")
     .select("kb_id, call_count, call_duration_sec, satisfaction_avg, success_rate, escalation_rate, updated_at")
     .in("kb_id", ids)
     .or(`org_id.eq.${context.orgId},org_id.is.null`);

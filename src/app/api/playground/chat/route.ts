@@ -219,7 +219,7 @@ function readCustomerList(payload: unknown) {
       if (depth === 1) return "circle";
       return "square";
     };
-    const renderList = (node: TreeNode, depth: number) => {
+    const renderList = (node: TreeNode, depth: number): string => {
       const items = Array.from(node.children.entries())
         .map(([key, child]) => {
           const valuePart = child.value !== undefined ? `: ${escapeHtml(child.value)}` : "";
@@ -419,7 +419,7 @@ function chooseBestAlias(text: string, aliases: ProductAliasRow[]) {
 
 async function resolveProductDecision(context: any, text: string) {
   const aliasRes = await context.supabase
-    .from("product_alias")
+    .from("G_com_product_aliases")
     .select("org_id, alias, product_id, match_type, priority, is_active")
     .eq("is_active", true)
     .or(`org_id.eq.${context.orgId},org_id.is.null`);
@@ -433,7 +433,7 @@ async function resolveProductDecision(context: any, text: string) {
   }
 
   const ruleRes = await context.supabase
-    .from("product_rule")
+    .from("G_com_product_rules")
     .select("org_id, product_id, answerability, restock_policy, restock_at, updated_at, source")
     .eq("product_id", matchedAlias.product_id)
     .or(`org_id.eq.${context.orgId},org_id.is.null`);
@@ -469,7 +469,7 @@ function isRestockQuestion(text: string) {
 
 async function fetchAgent(context: any, agentId: string) {
   const { data, error } = await context.supabase
-    .from("agent")
+    .from("B_bot_agents")
     .select("*")
     .eq("id", agentId)
     .or(`org_id.eq.${context.orgId},org_id.is.null`)
@@ -478,7 +478,7 @@ async function fetchAgent(context: any, agentId: string) {
   if (data) return { data: data as AgentRow };
 
   const { data: parent, error: parentError } = await context.supabase
-    .from("agent")
+    .from("B_bot_agents")
     .select("*")
     .eq("parent_id", agentId)
     .eq("is_active", true)
@@ -490,7 +490,7 @@ async function fetchAgent(context: any, agentId: string) {
 
 async function fetchKb(context: any, kbId: string) {
   const { data, error } = await context.supabase
-    .from("knowledge_base")
+    .from("B_bot_knowledge_bases")
     .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
     .eq("id", kbId)
     .or(`org_id.eq.${context.orgId},org_id.is.null`)
@@ -501,7 +501,7 @@ async function fetchKb(context: any, kbId: string) {
 
 async function fetchAdminKbs(context: any) {
   const { data, error } = await context.supabase
-    .from("knowledge_base")
+    .from("B_bot_knowledge_bases")
     .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
     .eq("is_admin", true)
     .eq("is_active", true)
@@ -519,14 +519,14 @@ async function createSession(context: any, agentId: string | null) {
     channel: "playground",
     agent_id: agentId,
   };
-  const { data, error } = await context.supabase.from("sessions").insert(payload).select("*").single();
+  const { data, error } = await context.supabase.from("D_conv_sessions").insert(payload).select("*").single();
   if (error) return { error: error.message };
   return { data };
 }
 
 async function getLastTurn(context: any, sessionId: string) {
   const { data, error } = await context.supabase
-    .from("turns")
+    .from("D_conv_turns")
     .select("*")
     .eq("session_id", sessionId)
     .order("seq", { ascending: false })
@@ -538,7 +538,7 @@ async function getLastTurn(context: any, sessionId: string) {
 
 async function getRecentTurns(context: any, sessionId: string) {
   const { data, error } = await context.supabase
-    .from("turns")
+    .from("D_conv_turns")
     .select("id, transcript_text, summary_text, correction_text, confirmation_response, confirm_prompt, user_confirmed, answer_text, seq, bot_context")
     .eq("session_id", sessionId)
     .order("seq", { ascending: true })
@@ -592,7 +592,7 @@ async function insertEvent(
   payload: Record<string, unknown>,
   botContext: Record<string, unknown>
 ) {
-  await context.supabase.from("event_logs").insert({
+  await context.supabase.from("F_audit_events").insert({
     session_id: sessionId,
     turn_id: turnId,
     event_type: eventType,
@@ -607,7 +607,7 @@ async function upsertDebugLog(
   payload: { sessionId: string; turnId: string; seq?: number | null; prefixJson: Record<string, unknown> | null }
 ) {
   if (!payload.prefixJson) return;
-  await context.supabase.from("debug_log").upsert(
+  await context.supabase.from("F_audit_turn_specs").upsert(
     {
       session_id: payload.sessionId,
       turn_id: payload.turnId,
@@ -624,7 +624,7 @@ async function insertFinalTurn(
   payload: Record<string, unknown>,
   prefixJson: Record<string, unknown> | null
 ) {
-  const { data, error } = await context.supabase.from("turns").insert(payload).select("*").single();
+  const { data, error } = await context.supabase.from("D_conv_turns").insert(payload).select("*").single();
   if (!error && data?.id && data?.session_id) {
     await upsertDebugLog(context, {
       sessionId: data.session_id,
@@ -653,7 +653,7 @@ async function callMcpTool(
     return { ok: false, error: "TOOL_NOT_ALLOWED_FOR_AGENT" };
   }
   const { data: toolRow } = await context.supabase
-    .from("mcp_tools")
+    .from("C_mcp_tools")
     .select("id, name, version, schema_json")
     .eq("name", tool)
     .eq("is_active", true)
@@ -662,7 +662,7 @@ async function callMcpTool(
     return { ok: false, error: "TOOL_NOT_FOUND" };
   }
   const policy = await context.supabase
-    .from("mcp_tool_policies")
+    .from("C_mcp_tool_policies")
     .select("is_allowed, allowed_scopes, rate_limit_per_min, masking_rules, conditions, adapter_key")
     .eq("org_id", context.orgId)
     .eq("tool_id", toolRow.id)
@@ -688,14 +688,14 @@ async function callMcpTool(
     userId: context.user.id,
   });
   const latency = Date.now() - start;
-  const responsePayload = result.data ? { ...result.data } : {};
-  const masked = applyMasking(responsePayload, policy.data.masking_rules);
+  const rawResponsePayload = result.data ? { ...result.data } : {};
+  const masked = applyMasking(rawResponsePayload, policy.data.masking_rules);
 
   const responsePayload =
     result.status === "error"
       ? { ...(masked.masked as Record<string, unknown>), error: result.error || null }
       : masked.masked;
-  await context.supabase.from("mcp_tool_audit_logs").insert({
+  await context.supabase.from("F_audit_mcp_tools").insert({
     org_id: context.orgId,
     session_id: sessionId,
     turn_id: turnId,
@@ -843,7 +843,7 @@ export async function POST(req: NextRequest) {
     });
   }
   const { data: accessRow } = await context.supabase
-    .from("user_access")
+    .from("A_iam_user_access_maps")
     .select("group, plan, is_admin, org_role, org_id")
     .eq("user_id", context.user.id)
     .maybeSingle();
@@ -853,7 +853,7 @@ export async function POST(req: NextRequest) {
   const userRole = (accessRow?.org_role as string | null) ?? null;
   const userOrgId = (accessRow?.org_id as string | null) ?? null;
   const { data: authSettings } = await context.supabase
-    .from("auth_settings")
+    .from("A_iam_auth_settings")
     .select("id, providers")
     .eq("org_id", context.orgId)
     .eq("user_id", context.user.id)
@@ -926,7 +926,7 @@ export async function POST(req: NextRequest) {
   const allowedToolNames = new Set<string>();
   if (agent.mcp_tool_ids && agent.mcp_tool_ids.length > 0) {
     const { data: tools } = await context.supabase
-      .from("mcp_tools")
+      .from("C_mcp_tools")
       .select("id, name")
       .in("id", agent.mcp_tool_ids);
     (tools || []).forEach((t) => allowedToolNames.add(String(t.name)));
@@ -939,9 +939,9 @@ export async function POST(req: NextRequest) {
       return respond({ error: sessionRes.error || "SESSION_CREATE_FAILED" }, { status: 400 });
     }
     sessionId = sessionRes.data.id;
-    await context.supabase.from("sessions").update({ bot_context: botContext }).eq("id", sessionId);
+    await context.supabase.from("D_conv_sessions").update({ bot_context: botContext }).eq("id", sessionId);
   } else {
-    await context.supabase.from("sessions").update({ bot_context: botContext }).eq("id", sessionId);
+    await context.supabase.from("D_conv_sessions").update({ bot_context: botContext }).eq("id", sessionId);
   }
 
   const lastTurnRes = await getLastTurn(context, sessionId);
@@ -1244,7 +1244,7 @@ export async function POST(req: NextRequest) {
         customer_verified: true,
         customer_verification_token: verificationToken || null,
       };
-      await context.supabase.from("turns").update({
+      await context.supabase.from("D_conv_turns").update({
         confirmation_response: message,
         user_confirmed: true,
         correction_text: message,
@@ -1328,7 +1328,7 @@ export async function POST(req: NextRequest) {
         pending_verification: pendingVerification ? true : undefined,
       },
     };
-    await context.supabase.from("turns").update(confirmUpdate).eq("id", lastTurn.id);
+    await context.supabase.from("D_conv_turns").update(confirmUpdate).eq("id", lastTurn.id);
 
     if (pendingVerification && confirmed) {
       usedProviders.push(toolProviderMap.find_customer_by_phone);
@@ -1363,7 +1363,7 @@ export async function POST(req: NextRequest) {
             cellphone: picked.cellphone || picked.mobile || null,
           },
         };
-        await context.supabase.from("turns").update({
+        await context.supabase.from("D_conv_turns").update({
           bot_context: {
             ...(lastTurn?.bot_context || {}),
             ...botContext,
@@ -1373,8 +1373,12 @@ export async function POST(req: NextRequest) {
             customer_ref: runtimeBotContext.customer_ref,
           },
         }).eq("id", lastTurn.id);
-        const name = runtimeBotContext.customer_ref?.name || "-";
-        const memberId = runtimeBotContext.customer_ref?.member_id || "-";
+        const customerRef = runtimeBotContext.customer_ref as
+          | { name?: string | null; member_id?: string | null }
+          | null
+          | undefined;
+        const name = customerRef?.name || "-";
+        const memberId = customerRef?.member_id || "-";
         const prompt = `확인된 고객 정보입니다. 이름: ${name}, 아이디: ${memberId}. 본인이 맞으신가요?`;
         await insertTurn({
           session_id: sessionId,
@@ -1442,6 +1446,10 @@ export async function POST(req: NextRequest) {
         return respond({ session_id: sessionId, step: "confirm", message: makeReply(prompt), turn_id: null });
       }
       if (intentName === "change") {
+        const customerRef = runtimeBotContext.customer_ref as
+          | { member_id?: string | null; cellphone?: string | null }
+          | null
+          | undefined;
         const start = new Date();
         const end = new Date();
         start.setDate(end.getDate() - 30);
@@ -1453,8 +1461,8 @@ export async function POST(req: NextRequest) {
             start_date: toDate(start),
             end_date: toDate(end),
             limit: 5,
-            member_id: runtimeBotContext.customer_ref?.member_id || undefined,
-            cellphone: runtimeBotContext.customer_ref?.cellphone || undefined,
+            member_id: customerRef?.member_id || undefined,
+            cellphone: customerRef?.cellphone || undefined,
           },
           sessionId,
           latestTurnId,
@@ -1467,7 +1475,7 @@ export async function POST(req: NextRequest) {
         usedProviders.push(toolProviderMap.list_orders);
         executedTools.push("list_orders");
         let orders = list.ok ? ((list.data as any)?.orders || (list.data as any)?.orders?.order || []) : [];
-        const memberId = runtimeBotContext.customer_ref?.member_id;
+        const memberId = customerRef?.member_id;
         if (memberId && Array.isArray(orders)) {
           orders = orders.filter((o: any) => !o.member_id || o.member_id === memberId);
         }
@@ -1624,7 +1632,7 @@ export async function POST(req: NextRequest) {
             extracted_entities: extractedEntities,
           },
         };
-        await context.supabase.from("turns").update(confirmUpdateAuto).eq("id", lastTurn.id);
+        await context.supabase.from("D_conv_turns").update(confirmUpdateAuto).eq("id", lastTurn.id);
       } else {
       const summaryPrompt = `아래 고객 정정 내용을 반영해 요약과 확인 질문을 만들어 주세요.
 - 요약: 한 문장, 자연스러운 한국어, 숫자/목록/고객 단어 금지
@@ -1970,6 +1978,7 @@ export async function POST(req: NextRequest) {
       await insertEvent(
         context,
         sessionId,
+        latestTurnId,
         "PRODUCT_DECISION_FORCED",
         { decision, needs_restock: needsRestock },
         botContext
@@ -2251,6 +2260,7 @@ export async function POST(req: NextRequest) {
     await insertEvent(
       context,
       sessionId,
+      latestTurnId,
       "FINAL_ANSWER_READY",
       { answer: reply },
       botContext
@@ -2303,6 +2313,7 @@ ${mcpActions.length ? mcpActions.join(", ") : "없음"}`;
     await insertEvent(
       context,
       sessionId,
+      latestTurnId,
       "POLICY_DECISION",
       { stage: "output", matched: outputGate.matched.map((rule) => rule.id) },
       botContext
@@ -2332,11 +2343,12 @@ ${mcpActions.length ? mcpActions.join(", ") : "없음"}`;
       llm_model: answerRes.model,
       mcp_actions: mcpActions,
     },
-  }, finalAnswer);
+  }, lastDebugPrefixJson);
 
   await insertEvent(
     context,
     sessionId,
+    latestTurnId,
     "FINAL_ANSWER_READY",
     { answer: finalAnswer, model: answerRes.model },
     botContext

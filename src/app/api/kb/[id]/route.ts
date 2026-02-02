@@ -49,12 +49,12 @@ function bumpVersion(value?: string | null) {
 }
 
 function buildScopedQuery(client: SupabaseClient, id: string, orgId: string) {
-  return client.from("knowledge_base").select("*").eq("id", id).or(`org_id.eq.${orgId},org_id.is.null`);
+  return client.from("B_bot_knowledge_bases").select("*").eq("id", id).or(`org_id.eq.${orgId},org_id.is.null`);
 }
 
 function buildParentQuery(client: SupabaseClient, parentId: string, orgId: string) {
   return client
-    .from("knowledge_base")
+    .from("B_bot_knowledge_bases")
     .select("*")
     .eq("parent_id", parentId)
     .or(`org_id.eq.${orgId},org_id.is.null`)
@@ -202,7 +202,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
   if (titleChanged || categoryChanged) {
     const { error: updateMetaError } = await serverContext.supabase
-      .from("knowledge_base")
+      .from("B_bot_knowledge_bases")
       .update({ title: nextTitle, category: nextCategory })
       .eq("parent_id", parentId)
       .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
@@ -231,7 +231,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     const nextIsActive = payload.is_active ?? existing.is_active ?? true;
     if (nextIsActive) {
       const { error: deactivateError } = await serverContext.supabase
-        .from("knowledge_base")
+        .from("B_bot_knowledge_bases")
         .update({ is_active: false })
         .eq("parent_id", parentId)
         .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
@@ -255,7 +255,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     };
 
     const { data: inserted, error: insertError } = await serverContext.supabase
-      .from("knowledge_base")
+      .from("B_bot_knowledge_bases")
       .insert(insertPayload)
       .select("*")
       .single();
@@ -270,7 +270,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
     if (shouldActivate) {
       const { error: deactivateError } = await serverContext.supabase
-        .from("knowledge_base")
+        .from("B_bot_knowledge_bases")
         .update({ is_active: false })
         .eq("parent_id", parentId)
         .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
@@ -280,7 +280,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     }
 
     const { data: updated, error: updateError } = await serverContext.supabase
-      .from("knowledge_base")
+      .from("B_bot_knowledge_bases")
       .update(updatePayload)
       .eq("id", existing.id)
       .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)
@@ -296,7 +296,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
   if (data?.id && data.id !== existing.id && updateAgentIds.length > 0 && !nextIsAdmin) {
     const { data: agents, error: agentError } = await serverContext.supabase
-      .from("agent")
+      .from("B_bot_agents")
       .select("*")
       .in("id", updateAgentIds)
       .eq("kb_id", existing.id)
@@ -312,7 +312,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       const nextAgentIsActive = agent.is_active ?? true;
       if (nextAgentIsActive) {
         const { error: deactivateError } = await serverContext.supabase
-          .from("agent")
+          .from("B_bot_agents")
           .update({ is_active: false })
           .eq("parent_id", agentParentId)
           .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
@@ -321,7 +321,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         }
       }
 
-      const { error: insertError } = await serverContext.supabase.from("agent").insert({
+      const { error: insertError } = await serverContext.supabase.from("B_bot_agents").insert({
         parent_id: agentParentId,
         name: agent.name,
         llm: agent.llm,
@@ -364,7 +364,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
   const urlId = req.nextUrl.pathname.split("/").pop() || "";
   const id = normalizeId(rawId && rawId !== "undefined" ? rawId : urlId);
   const { data, error } = await serverContext.supabase
-    .from("knowledge_base")
+    .from("B_bot_knowledge_bases")
     .delete()
     .eq("id", id)
     .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)

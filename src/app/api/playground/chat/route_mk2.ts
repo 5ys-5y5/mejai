@@ -121,7 +121,7 @@ function buildDebugPrefix(payload: {
     if (depth === 1) return "circle";
     return "square";
   };
-  const renderList = (node: TreeNode, depth: number) => {
+  const renderList = (node: TreeNode, depth: number): string => {
     const items = Array.from(node.children.entries())
       .map(([key, child]) => {
         const valuePart = child.value !== undefined ? `: ${escapeHtml(child.value)}` : "";
@@ -362,7 +362,7 @@ function matchesAdminGroup(
 
 async function resolveProductDecision(context: any, text: string) {
   const aliasRes = await context.supabase
-    .from("product_alias")
+    .from("G_com_product_aliases")
     .select("org_id, alias, product_id, match_type, priority, is_active")
     .eq("is_active", true)
     .or(`org_id.eq.${context.orgId},org_id.is.null`);
@@ -376,7 +376,7 @@ async function resolveProductDecision(context: any, text: string) {
   }
 
   const ruleRes = await context.supabase
-    .from("product_rule")
+    .from("G_com_product_rules")
     .select("org_id, product_id, answerability, restock_policy, restock_at, updated_at, source")
     .eq("product_id", matchedAlias.product_id)
     .or(`org_id.eq.${context.orgId},org_id.is.null`);
@@ -408,7 +408,7 @@ async function resolveProductDecision(context: any, text: string) {
 
 async function fetchAgent(context: any, agentId: string) {
   const { data, error } = await context.supabase
-    .from("agent")
+    .from("B_bot_agents")
     .select("*")
     .eq("id", agentId)
     .or(`org_id.eq.${context.orgId},org_id.is.null`)
@@ -417,7 +417,7 @@ async function fetchAgent(context: any, agentId: string) {
   if (data) return { data: data as AgentRow };
 
   const { data: parent, error: parentError } = await context.supabase
-    .from("agent")
+    .from("B_bot_agents")
     .select("*")
     .eq("parent_id", agentId)
     .eq("is_active", true)
@@ -429,7 +429,7 @@ async function fetchAgent(context: any, agentId: string) {
 
 async function fetchKb(context: any, kbId: string) {
   const { data, error } = await context.supabase
-    .from("knowledge_base")
+    .from("B_bot_knowledge_bases")
     .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
     .eq("id", kbId)
     .or(`org_id.eq.${context.orgId},org_id.is.null`)
@@ -440,7 +440,7 @@ async function fetchKb(context: any, kbId: string) {
 
 async function fetchAdminKbs(context: any) {
   const { data, error } = await context.supabase
-    .from("knowledge_base")
+    .from("B_bot_knowledge_bases")
     .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
     .eq("is_admin", true)
     .eq("is_active", true)
@@ -458,14 +458,14 @@ async function createSession(context: any, agentId: string | null) {
     channel: "playground",
     agent_id: agentId,
   };
-  const { data, error } = await context.supabase.from("sessions").insert(payload).select("*").single();
+  const { data, error } = await context.supabase.from("D_conv_sessions").insert(payload).select("*").single();
   if (error) return { error: error.message };
   return { data };
 }
 
 async function getRecentTurns(context: any, sessionId: string, limit = 5) {
   const { data, error } = await context.supabase
-    .from("turns")
+    .from("D_conv_turns")
     .select("*")
     .eq("session_id", sessionId)
     .order("seq", { ascending: false })
@@ -482,7 +482,7 @@ async function insertEvent(
   payload: Record<string, unknown>,
   botContext: Record<string, unknown>
 ) {
-  await context.supabase.from("event_logs").insert({
+  await context.supabase.from("F_audit_events").insert({
     session_id: sessionId,
     turn_id: turnId,
     event_type: eventType,
@@ -497,7 +497,7 @@ async function upsertDebugLog(
   payload: { sessionId: string; turnId: string; seq?: number | null; prefixJson: Record<string, unknown> | null }
 ) {
   if (!payload.prefixJson) return;
-  await context.supabase.from("debug_log").upsert(
+  await context.supabase.from("F_audit_turn_specs").upsert(
     {
       session_id: payload.sessionId,
       turn_id: payload.turnId,
@@ -514,7 +514,7 @@ async function insertFinalTurn(
   payload: Record<string, unknown>,
   prefixJson: Record<string, unknown> | null
 ) {
-  const { data, error } = await context.supabase.from("turns").insert(payload).select("*").single();
+  const { data, error } = await context.supabase.from("D_conv_turns").insert(payload).select("*").single();
   if (!error && data?.id && data?.session_id) {
     await upsertDebugLog(context, {
       sessionId: data.session_id,
@@ -566,7 +566,7 @@ async function callMcpTool(
     return { ok: false, error: "TOOL_NOT_ALLOWED_FOR_AGENT" };
   }
   const { data: toolRow } = await context.supabase
-    .from("mcp_tools")
+    .from("C_mcp_tools")
     .select("id, name, version, schema_json")
     .eq("name", tool)
     .eq("is_active", true)
@@ -575,7 +575,7 @@ async function callMcpTool(
     return { ok: false, error: "TOOL_NOT_FOUND" };
   }
   const policy = await context.supabase
-    .from("mcp_tool_policies")
+    .from("C_mcp_tool_policies")
     .select("is_allowed, allowed_scopes, rate_limit_per_min, masking_rules, conditions, adapter_key")
     .eq("org_id", context.orgId)
     .eq("tool_id", toolRow.id)
@@ -608,7 +608,7 @@ async function callMcpTool(
       result.status === "error"
         ? { ...(masked.masked as Record<string, unknown>), error: result.error || null }
         : masked.masked;
-    await context.supabase.from("mcp_tool_audit_logs").insert({
+    await context.supabase.from("F_audit_mcp_tools").insert({
     org_id: context.orgId,
     session_id: sessionId,
     turn_id: turnId,
@@ -651,6 +651,7 @@ export async function POST(req: NextRequest) {
       }
       return respond({ error: context.error }, { status: 401 });
     }
+    const authContext = context;
 
     const body = (await req.json().catch(() => null)) as Body | null;
     const agentId = String(body?.agent_id || "").trim();
@@ -700,9 +701,9 @@ export async function POST(req: NextRequest) {
     const kb = kbRes.data;
 
     const { data: accessRow } = await context.supabase
-      .from("user_access")
+      .from("A_iam_user_access_maps")
       .select("group, plan, is_admin, org_role, org_id")
-      .eq("user_id", context.user.id)
+      .eq("user_id", authContext.user.id)
       .maybeSingle();
     const userGroup = (accessRow?.group as Record<string, unknown> | null) ?? null;
     const userPlan = (accessRow?.plan as string | null) ?? null;
@@ -711,10 +712,10 @@ export async function POST(req: NextRequest) {
     const userOrgId = (accessRow?.org_id as string | null) ?? null;
 
     const { data: authSettings } = await context.supabase
-      .from("auth_settings")
+      .from("A_iam_auth_settings")
       .select("id, providers")
-      .eq("org_id", context.orgId)
-      .eq("user_id", context.user.id)
+      .eq("org_id", authContext.orgId)
+      .eq("user_id", authContext.user.id)
       .maybeSingle();
     const providers = (authSettings?.providers || {}) as Record<string, Record<string, unknown> | undefined>;
     const providerAvailable = Object.keys(providers || {}).filter((key) => {
@@ -750,7 +751,7 @@ export async function POST(req: NextRequest) {
     const allowedToolNames = new Set<string>();
     if (agent.mcp_tool_ids && agent.mcp_tool_ids.length > 0) {
       const { data: tools } = await context.supabase
-        .from("mcp_tools")
+        .from("C_mcp_tools")
         .select("id, name")
         .in("id", agent.mcp_tool_ids);
       (tools || []).forEach((t) => allowedToolNames.add(String(t.name)));
@@ -772,6 +773,8 @@ export async function POST(req: NextRequest) {
     const prevBotContext = (lastTurn?.bot_context || {}) as Record<string, unknown>;
     const prevIntent =
       typeof prevBotContext.intent_name === "string" ? String(prevBotContext.intent_name) : null;
+    let resolvedIntent = prevIntent || "general";
+    let lastDebugPrefixJson: Record<string, unknown> | null = null;
     const prevEntity = (prevBotContext.entity || {}) as Record<string, unknown>;
     const prevSelectedOrderId =
       typeof prevBotContext.selected_order_id === "string" ? prevBotContext.selected_order_id : null;
@@ -878,12 +881,12 @@ export async function POST(req: NextRequest) {
           bot_context: {
             intent_name: resolvedIntent,
             entity: prevEntity,
-            selected_order_id: resolvedOrderId,
+            selected_order_id: prevSelectedOrderId,
             address_pending: true,
             address_stage: "awaiting_zipcode",
             pending_address: pendingAddress || null,
           },
-        }, lastDebugPrefixJson);
+        });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
       derivedZipcode = pendingZip || null;
@@ -996,9 +999,8 @@ export async function POST(req: NextRequest) {
       const provider = toolProviderMap[name];
       if (provider) usedProviders.push(provider);
     };
-    let lastDebugPrefixJson: Record<string, unknown> | null = null;
     const toolResults: Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }> = [];
-    const makeReply = (text: string, llmModel?: string | null, tools?: string[]) => {
+    function makeReply(text: string, llmModel?: string | null, tools?: string[]) {
       const mcpLogLines = toolResults.map((tool) => {
         const status = tool.ok ? "success" : "error";
         const error = tool.ok ? "" : String(tool.error || "MCP_ERROR");
@@ -1030,8 +1032,8 @@ export async function POST(req: NextRequest) {
         providerConfig: usedProviders.includes("cafe24") ? providerConfig : {},
         providerAvailable,
         authSettingsId: authSettings?.id || null,
-        userId: context.user.id,
-        orgId: userOrgId || context.orgId,
+        userId: authContext.user.id,
+        orgId: userOrgId || authContext.orgId,
         userPlan,
         userIsAdmin,
         userRole,
@@ -1044,8 +1046,8 @@ export async function POST(req: NextRequest) {
       };
       lastDebugPrefixJson = { entries: buildDebugEntries(debugPayload) };
       return text;
-    };
-    const insertTurn = async (payload: Record<string, unknown>) => {
+    }
+    async function insertTurn(payload: Record<string, unknown>) {
       if (!lastDebugPrefixJson) {
         const debugPayload = {
           llmModel: null,
@@ -1059,8 +1061,8 @@ export async function POST(req: NextRequest) {
           providerConfig: usedProviders.includes("cafe24") ? providerConfig : {},
           providerAvailable,
           authSettingsId: authSettings?.id || null,
-          userId: context.user.id,
-          orgId: userOrgId || context.orgId,
+          userId: authContext.user.id,
+          orgId: userOrgId || authContext.orgId,
           userPlan,
           userIsAdmin,
           userRole,
@@ -1076,12 +1078,11 @@ export async function POST(req: NextRequest) {
       const result = await insertFinalTurn(context, payload, lastDebugPrefixJson);
       latestTurnId = result.data?.id || null;
       return result;
-    };
+    }
     const intentFromPolicy = inputGate.actions.flags?.intent_name
       ? String(inputGate.actions.flags.intent_name)
       : "general";
-    const resolvedIntent =
-      intentFromPolicy === "general" && prevIntent ? prevIntent : intentFromPolicy;
+    resolvedIntent = intentFromPolicy === "general" && prevIntent ? prevIntent : intentFromPolicy;
     policyContext = {
       ...policyContext,
       intent: { name: resolvedIntent },
@@ -1101,7 +1102,7 @@ export async function POST(req: NextRequest) {
           entity: policyContext.entity,
           selected_order_id: resolvedOrderId,
         },
-      }, lastDebugPrefixJson);
+      });
       await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "input" }, { intent_name: resolvedIntent });
       return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
     }
@@ -1131,7 +1132,7 @@ export async function POST(req: NextRequest) {
               otp_pending: true,
               otp_stage: "awaiting_phone",
             },
-          }, lastDebugPrefixJson);
+          });
           return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
         }
         if (!allowedToolNames.has("send_otp")) {
@@ -1147,7 +1148,7 @@ export async function POST(req: NextRequest) {
               entity: policyContext.entity,
               selected_order_id: resolvedOrderId,
             },
-          }, lastDebugPrefixJson);
+          });
           return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
         }
         const sendResult = await callMcpTool(
@@ -1174,7 +1175,7 @@ export async function POST(req: NextRequest) {
               entity: policyContext.entity,
               selected_order_id: resolvedOrderId,
             },
-          }, lastDebugPrefixJson);
+          });
           return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
         }
         const otpRefValue = String((sendResult.data as any)?.otp_ref || "").trim();
@@ -1195,7 +1196,7 @@ export async function POST(req: NextRequest) {
             otp_destination: phone,
             otp_ref: otpRefValue || null,
           },
-        }, lastDebugPrefixJson);
+        });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
       if (!otpCode) {
@@ -1216,7 +1217,7 @@ export async function POST(req: NextRequest) {
             otp_destination: otpDestination || null,
             otp_ref: otpRef || null,
           },
-        }, lastDebugPrefixJson);
+        });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
       if (!allowedToolNames.has("verify_otp")) {
@@ -1232,7 +1233,7 @@ export async function POST(req: NextRequest) {
             entity: policyContext.entity,
             selected_order_id: resolvedOrderId,
           },
-        }, lastDebugPrefixJson);
+        });
         return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
       }
       const verifyResult = await callMcpTool(
@@ -1264,12 +1265,12 @@ export async function POST(req: NextRequest) {
             otp_destination: otpDestination || null,
             otp_ref: otpRef || null,
           },
-        }, lastDebugPrefixJson);
+        });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
       const tokenValue = String((verifyResult.data as any)?.customer_verification_token || "").trim();
       customerVerificationToken = tokenValue || null;
-      await context.supabase.from("turns").update({
+      await context.supabase.from("D_conv_turns").update({
         confirmation_response: message,
         user_confirmed: true,
         correction_text: message,
@@ -1308,7 +1309,7 @@ export async function POST(req: NextRequest) {
             otp_pending: true,
             otp_stage: "awaiting_phone",
           },
-        }, lastDebugPrefixJson);
+        });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
       if (!allowedToolNames.has("send_otp")) {
@@ -1324,7 +1325,7 @@ export async function POST(req: NextRequest) {
             entity: policyContext.entity,
             selected_order_id: resolvedOrderId,
           },
-        }, lastDebugPrefixJson);
+        });
         return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
       }
       const sendResult = await callMcpTool(
@@ -1351,7 +1352,7 @@ export async function POST(req: NextRequest) {
             entity: policyContext.entity,
             selected_order_id: resolvedOrderId,
           },
-        }, lastDebugPrefixJson);
+        });
         return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
       }
       const otpRefValue = String((sendResult.data as any)?.otp_ref || "").trim();
@@ -1372,7 +1373,7 @@ export async function POST(req: NextRequest) {
           otp_destination: otpDestination,
           otp_ref: otpRefValue || null,
         },
-      }, lastDebugPrefixJson);
+      });
       return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
     }
 
@@ -1467,7 +1468,7 @@ export async function POST(req: NextRequest) {
           product_decision: productDecisionRes.decision || null,
           policy_matched: toolGate.matched.map((rule) => rule.id),
         },
-      }, lastDebugPrefixJson);
+      });
       await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "tool" }, { intent_name: resolvedIntent });
       return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
     }
@@ -1671,7 +1672,7 @@ export async function POST(req: NextRequest) {
             address_stage: "awaiting_zipcode",
             pending_address: currentAddress,
           },
-        }, lastDebugPrefixJson);
+        });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
       const updatePayload: Record<string, unknown> = {
@@ -1705,6 +1706,7 @@ export async function POST(req: NextRequest) {
         await insertEvent(
           context,
           sessionId,
+          latestTurnId,
           "MCP_TOOL_FAILED",
           { tool: "update_order_shipping_address", error: update.error },
           { intent_name: resolvedIntent }
@@ -1735,6 +1737,7 @@ export async function POST(req: NextRequest) {
             await insertEvent(
               context,
               sessionId,
+              latestTurnId,
               "MCP_TOOL_FAILED",
               { tool: "create_ticket", error: fallback.error },
               { intent_name: resolvedIntent }
@@ -1829,10 +1832,11 @@ export async function POST(req: NextRequest) {
           order_choices: listOrdersChoices,
           mcp_actions: mcpActions,
         },
-      }, lastDebugPrefixJson);
+      });
       await insertEvent(
         context,
         sessionId,
+        latestTurnId,
         "ORDER_CHOICES_PRESENTED",
         { choices: listOrdersChoices },
         { intent_name: resolvedIntent }
@@ -1854,7 +1858,7 @@ export async function POST(req: NextRequest) {
           selected_order_id: resolvedOrderId,
           mcp_actions: mcpActions,
         },
-      }, lastDebugPrefixJson);
+      });
       await insertEvent(context, sessionId, latestTurnId, "ORDER_CHOICES_EMPTY", {}, { intent_name: resolvedIntent });
       return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
     }
@@ -1928,11 +1932,12 @@ ${mcpSummary || "(없음)"}`;
         } : null,
         mcp_actions: mcpActions,
       },
-    }, lastDebugPrefixJson);
+    });
 
     await insertEvent(
       context,
       sessionId,
+      latestTurnId,
       "FINAL_ANSWER_READY",
       { answer: reply, model: answerRes.model },
       { intent_name: resolvedIntent }

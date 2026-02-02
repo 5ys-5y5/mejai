@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: access, error: accessError } = await context.supabase
-    .from("user_access")
+    .from("A_iam_user_access_maps")
     .select("is_admin")
     .eq("user_id", context.user.id)
     .maybeSingle();
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data, error } = await context.supabase
-    .from("user_access")
+    .from("A_iam_user_access_maps")
     .select("group")
     .eq("org_id", context.orgId);
 

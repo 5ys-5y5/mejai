@@ -719,9 +719,9 @@ export default function LabolatoryPage() {
       const hasError = bundles.some((bundle) => Boolean(bundle.logsError));
       const blocked = new Set<string>();
       if (hasLoading || hasError) {
-        blocked.add("mcp_tool_audit_logs");
-        blocked.add("event_logs");
-        blocked.add("debug_log");
+        blocked.add("F_audit_mcp_tools");
+        blocked.add("F_audit_events");
+        blocked.add("F_audit_turn_specs");
       }
 
       const getDebugFunctions = () => {
@@ -746,7 +746,7 @@ export default function LabolatoryPage() {
       const completed = new Set<string>();
       const incomplete = new Map<string, string[]>();
 
-      if (!blocked.has("mcp_tool_audit_logs")) {
+      if (!blocked.has("F_audit_mcp_tools")) {
         expected.mcp_tools.forEach((tool) => {
           const logs = allMcpLogs.filter((log) => log.tool_name === tool);
           const missing = logs.some((log) => {
@@ -772,7 +772,7 @@ export default function LabolatoryPage() {
         });
       }
 
-      if (!blocked.has("event_logs")) {
+      if (!blocked.has("F_audit_events")) {
         expected.event_types.forEach((eventType) => {
           const logs = allEventLogs.filter((log) => log.event_type === eventType);
           const missing = logs.some((log) => {
@@ -795,7 +795,7 @@ export default function LabolatoryPage() {
         });
       }
 
-      if (!blocked.has("debug_log")) {
+      if (!blocked.has("F_audit_turn_specs")) {
         if (expected.debug_functions.length === 0 && allDebugLogs.length > 0) {
           incomplete.set("debug.MCP.last_function", ["MCP.last_function 누락"]);
         } else {
@@ -831,7 +831,7 @@ export default function LabolatoryPage() {
     })();
     const corePrinciple = [
       "디버그 대원칙:",
-      "- 본 원칙은 mcp_tool_audit_logs, event_logs, debug_log 테이블에 내용을 기록할 때에 최소한의 디버깅으로 최대한의 개선을 위해 반드시 준수하여 해당 테이블에 기록하게 할 것(기록하는 기능 설계시 아래의 원칙 미준수가 감지되면 개선하여 기록하도록 할 것)",
+      "- 본 원칙은 F_audit_mcp_tools, F_audit_events, F_audit_turn_specs 테이블에 내용을 기록할 때에 최소한의 디버깅으로 최대한의 개선을 위해 반드시 준수하여 해당 테이블에 기록하게 할 것(기록하는 기능 설계시 아래의 원칙 미준수가 감지되면 개선하여 기록하도록 할 것)",
       "- 원인 미확인은 로그 누락/정밀도 부족에서 발생한다.",
       "- 단계별 로그를 촘촘히 남겨 범위를 줄인다 (5->2->1 단계).",
       "- 실패 지점의 직전/직후 로그를 반드시 기록한다.",

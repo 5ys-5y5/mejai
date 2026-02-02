@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   const { field, ascending } = parseOrder(orderParam);
 
   const { data, error, count } = await context.supabase
-    .from("sessions")
+    .from("D_conv_sessions")
     .select("*", { count: "exact" })
     .eq("org_id", context.orgId)
     .order(field, { ascending })
@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
   };
 
   const { data, error } = await context.supabase
-    .from("sessions")
+    .from("D_conv_sessions")
     .insert(payload)
     .select("*")
     .single();

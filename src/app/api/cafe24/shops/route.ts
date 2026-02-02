@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
   const headerAccessToken = (req.headers.get("x-cafe24-access-token") || "").trim();
 
   const { data: access } = await context.supabase
-    .from("user_access")
+    .from("A_iam_user_access_maps")
     .select("is_admin")
     .eq("user_id", context.user.id)
     .maybeSingle();
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
   let apiVersion = readApiVersion();
   if (!mallId || !accessToken) {
     const { data, error } = await context.supabase
-      .from("auth_settings")
+      .from("A_iam_auth_settings")
       .select("id, providers")
       .eq("org_id", context.orgId)
       .eq("user_id", context.user.id)

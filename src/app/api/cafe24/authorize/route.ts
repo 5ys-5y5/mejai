@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
   if (!mallId) {
     const { data, error } = await context.supabase
-      .from("auth_settings")
+      .from("A_iam_auth_settings")
       .select("providers")
       .eq("org_id", context.orgId)
       .eq("user_id", context.user.id)

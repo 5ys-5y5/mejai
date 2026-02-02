@@ -126,7 +126,7 @@ export default function SettingsPage() {
         setAuthToken(sessionData.session.access_token);
       }
       const { data: access } = await supabase
-        .from("user_access")
+        .from("A_iam_user_access_maps")
         .select("is_admin")
         .eq("user_id", data.user.id)
         .maybeSingle();

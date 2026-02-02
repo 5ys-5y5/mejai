@@ -89,7 +89,7 @@ export default function OnboardingPage() {
     const timer = setTimeout(async () => {
       setIsCheckingOrg(true);
       const { data, error } = await supabase
-        .from("organizations")
+        .from("A_iam_organizations")
         .select("id, name, owner_id, business_registration_number")
         .eq("business_registration_number", normalizedBusinessNumber)
         .maybeSingle();
@@ -172,7 +172,7 @@ export default function OnboardingPage() {
 
       if (existingOrg.owner_id !== userData.user.id) {
         const { error: updateError } = await supabase
-          .from("organizations")
+          .from("A_iam_organizations")
           .update({ registrant_id: userData.user.id })
           .eq("id", existingOrg.id);
 
@@ -181,7 +181,7 @@ export default function OnboardingPage() {
           return;
         }
 
-        const { error: accessError } = await supabase.from("user_access").upsert({
+        const { error: accessError } = await supabase.from("A_iam_user_access_maps").upsert({
           user_id: userData.user.id,
           org_id: existingOrg.id,
           plan: "starter",
@@ -198,7 +198,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      const { error: accessError } = await supabase.from("user_access").upsert({
+      const { error: accessError } = await supabase.from("A_iam_user_access_maps").upsert({
         user_id: userData.user.id,
         org_id: existingOrg.id,
         plan: "starter",
@@ -216,7 +216,7 @@ export default function OnboardingPage() {
     }
 
     const { data: orgData, error: orgError } = await supabase
-      .from("organizations")
+      .from("A_iam_organizations")
       .insert({
         name: orgName.trim(),
         owner_id: userData.user.id,
@@ -232,7 +232,7 @@ export default function OnboardingPage() {
     }
 
     if (orgData?.id) {
-      const { error: accessError } = await supabase.from("user_access").upsert({
+      const { error: accessError } = await supabase.from("A_iam_user_access_maps").upsert({
         user_id: userData.user.id,
         org_id: orgData.id,
         plan: "starter",

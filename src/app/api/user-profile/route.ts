@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: profile, error } = await context.supabase
-    .from("user_access")
+    .from("A_iam_user_access_maps")
     .select("plan, is_admin, org_role, org_id")
     .eq("user_id", context.user.id)
     .maybeSingle();

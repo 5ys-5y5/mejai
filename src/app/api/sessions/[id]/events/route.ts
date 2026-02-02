@@ -15,7 +15,7 @@ export async function GET(
   const { id } = await context.params;
 
   const { data, error } = await supabase
-    .from("event_logs")
+    .from("F_audit_events")
     .select("*")
     .eq("session_id", id)
     .order("created_at", { ascending: true });
@@ -49,7 +49,7 @@ export async function POST(
     payload: body.payload ?? {},
   };
 
-  const { data, error } = await supabase.from("event_logs").insert(payload).select("*").single();
+  const { data, error } = await supabase.from("F_audit_events").insert(payload).select("*").single();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

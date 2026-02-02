@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const { field, ascending } = parseOrder(orderParam);
 
   const { data, error, count } = await supabase
-    .from("audit_logs")
+    .from("E_ops_actions")
     .select("*", { count: "exact" })
     .order(field, { ascending })
     .range(offset, offset + limit - 1);

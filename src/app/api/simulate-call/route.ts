@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   };
 
   const { data: session, error: sessionError } = await context.supabase
-    .from("sessions")
+    .from("D_conv_sessions")
     .insert(sessionPayload)
     .select("*")
     .single();
@@ -97,7 +97,7 @@ export async function POST(req: NextRequest) {
   ];
 
   const { data: turns, error: turnsError } = await context.supabase
-    .from("turns")
+    .from("D_conv_turns")
     .insert(turnsPayload)
     .select("*");
 
@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: events, error: eventsError } = await context.supabase
-    .from("event_logs")
+    .from("F_audit_events")
     .insert(eventsPayload)
     .select("*");
 
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
   ];
 
   const { data: audioSegments, error: audioError } = await context.supabase
-    .from("audio_segments")
+    .from("D_conv_audio_segments")
     .insert(audioPayload)
     .select("*");
 
@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
   let reviewItem = null;
   if (escalated) {
     const { data: review, error: reviewError } = await context.supabase
-      .from("review_queue")
+      .from("E_ops_review_queue_items")
       .insert({
         session_id: session.id,
         reason: "후속 지원 요청",

@@ -14,7 +14,7 @@ export async function GET(
   const { id } = await context.params;
 
   const { data, error } = await contextAuth.supabase
-    .from("sessions")
+    .from("D_conv_sessions")
     .select("*")
     .eq("id", id)
     .eq("org_id", contextAuth.orgId)
@@ -44,7 +44,7 @@ export async function DELETE(
   const { id } = await context.params;
 
   const { data: session, error: sessionError } = await contextAuth.supabase
-    .from("sessions")
+    .from("D_conv_sessions")
     .select("id, org_id")
     .eq("id", id)
     .eq("org_id", contextAuth.orgId)
@@ -58,7 +58,7 @@ export async function DELETE(
   }
 
   const { error: turnsError } = await contextAuth.supabase
-    .from("turns")
+    .from("D_conv_turns")
     .delete()
     .eq("session_id", id);
 
@@ -67,7 +67,7 @@ export async function DELETE(
   }
 
   const { error: deleteError } = await contextAuth.supabase
-    .from("sessions")
+    .from("D_conv_sessions")
     .delete()
     .eq("id", id)
     .eq("org_id", contextAuth.orgId);

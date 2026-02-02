@@ -114,7 +114,7 @@ export function AdminClient() {
           return;
         }
         const { data: access, error: accessError } = await supabase
-          .from("user_access")
+          .from("A_iam_user_access_maps")
           .select("is_admin")
           .eq("user_id", userData.user.id)
           .maybeSingle();

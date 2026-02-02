@@ -15,7 +15,7 @@ export async function GET(
   const { id } = await context.params;
 
   const { data, error } = await supabase
-    .from("audio_segments")
+    .from("D_conv_audio_segments")
     .select("*")
     .eq("session_id", id)
     .order("created_at", { ascending: true });
@@ -52,7 +52,7 @@ export async function POST(
   };
 
   const { data, error } = await supabase
-    .from("audio_segments")
+    .from("D_conv_audio_segments")
     .insert(payload)
     .select("*")
     .single();

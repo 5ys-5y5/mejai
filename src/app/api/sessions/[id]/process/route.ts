@@ -28,7 +28,7 @@ export async function POST(
   }
 
   const { data: session, error: sessionError } = await contextAuth.supabase
-    .from("sessions")
+    .from("D_conv_sessions")
     .select("id, org_id")
     .eq("id", id)
     .eq("org_id", contextAuth.orgId)
@@ -54,7 +54,7 @@ export async function POST(
   };
 
   const { data: turn, error: turnError } = await contextAuth.supabase
-    .from("turns")
+    .from("D_conv_turns")
     .insert(turnPayload)
     .select("*")
     .single();
@@ -65,7 +65,7 @@ export async function POST(
 
   const eventType = EVENT_MAP[String(body.step)] || "TURN_LOGGED";
   const { data: event, error: eventError } = await contextAuth.supabase
-    .from("event_logs")
+    .from("F_audit_events")
     .insert({
       session_id: id,
       event_type: eventType,
@@ -81,7 +81,7 @@ export async function POST(
   let sessionUpdate = null;
   if (body.step === "final") {
     const { data } = await contextAuth.supabase
-      .from("sessions")
+      .from("D_conv_sessions")
       .update({ outcome: body.outcome ?? "해결" })
       .eq("id", id)
       .select("*")
@@ -92,11 +92,11 @@ export async function POST(
   if (body.step === "escalate" || body.escalated) {
     const escalationReason = body.escalation_reason ?? "사람 상담 필요";
     await contextAuth.supabase
-      .from("sessions")
+      .from("D_conv_sessions")
       .update({ outcome: "이관", escalation_reason: escalationReason })
       .eq("id", id);
 
-    await contextAuth.supabase.from("review_queue").insert({
+    await contextAuth.supabase.from("E_ops_review_queue_items").insert({
       session_id: id,
       reason: "후속 지원 요청",
       owner: "미배정",

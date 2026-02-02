@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
   const { field, ascending } = parseOrder(orderParam);
 
   let query = context.supabase
-    .from("knowledge_base")
+    .from("B_bot_knowledge_bases")
     .select("*", { count: "exact" })
     .order(field, { ascending })
     .range(offset, offset + limit - 1)
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: accessRow } = await context.supabase
-    .from("user_access")
+    .from("A_iam_user_access_maps")
     .select("group")
     .eq("user_id", context.user.id)
     .maybeSingle();
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
   let isAdmin = false;
   if (wantsAdmin) {
     const { data: access, error: accessError } = await context.supabase
-      .from("user_access")
+      .from("A_iam_user_access_maps")
       .select("is_admin")
       .eq("user_id", context.user.id)
       .maybeSingle();
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { data, error } = await context.supabase
-    .from("knowledge_base")
+    .from("B_bot_knowledge_bases")
     .insert(payload)
     .select("*")
     .single();

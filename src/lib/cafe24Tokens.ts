@@ -46,7 +46,7 @@ export async function refreshCafe24Token(cfg: {
     expires_at: string;
   };
   const { data: settingsRow, error: settingsError } = await cfg.supabase
-    .from("auth_settings")
+    .from("A_iam_auth_settings")
     .select("providers")
     .eq("id", cfg.settingsId)
     .maybeSingle();
@@ -63,7 +63,7 @@ export async function refreshCafe24Token(cfg: {
   };
   providers.cafe24 = next;
   const { error } = await cfg.supabase
-    .from("auth_settings")
+    .from("A_iam_auth_settings")
     .update({
       providers,
       updated_at: new Date().toISOString(),

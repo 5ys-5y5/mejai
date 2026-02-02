@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: access, error: accessError } = await context.supabase
-    .from("user_access")
+    .from("A_iam_user_access_maps")
     .select("is_admin")
     .eq("user_id", context.user.id)
     .maybeSingle();
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: policies, error: policyError } = await context.supabase
-    .from("mcp_tool_policies")
+    .from("C_mcp_tool_policies")
     .select("tool_id, is_allowed, allowed_scopes, rate_limit_per_min, masking_rules, conditions, adapter_key")
     .eq("org_id", context.orgId);
 
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: tools, error: toolError } = await context.supabase
-    .from("mcp_tools")
+    .from("C_mcp_tools")
     .select("id, name, description, schema_json, version, is_active")
     .in("id", toolIds)
     .eq("is_active", true);

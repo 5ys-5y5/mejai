@@ -136,40 +136,41 @@
 테이블명이 기능별로 섞여 있어 이해가 어렵다는 점을 반영해, 아래처럼 **기능 Prefix + 복수형** 기준으로 통일을 권장합니다.
 
 ### A. 멀티테넌트/권한/외부인증 (`iam_`)
-- `organizations` -> `iam_organizations`
-- `user_access` -> `iam_user_access_maps`
-- `auth_settings` -> `iam_auth_settings`
+- `organizations` -> `A_iam_organizations`
+- `user_access` -> `A_iam_user_access_maps`
+- `auth_settings` -> `A_iam_auth_settings`
 
 ### B. 에이전트/지식베이스 (`bot_`)
-- `agent` -> `bot_agents`
-- `knowledge_base` -> `bot_knowledge_bases`
-- `kb_version_metrics` -> `bot_kb_version_metrics`
+- `agent` -> `B_bot_agents`
+- `knowledge_base` -> `B_bot_knowledge_bases`
+- `kb_version_metrics` -> `B_bot_knowledge_bases` 컬럼 통합 예정
 
 ### C. 상담 세션 데이터 (`conv_`)
-- `sessions` -> `conv_sessions`
-- `turns` -> `conv_turns`
-- `audio_segments` -> `conv_audio_segments`
-- `event_logs` -> `conv_event_logs`
+- `sessions` -> `D_conv_sessions`
+- `turns` -> `D_conv_turns`
+- `audio_segments` -> `D_conv_audio_segments`
 
 ### D. 운영/검토/감사 (`ops_`)
-- `review_queue` -> `ops_review_queue_items`
-- `audit_logs` -> `ops_audit_logs`
+- `review_queue` -> `E_ops_review_queue_items`
+- `audit_logs` -> `E_ops_actions`
 
 ### E. 관측/디버그 (`obs_`)
-- `debug_log` -> `obs_debug_logs`
-- `debug_log_view` -> `obs_debug_logs_view` (VIEW)
+- `debug_log` -> `F_audit_turn_specs`
+- `event_logs` -> `F_audit_events`
+- `mcp_tool_audit_logs` -> `F_audit_mcp_tools`
 
 ### F. MCP 거버넌스 (`mcp_`)
-아래 3개는 이미 prefix가 일관적이므로, 변경 비용 대비 이득이 작아 **유지 권장**:
-- `mcp_tools` (유지)
-- `mcp_tool_policies` (유지)
-- `mcp_tool_audit_logs` (유지)
+아래는 접두 순서 강제를 위해 `C_`를 부여:
+- `mcp_tools` -> `C_mcp_tools`
+- `mcp_tool_policies` -> `C_mcp_tool_policies`
+- `mcp_tool_endpoints` -> `C_mcp_tool_endpoints`
+- `mcp_tool_versions` -> `C_mcp_tool_versions`
 
 ### G. 커머스/재입고/본인인증 (`com_`, `idv_`)
-- `product_alias` -> `com_product_aliases`
-- `product_rule` -> `com_product_rules`
-- `restock_subscription` -> `com_restock_subscriptions`
-- `otp_verifications` -> `idv_otp_verifications`
+- `product_alias` -> `G_com_product_aliases`
+- `product_rule` -> `G_com_product_rules`
+- `restock_subscription` -> `G_com_restock_subscriptions`
+- `otp_verifications` -> `H_auth_otp_verifications`
 
 ## 9) 전체 테이블명 변경 적용 난이도
 

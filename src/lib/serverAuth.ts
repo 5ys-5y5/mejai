@@ -130,7 +130,7 @@ export async function getServerContext(
   const { supabase, user } = userContext;
 
   const { data: access, error: accessError } = await supabase
-    .from("user_access")
+    .from("A_iam_user_access_maps")
     .select("org_id, org_role")
     .eq("user_id", user.id)
     .maybeSingle();

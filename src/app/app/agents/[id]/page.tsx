@@ -258,7 +258,9 @@ export default function AgentDetailPage() {
           apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
           apiFetch<{ items: MpcTool[] }>("/api/mcp/tools").catch(() => ({ items: [] })),
           apiFetch<{ items: SessionRow[] }>("/api/sessions?limit=500").catch(() => ({ items: [] })),
-          apiFetch<{ is_admin?: boolean; org_id?: string | null }>("/api/user-profile").catch(() => ({})),
+          apiFetch<{ is_admin?: boolean; org_id?: string | null }>("/api/user-profile").catch(
+            () => ({ is_admin: false, org_id: null })
+          ),
         ]);
         if (!mounted) return;
         setAllAgents(agentRes.items || []);

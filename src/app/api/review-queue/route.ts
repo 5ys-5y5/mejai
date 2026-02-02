@@ -23,9 +23,9 @@ export async function GET(req: NextRequest) {
   const { field, ascending } = parseOrder(orderParam);
 
   let query = context.supabase
-    .from("review_queue")
-    .select("*, sessions!inner(id, org_id)", { count: "exact" })
-    .eq("sessions.org_id", context.orgId)
+    .from("E_ops_review_queue_items")
+    .select("*, D_conv_sessions!inner(id, org_id)", { count: "exact" })
+    .eq("D_conv_sessions.org_id", context.orgId)
     .order(field, { ascending })
     .range(offset, offset + limit - 1);
 
@@ -40,8 +40,8 @@ export async function GET(req: NextRequest) {
   }
 
   const items =
-    data?.map((row: { sessions?: unknown }) => {
-      const { sessions, ...rest } = row as Record<string, unknown>;
+    data?.map((row: { D_conv_sessions?: unknown }) => {
+      const { D_conv_sessions, ...rest } = row as Record<string, unknown>;
       return rest;
     }) || [];
 
@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
     status: body.status ?? "Open",
   };
 
-  const { data, error } = await supabase.from("review_queue").insert(payload).select("*").single();
+  const { data, error } = await supabase.from("E_ops_review_queue_items").insert(payload).select("*").single();
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

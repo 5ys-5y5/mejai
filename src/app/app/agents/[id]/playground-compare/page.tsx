@@ -66,7 +66,8 @@ export default function AgentPlaygroundComparePage() {
       });
       if (data.session_id) setLeftSessionId(data.session_id);
       if (data.message) {
-        setLeftMessages((prev) => [...prev, { id: makeId(), role: "bot", content: data.message }]);
+        const reply = String(data.message);
+        setLeftMessages((prev) => [...prev, { id: makeId(), role: "bot", content: reply }]);
       }
     } catch {
       setLeftMessages((prev) => [...prev, { id: makeId(), role: "bot", content: "Legacy 응답 실패" }]);
@@ -95,7 +96,8 @@ export default function AgentPlaygroundComparePage() {
       });
       if (data.session_id) setRightSessionId(data.session_id);
       if (data.message) {
-        setRightMessages((prev) => [...prev, { id: makeId(), role: "bot", content: data.message }]);
+        const reply = String(data.message);
+        setRightMessages((prev) => [...prev, { id: makeId(), role: "bot", content: reply }]);
       }
     } catch {
       setRightMessages((prev) => [...prev, { id: makeId(), role: "bot", content: "MK2 응답 실패" }]);

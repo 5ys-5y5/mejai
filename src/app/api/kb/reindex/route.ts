@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const limit = Math.min(Number(body?.limit || 50), 200);
 
   const { data, error } = await context.supabase
-    .from("knowledge_base")
+    .from("B_bot_knowledge_bases")
     .select("id, content")
     .eq("org_id", context.orgId)
     .is("embedding", null)
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     try {
       const embeddingRes = await createEmbedding(String(row.content || ""));
       const { error: updateError } = await context.supabase
-        .from("knowledge_base")
+        .from("B_bot_knowledge_bases")
         .update({ embedding: embeddingRes.embedding })
         .eq("id", row.id);
       if (!updateError) {

@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
   const { field, ascending } = parseOrder(orderParam);
 
   let query = context.supabase
-    .from("agent")
+    .from("B_bot_agents")
     .select("*", { count: "exact" })
     .order(field, { ascending })
     .range(offset, offset + limit - 1)
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "INVALID_NAME" }, { status: 400 });
   }
 
-  const { data, error } = await context.supabase.from("agent").insert(payload).select("*").single();
+  const { data, error } = await context.supabase.from("B_bot_agents").insert(payload).select("*").single();
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

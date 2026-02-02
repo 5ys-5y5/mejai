@@ -29,7 +29,7 @@ export async function GET(
   }
 
   let query = supabase
-    .from("debug_log_view")
+    .from("F_audit_turn_specs_view")
     .select("*")
     .eq("session_id", id)
     .order("created_at", { ascending: true })

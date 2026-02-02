@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const toolName = body.tool;
 
   const { data: tool, error: toolError } = await context.supabase
-    .from("mcp_tools")
+    .from("C_mcp_tools")
     .select("id, name, schema_json, version, is_active")
     .eq("name", toolName)
     .eq("is_active", true)
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: policy, error: policyError } = await context.supabase
-    .from("mcp_tool_policies")
+    .from("C_mcp_tool_policies")
     .select("is_allowed, allowed_scopes, rate_limit_per_min, masking_rules, conditions, adapter_key")
     .eq("org_id", context.orgId)
     .eq("tool_id", tool.id)
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (!policy.is_allowed) {
-    await context.supabase.from("mcp_tool_audit_logs").insert({
+    await context.supabase.from("F_audit_mcp_tools").insert({
       org_id: context.orgId,
       session_id: body.session_id ?? null,
       tool_id: tool.id,
@@ -82,13 +82,13 @@ export async function POST(req: NextRequest) {
   if (policy.rate_limit_per_min && policy.rate_limit_per_min > 0) {
     const since = new Date(Date.now() - 60_000).toISOString();
     const { count } = await context.supabase
-      .from("mcp_tool_audit_logs")
+      .from("F_audit_mcp_tools")
       .select("id", { count: "exact", head: true })
       .eq("org_id", context.orgId)
       .eq("tool_id", tool.id)
       .gte("created_at", since);
     if ((count || 0) >= policy.rate_limit_per_min) {
-      await context.supabase.from("mcp_tool_audit_logs").insert({
+      await context.supabase.from("F_audit_mcp_tools").insert({
         org_id: context.orgId,
         session_id: body.session_id ?? null,
         tool_id: tool.id,
@@ -117,7 +117,7 @@ export async function POST(req: NextRequest) {
   const responsePayload = result.data ? { ...result.data } : {};
   const masked = applyMasking(responsePayload, policy.masking_rules);
 
-  await context.supabase.from("mcp_tool_audit_logs").insert({
+  await context.supabase.from("F_audit_mcp_tools").insert({
     org_id: context.orgId,
     session_id: body.session_id ?? null,
     tool_id: tool.id,

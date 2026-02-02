@@ -49,10 +49,10 @@ function matchAliasText(text: string, alias: string, matchType: string) {
   return false;
 }
 
-function chooseBestAlias(
+function chooseBestAlias<T extends { alias: string; match_type: string; priority?: number | null }>(
   text: string,
-  aliases: Array<{ alias: string; match_type: string; priority?: number | null }>
-) {
+  aliases: T[]
+): T | null {
   const candidates = aliases.filter((row) => matchAliasText(text, row.alias, row.match_type));
   if (candidates.length === 0) return null;
   const scored = candidates.map((row) => ({
@@ -241,7 +241,7 @@ async function bootstrapCafe24FromEnv(ctx: AdapterContext, row: AuthSettingsRow)
   providers.cafe24 = nextCafe24;
 
   await ctx.supabase
-    .from("auth_settings")
+    .from("A_iam_auth_settings")
     .update({ providers, updated_at: new Date().toISOString() })
     .eq("id", row.id);
 
@@ -254,7 +254,7 @@ async function getCafe24Config(ctx?: AdapterContext) {
   }
   const { supabase, orgId, userId } = ctx;
   const { data, error } = await supabase
-    .from("auth_settings")
+    .from("A_iam_auth_settings")
     .select("id, org_id, user_id, providers")
     .eq("org_id", orgId)
     .eq("user_id", userId)
@@ -485,6 +485,7 @@ const adapters: Record<string, ToolAdapter> = {
       const customerResult = await cafe24Request(cfg, `/customers`, {
         query: { shop_no: cfg.shopNo, cellphone: cellphoneRaw },
       });
+      let customerPayload = customerResult.ok ? customerResult.data : null;
       if (!customerResult.ok && customerResult.error.includes("401")) {
         const refreshed = await refreshCafe24Token({
           settingsId: cfg.settingsId,
@@ -499,15 +500,17 @@ const adapters: Record<string, ToolAdapter> = {
             { query: { shop_no: cfg.shopNo, cellphone: cellphoneRaw } }
           );
           if (retry.ok) {
-            customerResult.data = retry.data;
-            customerResult.ok = true;
+            customerPayload = retry.data;
           }
         }
       }
-      if (!customerResult.ok) {
-        return { status: "error", error: { code: "CAFE24_ERROR", message: customerResult.error } };
+      if (!customerPayload) {
+        return {
+          status: "error",
+          error: { code: "CAFE24_ERROR", message: customerResult.ok ? "unknown error" : customerResult.error },
+        };
       }
-      const customers = readCustomers(customerResult.data);
+      const customers = readCustomers(customerPayload);
       if (customers.length === 0) {
         return { status: "error", error: { code: "CUSTOMER_NOT_FOUND", message: "no customer for cellphone" } };
       }
@@ -900,7 +903,7 @@ const adapters: Record<string, ToolAdapter> = {
           status: "error",
           error: {
             code: "INVALID_INPUT",
-            message: `shipping_code is required (receiver lookup failed${receiversRes?.ok === false ? `: ${receiversRes.error}` : ""})`,
+            message: "shipping_code is required (receiver lookup failed)",
           },
         };
       }
@@ -1033,7 +1036,7 @@ const adapters: Record<string, ToolAdapter> = {
       return { status: "error", error: { code: "INVALID_INPUT", message: "query is required" } };
     }
     const { data, error } = await ctx.supabase
-      .from("product_alias")
+      .from("G_com_product_aliases")
       .select("org_id, alias, product_id, match_type, priority, is_active")
       .eq("is_active", true)
       .or(`org_id.eq.${ctx.orgId},org_id.is.null`);
@@ -1229,7 +1232,7 @@ const adapters: Record<string, ToolAdapter> = {
       status: "active",
       created_at: new Date().toISOString(),
     };
-    const { data, error } = await ctx.supabase.from("restock_subscription").insert(payload).select("id").single();
+    const { data, error } = await ctx.supabase.from("G_com_restock_subscriptions").insert(payload).select("id").single();
     if (error) {
       return { status: "error", error: { code: "DB_ERROR", message: error.message } };
     }
@@ -1292,7 +1295,7 @@ const adapters: Record<string, ToolAdapter> = {
     const codeHash = crypto.createHash("sha256").update(code + otpRef).digest("hex");
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
     const recordId = crypto.randomUUID();
-    const { error } = await ctx.supabase.from("otp_verifications").insert({
+    const { error } = await ctx.supabase.from("H_auth_otp_verifications").insert({
       id: recordId,
       org_id: ctx.orgId,
       user_id: ctx.userId,
@@ -1329,7 +1332,7 @@ const adapters: Record<string, ToolAdapter> = {
       return { status: "error", error: { code: "INVALID_INPUT", message: "otp_ref is required" } };
     }
     const { data, error } = await ctx.supabase
-      .from("otp_verifications")
+      .from("H_auth_otp_verifications")
       .select("id, code_hash, expires_at, verified_at")
       .eq("otp_ref", otpRef)
       .maybeSingle();
@@ -1348,7 +1351,7 @@ const adapters: Record<string, ToolAdapter> = {
     }
     const verificationToken = crypto.randomUUID();
     await ctx.supabase
-      .from("otp_verifications")
+      .from("H_auth_otp_verifications")
       .update({ verified_at: new Date().toISOString(), verification_token: verificationToken })
       .eq("id", data.id);
     return {
