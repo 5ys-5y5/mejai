@@ -76,8 +76,11 @@ export function validateToolParams(schema: Record<string, unknown>, params: Reco
 export function checkPolicyConditions(conditions: Record<string, unknown> | null | undefined, params: Record<string, unknown>) {
   if (!conditions) return { ok: true };
   if (conditions.requires_verification && !params.customer_verification_token) {
+    const bypassRaw = (process.env.SOLAPI_BYPASS || "").trim().toLowerCase();
+    const bypassEnabled =
+      bypassRaw === "1" || bypassRaw === "true" || bypassRaw === "y" || bypassRaw === "yes";
     const tempCode = (process.env.SOLAPI_TEMP || "").trim();
-    if (tempCode) {
+    if (bypassEnabled && tempCode) {
       return { ok: true };
     }
     return { ok: false, error: "CUSTOMER_VERIFICATION_REQUIRED" };

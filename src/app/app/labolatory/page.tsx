@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Bot, Copy, ExternalLink, Info, Minus, Plus, Send, Trash2, User, X } from "lucide-react";
+import { AlertTriangle, Bot, Check, Copy, ExternalLink, Info, Minus, Plus, Send, Trash2, User, X } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -31,6 +31,7 @@ type ChatMessage = {
   role: "user" | "bot";
   content: string;
   turnId?: string | null;
+  quickReplies?: Array<{ label: string; value: string }>;
 };
 
 type MessageLogBundle = {
@@ -86,6 +87,7 @@ type ModelState = {
   config: ModelConfig;
   sessionId: string | null;
   messages: ChatMessage[];
+  selectedMessageIds: string[];
   messageLogs: Record<string, MessageLogBundle>;
   lastLogAt: string | null;
   chatExpanded: boolean;
@@ -375,6 +377,7 @@ function createDefaultModel(): ModelState {
     },
     sessionId: null,
     messages: [],
+    selectedMessageIds: [],
     messageLogs: {},
     lastLogAt: null,
     chatExpanded: false,
@@ -551,6 +554,7 @@ export default function LabolatoryPage() {
       ...model,
       sessionId: null,
       messages: [],
+      selectedMessageIds: [],
       messageLogs: {},
       lastLogAt: null,
     }));
@@ -562,6 +566,7 @@ export default function LabolatoryPage() {
         ...model,
         sessionId: null,
         messages: [],
+        selectedMessageIds: [],
         messageLogs: {},
         lastLogAt: null,
       }))
@@ -583,7 +588,12 @@ export default function LabolatoryPage() {
   };
 
   const sendMessage = async (config: ModelConfig, sessionId: string | null, message: string) => {
-    return apiFetch<{ session_id: string; message?: string; turn_id?: string | null }>("/api/labolatory/run", {
+    return apiFetch<{
+      session_id: string;
+      message?: string;
+      turn_id?: string | null;
+      quick_replies?: Array<{ label?: string; value?: string }>;
+    }>("/api/labolatory/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -598,11 +608,9 @@ export default function LabolatoryPage() {
     });
   };
 
-  const handleSend = async (e: React.FormEvent, modelId: string) => {
-    e.preventDefault();
+  const submitMessage = async (modelId: string, text: string) => {
     const target = models.find((model) => model.id === modelId);
     if (!target) return;
-    const text = target.input.trim();
     if (!text) return;
     if (!target.config.kbId) {
       toast.error("KB를 선택하세요.");
@@ -628,13 +636,27 @@ export default function LabolatoryPage() {
     if (result.status === "fulfilled") {
       const res = result.value;
       const botMessageId = res.message ? makeId() : null;
+      const quickReplies = Array.isArray(res.quick_replies)
+        ? res.quick_replies
+            .map((item) => ({
+              label: String(item?.label || item?.value || "").trim(),
+              value: String(item?.value || item?.label || "").trim(),
+            }))
+            .filter((item) => item.label && item.value)
+        : [];
       updateModel(modelId, (model) => ({
         ...model,
         sessionId: res.session_id || model.sessionId,
         messages: botMessageId
           ? [
             ...model.messages,
-            { id: botMessageId, role: "bot", content: res.message || "", turnId: res.turn_id || null },
+            {
+              id: botMessageId,
+              role: "bot",
+              content: res.message || "",
+              turnId: res.turn_id || null,
+              quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
+            },
           ]
           : model.messages,
         sending: false,
@@ -650,6 +672,26 @@ export default function LabolatoryPage() {
       }));
       toast.error("응답에 실패했습니다.");
     }
+  };
+
+  const toggleMessageSelection = (modelId: string, messageId: string) => {
+    updateModel(modelId, (model) => {
+      const exists = model.selectedMessageIds.includes(messageId);
+      return {
+        ...model,
+        selectedMessageIds: exists
+          ? model.selectedMessageIds.filter((id) => id !== messageId)
+          : [...model.selectedMessageIds, messageId],
+      };
+    });
+  };
+
+  const handleSend = async (e: React.FormEvent, modelId: string) => {
+    e.preventDefault();
+    const target = models.find((model) => model.id === modelId);
+    if (!target) return;
+    const text = target.input.trim();
+    await submitMessage(modelId, text);
   };
 
   const loadLogs = async (id: string, messageId: string, sessionIdOverride?: string | null) => {
@@ -718,6 +760,9 @@ export default function LabolatoryPage() {
   const handleCopyTranscript = async (id: string) => {
     const target = models.find((model) => model.id === id);
     if (!target) return;
+    const selectedIds = new Set(target.selectedMessageIds || []);
+    const selectedMessages =
+      selectedIds.size > 0 ? target.messages.filter((msg) => selectedIds.has(msg.id)) : target.messages;
     const auditStatus = (() => {
       const bundles = Object.values(target.messageLogs || {});
       const allMcpLogs = bundles.flatMap((bundle) => bundle.mcp_logs || []);
@@ -856,7 +901,7 @@ export default function LabolatoryPage() {
       `점검 불가: ${auditStatus.blocked.length ? auditStatus.blocked.join(", ") : "-"}`,
       "",
     ].join("\n");
-    const transcript = corePrinciple + target.messages
+    const transcript = corePrinciple + selectedMessages
       .map((msg) => {
         const speaker = msg.role === "user" ? "USER" : "BOT";
         const body =
@@ -928,6 +973,7 @@ export default function LabolatoryPage() {
       updateModel(id, (model) => ({
         ...model,
         messages: [],
+        selectedMessageIds: [],
         messageLogs: {},
         lastLogAt: null,
         sessionId: null,
@@ -942,6 +988,7 @@ export default function LabolatoryPage() {
         ...model,
         sessionId: null,
         messages: [],
+        selectedMessageIds: [],
         messageLogs: {},
         lastLogAt: null,
       }));
@@ -1287,22 +1334,34 @@ export default function LabolatoryPage() {
                           {model.messages.map((msg) => {
                             const hasDebug = msg.role === "bot" && msg.content.includes("debug_prefix");
                             const debugParts = hasDebug ? getDebugParts(msg.content) : null;
+                            const isSelected = model.selectedMessageIds.includes(msg.id);
                             return (
                               <div
                                 key={msg.id}
                                 className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}
                               >
                                 {msg.role === "bot" ? (
-                                  <div className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
-                                    <Bot className="h-4 w-4 text-slate-500" />
+                                  <div
+                                    className={cn(
+                                      "h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center",
+                                      isSelected && "ring-2 ring-emerald-400"
+                                    )}
+                                  >
+                                    {isSelected ? (
+                                      <Check className="h-4 w-4 text-emerald-600" />
+                                    ) : (
+                                      <Bot className="h-4 w-4 text-slate-500" />
+                                    )}
                                   </div>
                                 ) : null}
                                 <div
+                                  onClick={() => toggleMessageSelection(model.id, msg.id)}
                                   className={cn(
-                                    "max-w-[75%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm",
+                                    "relative max-w-[75%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm cursor-pointer transition",
                                     msg.role === "user"
                                       ? "bg-slate-900 text-white"
-                                      : "bg-slate-100 text-slate-700 border border-slate-200"
+                                      : "bg-slate-100 text-slate-700 border border-slate-200",
+                                    isSelected && "ring-2 ring-emerald-400 ring-offset-1"
                                   )}
                                 >
                                   {hasDebug && debugParts ? (
@@ -1316,10 +1375,40 @@ export default function LabolatoryPage() {
                                   ) : (
                                     msg.content
                                   )}
+                                  {msg.role === "bot" && msg.quickReplies && msg.quickReplies.length > 0 ? (
+                                    <div className="mt-3 flex flex-wrap gap-2">
+                                      {msg.quickReplies.map((item, idx) => (
+                                        <button
+                                          key={`${msg.id}-quick-${idx}-${item.value}`}
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            void submitMessage(model.id, item.value);
+                                          }}
+                                          disabled={model.sending}
+                                          className={cn(
+                                            "rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700",
+                                            "hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                          )}
+                                        >
+                                          {item.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : null}
                                 </div>
                                 {msg.role === "user" ? (
-                                  <div className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
-                                    <User className="h-4 w-4 text-slate-500" />
+                                  <div
+                                    className={cn(
+                                      "h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center",
+                                      isSelected && "ring-2 ring-emerald-400"
+                                    )}
+                                  >
+                                    {isSelected ? (
+                                      <Check className="h-4 w-4 text-emerald-600" />
+                                    ) : (
+                                      <User className="h-4 w-4 text-slate-500" />
+                                    )}
                                   </div>
                                 ) : null}
                               </div>

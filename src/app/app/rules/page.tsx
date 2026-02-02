@@ -345,7 +345,8 @@ export default function RulesPage() {
                   </button>
 
                   {isExpanded ? (
-                    <div className="mt-4 grid grid-cols-1 items-stretch gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-2">
+                    <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
                       <div className="relative flex h-full flex-col">
                         <div className="flex min-h-[28px] items-center justify-between">
                           <div className="text-[11px] font-semibold text-slate-700">Input (JSON)</div>
@@ -448,6 +449,7 @@ export default function RulesPage() {
                         {runState?.error ? (
                           <div className="mt-2 text-[11px] text-rose-600">{runState.error}</div>
                         ) : null}
+                      </div>
                       </div>
                     </div>
                   ) : null}

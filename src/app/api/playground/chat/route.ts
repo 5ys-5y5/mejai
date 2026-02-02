@@ -69,6 +69,10 @@ function isValidLlm(value?: string | null) {
   return value === "chatgpt" || value === "gemini";
 }
 
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function isYes(text: string) {
   const trimmed = text.trim();
   return YES_PATTERNS.some((p) => p.test(trimmed));
@@ -151,6 +155,22 @@ function parseAddressParts(text: string) {
     return { zipcode, address1, address2 };
   }
   return { zipcode, address1: cleaned, address2: "" };
+}
+
+function readLookupOrderView(payload: unknown) {
+  const order = payload && typeof payload === "object" ? ((payload as any).order || {}) : {};
+  const core = order?.core && typeof order.core === "object" ? order.core : order;
+  const summary =
+    order?.summary && typeof order.summary === "object"
+      ? order.summary
+      : (order?.order_summary && typeof order.order_summary === "object" ? order.order_summary : {});
+  const items =
+    (Array.isArray(order?.items) && order.items) ||
+    (Array.isArray(order?.order_items) && order.order_items) ||
+    (Array.isArray(order?.order_item) && order.order_item) ||
+    (Array.isArray(order?.products) && order.products) ||
+    [];
+  return { order, core, summary, items };
 }
 
 function extractChannel(text: string) {
@@ -925,10 +945,14 @@ export async function POST(req: NextRequest) {
 
   const allowedToolNames = new Set<string>();
   if (agent.mcp_tool_ids && agent.mcp_tool_ids.length > 0) {
-    const { data: tools } = await context.supabase
-      .from("C_mcp_tools")
-      .select("id, name")
-      .in("id", agent.mcp_tool_ids);
+    const requestedToolIds = agent.mcp_tool_ids.map((id) => String(id)).filter(Boolean);
+    const validToolIds = requestedToolIds.filter((id) => isUuidLike(id));
+    const { data: tools } = validToolIds.length
+      ? await context.supabase
+        .from("C_mcp_tools")
+        .select("id, name")
+        .in("id", validToolIds)
+      : { data: [] as Array<{ id: string; name: string }> };
     (tools || []).forEach((t) => allowedToolNames.add(String(t.name)));
   }
 
@@ -1499,13 +1523,8 @@ export async function POST(req: NextRequest) {
             executedTools.push("lookup_order");
             usedProviders.push(toolProviderMap.lookup_order);
             if (detail.ok) {
-              const order = (detail.data as any)?.order || {};
-              const itemsData =
-                order.order_items ||
-                order.order_item ||
-                order.items ||
-                order.products ||
-                [];
+              const parsed = readLookupOrderView(detail.data);
+              const itemsData = parsed.items;
               const first = Array.isArray(itemsData) ? itemsData[0] : itemsData;
               const name = first?.product_name || first?.name || "-";
               const option = first?.option_name || first?.option_value || "-";
@@ -2073,7 +2092,10 @@ export async function POST(req: NextRequest) {
     const verificationToken = runtimeBotContext.customer_verification_token as string | null;
     candidateCalls.push({
       name: "lookup_order",
-      args: { order_id: orderId, customer_verification_token: verificationToken || undefined },
+      args: {
+        order_id: orderId,
+        customer_verification_token: verificationToken || undefined,
+      },
     });
     if (needsShipmentAction(questionText)) {
       candidateCalls.push({ name: "track_shipment", args: { order_id: orderId } });
@@ -2189,12 +2211,14 @@ export async function POST(req: NextRequest) {
     lastMcpError = result.ok ? null : String(result.error || "MCP_ERROR");
     if (call.name === "lookup_order") {
       if (result.ok) {
-        const order = (result.data as any)?.order || {};
+        const parsed = readLookupOrderView(result.data);
+        const core = parsed.core || {};
+        const summary = parsed.summary || {};
         const orderInfo = [
-          order.order_id || order.order_no || orderId,
-          order.order_date,
-          order.order_summary?.total_amount_due,
-          order.order_summary?.shipping_status,
+          core.order_id || core.order_no || orderId,
+          core.order_date || summary.order_date,
+          summary.total_amount_due ?? core.total_amount_due ?? core.payment_amount,
+          summary.shipping_status || core.shipping_status,
         ].filter(Boolean).join(", ");
         mcpSummary += `주문 조회 성공 (${orderInfo || orderId}). `;
       } else {

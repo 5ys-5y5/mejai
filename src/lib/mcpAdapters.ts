@@ -24,11 +24,6 @@ function maskValue(value: string) {
   return `${value.slice(0, 2)}***${value.slice(-2)}`;
 }
 
-function maskOptional(value: unknown) {
-  if (typeof value !== "string") return value;
-  return maskValue(value);
-}
-
 function normalizeMatchText(text: string) {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
 }
@@ -64,56 +59,7 @@ function chooseBestAlias<T extends { alias: string; match_type: string; priority
   return scored[0].row;
 }
 
-function addOrderSummary(order: Record<string, unknown>) {
-  const paid = order.paid === "T";
-  const canceled = order.canceled === "T";
-  const shippingStatus = String(order.shipping_status || "");
-  const shippingStatusMap: Record<string, string> = {
-    "F": "배송전 (Before Shipment)",
-    "M": "배송중 (Shipping)",
-    "T": "배송완료 (Delivery Completed)",
-    "W": "배송보류 (Shipping Held)",
-    "X": "발주전 (Before Order)",
-  };
-  const statusText = shippingStatusMap[shippingStatus] || shippingStatus;
-  const readTotalAmountDue = (value: unknown) => {
-    if (!value || typeof value !== "object") return undefined;
-    const record = value as Record<string, unknown>;
-    return record.total_amount_due;
-  };
-  const actualTotal = readTotalAmountDue(order.actual_order_amount);
-  const initialTotal = readTotalAmountDue(order.initial_order_amount);
-  return {
-    ...order,
-    order_summary: {
-      paid,
-      canceled,
-      shipping_status: statusText,
-      order_date: order.order_date,
-      payment_method_name: order.payment_method_name,
-      total_amount_due: actualTotal ?? initialTotal,
-    },
-  };
-}
-
-function maskOrderSensitive(order: Record<string, unknown>) {
-  return {
-    ...order,
-    billing_name: maskOptional(order.billing_name),
-    bank_account_no: maskOptional(order.bank_account_no),
-    bank_account_owner_name: maskOptional(order.bank_account_owner_name),
-    member_id: maskOptional(order.member_id),
-  };
-}
-
-function formatOrderData(payload: Record<string, unknown>) {
-  if (!payload || typeof payload !== "object" || !("order" in payload)) return payload;
-  const order = (payload as { order?: Record<string, unknown> }).order;
-  if (!order) return payload;
-  const summarized = addOrderSummary(order);
-  const masked = maskOrderSensitive(summarized);
-  return { ...payload, order: masked };
-}
+const LOOKUP_ORDER_EMBED = "items,receivers,buyer,return";
 
 type Cafe24ProviderConfig = {
   mall_id?: string;
@@ -175,6 +121,11 @@ function readEnv(name: string) {
   if (value) return value;
   const fallback = loadEnvFromFiles();
   return (fallback[name] || "").trim();
+}
+
+function isEnvTrue(name: string) {
+  const value = readEnv(name).toLowerCase();
+  return value === "1" || value === "true" || value === "y" || value === "yes";
 }
 
 function buildSolapiAuthHeader(apiKey: string, apiSecret: string) {
@@ -822,8 +773,9 @@ const adapters: Record<string, ToolAdapter> = {
         return { status: "error", error: { code: "TOKEN_REFRESH_FAILED", message: refreshed.error } };
       }
     }
+    const baseQuery: Record<string, string> = { shop_no: cfg.shopNo, embed: LOOKUP_ORDER_EMBED };
     const result = await cafe24Request(cfg, `/orders/${encodeURIComponent(orderId)}`, {
-      query: { shop_no: cfg.shopNo },
+      query: baseQuery,
     });
     if (!result.ok && result.error.includes("401")) {
       const refreshed = await refreshCafe24Token({
@@ -836,15 +788,15 @@ const adapters: Record<string, ToolAdapter> = {
         const retry = await cafe24Request(
           { ...cfg, accessToken: refreshed.accessToken },
           `/orders/${encodeURIComponent(orderId)}`,
-          { query: { shop_no: cfg.shopNo } }
+          { query: baseQuery }
         );
-        if (retry.ok) return { status: "success", data: formatOrderData(retry.data) };
+        if (retry.ok) return { status: "success", data: retry.data };
       }
     }
     if (!result.ok) {
       return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
     }
-    return { status: "success", data: formatOrderData(result.data) };
+    return { status: "success", data: result.data };
   },
   track_shipment: async (params, ctx) => {
     const orderId = String(params.order_id || params.tracking_number || "");
@@ -1400,32 +1352,44 @@ const adapters: Record<string, ToolAdapter> = {
     if (!destination) {
       return { status: "error", error: { code: "INVALID_INPUT", message: "destination is required" } };
     }
-    const from = readEnv("SOLAPI_FROM");
-    if (!from) {
-      const processKeys = Object.keys(process.env || {}).filter((key) => key.startsWith("SOLAPI_"));
-      const fallbackKeys = Object.keys(loadEnvFromFiles() || {}).filter((key) => key.startsWith("SOLAPI_"));
-      const envKeys = Array.from(new Set([...processKeys, ...fallbackKeys])).sort();
+    const bypassSms = isEnvTrue("SOLAPI_BYPASS");
+    const tempCode = readEnv("SOLAPI_TEMP");
+    if (bypassSms && !tempCode) {
       return {
         status: "error",
         error: {
           code: "CONFIG_ERROR",
-          message: "SOLAPI_FROM is required",
-          detail: {
-            cwd: process.cwd(),
-            solapi_from_len: (process.env.SOLAPI_FROM || "").length,
-            solapi_env_keys: envKeys,
-          },
+          message: "SOLAPI_BYPASS is enabled, but SOLAPI_TEMP is missing",
         },
       };
     }
-    const tempCode = readEnv("SOLAPI_TEMP");
     const code = tempCode ? tempCode : String(Math.floor(100000 + Math.random() * 900000));
-    const testMode = Boolean(tempCode);
+    const testMode = bypassSms || Boolean(tempCode);
     const otpRef = crypto.randomUUID();
-    const text = String(params.text || `인증번호는 ${code} 입니다.`);
-    const sendResult = await solapiSendMessage({ to: destination, from, text });
-    if (!sendResult.ok) {
-      return { status: "error", error: { code: "SOLAPI_ERROR", message: sendResult.error } };
+    if (!bypassSms) {
+      const from = readEnv("SOLAPI_FROM");
+      if (!from) {
+        const processKeys = Object.keys(process.env || {}).filter((key) => key.startsWith("SOLAPI_"));
+        const fallbackKeys = Object.keys(loadEnvFromFiles() || {}).filter((key) => key.startsWith("SOLAPI_"));
+        const envKeys = Array.from(new Set([...processKeys, ...fallbackKeys])).sort();
+        return {
+          status: "error",
+          error: {
+            code: "CONFIG_ERROR",
+            message: "SOLAPI_FROM is required",
+            detail: {
+              cwd: process.cwd(),
+              solapi_from_len: (process.env.SOLAPI_FROM || "").length,
+              solapi_env_keys: envKeys,
+            },
+          },
+        };
+      }
+      const text = String(params.text || `인증번호는 ${code} 입니다.`);
+      const sendResult = await solapiSendMessage({ to: destination, from, text });
+      if (!sendResult.ok) {
+        return { status: "error", error: { code: "SOLAPI_ERROR", message: sendResult.error } };
+      }
     }
     const codeHash = crypto.createHash("sha256").update(code + otpRef).digest("hex");
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
@@ -1492,43 +1456,6 @@ const adapters: Record<string, ToolAdapter> = {
     return {
       status: "success",
       data: { verified: true, customer_verification_token: verificationToken },
-    };
-  },
-  debug_cafe24_order: async (params, ctx) => {
-    const orderId = String(params.order_id || "").trim();
-    if (!orderId) {
-      return { status: "error", error: { code: "INVALID_INPUT", message: "order_id is required" } };
-    }
-    const cfg = await getCafe24Config(ctx);
-    if (!cfg.ok) {
-      return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
-    }
-    if (isTokenExpired(cfg.expiresAt)) {
-      const refreshed = await refreshCafe24Token({
-        settingsId: cfg.settingsId,
-        mallId: cfg.mallId,
-        refreshToken: cfg.refreshToken,
-        supabase: ctx!.supabase,
-      });
-      if (refreshed.ok) {
-        cfg.accessToken = refreshed.accessToken;
-      }
-    }
-    const result = await cafe24Request(cfg, `/orders/${encodeURIComponent(orderId)}`, {
-      query: {
-        shop_no: cfg.shopNo,
-        embed: "receivers,items,buyer,return"
-      },
-    });
-    if (!result.ok) {
-      return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
-    }
-    return {
-      status: "success",
-      data: {
-        raw_order: result.data,
-        note: "This is raw data from Cafe24 API for debugging purposes."
-      }
     };
   },
   search_address: async (params, ctx) => {

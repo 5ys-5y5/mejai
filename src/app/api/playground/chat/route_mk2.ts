@@ -69,6 +69,16 @@ type ProductDecision = {
   source?: string | null;
 };
 
+const EXECUTION_GUARD_RULES = {
+  updateAddress: {
+    missingZipcodeCode: "MISSING_ZIPCODE",
+    askZipcodePrompt: "배송지 변경을 위해 우편번호(5자리)를 알려주세요.",
+    fallbackTicketMessage:
+      "배송지 변경 자동 처리에 실패하여 상담 요청을 접수했습니다. 담당자가 확인 후 안내드릴게요.",
+    fallbackRetryMessage: "배송지 변경 처리 중 오류가 발생했습니다. 다시 시도해 주세요.",
+  },
+} as const;
+
 function buildDebugPrefix(payload: {
   llmModel?: string | null;
   mcpTools?: string[];
@@ -92,6 +102,16 @@ function buildDebugPrefix(payload: {
   usedTemplateIds?: string[];
   usedToolPolicies?: string[];
   conversationMode?: string | null;
+  slotExpectedInput?: string | null;
+  slotOrderId?: string | null;
+  slotPhone?: string | null;
+  slotPhoneMasked?: string | null;
+  slotZipcode?: string | null;
+  slotAddress?: string | null;
+  mcpCandidateCalls?: string[];
+  mcpSkipped?: string[];
+  policyInputRules?: string[];
+  policyToolRules?: string[];
 }) {
   const entries = buildDebugEntries(payload);
   const escapeHtml = (value: string) =>
@@ -158,6 +178,17 @@ function buildDebugEntries(payload: {
   usedTemplateIds?: string[];
   usedToolPolicies?: string[];
   conversationMode?: string | null;
+  slotExpectedInput?: string | null;
+  slotOrderId?: string | null;
+  slotPhone?: string | null;
+  slotPhoneMasked?: string | null;
+  slotZipcode?: string | null;
+  slotAddress?: string | null;
+  mcpCandidateCalls?: string[];
+  mcpSkipped?: string[];
+  policyInputRules?: string[];
+  policyToolRules?: string[];
+  contextContamination?: string[];
 }) {
   const uniq = (items?: string[]) => Array.from(new Set(items || [])).filter(Boolean);
   const providerConfig = payload.providerConfig || {};
@@ -199,12 +230,38 @@ function buildDebugEntries(payload: {
     { key: "KB_ADMIN.rules", value: uniq(payload.usedRuleIds).join(", ") || "-" },
     { key: "KB_ADMIN.templates", value: uniq(payload.usedTemplateIds).join(", ") || "-" },
     { key: "KB_ADMIN.tool_policies", value: uniq(payload.usedToolPolicies).join(", ") || "-" },
+    { key: "SLOT.expected_input", value: payload.slotExpectedInput || "-" },
+    { key: "SLOT.order_id", value: payload.slotOrderId || "-" },
+    { key: "SLOT.phone", value: payload.slotPhone || "-" },
+    { key: "SLOT.phone_masked", value: payload.slotPhoneMasked || "-" },
+    { key: "SLOT.zipcode", value: payload.slotZipcode || "-" },
+    { key: "SLOT.address", value: payload.slotAddress || "-" },
+    { key: "POLICY.input_rules", value: uniq(payload.policyInputRules).join(", ") || "-" },
+    { key: "POLICY.tool_rules", value: uniq(payload.policyToolRules).join(", ") || "-" },
+    { key: "CONTEXT.contamination.count", value: uniq(payload.contextContamination).length || "-" },
+    ...(payload.contextContamination && payload.contextContamination.length > 0
+      ? uniq(payload.contextContamination).map((line, index) => ({
+        key: `CONTEXT.contamination.${index + 1}`,
+        value: line,
+      }))
+      : [{ key: "CONTEXT.contamination", value: "-" }]),
+    { key: "MCP.candidate_calls", value: uniq(payload.mcpCandidateCalls).join(", ") || "-" },
+    ...(payload.mcpSkipped && payload.mcpSkipped.length > 0
+      ? payload.mcpSkipped.map((line, index) => ({
+        key: `MCP.skipped.${index + 1}`,
+        value: line,
+      }))
+      : [{ key: "MCP.skipped", value: "-" }]),
     { key: "MODE", value: payload.conversationMode || "-" },
   ];
 }
 
 function isValidLlm(value?: string | null) {
   return value === "chatgpt" || value === "gemini";
+}
+
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 function normalizeMatchText(text: string) {
@@ -252,6 +309,17 @@ function extractPhone(text: string) {
   return null;
 }
 
+function maskPhone(value: string | null | undefined) {
+  const digits = String(value || "").replace(/[^\d]/g, "");
+  if (!digits) return "-";
+  if (digits.length <= 4) return `***${digits}`;
+  return `${"*".repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
+}
+
+function normalizePhoneDigits(value: string | null | undefined) {
+  return String(value || "").replace(/[^\d]/g, "");
+}
+
 function extractOtpCode(text: string) {
   const match = text.match(/\b\d{4,8}\b/);
   return match ? match[0] : null;
@@ -274,15 +342,25 @@ function isLikelyOrderId(value: string | null | undefined) {
   if (!v) return false;
   if (/[가-힣\s]/.test(v)) return false;
   if (/^01\d{8,9}$/.test(v)) return false;
-  if (/^\d{6,20}$/.test(v)) return true;
+  // Guard against OTP/short numeric values being treated as order ids.
+  if (/^\d{6,20}$/.test(v)) return v.length >= 12;
   if (/^\d{4,12}-\d{3,12}(?:-\d{1,6})?$/.test(v)) return true;
   if (/^[0-9A-Za-z\-]{6,30}$/.test(v)) return true;
   return false;
 }
 
+function isInvalidOrderIdError(errorText: string | null | undefined) {
+  const text = String(errorText || "").toLowerCase();
+  return text.includes("invalid order number") || text.includes("parameter.order_id");
+}
+
 function extractZipcode(text: string) {
   const match = text.match(/\b\d{5}\b/);
   return match ? match[0] : null;
+}
+
+function isLikelyZipcode(value: string | null | undefined) {
+  return /^\d{5}$/.test(String(value || "").trim());
 }
 
 function parseAddressParts(text: string) {
@@ -300,9 +378,115 @@ function parseAddressParts(text: string) {
   return { zipcode, address1: cleaned, address2: "" };
 }
 
+function normalizeAddressText(text: string) {
+  return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+function cleanAddressCandidate(text: string) {
+  let v = normalizeAddressText(text);
+  if (!v) return "";
+  // "배송지를", "주소를" 같은 목적격 조사 제거
+  v = v.replace(/^(?:배송지|주소)?\s*(?:를|을)\s*/g, "");
+  // "으로/로 바꾸고 싶어요" 류의 의도 표현 제거
+  v = v.replace(
+    /\s*(?:으로|로)?\s*(?:바꿔|바꾸|변경|수정|고쳐|옮겨)(?:\S*\s*)*(?:주세요|줘요|줘|요|싶어요|싶습니다|원해요|원합니다)?[.!?~]*$/g,
+    ""
+  );
+  v = v.replace(/[,.!?~]+$/g, "").trim();
+  return v;
+}
+
+function hasKoreanAddressCue(text: string) {
+  const v = normalizeAddressText(text);
+  if (!v) return false;
+  // NOTE: Avoid \b with Korean text; it can miss valid matches in JS.
+  return /[가-힣]{2,}(시|도|군|구|동|로|길|읍|면)(\s|$)/.test(v);
+}
+
+function isLikelyAddressDetailOnly(text: string) {
+  const v = normalizeAddressText(text);
+  if (!v) return false;
+  // full addresses usually contain one of these location tokens.
+  if (hasKoreanAddressCue(v)) return false;
+  return /(?:[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*(?:호|층|실|동)?|\b\d{1,5}\b)/.test(v);
+}
+
+function extractAddressDetail(text: string) {
+  const v = normalizeAddressText(text);
+  if (!v) return "";
+  const detailMatch = v.match(
+    /((?:\d+\s*동\s*)?(?:[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*(?:호|층|실)?|\d{1,5}))$/i
+  );
+  if (detailMatch) return normalizeAddressText(detailMatch[1]);
+  const matches = Array.from(
+    v.matchAll(/(?:\d+\s*동\s*[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*호|\d+\s*동|[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*(?:호|층|실)?|\b\d{1,5}\b)/gi)
+  );
+  if (matches.length > 0) {
+    return normalizeAddressText(matches[matches.length - 1][0]);
+  }
+  return "";
+}
+
+function splitAddressForUpdate(
+  rawAddress: string,
+  opts?: { baseAddress?: string | null; fallbackBaseAddress?: string | null }
+) {
+  const raw = normalizeAddressText(rawAddress);
+  const parsed = parseAddressParts(raw);
+  const baseAddress = normalizeAddressText(opts?.baseAddress || "");
+  const fallbackBaseAddress = normalizeAddressText(opts?.fallbackBaseAddress || "");
+
+  if (baseAddress) {
+    const detailFromSuffix = raw.startsWith(baseAddress)
+      ? normalizeAddressText(raw.slice(baseAddress.length))
+      : "";
+    const detail = detailFromSuffix || extractAddressDetail(raw) || parsed.address2;
+    return {
+      zipcode: parsed.zipcode,
+      address1: baseAddress,
+      address2: detail,
+    };
+  }
+
+  if (isLikelyAddressDetailOnly(raw) && fallbackBaseAddress) {
+    const detail = extractAddressDetail(raw) || raw;
+    return {
+      zipcode: parsed.zipcode,
+      address1: fallbackBaseAddress,
+      address2: detail,
+    };
+  }
+
+  return parsed;
+}
+
+function buildLookupOrderArgs(orderId: string, customerVerificationToken: string | null) {
+  const args: Record<string, unknown> = { order_id: orderId };
+  if (customerVerificationToken) {
+    args.customer_verification_token = customerVerificationToken;
+  }
+  return args;
+}
+
+function readLookupOrderView(payload: unknown) {
+  const order = payload && typeof payload === "object" ? ((payload as any).order || {}) : {};
+  const core = order?.core && typeof order.core === "object" ? order.core : order;
+  const summary =
+    order?.summary && typeof order.summary === "object"
+      ? order.summary
+      : (order?.order_summary && typeof order.order_summary === "object" ? order.order_summary : {});
+  const items =
+    (Array.isArray(order?.items) && order.items) ||
+    (Array.isArray(order?.order_items) && order.order_items) ||
+    (Array.isArray(order?.order_item) && order.order_item) ||
+    (Array.isArray(order?.products) && order.products) ||
+    [];
+  return { order, core, summary, items };
+}
+
 function extractAddress(text: string, orderId: string | null, phone: string | null, zipcode: string | null) {
   const keywordMatch = text.search(/주소|배송지/);
-  const hasKoreanAddressToken = /[가-힣]{2,}(시|도|군|구|동|로|길|읍|면)\b/.test(text);
+  const hasKoreanAddressToken = hasKoreanAddressCue(text);
   const hasZip = Boolean(zipcode || /\(\s*\d{5}\s*\)/.test(text));
   if (keywordMatch === -1 && !hasKoreanAddressToken && !hasZip) return null;
   let segment = keywordMatch === -1 ? text : text.slice(keywordMatch);
@@ -313,8 +497,9 @@ function extractAddress(text: string, orderId: string | null, phone: string | nu
   if (phone) segment = segment.replace(phone, " ");
   if (zipcode) segment = segment.replace(zipcode, " ");
   segment = segment.replace(/주문번호[^\s]*/gi, " ");
-  segment = segment.replace(/\s+/g, " ").trim();
-  if (segment.length < 8) return null;
+  segment = cleanAddressCandidate(segment);
+  if (!segment) return null;
+  if (!hasKoreanAddressCue(segment) && !isLikelyAddressDetailOnly(segment) && segment.length < 8) return null;
   return segment;
 }
 
@@ -482,14 +667,23 @@ async function insertEvent(
   payload: Record<string, unknown>,
   botContext: Record<string, unknown>
 ) {
-  await context.supabase.from("F_audit_events").insert({
-    session_id: sessionId,
-    turn_id: turnId,
-    event_type: eventType,
-    payload,
-    created_at: nowIso(),
-    bot_context: botContext,
-  });
+  try {
+    await context.supabase.from("F_audit_events").insert({
+      session_id: sessionId,
+      turn_id: turnId,
+      event_type: eventType,
+      payload,
+      created_at: nowIso(),
+      bot_context: botContext,
+    });
+  } catch (error) {
+    console.warn("[playground/chat_mk2] failed to insert event log", {
+      eventType,
+      sessionId,
+      turnId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function upsertDebugLog(
@@ -497,16 +691,24 @@ async function upsertDebugLog(
   payload: { sessionId: string; turnId: string; seq?: number | null; prefixJson: Record<string, unknown> | null }
 ) {
   if (!payload.prefixJson) return;
-  await context.supabase.from("F_audit_turn_specs").upsert(
-    {
-      session_id: payload.sessionId,
-      turn_id: payload.turnId,
-      seq: payload.seq ?? null,
-      prefix_json: payload.prefixJson,
-      created_at: nowIso(),
-    },
-    { onConflict: "turn_id" }
-  );
+  try {
+    await context.supabase.from("F_audit_turn_specs").upsert(
+      {
+        session_id: payload.sessionId,
+        turn_id: payload.turnId,
+        seq: payload.seq ?? null,
+        prefix_json: payload.prefixJson,
+        created_at: nowIso(),
+      },
+      { onConflict: "turn_id" }
+    );
+  } catch (error) {
+    console.warn("[playground/chat_mk2] failed to upsert debug log", {
+      sessionId: payload.sessionId,
+      turnId: payload.turnId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
 async function insertFinalTurn(
@@ -558,11 +760,42 @@ async function callMcpTool(
   botContext: Record<string, unknown>,
   allowedTools: Set<string> | undefined
 ) {
+  const auditBlocked = async (
+    status: string,
+    reason: string,
+    toolId?: string | null,
+    responsePayload?: Record<string, unknown> | null
+  ) => {
+    try {
+      await context.supabase.from("F_audit_mcp_tools").insert({
+        org_id: context.orgId,
+        session_id: sessionId,
+        turn_id: turnId,
+        tool_id: toolId || null,
+        tool_name: tool,
+        request_payload: params,
+        response_payload: responsePayload || null,
+        status,
+        latency_ms: 0,
+        masked_fields: [],
+        policy_decision: { allowed: false, reason },
+        created_at: nowIso(),
+        bot_context: botContext,
+      });
+    } catch (error) {
+      console.warn("[playground/chat_mk2] failed to audit blocked MCP call", {
+        tool,
+        reason,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
   if (!allowedTools) {
     console.warn("[playground/chat_mk2] allowedTools missing", { tool, sessionId, turnId });
   }
   const allowed = allowedTools ?? new Set<string>();
   if (!allowed.has(tool)) {
+    await auditBlocked("blocked", "TOOL_NOT_ALLOWED_FOR_AGENT");
     return { ok: false, error: "TOOL_NOT_ALLOWED_FOR_AGENT" };
   }
   const { data: toolRow } = await context.supabase
@@ -572,6 +805,7 @@ async function callMcpTool(
     .eq("is_active", true)
     .maybeSingle();
   if (!toolRow) {
+    await auditBlocked("blocked", "TOOL_NOT_FOUND");
     return { ok: false, error: "TOOL_NOT_FOUND" };
   }
   const policy = await context.supabase
@@ -581,6 +815,7 @@ async function callMcpTool(
     .eq("tool_id", toolRow.id)
     .maybeSingle();
   if (!policy.data || !policy.data.is_allowed) {
+    await auditBlocked("blocked", "POLICY_BLOCK", toolRow.id);
     return { ok: false, error: "POLICY_BLOCK" };
   }
   const { callAdapter } = await import("@/lib/mcpAdapters");
@@ -588,19 +823,57 @@ async function callMcpTool(
 
   const schema = (toolRow as any).schema_json || {};
   const validation = validateToolParams(schema as Record<string, unknown>, params);
-  if (!validation.ok) return { ok: false, error: validation.error };
+  if (!validation.ok) {
+    await auditBlocked("invalid_params", "INVALID_PARAMS", toolRow.id, {
+      error: validation.error || "INVALID_PARAMS",
+    });
+    return { ok: false, error: validation.error };
+  }
 
   const conditionCheck = checkPolicyConditions(policy.data.conditions, params);
-  if (!conditionCheck.ok) return { ok: false, error: conditionCheck.error };
+  if (!conditionCheck.ok) {
+    await auditBlocked("blocked", String(conditionCheck.error || "POLICY_CONDITION_BLOCK"), toolRow.id);
+    return { ok: false, error: conditionCheck.error };
+  }
 
   const start = Date.now();
   const adapterKey = policy.data.adapter_key || tool;
-  const result = await callAdapter(adapterKey, params, {
-    supabase: context.supabase,
-    orgId: context.orgId,
-    userId: context.user.id,
-  });
-  const latency = Date.now() - start;
+  let result: any;
+  let latency = 0;
+  try {
+    result = await callAdapter(adapterKey, params, {
+      supabase: context.supabase,
+      orgId: context.orgId,
+      userId: context.user.id,
+    });
+    latency = Date.now() - start;
+  } catch (error) {
+    latency = Date.now() - start;
+    const message = error instanceof Error ? error.message : String(error);
+    try {
+      await context.supabase.from("F_audit_mcp_tools").insert({
+        org_id: context.orgId,
+        session_id: sessionId,
+        turn_id: turnId,
+        tool_id: toolRow.id,
+        tool_name: tool,
+        request_payload: params,
+        response_payload: { error: message },
+        status: "error",
+        latency_ms: latency,
+        masked_fields: [],
+        policy_decision: { allowed: true, reason: "ADAPTER_THROWN_ERROR" },
+        created_at: nowIso(),
+        bot_context: botContext,
+      });
+    } catch (auditError) {
+      console.warn("[playground/chat_mk2] failed to audit MCP adapter error", {
+        tool,
+        error: auditError instanceof Error ? auditError.message : String(auditError),
+      });
+    }
+    return { ok: false, error: `ADAPTER_ERROR: ${message}` };
+  }
   const responsePayload = result.data ? { ...result.data } : {};
   const masked = applyMasking(responsePayload, policy.data.masking_rules);
 
@@ -608,21 +881,29 @@ async function callMcpTool(
     result.status === "error"
       ? { ...(masked.masked as Record<string, unknown>), error: result.error || null }
       : masked.masked;
-  await context.supabase.from("F_audit_mcp_tools").insert({
-    org_id: context.orgId,
-    session_id: sessionId,
-    turn_id: turnId,
-    tool_id: toolRow.id,
-    tool_name: toolRow.name,
-    request_payload: params,
-    response_payload: responsePayloadWithError,
-    status: result.status,
-    latency_ms: latency,
-    masked_fields: masked.maskedFields,
-    policy_decision: { allowed: true },
-    created_at: nowIso(),
-    bot_context: botContext,
-  });
+  try {
+    await context.supabase.from("F_audit_mcp_tools").insert({
+      org_id: context.orgId,
+      session_id: sessionId,
+      turn_id: turnId,
+      tool_id: toolRow.id,
+      tool_name: toolRow.name,
+      request_payload: params,
+      response_payload: responsePayloadWithError,
+      status: result.status,
+      latency_ms: latency,
+      masked_fields: masked.maskedFields,
+      policy_decision: { allowed: true },
+      created_at: nowIso(),
+      bot_context: botContext,
+    });
+  } catch (auditError) {
+    console.warn("[playground/chat_mk2] failed to audit MCP result", {
+      tool,
+      status: result.status,
+      error: auditError instanceof Error ? auditError.message : String(auditError),
+    });
+  }
 
   if (result.status !== "success") {
     const err = result.error as { code?: string; message?: string } | string | null | undefined;
@@ -652,11 +933,86 @@ function isRestockInquiry(text: string) {
 function detectIntent(text: string) {
   if (isRestockSubscribe(text)) return "restock_subscribe";
   if (isRestockInquiry(text)) return "restock_inquiry";
-  if (/주소|배송지|수령인|연락처/.test(text)) return "change";
-  if (/조회|확인/.test(text) && /배송|송장|출고|운송장/.test(text)) return "order_lookup";
-  if (/배송|송장|출고|운송장|배송조회/.test(text)) return "shipment";
-  if (/환불|취소|반품|교환/.test(text)) return "refund";
+  if (/주소|배송지|수령인|연락처/.test(text)) return "order_change";
+  if (/조회|확인/.test(text) && /배송|송장|출고|운송장/.test(text)) return "shipping_inquiry";
+  if (/배송|송장|출고|운송장|배송조회/.test(text)) return "shipping_inquiry";
+  if (/환불|취소|반품|교환/.test(text)) return "refund_request";
   return "general";
+}
+
+function isAddressChangeUtterance(text: string) {
+  const v = String(text || "");
+  return /(주소|배송지|수령지|받는\s*곳).*(바꿔|바꾸|변경|수정|고쳐|옮겨)|(?:바꿔|바꾸|변경|수정|고쳐|옮겨).*(주소|배송지|수령지|받는\s*곳)/.test(
+    v
+  );
+}
+
+function toOrderDateShort(value: string | null | undefined) {
+  const raw = String(value || "").trim();
+  if (!raw) return "-";
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+    const dd = String(parsed.getDate()).padStart(2, "0");
+    const hh = String(parsed.getHours()).padStart(2, "0");
+    const mi = String(parsed.getMinutes()).padStart(2, "0");
+    return `${mm}/${dd} ${hh}:${mi}`;
+  }
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (m) return `${m[2]}/${m[3]} ${m[4]}:${m[5]}`;
+  return raw;
+}
+
+function toMoneyText(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw || raw === "-") return "-";
+  const num = Number(raw.replace(/,/g, ""));
+  if (!Number.isFinite(num)) return raw;
+  return num.toLocaleString("ko-KR");
+}
+
+function isYesText(text: string) {
+  const v = String(text || "").trim().toLowerCase();
+  if (!v) return false;
+  return /^(네|네요|예|예요|응|응응|맞아|맞아요|맞습니다|yes|y)$/.test(v);
+}
+
+function isNoText(text: string) {
+  const v = String(text || "").trim().toLowerCase();
+  if (!v) return false;
+  return /^(아니|아니오|아니요|아뇨|no|n)$/.test(v);
+}
+
+function buildAddressSearchKeywords(raw: string) {
+  const cleaned = String(raw || "")
+    .replace(/^(주소|배송지)\s*[:\-]?\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!cleaned) return [];
+  const out: string[] = [cleaned];
+  const tokens = cleaned.split(" ").filter(Boolean);
+  const isDetailToken = (token: string) =>
+    /^\d{1,5}$/.test(token) ||
+    /^\d{1,5}(호|층|동|실)$/.test(token) ||
+    /^[A-Za-z]?\d{1,5}$/.test(token);
+  // JUSO는 상세 동/호수까지 붙으면 매칭 실패가 잦아서 뒤 토큰을 단계적으로 제거하며 재시도한다.
+  if (tokens.length >= 2) {
+    let end = tokens.length;
+    while (end > 1) {
+      const last = tokens[end - 1];
+      if (!isDetailToken(last)) break;
+      end -= 1;
+      const trimmed = tokens.slice(0, end).join(" ").trim();
+      if (trimmed && !out.includes(trimmed)) out.push(trimmed);
+    }
+  }
+  return out;
+}
+
+function normalizeOrderChangeAddressPrompt(intent: string, text: string) {
+  if (intent !== "order_change") return text;
+  if (!/우편번호/.test(text)) return text;
+  return "배송지 변경을 위해 새 주소를 알려주세요. 예) 주소: 서울시 ...";
 }
 
 async function extractEntitiesWithLlm(text: string, model: "chatgpt" | "gemini") {
@@ -676,11 +1032,120 @@ Output Schema: { "order_id": string | null, "phone": string | null, "address": s
   }
 }
 
+async function callAddressSearchWithAudit(
+  context: any,
+  keyword: string,
+  sessionId: string,
+  turnId: string | null,
+  botContext: Record<string, unknown>
+) {
+  const { callAdapter } = await import("@/lib/mcpAdapters");
+  const start = Date.now();
+  const keywords = buildAddressSearchKeywords(keyword);
+  let result: any = {
+    status: "error",
+    error: { code: "INVALID_INPUT", message: "keyword is required" },
+    data: {},
+  };
+  const attempts: Array<{ keyword: string; status: string; total_count?: number | string; error?: string }> = [];
+  let latency = 0;
+  if (keywords.length > 0) {
+    for (const kw of keywords) {
+      try {
+        const current = await callAdapter(
+          "search_address",
+          { keyword: kw },
+          { supabase: context.supabase, orgId: context.orgId, userId: context.user.id }
+        );
+        attempts.push({
+          keyword: kw,
+          status: current?.status || "error",
+          total_count: (current as any)?.data?.totalCount,
+          error:
+            current?.status === "error"
+              ? String((current as any)?.error?.message || (current as any)?.error || "ADDRESS_SEARCH_FAILED")
+              : undefined,
+        });
+        result = current;
+        const rows = Array.isArray((current as any)?.data?.results) ? (current as any).data.results : [];
+        if (current?.status === "success" && rows.length > 0) {
+          break;
+        }
+      } catch (error) {
+        attempts.push({
+          keyword: kw,
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+        });
+        result = {
+          status: "error",
+          error: { code: "ADDRESS_SEARCH_THROWN", message: error instanceof Error ? error.message : String(error) },
+          data: {},
+        };
+      }
+    }
+  }
+  latency = Date.now() - start;
+  if (result?.data && typeof result.data === "object") {
+    result.data = {
+      ...(result.data as Record<string, unknown>),
+      _search_attempts: attempts,
+      _search_keywords: keywords,
+    };
+  }
+  try {
+    await context.supabase.from("F_audit_mcp_tools").insert({
+      org_id: context.orgId,
+      session_id: sessionId,
+      turn_id: turnId,
+      tool_id: null,
+      tool_name: "search_address",
+      request_payload: { keyword, search_keywords: keywords },
+      response_payload: result.status === "success" ? result.data || {} : { error: result.error || null },
+      status: result.status,
+      latency_ms: latency,
+      masked_fields: [],
+      policy_decision: { allowed: true, reason: "INTERNAL_FALLBACK" },
+      created_at: nowIso(),
+      bot_context: botContext,
+    });
+  } catch {
+    // noop: address search audit insert failure should not block response
+  }
+  return result;
+}
+
 export async function POST(req: NextRequest) {
   const debugEnabled = process.env.DEBUG_PLAYGROUND_CHAT === "1" || process.env.NODE_ENV !== "production";
   let latestTurnId: string | null = null;
-  const respond = (payload: Record<string, unknown>, init?: ResponseInit) =>
-    NextResponse.json({ ...payload, turn_id: latestTurnId }, init);
+  const deriveQuickReplies = (message?: unknown) => {
+    const text = typeof message === "string" ? message : "";
+    if (!text) return [] as Array<{ label: string; value: string }>;
+    if (text.includes("맞으면 '네', 아니면 '아니오'")) {
+      return [
+        { label: "네", value: "네" },
+        { label: "아니오", value: "아니오" },
+      ];
+    }
+    const numberMatches = Array.from(text.matchAll(/-\s*(\d{1,2})번\s*\|/g))
+      .map((m) => Number(m[1]))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (numberMatches.length > 0) {
+      const uniq = Array.from(new Set(numberMatches)).slice(0, 9);
+      return uniq.map((n) => ({ label: `${n}번`, value: String(n) }));
+    }
+    return [] as Array<{ label: string; value: string }>;
+  };
+  const respond = (payload: Record<string, unknown>, init?: ResponseInit) => {
+    const quickReplies =
+      Array.isArray(payload.quick_replies) && payload.quick_replies.length > 0
+        ? payload.quick_replies
+        : deriveQuickReplies(payload.message);
+    return NextResponse.json(
+      { ...payload, turn_id: latestTurnId, ...(quickReplies.length > 0 ? { quick_replies: quickReplies } : {}) },
+      init
+    );
+  };
   try {
     const authHeader = req.headers.get("authorization") || "";
     const cookieHeader = req.headers.get("cookie") || "";
@@ -789,12 +1254,23 @@ export async function POST(req: NextRequest) {
     const compiledPolicy = compilePolicy(policyPacks);
 
     const allowedToolNames = new Set<string>();
+    const allowedToolIdByName = new Map<string, string>();
     if (agent.mcp_tool_ids && agent.mcp_tool_ids.length > 0) {
-      const { data: tools } = await context.supabase
-        .from("C_mcp_tools")
-        .select("id, name")
-        .in("id", agent.mcp_tool_ids);
-      (tools || []).forEach((t) => allowedToolNames.add(String(t.name)));
+      const requestedToolIds = agent.mcp_tool_ids.map((id) => String(id)).filter(Boolean);
+      const validToolIds = requestedToolIds.filter((id) => isUuidLike(id));
+      const { data: tools } = validToolIds.length
+        ? await context.supabase
+          .from("C_mcp_tools")
+          .select("id, name")
+          .in("id", validToolIds)
+        : { data: [] as Array<{ id: string; name: string }> };
+      (tools || []).forEach((t) => {
+        const name = String(t.name || "").trim();
+        const id = String((t as any).id || "").trim();
+        if (!name) return;
+        allowedToolNames.add(name);
+        if (id) allowedToolIdByName.set(name, id);
+      });
     }
 
     let sessionId = String(body?.session_id || "").trim();
@@ -847,6 +1323,7 @@ export async function POST(req: NextRequest) {
     let derivedPhone = extractPhone(message);
     let derivedZipcode = extractZipcode(message);
     let derivedAddress = extractAddress(message, derivedOrderId, derivedPhone, derivedZipcode);
+    let updateConfirmAcceptedThisTurn = false;
     const lastAnswer =
       typeof lastTurn?.final_answer === "string"
         ? lastTurn?.final_answer
@@ -857,8 +1334,12 @@ export async function POST(req: NextRequest) {
       const text = String(lastAnswer || "");
       if (text.includes("인증번호")) return "otp_code";
       const addressPrompt = text.includes("주소") || text.includes("배송지");
+      const zipcodeOnlyPrompt =
+        text.includes("우편번호") &&
+        !addressPrompt &&
+        /(알려|입력|필요)/.test(text);
+      if (zipcodeOnlyPrompt) return "zipcode";
       if (addressPrompt) return "address";
-      if (text.includes("우편번호")) return "zipcode";
       if (text.includes("휴대폰 번호")) {
         if (text.includes("주문번호") && text.includes("또는")) return "order_id_or_phone";
         return "phone";
@@ -876,7 +1357,9 @@ export async function POST(req: NextRequest) {
       derivedOrderId = null;
       derivedPhone = null;
       derivedAddress = null;
-      derivedZipcode = extractZipcode(message) || message.replace(/[^\d]/g, "").slice(0, 5) || null;
+      const rawDigits = message.replace(/[^\d]/g, "");
+      const strictFive = /^\d{5}$/.test(rawDigits) ? rawDigits : null;
+      derivedZipcode = extractZipcode(message) || strictFive || null;
     } else if (expectedInput === "phone") {
       derivedOrderId = null;
       derivedZipcode = null;
@@ -892,7 +1375,12 @@ export async function POST(req: NextRequest) {
       derivedPhone = null;
       derivedZipcode = extractZipcode(message);
       const cleaned = message.replace(/^(주소|배송지)\s*[:\-]?\s*/g, "").trim();
-      derivedAddress = extractAddress(message, null, null, derivedZipcode) || cleaned || null;
+      const extractedAddress = extractAddress(message, null, null, derivedZipcode) || cleaned || null;
+      if (extractedAddress && isLikelyAddressDetailOnly(extractedAddress)) {
+        derivedAddress = extractAddressDetail(extractedAddress) || extractedAddress;
+      } else {
+        derivedAddress = extractedAddress;
+      }
     } else if (expectedInput === "order_id_or_phone") {
       derivedZipcode = null;
       derivedAddress = null;
@@ -934,11 +1422,39 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (prevBotContext.address_pending && prevBotContext.address_stage === "awaiting_zipcode") {
+    if (prevBotContext.address_pending && prevBotContext.address_stage === "awaiting_zipcode_confirm") {
       const pendingAddress = String(prevBotContext.pending_address || "").trim();
-      const pendingZip = extractZipcode(message) || message.replace(/[^\d]/g, "").slice(0, 5);
-      if (!pendingZip) {
-        const prompt = "우편번호를 알려주세요.";
+      const pendingZipcode = String(prevBotContext.pending_zipcode || "").trim();
+      const candidateRoad = String(prevBotContext.pending_road_addr || "").trim();
+      const candidateJibun = String(prevBotContext.pending_jibun_addr || "").trim();
+      const pendingOrderId = String(prevBotContext.pending_order_id || "").trim();
+      if (isYesText(message) && pendingZipcode) {
+        derivedZipcode = pendingZipcode;
+        derivedAddress = pendingAddress || derivedAddress;
+        if (isLikelyOrderId(pendingOrderId)) {
+          derivedOrderId = pendingOrderId;
+        }
+      } else if (isNoText(message)) {
+        const prompt = "주소를 다시 입력해 주세요. 입력하신 주소로 우편번호를 다시 찾아볼게요.";
+        const reply = makeReply(prompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+              selected_order_id: prevSelectedOrderId,
+              address_pending: true,
+              address_stage: "awaiting_address",
+              pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+            },
+          });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      } else {
+        const prompt = `검색된 주소가 맞는지 확인해 주세요.\n- 지번주소: ${candidateJibun || pendingAddress || "-"}\n- 도로명주소: ${candidateRoad || "-"}\n- 우편번호: ${pendingZipcode || "-"}\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
         const reply = makeReply(prompt);
         await insertTurn({
           session_id: sessionId,
@@ -951,15 +1467,201 @@ export async function POST(req: NextRequest) {
             entity: prevEntity,
             selected_order_id: prevSelectedOrderId,
             address_pending: true,
-            address_stage: "awaiting_zipcode",
-            pending_address: pendingAddress || null,
-          },
-        });
+              address_stage: "awaiting_zipcode_confirm",
+              pending_address: pendingAddress || null,
+              pending_zipcode: pendingZipcode || null,
+              pending_road_addr: candidateRoad || null,
+              pending_jibun_addr: candidateJibun || null,
+              pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+            },
+          });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+    }
+    if (prevBotContext.address_pending && prevBotContext.address_stage === "awaiting_zipcode") {
+      const pendingAddress = String(prevBotContext.pending_address || "").trim();
+      const pendingDigits = message.replace(/[^\d]/g, "");
+      const pendingStrictFive = /^\d{5}$/.test(pendingDigits) ? pendingDigits : "";
+      const pendingZip = extractZipcode(message) || pendingStrictFive;
+      if (!pendingZip) {
+        if (pendingAddress) {
+          const search = await callAddressSearchWithAudit(
+            context,
+            pendingAddress,
+            sessionId,
+            latestTurnId,
+            { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+          );
+          if (search.status === "success") {
+            const rows = Array.isArray((search.data as any)?.results) ? (search.data as any).results : [];
+            const first = rows[0];
+            const candidateZip = String(first?.zipNo || "").trim();
+            const roadAddr = String(first?.roadAddr || first?.roadAddrPart1 || "").trim();
+            const jibunAddr = String(first?.jibunAddr || "").trim();
+            if (candidateZip) {
+              const prompt = `입력하신 주소로 우편번호를 찾았습니다.\n- 지번주소: ${jibunAddr || pendingAddress}\n- 도로명주소: ${roadAddr || "-"}\n- 우편번호: ${candidateZip}\n위 정보가 맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+              const reply = makeReply(prompt);
+              await insertTurn({
+                session_id: sessionId,
+                seq: nextSeq,
+                transcript_text: message,
+                answer_text: reply,
+                final_answer: reply,
+                bot_context: {
+                  intent_name: resolvedIntent,
+                  entity: prevEntity,
+                  selected_order_id: prevSelectedOrderId,
+                  address_pending: true,
+                  address_stage: "awaiting_zipcode_confirm",
+                  pending_address: pendingAddress || null,
+                  pending_zipcode: candidateZip,
+                  pending_road_addr: roadAddr || null,
+                  pending_jibun_addr: jibunAddr || null,
+                },
+              });
+              return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+            }
+          } else {
+            await insertEvent(
+              context,
+              sessionId,
+              latestTurnId,
+              "MCP_TOOL_FAILED",
+              { tool: "search_address", error: (search as any).error || "ADDRESS_SEARCH_FAILED" },
+              { intent_name: resolvedIntent }
+            );
+          }
+        }
+        const prompt = "입력하신 주소를 확인할 수 없습니다. 도로명/지번 포함 주소를 다시 입력해 주세요.";
+        const reply = makeReply(prompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+              selected_order_id: prevSelectedOrderId,
+              address_pending: true,
+              address_stage: "awaiting_address",
+              pending_order_id: isLikelyOrderId(prevSelectedOrderId) ? prevSelectedOrderId : null,
+            },
+          });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
       derivedZipcode = pendingZip || null;
       derivedAddress = pendingAddress || derivedAddress;
     }
+    if (prevBotContext.address_pending && prevBotContext.address_stage === "awaiting_address") {
+      const nextAddress = extractAddress(message, null, null, extractZipcode(message)) || message.trim();
+      if (!nextAddress) {
+        const prompt = "변경할 주소를 다시 입력해 주세요.";
+        const reply = makeReply(prompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            address_pending: true,
+            address_stage: "awaiting_address",
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      if (isLikelyAddressDetailOnly(nextAddress)) {
+        derivedAddress = extractAddressDetail(nextAddress) || nextAddress;
+      } else {
+        derivedAddress = nextAddress;
+      }
+    }
+    if (prevBotContext.change_pending && prevBotContext.change_stage === "awaiting_update_confirm") {
+      const pendingOrderId = String(prevBotContext.pending_order_id || "").trim();
+      const pendingAddress = String(prevBotContext.pending_address || "").trim();
+      const pendingZipcode = String(prevBotContext.pending_zipcode || "").trim();
+      const beforeAddress = String(prevBotContext.pending_before_address || "").trim();
+      if (isYesText(message)) {
+        updateConfirmAcceptedThisTurn = true;
+        if (isLikelyOrderId(pendingOrderId)) derivedOrderId = pendingOrderId;
+        if (pendingAddress) derivedAddress = pendingAddress;
+        if (isLikelyZipcode(pendingZipcode)) derivedZipcode = pendingZipcode;
+      } else if (isNoText(message)) {
+        const reply = makeReply("변경할 주소를 다시 입력해 주세요. (예: 서울시 ...)");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : prevSelectedOrderId,
+            address_pending: true,
+            address_stage: "awaiting_address",
+            customer_verification_token:
+              typeof prevBotContext.customer_verification_token === "string"
+                ? prevBotContext.customer_verification_token
+                : null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      } else {
+        const reply = makeReply(
+          `아래 내용으로 변경할까요?\n- 주문번호: ${pendingOrderId || "-"}\n- 현재 배송지: ${beforeAddress || "-"}\n- 변경 배송지: ${pendingAddress || "-"}\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : prevSelectedOrderId,
+            change_pending: true,
+            change_stage: "awaiting_update_confirm",
+            pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+            pending_address: pendingAddress || null,
+            pending_zipcode: isLikelyZipcode(pendingZipcode) ? pendingZipcode : null,
+            pending_before_address: beforeAddress || null,
+            customer_verification_token:
+              typeof prevBotContext.customer_verification_token === "string"
+                ? prevBotContext.customer_verification_token
+                : null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+    }
+    const contaminationSummaries: string[] = [];
+    const noteContamination = (info: {
+      slot: string;
+      reason: string;
+      action: string;
+      candidate?: string | null;
+    }) => {
+      const candidate = String(info.candidate || "").trim();
+      const summary = [
+        info.slot,
+        info.reason,
+        info.action,
+        candidate ? `candidate=${candidate}` : null,
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      contaminationSummaries.push(summary);
+      if (contaminationSummaries.length > 10) {
+        contaminationSummaries.splice(0, contaminationSummaries.length - 10);
+      }
+    };
     const orderChoiceIndex =
       !derivedOrderId && prevChoices.length > 0 ? extractChoiceIndex(message, prevChoices.length) : null;
     const orderIdFromChoice =
@@ -978,16 +1680,191 @@ export async function POST(req: NextRequest) {
       prevSelectedOrderId && isLikelyOrderId(prevSelectedOrderId) ? prevSelectedOrderId : null;
     const safeRecentOrderId =
       recentEntity?.order_id && isLikelyOrderId(recentEntity.order_id) ? recentEntity.order_id : null;
+    // Keep explicit user choice(selected_order_id) above loose history fallbacks.
     let resolvedOrderId =
       derivedOrderId ??
       orderIdFromChoice ??
+      safePrevSelectedOrderId ??
       safePrevEntityOrderId ??
       safePrevOrderIdFromTranscript ??
-      safePrevSelectedOrderId ??
       (safeRecentOrderId || null);
 
+    if (resolvedOrderId && !isLikelyOrderId(resolvedOrderId)) {
+      noteContamination({
+        slot: "order_id",
+        candidate: resolvedOrderId,
+        reason: "ORDER_ID_FAILED_LIKELIHOOD_CHECK",
+        action: "CLEARED",
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "CONTEXT_CONTAMINATION_DETECTED",
+        {
+          slot: "order_id",
+          candidate: resolvedOrderId,
+          reason: "ORDER_ID_FAILED_LIKELIHOOD_CHECK",
+          action: "CLEARED",
+        },
+        { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      );
+      resolvedOrderId = null;
+    }
+
+    // Guard against stale/contaminated order_id overriding an explicitly listed choice set.
+    if (resolvedOrderId && prevChoices.length > 0) {
+      const listedOrderIds = new Set(
+        prevChoices
+          .map((choice) => String(choice.order_id || "").trim())
+          .filter((value) => isLikelyOrderId(value))
+      );
+      if (listedOrderIds.size > 0 && !listedOrderIds.has(resolvedOrderId)) {
+        noteContamination({
+          slot: "order_id",
+          candidate: resolvedOrderId,
+          reason: "ORDER_ID_NOT_IN_ACTIVE_CHOICES",
+          action: listedOrderIds.size === 1 ? "REPLACED_WITH_SINGLE_CHOICE" : "CLEARED",
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "CONTEXT_CONTAMINATION_DETECTED",
+          {
+            slot: "order_id",
+            candidate: resolvedOrderId,
+            reason: "ORDER_ID_NOT_IN_ACTIVE_CHOICES",
+            action: listedOrderIds.size === 1 ? "REPLACED_WITH_SINGLE_CHOICE" : "CLEARED",
+          },
+          { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+        );
+        resolvedOrderId = listedOrderIds.size === 1 ? Array.from(listedOrderIds)[0] : null;
+      }
+    }
+
+    const safePrevEntityZipcode =
+      typeof prevEntity.zipcode === "string" && isLikelyZipcode(prevEntity.zipcode)
+        ? String(prevEntity.zipcode).trim()
+        : null;
+    const safePrevZipFromTranscript =
+      prevZipFromTranscript && isLikelyZipcode(prevZipFromTranscript)
+        ? prevZipFromTranscript
+        : null;
+    const safeRecentZipcode =
+      recentEntity?.zipcode && isLikelyZipcode(recentEntity.zipcode)
+        ? String(recentEntity.zipcode).trim()
+        : null;
+    const addressStage = String(prevBotContext.address_stage || "").trim();
+    const hasActiveAddressPending =
+      Boolean(prevBotContext.address_pending) &&
+      ["awaiting_address", "awaiting_zipcode", "awaiting_zipcode_confirm"].includes(addressStage);
+    const pendingZipFromContextRaw =
+      prevBotContext.address_pending && isLikelyZipcode(String(prevBotContext.pending_zipcode || ""))
+        ? String(prevBotContext.pending_zipcode || "").trim()
+        : null;
+    const allowPendingZipCarry =
+      hasActiveAddressPending &&
+      (
+        expectedInput === "address" ||
+        expectedInput === "zipcode" ||
+        (addressStage === "awaiting_zipcode_confirm" && (isYesText(message) || isNoText(message)))
+      );
+    const pendingZipFromContext = allowPendingZipCarry ? pendingZipFromContextRaw : null;
+    if (pendingZipFromContextRaw && !pendingZipFromContext) {
+      noteContamination({
+        slot: "zipcode",
+        candidate: pendingZipFromContextRaw,
+        reason: "ZIPCODE_PENDING_CONTEXT_BLOCKED_BY_EXPECTED_INPUT",
+        action: "CLEARED",
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "CONTEXT_CONTAMINATION_DETECTED",
+        {
+          slot: "zipcode",
+          candidate: pendingZipFromContextRaw,
+          reason: "ZIPCODE_PENDING_CONTEXT_BLOCKED_BY_EXPECTED_INPUT",
+          action: "CLEARED",
+          expected_input: expectedInput,
+          address_stage: addressStage || null,
+        },
+        { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      );
+    }
+    const allowZipHistoryFallback =
+      expectedInput === null || expectedInput === "address" || expectedInput === "zipcode";
+    const blockedZipFallback =
+      !allowZipHistoryFallback && !derivedZipcode
+        ? safePrevEntityZipcode || safePrevZipFromTranscript || safeRecentZipcode
+        : null;
+    if (blockedZipFallback) {
+      noteContamination({
+        slot: "zipcode",
+        candidate: blockedZipFallback,
+        reason: "ZIPCODE_CARRYOVER_BLOCKED_BY_EXPECTED_INPUT",
+        action: "CLEARED",
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "CONTEXT_CONTAMINATION_DETECTED",
+        {
+          slot: "zipcode",
+          candidate: blockedZipFallback,
+          reason: "ZIPCODE_CARRYOVER_BLOCKED_BY_EXPECTED_INPUT",
+          action: "CLEARED",
+          expected_input: expectedInput,
+        },
+        { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      );
+    }
+    let resolvedZipcode =
+      derivedZipcode ??
+      pendingZipFromContext ??
+      (allowZipHistoryFallback
+        ? safePrevEntityZipcode ?? safePrevZipFromTranscript ?? (safeRecentZipcode || null)
+        : null);
+    if (resolvedZipcode && !isLikelyZipcode(resolvedZipcode)) {
+      noteContamination({
+        slot: "zipcode",
+        candidate: resolvedZipcode,
+        reason: "ZIPCODE_FAILED_LIKELIHOOD_CHECK",
+        action: "CLEARED",
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "CONTEXT_CONTAMINATION_DETECTED",
+        {
+          slot: "zipcode",
+          candidate: resolvedZipcode,
+          reason: "ZIPCODE_FAILED_LIKELIHOOD_CHECK",
+          action: "CLEARED",
+        },
+        { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      );
+      resolvedZipcode = null;
+    }
+
+    const explicitUserConfirmed = isYesText(message);
+    const detectedIntent = detectIntent(message);
+    const hasAddressSignal =
+      Boolean(derivedAddress) ||
+      (typeof prevEntity.address === "string" && Boolean(prevEntity.address.trim())) ||
+      Boolean(prevBotContext.address_pending);
+    let seededIntent = detectedIntent === "general" ? (prevIntent || "general") : detectedIntent;
+    if (seededIntent === "shipping_inquiry" && hasAddressSignal && isAddressChangeUtterance(message)) {
+      seededIntent = "order_change";
+    }
+    resolvedIntent = seededIntent;
     let policyContext: PolicyEvalContext = {
       input: { text: message },
+      intent: { name: resolvedIntent },
       entity: {
         channel:
           derivedChannel ?? (typeof prevEntity.channel === "string" ? prevEntity.channel : null),
@@ -1002,13 +1879,9 @@ export async function POST(req: NextRequest) {
           (typeof prevEntity.address === "string" ? prevEntity.address : null) ??
           prevAddressFromTranscript ??
           (recentEntity?.address || null),
-        zipcode:
-          derivedZipcode ??
-          (typeof prevEntity.zipcode === "string" ? prevEntity.zipcode : null) ??
-          prevZipFromTranscript ??
-          (recentEntity?.zipcode || null),
+        zipcode: resolvedZipcode,
       },
-      user: { confirmed: true },
+      user: { confirmed: explicitUserConfirmed },
       conversation: { repeat_count: 0, flags: {} },
     };
 
@@ -1029,9 +1902,26 @@ export async function POST(req: NextRequest) {
     const matchedTemplateIds = extractTemplateIds(inputGate.matched as any[]);
     let usedRuleIds = [...matchedRuleIds];
     let usedTemplateIds = [...matchedTemplateIds];
+    const inputRuleIds = [...matchedRuleIds];
+    let toolRuleIds: string[] = [];
     const usedToolPolicies: string[] = [];
     const usedProviders: string[] = [];
     const mcpActions: string[] = [];
+    let mcpCandidateCalls: string[] = [];
+    const mcpSkipLogs: string[] = [];
+    const mcpSkipQueue: Array<{
+      tool: string;
+      reason: string;
+      args?: Record<string, unknown>;
+      detail?: Record<string, unknown>;
+    }> = [];
+    const slotDebug = {
+      expectedInput,
+      orderId: resolvedOrderId,
+      phone: typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null,
+      zipcode: typeof policyContext.entity?.zipcode === "string" ? policyContext.entity.zipcode : null,
+      address: typeof policyContext.entity?.address === "string" ? policyContext.entity.address : null,
+    };
     let lastMcpFunction: string | null = null;
     let lastMcpStatus: string | null = null;
     let lastMcpError: string | null = null;
@@ -1067,8 +1957,72 @@ export async function POST(req: NextRequest) {
       const provider = toolProviderMap[name];
       if (provider) usedProviders.push(provider);
     };
+    const noteMcpSkip = (
+      name: string,
+      reason: string,
+      detail?: Record<string, unknown>,
+      args?: Record<string, unknown>
+    ) => {
+      lastMcpFunction = name;
+      lastMcpStatus = "skipped";
+      lastMcpError = reason;
+      lastMcpCount = null;
+      const provider = toolProviderMap[name];
+      if (provider) usedProviders.push(provider);
+      const detailText = detail ? ` (${JSON.stringify(detail)})` : "";
+      mcpSkipLogs.push(`${name}: skipped - ${reason}${detailText}`);
+      mcpSkipQueue.push({ tool: name, reason, args, detail });
+    };
+    const flushMcpSkipLogs = async () => {
+      for (const skip of mcpSkipQueue) {
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "MCP_CALL_SKIPPED",
+          {
+            tool: skip.tool,
+            reason: skip.reason,
+            args: skip.args || {},
+            detail: skip.detail || null,
+          },
+          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+        );
+        const toolId = allowedToolIdByName.get(skip.tool);
+        if (toolId) {
+          try {
+            await context.supabase.from("F_audit_mcp_tools").insert({
+              org_id: context.orgId,
+              session_id: sessionId,
+              turn_id: latestTurnId,
+              tool_id: toolId,
+              tool_name: skip.tool,
+              request_payload: skip.args || {},
+              response_payload: { skipped: true, reason: skip.reason, detail: skip.detail || null },
+              status: "skipped",
+              latency_ms: 0,
+              masked_fields: [],
+              policy_decision: { allowed: false, reason: skip.reason },
+              created_at: nowIso(),
+              bot_context: { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+            });
+          } catch (error) {
+            console.warn("[playground/chat_mk2] failed to insert MCP skip audit", {
+              tool: skip.tool,
+              reason: skip.reason,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
+        }
+      }
+      mcpSkipQueue.length = 0;
+    };
     const toolResults: Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }> = [];
     function makeReply(text: string, llmModel?: string | null, tools?: string[]) {
+      slotDebug.orderId = resolvedOrderId;
+      slotDebug.phone = typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null;
+      slotDebug.zipcode = typeof policyContext.entity?.zipcode === "string" ? policyContext.entity.zipcode : null;
+      slotDebug.address = typeof policyContext.entity?.address === "string" ? policyContext.entity.address : null;
       const mcpLogLines = toolResults.map((tool) => {
         const status = tool.ok ? "success" : "error";
         const error = tool.ok ? "" : String(tool.error || "MCP_ERROR");
@@ -1088,6 +2042,7 @@ export async function POST(req: NextRequest) {
           ? `${tool.name}: ${status}${countText} - ${error}`
           : `${tool.name}: ${status}${countText}`;
       });
+      const allMcpLogs = [...mcpLogLines, ...mcpSkipLogs];
       const debugPayload = {
         llmModel: llmModel || null,
         mcpTools: tools || mcpActions,
@@ -1096,7 +2051,7 @@ export async function POST(req: NextRequest) {
         mcpLastStatus: lastMcpStatus,
         mcpLastError: lastMcpError,
         mcpLastCount: lastMcpCount,
-        mcpLogs: mcpLogLines,
+        mcpLogs: allMcpLogs,
         providerConfig: usedProviders.includes("cafe24") ? providerConfig : {},
         providerAvailable,
         authSettingsId: authSettings?.id || null,
@@ -1110,6 +2065,17 @@ export async function POST(req: NextRequest) {
         usedRuleIds,
         usedTemplateIds,
         usedToolPolicies,
+        slotExpectedInput: slotDebug.expectedInput,
+        slotOrderId: slotDebug.orderId,
+        slotPhone: slotDebug.phone,
+        slotPhoneMasked: maskPhone(slotDebug.phone),
+        slotZipcode: slotDebug.zipcode,
+        slotAddress: slotDebug.address,
+        mcpCandidateCalls,
+        mcpSkipped: mcpSkipLogs,
+        policyInputRules: inputRuleIds,
+        policyToolRules: toolRuleIds,
+        contextContamination: contaminationSummaries,
         conversationMode: "mk2",
       };
       lastDebugPrefixJson = { entries: buildDebugEntries(debugPayload) };
@@ -1125,7 +2091,7 @@ export async function POST(req: NextRequest) {
           mcpLastStatus: lastMcpStatus,
           mcpLastError: lastMcpError,
           mcpLastCount: lastMcpCount,
-          mcpLogs: [],
+          mcpLogs: mcpSkipLogs,
           providerConfig: usedProviders.includes("cafe24") ? providerConfig : {},
           providerAvailable,
           authSettingsId: authSettings?.id || null,
@@ -1139,6 +2105,17 @@ export async function POST(req: NextRequest) {
           usedRuleIds,
           usedTemplateIds,
           usedToolPolicies,
+          slotExpectedInput: slotDebug.expectedInput,
+          slotOrderId: slotDebug.orderId,
+          slotPhone: slotDebug.phone,
+          slotPhoneMasked: maskPhone(slotDebug.phone),
+          slotZipcode: slotDebug.zipcode,
+          slotAddress: slotDebug.address,
+          mcpCandidateCalls,
+          mcpSkipped: mcpSkipLogs,
+          policyInputRules: inputRuleIds,
+          policyToolRules: toolRuleIds,
+          contextContamination: contaminationSummaries,
           conversationMode: "mk2",
         };
         lastDebugPrefixJson = { entries: buildDebugEntries(debugPayload) };
@@ -1150,14 +2127,65 @@ export async function POST(req: NextRequest) {
     const intentFromPolicy = inputGate.actions.flags?.intent_name
       ? String(inputGate.actions.flags.intent_name)
       : "general";
-    resolvedIntent = intentFromPolicy === "general" && prevIntent ? prevIntent : intentFromPolicy;
+    if (intentFromPolicy !== "general") {
+      if (intentFromPolicy === "shipping_inquiry" && resolvedIntent === "order_change" && hasAddressSignal) {
+        // 주소 변경 문맥을 배송조회로 덮어써서 파이프라인이 튀는 현상 방지
+        resolvedIntent = "order_change";
+      } else {
+        resolvedIntent = intentFromPolicy;
+      }
+    }
     policyContext = {
       ...policyContext,
       intent: { name: resolvedIntent },
     };
+    const activePolicyConflicts = (compiledPolicy.conflicts || []).filter((c) => {
+      if (c.intentScope === "*") return true;
+      return c.intentScope.split(",").map((v) => v.trim()).includes(resolvedIntent);
+    });
+    if (activePolicyConflicts.length > 0) {
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_STATIC_CONFLICT",
+        {
+          intent: resolvedIntent,
+          conflicts: activePolicyConflicts,
+          resolution: "tool_stage_force_response_precedence",
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+      );
+    }
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "SLOT_EXTRACTED",
+      {
+        expected_input: expectedInput || null,
+        derived: {
+          order_id: derivedOrderId || null,
+          phone: derivedPhone || null,
+          phone_masked: maskPhone(derivedPhone),
+          zipcode: derivedZipcode || null,
+          address: derivedAddress || null,
+        },
+        resolved: {
+          intent: resolvedIntent,
+          order_id: resolvedOrderId || null,
+          phone: typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null,
+          phone_masked:
+            typeof policyContext.entity?.phone === "string" ? maskPhone(policyContext.entity.phone) : "-",
+          zipcode: typeof policyContext.entity?.zipcode === "string" ? policyContext.entity.zipcode : null,
+          address: typeof policyContext.entity?.address === "string" ? policyContext.entity.address : null,
+        },
+      },
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+    );
 
     if (inputGate.actions.forcedResponse) {
-      const forcedText = inputGate.actions.forcedResponse;
+      const forcedText = normalizeOrderChangeAddressPrompt(resolvedIntent, inputGate.actions.forcedResponse);
       const reply = makeReply(forcedText);
       await insertTurn({
         session_id: sessionId,
@@ -1338,6 +2366,10 @@ export async function POST(req: NextRequest) {
       }
       const tokenValue = String((verifyResult.data as any)?.customer_verification_token || "").trim();
       customerVerificationToken = tokenValue || null;
+      policyContext = {
+        ...policyContext,
+        user: { ...(policyContext.user || {}), confirmed: true },
+      };
       await context.supabase.from("D_conv_turns").update({
         confirmation_response: message,
         user_confirmed: true,
@@ -1461,9 +2493,11 @@ export async function POST(req: NextRequest) {
     }
 
     const toolGate = runPolicyStage(compiledPolicy, "tool", policyContext);
-    usedRuleIds.push(...toolGate.matched.map((rule) => rule.id));
+    toolRuleIds = toolGate.matched.map((rule) => rule.id);
+    usedRuleIds.push(...toolRuleIds);
     usedTemplateIds.push(...extractTemplateIds(toolGate.matched as any[]));
     const forcedCalls = toolGate.actions.forcedToolCalls || [];
+    mcpCandidateCalls = forcedCalls.map((call) => String(call.name || "")).filter(Boolean);
     const denied = new Set(toolGate.actions.denyTools || []);
     const allowed = new Set(toolGate.actions.allowTools || []);
     const canUseTool = (name: string) => {
@@ -1472,8 +2506,14 @@ export async function POST(req: NextRequest) {
       return true;
     };
     let finalCalls = forcedCalls.filter((call) => {
-      if (denied.has("*") || denied.has(call.name)) return false;
-      if (allowed.size > 0 && !allowed.has(call.name)) return false;
+      if (denied.has("*") || denied.has(call.name)) {
+        noteMcpSkip(call.name, "DENY_RULE", { denied: true }, call.args as Record<string, unknown>);
+        return false;
+      }
+      if (allowed.size > 0 && !allowed.has(call.name)) {
+        noteMcpSkip(call.name, "ALLOWLIST_MISMATCH", { allowed: Array.from(allowed) }, call.args as Record<string, unknown>);
+        return false;
+      }
       return true;
     });
 
@@ -1501,6 +2541,15 @@ export async function POST(req: NextRequest) {
     });
 
     finalCalls = finalCalls.filter((call) => {
+      if (resolvedIntent === "order_change" && call.name === "update_order_shipping_address") {
+        noteMcpSkip(
+          call.name,
+          "DEFERRED_TO_DETERMINISTIC_UPDATE",
+          { intent: resolvedIntent },
+          call.args as Record<string, unknown>
+        );
+        return false;
+      }
       if (compiledPolicy.toolPolicies[call.name]) {
         usedToolPolicies.push(call.name);
       }
@@ -1510,19 +2559,142 @@ export async function POST(req: NextRequest) {
           typeof (call.args as any)?.memberId === "string";
         const hasPhone = typeof (call.args as any)?.cellphone === "string";
         if (!hasMember && !hasPhone) {
+          noteMcpSkip(call.name, "MISSING_MEMBER_OR_PHONE", { hasMember, hasPhone }, call.args as Record<string, unknown>);
           return false;
         }
       }
       if ((call.name === "lookup_order" || call.name === "update_order_shipping_address") && customerVerificationToken) {
         call.args.customer_verification_token = customerVerificationToken;
       }
+      if (call.name === "lookup_order" || call.name === "update_order_shipping_address") {
+        const candidateOrderId = String((call.args as any)?.order_id || "").trim();
+        if (candidateOrderId && !isLikelyOrderId(candidateOrderId)) {
+          noteContamination({
+            slot: "order_id",
+            candidate: candidateOrderId,
+            reason: "FORCED_CALL_INVALID_ORDER_ID",
+            action: "CALL_SKIPPED",
+          });
+          noteMcpSkip(
+            call.name,
+            "CONTEXT_CONTAMINATION_ORDER_ID",
+            { candidate_order_id: candidateOrderId },
+            call.args as Record<string, unknown>
+          );
+          void insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "CONTEXT_CONTAMINATION_DETECTED",
+            {
+              slot: "order_id",
+              candidate: candidateOrderId,
+              reason: "FORCED_CALL_INVALID_ORDER_ID",
+              action: "CALL_SKIPPED",
+            },
+            { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+          );
+          return false;
+        }
+      }
       const validation = validateToolArgs(call.name, call.args, compiledPolicy);
+      if (!validation.ok) {
+        noteMcpSkip(
+          call.name,
+          "INVALID_TOOL_ARGS",
+          { validation_error: validation.error || "INVALID_TOOL_ARGS" },
+          call.args as Record<string, unknown>
+        );
+      }
       return validation.ok;
     });
 
-    if (toolGate.actions.forcedResponse) {
-      const forcedText = toolGate.actions.forcedResponse;
-      const reply = makeReply(forcedText);
+    const piiSensitiveIntents = new Set(["order_change", "shipping_inquiry", "refund_request"]);
+    const piiSensitiveTools = new Set([
+      "find_customer_by_phone",
+      "list_orders",
+      "lookup_order",
+      "track_shipment",
+      "update_order_shipping_address",
+    ]);
+    const hasSensitivePlannedCall = finalCalls.some((call) => piiSensitiveTools.has(call.name));
+    if (
+      piiSensitiveIntents.has(resolvedIntent) &&
+      hasSensitivePlannedCall &&
+      !customerVerificationToken &&
+      !otpVerifiedThisTurn &&
+      !otpPending
+    ) {
+      const otpDestination =
+        derivedPhone ||
+        (typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null) ||
+        prevPhoneFromTranscript ||
+        String(lastTurn?.bot_context?.otp_destination || "");
+      if (!otpDestination) {
+        const prompt = "개인정보 보호를 위해 먼저 본인확인이 필요합니다. 휴대폰 번호를 알려주세요.";
+        const reply = makeReply(prompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+            otp_pending: true,
+            otp_stage: "awaiting_phone",
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      if (!allowedToolNames.has("send_otp")) {
+        const reply = makeReply("본인인증을 진행할 수 없습니다. 잠시 후 다시 시도해 주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+          },
+        });
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+      }
+      const sendResult = await callMcpTool(
+        context,
+        "send_otp",
+        { destination: otpDestination },
+        sessionId,
+        latestTurnId,
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+        allowedToolNames
+      );
+      noteMcp("send_otp", sendResult);
+      mcpActions.push("send_otp");
+      if (!sendResult.ok) {
+        const reply = makeReply("인증번호 전송에 실패했습니다. 잠시 후 다시 시도해 주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+          },
+        });
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+      }
+      const otpRefValue = String((sendResult.data as any)?.otp_ref || "").trim();
+      const prompt = "문자로 전송된 인증번호를 입력해 주세요.";
+      const reply = makeReply(prompt);
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -1533,12 +2705,217 @@ export async function POST(req: NextRequest) {
           intent_name: resolvedIntent,
           entity: policyContext.entity,
           selected_order_id: resolvedOrderId,
-          product_decision: productDecisionRes.decision || null,
-          policy_matched: toolGate.matched.map((rule) => rule.id),
+          otp_pending: true,
+          otp_stage: "awaiting_code",
+          otp_destination: otpDestination,
+          otp_ref: otpRefValue || null,
         },
       });
-      await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "tool" }, { intent_name: resolvedIntent });
-      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+      return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: ["send_otp"] });
+    }
+
+    if (
+      finalCalls.length === 0 &&
+      mcpCandidateCalls.length === 0 &&
+      !resolvedOrderId &&
+      (resolvedIntent === "order_change" ||
+        resolvedIntent === "shipping_inquiry" ||
+        resolvedIntent === "refund_request")
+    ) {
+      const phone = typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null;
+      const hasListOrdersPolicy = Boolean(compiledPolicy.toolPolicies?.list_orders);
+      if (phone && hasListOrdersPolicy && allowedToolNames.has("list_orders") && canUseTool("list_orders")) {
+        noteMcpSkip(
+          "list_orders",
+          "NO_FORCED_TOOL_CALLS",
+          { intent: resolvedIntent, phone_masked: maskPhone(phone) },
+          { cellphone: phone, ...buildDefaultOrderRange() }
+        );
+      }
+    }
+
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "PRE_MCP_DECISION",
+      {
+        intent: resolvedIntent,
+        forced_calls: forcedCalls.map((call) => ({ name: call.name, args: call.args })),
+        final_calls: finalCalls.map((call) => ({ name: call.name, args: call.args })),
+        denied: Array.from(denied),
+        allowed: Array.from(allowed),
+        allowed_tool_names: Array.from(allowedToolNames),
+        policy_conflicts: activePolicyConflicts,
+        entity: {
+          order_id: resolvedOrderId || null,
+          phone_masked:
+            typeof policyContext.entity?.phone === "string" ? maskPhone(policyContext.entity.phone) : "-",
+          has_address: Boolean(policyContext.entity?.address),
+        },
+      },
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+    );
+    await flushMcpSkipLogs();
+
+    const toolGateHasForcedResponse = toolGate.matched.some((rule) =>
+      (rule.enforce?.actions || []).some((action) => String(action.type || "") === "force_response_template")
+    );
+    const toolGateHasForcedTool = toolGate.matched.some((rule) =>
+      (rule.enforce?.actions || []).some((action) => String(action.type || "") === "force_tool_call")
+    );
+    if (toolGateHasForcedResponse && toolGateHasForcedTool) {
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_CONFLICT_DETECTED",
+        {
+          stage: "tool",
+          matched_rule_ids: toolGate.matched.map((rule) => rule.id),
+          conflict: "force_response_template vs force_tool_call",
+          resolution: "force_response_template_precedence",
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+      );
+    }
+
+    if (toolGate.actions.forcedResponse) {
+      const forcedText = normalizeOrderChangeAddressPrompt(resolvedIntent, toolGate.actions.forcedResponse);
+      const isNeedZipcodeTemplate =
+        forcedText === (compiledPolicy.templates?.order_change_need_zipcode || "") ||
+        usedTemplateIds.includes("order_change_need_zipcode");
+      const currentAddress =
+        typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
+      const shouldDeferZipcodeTemplate =
+        isNeedZipcodeTemplate &&
+        resolvedIntent === "order_change" &&
+        Boolean(currentAddress) &&
+        Boolean(resolvedOrderId);
+      if (shouldDeferZipcodeTemplate) {
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          {
+            stage: "tool",
+            action: "DEFER_FORCE_RESPONSE_TEMPLATE",
+            reason: "ORDER_AND_ADDRESS_ALREADY_AVAILABLE",
+            template: "order_change_need_zipcode",
+          },
+          { intent_name: resolvedIntent }
+        );
+      }
+      if (isNeedZipcodeTemplate && !shouldDeferZipcodeTemplate) {
+        if (!currentAddress) {
+          const prompt = "배송지 변경을 위해 새 주소를 알려주세요. 예) 서울시 ...";
+          const reply = makeReply(prompt);
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              selected_order_id: resolvedOrderId,
+              product_decision: productDecisionRes.decision || null,
+              policy_matched: toolGate.matched.map((rule) => rule.id),
+              address_pending: true,
+              address_stage: "awaiting_address",
+            },
+          });
+          await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "tool" }, { intent_name: resolvedIntent });
+          return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+        }
+        const search = await callAddressSearchWithAudit(
+          context,
+          currentAddress,
+          sessionId,
+          latestTurnId,
+          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+        );
+        if (search.status === "success") {
+          const rows = Array.isArray((search.data as any)?.results) ? (search.data as any).results : [];
+          const first = rows[0];
+          const candidateZip = String(first?.zipNo || "").trim();
+          const roadAddr = String(first?.roadAddr || first?.roadAddrPart1 || "").trim();
+          const jibunAddr = String(first?.jibunAddr || "").trim();
+          if (candidateZip) {
+            const prompt = `입력하신 주소를 확인했습니다.\n- 지번주소: ${jibunAddr || currentAddress}\n- 도로명주소: ${roadAddr || "-"}\n- 우편번호: ${candidateZip}\n위 정보가 맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+            const reply = makeReply(prompt);
+            await insertTurn({
+              session_id: sessionId,
+              seq: nextSeq,
+              transcript_text: message,
+              answer_text: reply,
+              final_answer: reply,
+              bot_context: {
+                intent_name: resolvedIntent,
+                entity: policyContext.entity,
+                selected_order_id: resolvedOrderId,
+                product_decision: productDecisionRes.decision || null,
+                policy_matched: toolGate.matched.map((rule) => rule.id),
+                address_pending: true,
+                address_stage: "awaiting_zipcode_confirm",
+                pending_address: currentAddress || null,
+                pending_zipcode: candidateZip || null,
+                pending_road_addr: roadAddr || null,
+                pending_jibun_addr: jibunAddr || null,
+                customer_verification_token: customerVerificationToken || null,
+              },
+            });
+            await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "tool" }, { intent_name: resolvedIntent });
+            return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+          }
+        }
+        const prompt = "입력하신 주소를 확인할 수 없습니다. 도로명/지번 포함 주소를 다시 입력해 주세요.";
+        const reply = makeReply(prompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+            product_decision: productDecisionRes.decision || null,
+            policy_matched: toolGate.matched.map((rule) => rule.id),
+            address_pending: true,
+            address_stage: "awaiting_address",
+            customer_verification_token: customerVerificationToken || null,
+          },
+        });
+        await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "tool" }, { intent_name: resolvedIntent });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      if (!shouldDeferZipcodeTemplate) {
+        const reply = makeReply(forcedText);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+            product_decision: productDecisionRes.decision || null,
+            policy_matched: toolGate.matched.map((rule) => rule.id),
+            address_pending: isNeedZipcodeTemplate ? true : undefined,
+            address_stage: isNeedZipcodeTemplate ? "awaiting_zipcode" : undefined,
+            pending_address: isNeedZipcodeTemplate ? currentAddress || null : undefined,
+            customer_verification_token: isNeedZipcodeTemplate ? customerVerificationToken : undefined,
+          },
+        });
+        await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "tool" }, { intent_name: resolvedIntent });
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+      }
     }
 
     let mcpSummary = "";
@@ -1548,6 +2925,7 @@ export async function POST(req: NextRequest) {
       index: number;
       order_id: string;
       order_date?: string;
+      order_date_short?: string;
       product_name?: string;
       option_name?: string;
       quantity?: string;
@@ -1555,7 +2933,15 @@ export async function POST(req: NextRequest) {
       label?: string;
     }> = [];
     for (const call of finalCalls) {
-      if (!allowedToolNames.has(call.name)) continue;
+      if (!allowedToolNames.has(call.name)) {
+        noteMcpSkip(
+          call.name,
+          "TOOL_NOT_ALLOWED_FOR_AGENT",
+          { allowed_tool_names: Array.from(allowedToolNames) },
+          call.args as Record<string, unknown>
+        );
+        continue;
+      }
       const result = await callMcpTool(
         context,
         call.name,
@@ -1572,21 +2958,7 @@ export async function POST(req: NextRequest) {
         if (result.ok) {
           const orders = (result.data as any)?.orders || (result.data as any)?.orders?.order || [];
           const items = Array.isArray(orders) ? orders : [];
-          if (items.length === 1) {
-            const onlyId = String(items[0]?.order_id || items[0]?.order_no || "").trim();
-            if (onlyId) {
-              resolvedOrderId = onlyId;
-              policyContext = {
-                ...policyContext,
-                entity: {
-                  ...(policyContext.entity || {}),
-                  order_id: resolvedOrderId,
-                },
-              };
-            } else {
-              listOrdersEmpty = true;
-            }
-          } else if (items.length > 1) {
+          if (items.length > 0) {
             const slice = items.slice(0, 3);
             const detailMap = new Map<
               string,
@@ -1599,7 +2971,7 @@ export async function POST(req: NextRequest) {
                 const detail = await callMcpTool(
                   context,
                   "lookup_order",
-                  { order_id: id, customer_verification_token: customerVerificationToken || undefined },
+                  buildLookupOrderArgs(id, customerVerificationToken),
                   sessionId,
                   latestTurnId,
                   { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
@@ -1614,25 +2986,22 @@ export async function POST(req: NextRequest) {
                 });
                 mcpActions.push("lookup_order");
                 if (detail.ok) {
-                  const order = (detail.data as any)?.order || {};
-                  const itemsData =
-                    order.order_items ||
-                    order.order_item ||
-                    order.items ||
-                    order.products ||
-                    [];
+                  const parsed = readLookupOrderView(detail.data);
+                  const core = parsed.core || {};
+                  const itemsData = parsed.items;
                   const first = Array.isArray(itemsData) ? itemsData[0] : itemsData;
-                  const name = first?.product_name || first?.name || "-";
-                  const option = first?.option_name || first?.option_value || "-";
-                  const qty = first?.quantity || first?.qty || "-";
+                  const name = first?.product_name || first?.name || first?.product_name_default || "상품 정보 확인 필요";
+                  const option = first?.option_name || first?.option_value || first?.option_value_default || "기본 옵션";
+                  const qty = first?.quantity || first?.qty || "1";
                   const priceRaw =
                     first?.price ||
                     first?.product_price ||
                     first?.unit_price ||
-                    order.order_price_amount ||
-                    order.payment_amount ||
-                    order.total_amount ||
-                    order.total_price ||
+                    first?.supply_price ||
+                    core.order_price_amount ||
+                    core.payment_amount ||
+                    core.total_amount ||
+                    core.total_price ||
                     "-";
                   detailMap.set(id, {
                     name: String(name),
@@ -1648,18 +3017,31 @@ export async function POST(req: NextRequest) {
                 const id = String(o.order_id || o.order_no || "").trim();
                 if (!id) return null;
                 const date = o.order_date || "";
-                const fallbackName = o.first_product_name || o.product_name || "-";
+                const fallbackName = o.first_product_name || o.product_name || "상품 정보 확인 필요";
+                const fallbackPrice =
+                  o?.actual_order_amount?.order_price_amount ||
+                  o?.actual_order_amount?.payment_amount ||
+                  o?.payment_amount ||
+                  o?.total_supply_price ||
+                  "-";
                 const detail = detailMap.get(id) || {
-                  name: String(fallbackName || "-"),
-                  option: "-",
-                  qty: "-",
-                  price: "-",
+                  name: String(fallbackName || "상품 정보 확인 필요"),
+                  option: "확인 필요",
+                  qty: "확인 필요",
+                  price: String(fallbackPrice),
                 };
-                const label = `- ${idx + 1}번 | ${date} | ${detail.name} | ${detail.option} | ${detail.qty} | ${detail.price}`;
+                const label = `${idx + 1}번 주문
+  주문일시: ${toOrderDateShort(date)}
+  주문번호: ${id}
+  상품명: ${detail.name}
+  옵션: ${detail.option}
+  수량: ${detail.qty}
+  금액: ${toMoneyText(detail.price)}원`;
                 return {
                   index: idx + 1,
                   order_id: id,
                   order_date: date,
+                  order_date_short: toOrderDateShort(date),
                   product_name: detail.name,
                   option_name: detail.option,
                   quantity: detail.qty,
@@ -1671,6 +3053,7 @@ export async function POST(req: NextRequest) {
                 index: number;
                 order_id: string;
                 order_date?: string;
+                order_date_short?: string;
                 product_name?: string;
                 option_name?: string;
                 quantity?: string;
@@ -1689,13 +3072,14 @@ export async function POST(req: NextRequest) {
       }
       mcpActions.push(call.name);
     }
+    await flushMcpSkipLogs();
 
     const hasToolResult = (name: string) => toolResults.some((tool) => tool.name === name);
     if (resolvedOrderId && canUseTool("lookup_order") && allowedToolNames.has("lookup_order") && !hasToolResult("lookup_order")) {
       const lookup = await callMcpTool(
         context,
         "lookup_order",
-        { order_id: resolvedOrderId, customer_verification_token: customerVerificationToken || undefined },
+        buildLookupOrderArgs(resolvedOrderId, customerVerificationToken),
         sessionId,
         latestTurnId,
         { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
@@ -1709,23 +3093,173 @@ export async function POST(req: NextRequest) {
         error: lookup.ok ? undefined : lookup.error,
       });
       mcpActions.push("lookup_order");
+      if (!lookup.ok && isInvalidOrderIdError(String(lookup.error || ""))) {
+        noteContamination({
+          slot: "order_id",
+          candidate: resolvedOrderId,
+          reason: "LOOKUP_ORDER_INVALID_ORDER_ID",
+          action: "CLEARED",
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "CONTEXT_CONTAMINATION_DETECTED",
+          {
+            slot: "order_id",
+            candidate: resolvedOrderId,
+            reason: "LOOKUP_ORDER_INVALID_ORDER_ID",
+            action: "CLEARED",
+          },
+          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+        );
+        resolvedOrderId = null;
+        policyContext = {
+          ...policyContext,
+          entity: {
+            ...(policyContext.entity || {}),
+            order_id: null,
+          },
+        };
+      }
     }
 
     const currentAddress =
       typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
 
     if (
-      resolvedIntent === "change" &&
+      resolvedIntent === "order_change" &&
       currentAddress &&
       resolvedOrderId &&
       canUseTool("update_order_shipping_address") &&
       allowedToolNames.has("update_order_shipping_address") &&
       !hasToolResult("update_order_shipping_address")
     ) {
-      const { zipcode, address1, address2 } = parseAddressParts(currentAddress);
-      if (!zipcode) {
-        const prompt = "우편번호를 알려주세요.";
+      const lookupTool = toolResults.find((tool) => tool.name === "lookup_order" && tool.ok);
+      const lookupOrder = lookupTool && lookupTool.data && typeof lookupTool.data === "object"
+        ? ((lookupTool.data as any).order || {})
+        : {};
+      const lookupReceivers = Array.isArray((lookupOrder as any)?.receivers) ? (lookupOrder as any).receivers : [];
+      const receiver = lookupReceivers[0] || {};
+      const receiverAddress1 = normalizeAddressText(String(receiver?.address1 || ""));
+      const receiverZipcode = isLikelyZipcode(String(receiver?.zipcode || ""))
+        ? String(receiver?.zipcode || "").trim()
+        : "";
+      const pendingJibun = normalizeAddressText(String(prevBotContext.pending_jibun_addr || ""));
+      const pendingRoad = normalizeAddressText(String(prevBotContext.pending_road_addr || ""));
+      const pendingZipFromContext = isLikelyZipcode(String(prevBotContext.pending_zipcode || ""))
+        ? String(prevBotContext.pending_zipcode || "").trim()
+        : "";
+      const pendingAddressFromContext = normalizeAddressText(String(prevBotContext.pending_address || ""));
+      const pendingBaseJibun = normalizeAddressText(String(prevBotContext.pending_jibun_addr || ""));
+      const pendingBaseRoad = normalizeAddressText(String(prevBotContext.pending_road_addr || ""));
+      const addressLooksDetailOnly = isLikelyAddressDetailOnly(currentAddress);
+      const baseAddressCandidate = addressLooksDetailOnly ? (pendingJibun || pendingRoad || receiverAddress1) : "";
+
+      const { zipcode, address1, address2 } = splitAddressForUpdate(currentAddress, {
+        baseAddress: baseAddressCandidate || null,
+        fallbackBaseAddress: receiverAddress1 || null,
+      });
+      const normalizedCurrentAddress = normalizeAddressText(currentAddress);
+      const normalizedAddress1 = normalizeAddressText(address1 || "");
+      const canTrustPendingZip =
+        Boolean(pendingZipFromContext) &&
+        (
+          (pendingAddressFromContext && pendingAddressFromContext === normalizedCurrentAddress) ||
+          (pendingBaseJibun && pendingBaseJibun === normalizedAddress1) ||
+          (pendingBaseRoad && pendingBaseRoad === normalizedAddress1)
+        );
+      if (pendingZipFromContext && !canTrustPendingZip) {
+        noteContamination({
+          slot: "zipcode",
+          candidate: pendingZipFromContext,
+          reason: "ZIPCODE_PENDING_CONTEXT_NOT_MATCHING_CURRENT_ADDRESS",
+          action: "CLEARED",
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "CONTEXT_CONTAMINATION_DETECTED",
+          {
+            slot: "zipcode",
+            candidate: pendingZipFromContext,
+            reason: "ZIPCODE_PENDING_CONTEXT_NOT_MATCHING_CURRENT_ADDRESS",
+            action: "CLEARED",
+            current_address: normalizedCurrentAddress || null,
+            pending_address: pendingAddressFromContext || null,
+          },
+          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+        );
+      }
+      const effectiveZipcode =
+        zipcode || (canTrustPendingZip ? pendingZipFromContext : "") || (addressLooksDetailOnly ? receiverZipcode : "");
+      if (!effectiveZipcode) {
+        const search = await callAddressSearchWithAudit(
+          context,
+          currentAddress,
+          sessionId,
+          latestTurnId,
+          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+        );
+        if (search.status === "success") {
+          const rows = Array.isArray((search.data as any)?.results) ? (search.data as any).results : [];
+          const first = rows[0];
+          const candidateZip = String(first?.zipNo || "").trim();
+          const roadAddr = String(first?.roadAddr || first?.roadAddrPart1 || "").trim();
+          const jibunAddr = String(first?.jibunAddr || "").trim();
+          if (candidateZip) {
+            const prompt = `입력하신 주소를 확인했습니다.\n- 지번주소: ${jibunAddr || currentAddress}\n- 도로명주소: ${roadAddr || "-"}\n- 우편번호: ${candidateZip}\n위 정보가 맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+            const reply = makeReply(prompt);
+            await insertTurn({
+              session_id: sessionId,
+              seq: nextSeq,
+              transcript_text: message,
+              answer_text: reply,
+              final_answer: reply,
+                bot_context: {
+                  intent_name: resolvedIntent,
+                  entity: policyContext.entity,
+                  selected_order_id: resolvedOrderId,
+                  address_pending: true,
+                  address_stage: "awaiting_zipcode_confirm",
+                  pending_address: currentAddress,
+                  pending_zipcode: candidateZip || null,
+                  pending_road_addr: roadAddr || null,
+                  pending_jibun_addr: jibunAddr || null,
+                  pending_order_id: isLikelyOrderId(resolvedOrderId) ? resolvedOrderId : null,
+                  customer_verification_token: customerVerificationToken || null,
+                },
+              });
+            return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+          }
+        }
+        const prompt = "입력하신 주소를 확인할 수 없습니다. 도로명/지번 포함 주소를 다시 입력해 주세요.";
         const reply = makeReply(prompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              selected_order_id: resolvedOrderId,
+              address_pending: true,
+              address_stage: "awaiting_address",
+              pending_order_id: isLikelyOrderId(resolvedOrderId) ? resolvedOrderId : null,
+              customer_verification_token: customerVerificationToken || null,
+            },
+          });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      const beforeAddress = normalizeAddressText(
+        String(receiver?.address_full || [receiver?.address1, receiver?.address2].filter(Boolean).join(" "))
+      );
+      if (!updateConfirmAcceptedThisTurn) {
+        const confirmPrompt = `아래 내용으로 배송지를 변경할까요?\n- 주문번호: ${resolvedOrderId}\n- 현재 배송지: ${beforeAddress || "-"}\n- 변경 배송지: ${normalizeAddressText([address1, address2].filter(Boolean).join(" ")) || currentAddress}\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+        const reply = makeReply(confirmPrompt);
         await insertTurn({
           session_id: sessionId,
           seq: nextSeq,
@@ -1736,18 +3270,30 @@ export async function POST(req: NextRequest) {
             intent_name: resolvedIntent,
             entity: policyContext.entity,
             selected_order_id: resolvedOrderId,
-            address_pending: true,
-            address_stage: "awaiting_zipcode",
+            change_pending: true,
+            change_stage: "awaiting_update_confirm",
+            pending_order_id: resolvedOrderId,
             pending_address: currentAddress,
+            pending_zipcode: effectiveZipcode,
+            pending_before_address: beforeAddress || null,
+            customer_verification_token: customerVerificationToken || null,
           },
         });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          { stage: "tool", action: "ASK_UPDATE_CONFIRM", order_id: resolvedOrderId },
+          { intent_name: resolvedIntent }
+        );
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
       const updatePayload: Record<string, unknown> = {
         order_id: resolvedOrderId,
       };
       if (customerVerificationToken) updatePayload.customer_verification_token = customerVerificationToken;
-      if (zipcode) updatePayload.zipcode = zipcode;
+      if (effectiveZipcode) updatePayload.zipcode = effectiveZipcode;
       if (address1) updatePayload.address1 = address1;
       if (address2) updatePayload.address2 = address2;
       if (!updatePayload.address1 && currentAddress) {
@@ -1829,12 +3375,14 @@ export async function POST(req: NextRequest) {
           return;
         }
         if (tool.name === "lookup_order") {
-          const order = (tool.data as any)?.order || {};
+          const parsed = readLookupOrderView(tool.data);
+          const core = parsed.core || {};
+          const summary = parsed.summary || {};
           const orderInfo = [
-            order.order_id || order.order_no,
-            order.order_date,
-            order.order_summary?.shipping_status || order.shipping_status,
-            order.order_summary?.total_amount_due,
+            core.order_id || core.order_no,
+            core.order_date || summary.order_date,
+            summary.shipping_status || core.shipping_status,
+            summary.total_amount_due ?? core.total_amount_due ?? core.payment_amount,
           ].filter(Boolean).join(", ");
           summaries.push(`lookup_order: ${orderInfo || "성공"}`);
           return;
@@ -1866,25 +3414,87 @@ export async function POST(req: NextRequest) {
       mcpSummary = summaries.join(" | ");
     }
 
-    if (listOrdersChoices.length > 0) {
+    if (!resolvedOrderId && listOrdersChoices.length === 1) {
+      const selected = listOrdersChoices[0];
+      const phoneFromSlot =
+        typeof policyContext.entity?.phone === "string" ? normalizePhoneDigits(policyContext.entity.phone) : "";
+      const lookupForSelected = toolResults.find((tool) => {
+        if (tool.name !== "lookup_order" || !tool.ok || !tool.data) return false;
+        const parsed = readLookupOrderView(tool.data);
+        const core = parsed.core || {};
+        return String(core.order_id || core.order_no || "").trim() === selected.order_id;
+      });
+      const receiverPhoneFromLookup = (() => {
+        if (!lookupForSelected?.data) return "";
+        const parsed = readLookupOrderView(lookupForSelected.data);
+        const receivers = Array.isArray((parsed.order as any)?.receivers) ? (parsed.order as any).receivers : [];
+        const first = receivers[0] || {};
+        return normalizePhoneDigits(
+          String(first?.cellphone || first?.phone || "")
+        );
+      })();
+      const mismatch =
+        Boolean(phoneFromSlot) &&
+        Boolean(receiverPhoneFromLookup) &&
+        phoneFromSlot !== receiverPhoneFromLookup;
+      if (mismatch) {
+        const reply = makeReply("인증한 번호와 주문 수신자 정보가 달라 주문번호 확인이 필요합니다. 주문번호를 입력해 주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: null,
+            order_choices: listOrdersChoices,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "MCP_CALL_SKIPPED",
+          {
+            tool: "auto_select_order",
+            reason: "PHONE_ORDER_MISMATCH",
+            detail: {
+              phone_masked: maskPhone(phoneFromSlot),
+              receiver_phone_masked: maskPhone(receiverPhoneFromLookup),
+            },
+          },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+      }
+
+      resolvedOrderId = selected.order_id;
+      policyContext = {
+        ...policyContext,
+        entity: {
+          ...(policyContext.entity || {}),
+          order_id: selected.order_id,
+        },
+      };
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "ORDER_CHOICES_PRESENTED",
+        { choices: listOrdersChoices, auto_selected: true, selected_order_id: selected.order_id },
+        { intent_name: resolvedIntent }
+      );
+    }
+
+    if (listOrdersChoices.length > 1) {
       const prompt =
         compiledPolicy.templates?.order_choices_prompt ||
         "조회된 주문이 여러 건입니다. 변경하실 주문을 번호로 선택해 주세요.";
-      const lines = listOrdersChoices.map((o) =>
-        o.label
-          ? o.label
-          : `- ${[
-            `${o.index}번`,
-            o.order_date,
-            o.product_name,
-            o.option_name,
-            o.quantity,
-            o.price,
-          ]
-            .filter(Boolean)
-            .join(" | ")}`.trim()
-      );
-      const header = "(번호 | 날짜 | 상품명 | 옵션 | 수량 | 가격)";
+      const lines = listOrdersChoices.map((o) => (o.label ? o.label : `${o.index}번 주문`));
+      const header = "아래 주문 중 번호를 선택해 주세요.";
       const replyText = `${prompt}\n${header}\n${lines.join("\n")}`.trim();
       const reply = makeReply(replyText);
       await insertTurn({
@@ -1909,7 +3519,10 @@ export async function POST(req: NextRequest) {
         { choices: listOrdersChoices },
         { intent_name: resolvedIntent }
       );
-      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+      const quickReplies = listOrdersChoices
+        .slice(0, 9)
+        .map((item) => ({ label: `${item.index}번`, value: String(item.index) }));
+      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions, quick_replies: quickReplies });
     }
 
     if (listOrdersCalled && listOrdersEmpty) {
@@ -1928,6 +3541,158 @@ export async function POST(req: NextRequest) {
         },
       });
       await insertEvent(context, sessionId, latestTurnId, "ORDER_CHOICES_EMPTY", {}, { intent_name: resolvedIntent });
+      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+    }
+
+    const updateFailures = toolResults.filter(
+      (tool) => tool.name === "update_order_shipping_address" && !tool.ok
+    );
+    if (resolvedIntent === "order_change" && updateFailures.length > 0) {
+      const firstUpdateError = String(updateFailures[0].error || "UPDATE_ORDER_SHIPPING_ADDRESS_FAILED");
+      const missingZipcode = firstUpdateError.includes(EXECUTION_GUARD_RULES.updateAddress.missingZipcodeCode);
+      if (missingZipcode) {
+        const search = await callAddressSearchWithAudit(
+          context,
+          currentAddress || "",
+          sessionId,
+          latestTurnId,
+          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+        );
+        if (search.status === "success") {
+          const rows = Array.isArray((search.data as any)?.results) ? (search.data as any).results : [];
+          const first = rows[0];
+          const candidateZip = String(first?.zipNo || "").trim();
+          const roadAddr = String(first?.roadAddr || first?.roadAddrPart1 || "").trim();
+          const jibunAddr = String(first?.jibunAddr || "").trim();
+          if (candidateZip) {
+            const prompt = `입력하신 주소를 확인했습니다.\n- 지번주소: ${jibunAddr || currentAddress}\n- 도로명주소: ${roadAddr || "-"}\n- 우편번호: ${candidateZip}\n위 정보가 맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+            const reply = makeReply(prompt);
+            await insertTurn({
+              session_id: sessionId,
+              seq: nextSeq,
+              transcript_text: message,
+              answer_text: reply,
+              final_answer: reply,
+              bot_context: {
+                intent_name: resolvedIntent,
+                entity: policyContext.entity,
+                selected_order_id: resolvedOrderId,
+                address_pending: true,
+                address_stage: "awaiting_zipcode_confirm",
+                pending_address: currentAddress || null,
+                pending_zipcode: candidateZip || null,
+                pending_road_addr: roadAddr || null,
+                pending_jibun_addr: jibunAddr || null,
+                customer_verification_token: customerVerificationToken,
+                mcp_actions: mcpActions,
+              },
+            });
+            await insertEvent(
+              context,
+              sessionId,
+              latestTurnId,
+              "EXECUTION_GUARD_TRIGGERED",
+              { reason: "MISSING_ZIPCODE", tool: "update_order_shipping_address", error: firstUpdateError },
+              { intent_name: resolvedIntent }
+            );
+            return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+          }
+        }
+        const prompt = "입력하신 주소를 확인할 수 없습니다. 도로명/지번 포함 주소를 다시 입력해 주세요.";
+        const reply = makeReply(prompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+            address_pending: true,
+            address_stage: "awaiting_address",
+            customer_verification_token: customerVerificationToken,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "EXECUTION_GUARD_TRIGGERED",
+          { reason: "MISSING_ZIPCODE", tool: "update_order_shipping_address", error: firstUpdateError },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+      }
+
+      const ticketSuccess = toolResults.some((tool) => tool.name === "create_ticket" && tool.ok);
+      const fallbackReply = ticketSuccess
+        ? EXECUTION_GUARD_RULES.updateAddress.fallbackTicketMessage
+        : EXECUTION_GUARD_RULES.updateAddress.fallbackRetryMessage;
+      const reply = makeReply(fallbackReply);
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: policyContext.entity,
+          selected_order_id: resolvedOrderId,
+          customer_verification_token: customerVerificationToken,
+          mcp_actions: mcpActions,
+        },
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "EXECUTION_GUARD_TRIGGERED",
+        { reason: "UPDATE_FAILED", tool: "update_order_shipping_address", error: firstUpdateError, ticket_success: ticketSuccess },
+        { intent_name: resolvedIntent }
+      );
+      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+    }
+
+    const updateSuccess = toolResults.find(
+      (tool) => tool.name === "update_order_shipping_address" && tool.ok
+    );
+    if (resolvedIntent === "order_change" && updateSuccess) {
+      const finalAddress =
+        typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
+      const finalZip =
+        typeof policyContext.entity?.zipcode === "string" ? String(policyContext.entity.zipcode).trim() : "";
+      const lines = [
+        "요약: 배송지 변경이 완료되었습니다.",
+        `상세: 주문번호 ${resolvedOrderId || "-"}의 배송지 변경 요청이 정상 처리되었습니다.${finalAddress ? ` (${finalAddress}${finalZip ? `, ${finalZip}` : ""})` : ""}`,
+        "다음 액션: 추가 변경이 필요하면 주소를 다시 알려주세요.",
+      ];
+      const reply = makeReply(lines.join("\n"));
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: policyContext.entity,
+          selected_order_id: resolvedOrderId,
+          customer_verification_token: customerVerificationToken,
+          mcp_actions: mcpActions,
+        },
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "FINAL_ANSWER_READY",
+        { answer: reply, model: "deterministic_order_change_success" },
+        { intent_name: resolvedIntent }
+      );
       return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
     }
 
@@ -1983,27 +3748,9 @@ ${mcpSummary || "(없음)"}`;
       finalAnswer = formatOutputDefault(finalAnswer);
     }
     if (outputGate.actions.forcedResponse) {
-      let isSoft = outputGate.actions.isSoftForced;
-      const reason = outputGate.actions.forceReason;
-
-      // Heuristic: If we successfully called tools (like track_shipment), 
-      // the LLM likely has better info than a static template. Treat as soft.
-      if (!isSoft && toolResults.some(t => t.ok)) {
-        isSoft = true;
-        if (debugEnabled) {
-          console.log("[playground/chat/mk2] auto-softening template due to successful tools", { reason });
-        }
-      }
-
-      if (isSoft && finalAnswer && finalAnswer.length > 5) {
-        if (debugEnabled) {
-          console.log("[playground/chat/mk2] skipping soft template", { reason, original: finalAnswer });
-        }
-      } else {
-        finalAnswer = outputGate.actions.forcedResponse;
-        if (debugEnabled) {
-          console.log("[playground/chat/mk2] forcing template", { reason });
-        }
+      finalAnswer = normalizeOrderChangeAddressPrompt(resolvedIntent, outputGate.actions.forcedResponse);
+      if (debugEnabled) {
+        console.log("[playground/chat/mk2] forcing template", { reason: outputGate.actions.forceReason });
       }
     }
 
@@ -2057,13 +3804,14 @@ ${mcpSummary || "(없음)"}`;
       console.error("[playground/chat/mk2] unhandled error", err);
     }
     const message = err instanceof Error ? err.message : "INTERNAL_ERROR";
-    return respond(
-      {
-        error: "INTERNAL_ERROR",
-        detail: debugEnabled ? { message, stack: err instanceof Error ? err.stack : null } : undefined,
-      },
-      { status: 500 }
-    );
+    const fallback = "처리 중 오류가 발생했습니다. 같은 내용을 한 번 더 보내주세요.";
+    return respond({
+      step: "final",
+      message: fallback,
+      mcp_actions: [],
+      error: "INTERNAL_ERROR",
+      detail: debugEnabled ? { message, stack: err instanceof Error ? err.stack : null } : undefined,
+    });
   }
 }
 

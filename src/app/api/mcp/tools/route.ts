@@ -65,30 +65,6 @@ export async function GET(req: NextRequest) {
     policy: policyByTool.get(tool.id) || null,
   }));
 
-  // Debug Tool Injection
-  items.push({
-    id: "debug-cafe24-order",
-    name: "debug_cafe24_order",
-    description: "Raw Cafe24 Order inspector (Debug only)",
-    schema: {
-      type: "object",
-      properties: {
-        order_id: { type: "string", example: "20260127-0000014" }
-      },
-      required: ["order_id"]
-    },
-    version: "v1",
-    policy: {
-      tool_id: "debug-cafe24-order",
-      is_allowed: true,
-      allowed_scopes: [],
-      rate_limit_per_min: 100,
-      masking_rules: null,
-      conditions: null,
-      adapter_key: "debug_cafe24_order"
-    }
-  });
-
   items.push({
     id: "search-address",
     name: "search_address",

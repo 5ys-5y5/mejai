@@ -84,7 +84,9 @@ function SidebarLink({
 }
 
 export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () => void; collapsed: boolean }) {
+  const pathname = usePathname();
   const [reviewCount, setReviewCount] = useState<number | null>(null);
+  const pollIntervalMs = pathname.startsWith("/app/review") ? 30_000 : 300_000;
 
   useEffect(() => {
     let mounted = true;
@@ -98,7 +100,7 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
       }
     }
     loadCount();
-    timer = setInterval(loadCount, 30000);
+    timer = setInterval(loadCount, pollIntervalMs);
     const supabase = getSupabaseClient();
     if (!supabase) return () => {};
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -110,7 +112,7 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
       if (timer) clearInterval(timer);
       sub?.subscription.unsubscribe();
     };
-  }, []);
+  }, [pollIntervalMs]);
 
   const badgeCount = typeof reviewCount === "number" && reviewCount > 0 ? reviewCount : undefined;
   return (

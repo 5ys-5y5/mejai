@@ -57,6 +57,14 @@ export type PolicyActionResult = {
   outputFormat?: "default";
 };
 
+export type PolicyConflict = {
+  stage: "input" | "tool" | "output";
+  ruleA: string;
+  ruleB: string;
+  kind: "FORCE_RESPONSE_VS_FORCE_TOOL";
+  intentScope: string;
+};
+
 const ABUSE_PATTERN = /(미친|병신|새끼|욕|꺼져|좆)/;
 const PHONE_PATTERN = /\b01[016789]-?\d{3,4}-?\d{4}\b/;
 const EMAIL_PATTERN = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
@@ -85,6 +93,10 @@ function matchPredicate(predicate: string, ctx: PolicyEvalContext, args?: Predic
       return Boolean(ctx.entity?.address);
     case "entity.address.missing":
       return !ctx.entity?.address;
+    case "entity.zipcode.present":
+      return Boolean(ctx.entity?.zipcode);
+    case "entity.zipcode.missing":
+      return !ctx.entity?.zipcode;
     case "user.confirmed":
       return Boolean(ctx.user?.confirmed) === Boolean(args?.value);
     case "conversation.repeat_over":
@@ -209,6 +221,87 @@ function applyActions(
   return result;
 }
 
+function extractIntentScopes(rule: PolicyRule) {
+  const scopes = new Set<string>();
+  const checks = [...(rule.when.all || []), ...(rule.when.any || [])];
+  checks.forEach((c) => {
+    if (c.predicate === "intent.is") {
+      const value = String(c.args?.value || "").trim();
+      if (value) scopes.add(value);
+    }
+    if (c.predicate === "intent.is_one_of" && Array.isArray(c.args?.values)) {
+      (c.args?.values as unknown[]).forEach((v) => {
+        const value = String(v || "").trim();
+        if (value) scopes.add(value);
+      });
+    }
+  });
+  if (scopes.size === 0) scopes.add("*");
+  return scopes;
+}
+
+function hasActionType(rule: PolicyRule, type: string) {
+  return (rule.enforce?.actions || []).some((a) => String(a.type || "") === type);
+}
+
+function scopesOverlap(a: Set<string>, b: Set<string>) {
+  if (a.has("*") || b.has("*")) return true;
+  for (const s of a) {
+    if (b.has(s)) return true;
+  }
+  return false;
+}
+
+function detectPolicyConflicts(rules: PolicyRule[]): PolicyConflict[] {
+  const isMutuallyExclusive = (a: PolicyRule, b: PolicyRule) => {
+    const checksA = [...(a.when.all || []), ...(a.when.any || [])].map((c) => c.predicate);
+    const checksB = [...(b.when.all || []), ...(b.when.any || [])].map((c) => c.predicate);
+    const fields = ["order_id", "phone", "address", "zipcode"] as const;
+    for (const field of fields) {
+      const present = `entity.${field}.present`;
+      const missing = `entity.${field}.missing`;
+      if ((checksA.includes(present) && checksB.includes(missing)) || (checksA.includes(missing) && checksB.includes(present))) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const conflicts: PolicyConflict[] = [];
+  for (let i = 0; i < rules.length; i++) {
+    for (let j = i + 1; j < rules.length; j++) {
+      const a = rules[i];
+      const b = rules[j];
+      if (a.stage !== b.stage) continue;
+      const aResp = hasActionType(a, "force_response_template");
+      const aTool = hasActionType(a, "force_tool_call");
+      const bResp = hasActionType(b, "force_response_template");
+      const bTool = hasActionType(b, "force_tool_call");
+      const mixed = (aResp && bTool) || (aTool && bResp);
+      if (!mixed) continue;
+      const aScopes = extractIntentScopes(a);
+      const bScopes = extractIntentScopes(b);
+      // Avoid noisy false positives from wildcard-scoped rules; keep explicit intent overlaps only.
+      if (aScopes.has("*") || bScopes.has("*")) continue;
+      if (!scopesOverlap(aScopes, bScopes)) continue;
+      if (isMutuallyExclusive(a, b)) continue;
+      const overlap = aScopes.has("*")
+        ? (bScopes.has("*") ? "*" : Array.from(bScopes).join(","))
+        : bScopes.has("*")
+          ? Array.from(aScopes).join(",")
+          : Array.from(aScopes).filter((s) => bScopes.has(s)).join(",");
+      conflicts.push({
+        stage: a.stage,
+        ruleA: a.id,
+        ruleB: b.id,
+        kind: "FORCE_RESPONSE_VS_FORCE_TOOL",
+        intentScope: overlap || "*",
+      });
+    }
+  }
+  return conflicts;
+}
+
 export function compilePolicy(packs: PolicyPack[]) {
   const rules: PolicyRule[] = [];
   const templates: Record<string, string> = {};
@@ -226,7 +319,8 @@ export function compilePolicy(packs: PolicyPack[]) {
 
   rules.sort((a, b) => (b.priority || 0) - (a.priority || 0));
 
-  return { rules, templates, toolPolicies };
+  const conflicts = detectPolicyConflicts(rules);
+  return { rules, templates, toolPolicies, conflicts };
 }
 
 export function runPolicyStage(
@@ -235,18 +329,25 @@ export function runPolicyStage(
   ctx: PolicyEvalContext
 ) {
   const matched = compiled.rules.filter((rule) => rule.stage === stage && whenMatches(rule, ctx));
-  const actionResults = matched.map((rule) => {
-    const res = applyActions(rule.enforce.actions || [], compiled.templates, ctx);
-    if (res.forcedResponse) res.forceReason = `RULE:${rule.id}`;
-    return res;
-  });
+  const hasToolForcedCall =
+    stage === "tool" && matched.some((rule) => hasActionType(rule, "force_tool_call"));
+  const ignoredForceResponseRules: string[] = [];
   const merged: PolicyActionResult = {
     denyTools: [],
     allowTools: [],
     forcedToolCalls: [],
     flags: {},
   };
-  actionResults.forEach((res) => {
+  for (const rule of matched) {
+    const res = applyActions(rule.enforce.actions || [], compiled.templates, ctx);
+    if (stage === "tool" && hasToolForcedCall && res.forcedResponse) {
+      // Resolve force_response vs force_tool conflicts by preferring executable tool flow.
+      ignoredForceResponseRules.push(rule.id);
+      res.forcedResponse = undefined;
+      res.forceReason = undefined;
+      res.isSoftForced = undefined;
+    }
+    if (res.forcedResponse) res.forceReason = `RULE:${rule.id}`;
     if (res.forcedResponse && !merged.forcedResponse) {
       merged.forcedResponse = res.forcedResponse;
       merged.forceReason = res.forceReason;
@@ -257,8 +358,20 @@ export function runPolicyStage(
     merged.allowTools!.push(...(res.allowTools || []));
     merged.forcedToolCalls!.push(...(res.forcedToolCalls || []));
     Object.assign(merged.flags!, res.flags || {});
-  });
-  return { matched, actions: merged };
+    if (stage === "tool" && res.forcedResponse) {
+      // Once response is forced in tool stage, tool execution must be empty.
+      merged.forcedToolCalls = [];
+      break;
+    }
+  }
+  return {
+    matched,
+    actions: merged,
+    meta: {
+      has_tool_forced_call: hasToolForcedCall,
+      ignored_force_response_rules: ignoredForceResponseRules,
+    },
+  };
 }
 
 export function validateToolArgs(

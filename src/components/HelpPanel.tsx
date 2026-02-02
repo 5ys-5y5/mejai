@@ -32,6 +32,7 @@ export function HelpPanel() {
   const { enabled } = useHelpPanelEnabled();
   const { collapsed, setCollapsed } = useHelpPanelCollapsed();
   const pathname = usePathname();
+  const pollIntervalMs = pathname.startsWith("/app/review") ? 30_000 : 300_000;
   const [mounted, setMounted] = useState(false);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -100,7 +101,7 @@ export function HelpPanel() {
     }
 
     refresh();
-    timer = setInterval(refresh, 30000);
+    timer = setInterval(refresh, pollIntervalMs);
     const onFocus = () => refresh();
     window.addEventListener("focus", onFocus);
 
@@ -123,7 +124,7 @@ export function HelpPanel() {
       window.removeEventListener("focus", onFocus);
       sub.subscription.unsubscribe();
     };
-  }, [enabled]);
+  }, [enabled, pollIntervalMs]);
 
   if (!enabled || !mounted) return null;
 

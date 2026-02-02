@@ -36,9 +36,6 @@ export async function POST(req: NextRequest) {
   if (toolName === "search_address") {
     tool = { id: "search-address", name: "search_address", schema_json: {}, version: "v1", is_active: true };
     policy = { is_allowed: true, allowed_scopes: [], rate_limit_per_min: 60, masking_rules: null, conditions: null, adapter_key: "search_address" };
-  } else if (toolName === "debug_cafe24_order") {
-    tool = { id: "debug-cafe24-order", name: "debug_cafe24_order", schema_json: {}, version: "v1", is_active: true };
-    policy = { is_allowed: true, allowed_scopes: [], rate_limit_per_min: 60, masking_rules: null, conditions: null, adapter_key: "debug_cafe24_order" };
   } else {
     // Database Lookup
     const { data: dbTool, error: toolError } = await context.supabase
