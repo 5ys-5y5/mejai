@@ -269,6 +269,17 @@ function extractOrderId(text: string) {
   return digits;
 }
 
+function isLikelyOrderId(value: string | null | undefined) {
+  const v = String(value || "").trim();
+  if (!v) return false;
+  if (/[가-힣\s]/.test(v)) return false;
+  if (/^01\d{8,9}$/.test(v)) return false;
+  if (/^\d{6,20}$/.test(v)) return true;
+  if (/^\d{4,12}-\d{3,12}(?:-\d{1,6})?$/.test(v)) return true;
+  if (/^[0-9A-Za-z\-]{6,30}$/.test(v)) return true;
+  return false;
+}
+
 function extractZipcode(text: string) {
   const match = text.match(/\b\d{5}\b/);
   return match ? match[0] : null;
@@ -802,13 +813,15 @@ export async function POST(req: NextRequest) {
     const expectedInput = (() => {
       const text = String(lastAnswer || "");
       if (text.includes("인증번호")) return "otp_code";
+      const addressPrompt = text.includes("주소") || text.includes("배송지");
+      if (addressPrompt) return "address";
+      if (text.includes("우편번호")) return "zipcode";
       if (text.includes("휴대폰 번호")) {
         if (text.includes("주문번호") && text.includes("또는")) return "order_id_or_phone";
         return "phone";
       }
       if (text.includes("주문번호") && text.includes("또는") && text.includes("휴대폰")) return "order_id_or_phone";
       if (text.includes("주문번호")) return "order_id";
-      if (text.includes("주소") || text.includes("배송지")) return "address";
       return null;
     })();
     if (expectedInput === "otp_code") {
@@ -816,20 +829,65 @@ export async function POST(req: NextRequest) {
       derivedPhone = null;
       derivedZipcode = null;
       derivedAddress = null;
+    } else if (expectedInput === "zipcode") {
+      derivedOrderId = null;
+      derivedPhone = null;
+      derivedAddress = null;
+      derivedZipcode = extractZipcode(message) || message.replace(/[^\d]/g, "").slice(0, 5) || null;
     } else if (expectedInput === "phone") {
       derivedOrderId = null;
       derivedZipcode = null;
       derivedAddress = null;
+      derivedPhone = extractPhone(message);
     } else if (expectedInput === "order_id") {
       derivedPhone = null;
       derivedZipcode = null;
       derivedAddress = null;
+      derivedOrderId = extractOrderId(message);
     } else if (expectedInput === "address") {
       derivedOrderId = null;
       derivedPhone = null;
+      derivedZipcode = extractZipcode(message);
+      const cleaned = message.replace(/^(주소|배송지)\s*[:\-]?\s*/g, "").trim();
+      derivedAddress = extractAddress(message, null, null, derivedZipcode) || cleaned || null;
     } else if (expectedInput === "order_id_or_phone") {
       derivedZipcode = null;
       derivedAddress = null;
+      const phone = extractPhone(message);
+      if (phone) {
+        derivedPhone = phone;
+        derivedOrderId = null;
+      } else {
+        derivedOrderId = extractOrderId(message);
+        derivedPhone = null;
+      }
+    }
+
+    if (prevBotContext.address_pending && prevBotContext.address_stage === "awaiting_zipcode") {
+      const pendingAddress = String(prevBotContext.pending_address || "").trim();
+      const pendingZip = extractZipcode(message) || message.replace(/[^\d]/g, "").slice(0, 5);
+      if (!pendingZip) {
+        const prompt = "우편번호를 알려주세요.";
+        const reply = makeReply(prompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: resolvedOrderId,
+            address_pending: true,
+            address_stage: "awaiting_zipcode",
+            pending_address: pendingAddress || null,
+          },
+        }, lastDebugPrefixJson);
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      derivedZipcode = pendingZip || null;
+      derivedAddress = pendingAddress || derivedAddress;
     }
     const orderChoiceIndex =
       !derivedOrderId && prevChoices.length > 0 ? extractChoiceIndex(message, prevChoices.length) : null;
@@ -837,13 +895,25 @@ export async function POST(req: NextRequest) {
       orderChoiceIndex && prevChoices[orderChoiceIndex - 1]?.order_id
         ? String(prevChoices[orderChoiceIndex - 1]?.order_id)
         : null;
+    const safePrevEntityOrderId =
+      typeof prevEntity.order_id === "string" && isLikelyOrderId(prevEntity.order_id)
+        ? prevEntity.order_id
+        : null;
+    const safePrevOrderIdFromTranscript =
+      prevOrderIdFromTranscript && isLikelyOrderId(prevOrderIdFromTranscript)
+        ? prevOrderIdFromTranscript
+        : null;
+    const safePrevSelectedOrderId =
+      prevSelectedOrderId && isLikelyOrderId(prevSelectedOrderId) ? prevSelectedOrderId : null;
+    const safeRecentOrderId =
+      recentEntity?.order_id && isLikelyOrderId(recentEntity.order_id) ? recentEntity.order_id : null;
     let resolvedOrderId =
       derivedOrderId ??
       orderIdFromChoice ??
-      (typeof prevEntity.order_id === "string" ? prevEntity.order_id : null) ??
-      prevOrderIdFromTranscript ??
-      prevSelectedOrderId ??
-      (recentEntity?.order_id || null);
+      safePrevEntityOrderId ??
+      safePrevOrderIdFromTranscript ??
+      safePrevSelectedOrderId ??
+      (safeRecentOrderId || null);
 
     let policyContext: PolicyEvalContext = {
       input: { text: message },
@@ -1572,15 +1642,38 @@ export async function POST(req: NextRequest) {
       mcpActions.push("lookup_order");
     }
 
+    const currentAddress =
+      typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
+
     if (
       resolvedIntent === "change" &&
-      derivedAddress &&
+      currentAddress &&
       resolvedOrderId &&
       canUseTool("update_order_shipping_address") &&
       allowedToolNames.has("update_order_shipping_address") &&
       !hasToolResult("update_order_shipping_address")
     ) {
-      const { zipcode, address1, address2 } = parseAddressParts(derivedAddress);
+      const { zipcode, address1, address2 } = parseAddressParts(currentAddress);
+      if (!zipcode) {
+        const prompt = "우편번호를 알려주세요.";
+        const reply = makeReply(prompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+            address_pending: true,
+            address_stage: "awaiting_zipcode",
+            pending_address: currentAddress,
+          },
+        }, lastDebugPrefixJson);
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
       const updatePayload: Record<string, unknown> = {
         order_id: resolvedOrderId,
       };
@@ -1588,8 +1681,8 @@ export async function POST(req: NextRequest) {
       if (zipcode) updatePayload.zipcode = zipcode;
       if (address1) updatePayload.address1 = address1;
       if (address2) updatePayload.address2 = address2;
-      if (!updatePayload.address1 && derivedAddress) {
-        updatePayload.address_full = derivedAddress;
+      if (!updatePayload.address1 && currentAddress) {
+        updatePayload.address_full = currentAddress;
       }
       const update = await callMcpTool(
         context,
@@ -1623,7 +1716,7 @@ export async function POST(req: NextRequest) {
             {
               title: `배송지 변경 요청 - ${resolvedOrderId}`,
               summary: `배송지 변경 요청 - ${resolvedOrderId}`,
-              content: `배송지 변경 요청: ${derivedAddress}\n주문번호: ${resolvedOrderId}`,
+              content: `배송지 변경 요청: ${currentAddress}\n주문번호: ${resolvedOrderId}`,
             },
             sessionId,
             latestTurnId,

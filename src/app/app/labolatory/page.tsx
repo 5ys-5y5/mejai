@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Bot, Copy, ExternalLink, Info, Plus, Send, Trash2, User, X } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -416,6 +416,8 @@ export default function LabolatoryPage() {
   const [tools, setTools] = useState<MpcTool[]>([]);
 
   const [models, setModels] = useState<ModelState[]>(() => [createDefaultModel()]);
+  const chatScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const prevMessageSignatureRefs = useRef<Record<string, string>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -468,6 +470,27 @@ export default function LabolatoryPage() {
       }))
     );
   }, [tools]);
+
+  useLayoutEffect(() => {
+    const raf = requestAnimationFrame(() => {
+      for (const model of models) {
+        const el = chatScrollRefs.current[model.id];
+        if (!el) continue;
+
+        const last = model.messages[model.messages.length - 1];
+        const nextSignature = `${model.messages.length}:${last?.id ?? ""}:${last?.content?.length ?? 0}`;
+        const prevSignature = prevMessageSignatureRefs.current[model.id];
+
+        // Keep the initial viewport at the top; auto-scroll only after chat updates.
+        if (prevSignature && prevSignature !== nextSignature) {
+          el.scrollTop = el.scrollHeight;
+        }
+        prevMessageSignatureRefs.current[model.id] = nextSignature;
+      }
+    });
+
+    return () => cancelAnimationFrame(raf);
+  }, [models]);
 
   const kbOptions = useMemo<SelectOption[]>(() => {
     return kbItems.filter((kb) => !kb.is_admin).map((kb) => ({
@@ -818,10 +841,9 @@ export default function LabolatoryPage() {
       `기대 목록(Debug): ${auditStatus.expected.debug_functions.length ? auditStatus.expected.debug_functions.join(", ") : "-"}`,
       "",
       `점검 완료 항목: ${auditStatus.completed.length ? auditStatus.completed.join(", ") : "-"}`,
-      `점검 미완료: ${
-        auditStatus.incomplete.length
-          ? auditStatus.incomplete.map((item) => `${item.key}(${item.reasons.join(", ")})`).join(", ")
-          : "-"
+      `점검 미완료: ${auditStatus.incomplete.length
+        ? auditStatus.incomplete.map((item) => `${item.key}(${item.reasons.join(", ")})`).join(", ")
+        : "-"
       }`,
       `점검 불가: ${auditStatus.blocked.length ? auditStatus.blocked.join(", ") : "-"}`,
       "",
@@ -931,10 +953,6 @@ export default function LabolatoryPage() {
             <p className="mt-1 text-sm text-slate-500">
               LLM · KB · MCP · Route 조합을 여러 개 동시에 비교해 품질을 확인하세요.
             </p>
-            <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-              <Bot className="h-4 w-4" />
-              설정을 변경하면 해당 모델의 대화가 초기화됩니다.
-            </div>
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" onClick={handleResetAll}>
@@ -966,11 +984,14 @@ export default function LabolatoryPage() {
                         className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
                         onClick={() => handleRemoveModel(model.id)}
                         disabled={models.length <= 1}
-                        aria-label={`모델 ${index + 1} 제거`}
+                        aria-label={`Model ${index + 1} Remove`}
                       >
                         <X className="h-3.5 w-3.5" />
                       </button>
-                      <div className="text-sm font-semibold text-slate-900">모델 {index + 1}</div>
+                      <div className="text-sm font-semibold text-slate-900">Model {index + 1}</div>
+                      <div className=" flex items-center gap-2 text-xs text-slate-500">
+                        설정을 변경하면 해당 모델의 대화가 초기화됩니다.
+                      </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
                       <button
@@ -1242,54 +1263,60 @@ export default function LabolatoryPage() {
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-200 p-4 lg:border-l lg:border-t-0 flex flex-col">
-                      <div className="space-y-4 flex-1 min-h-0 overflow-auto pr-2">
-                        {model.messages.map((msg) => {
-                          const hasDebug = msg.role === "bot" && msg.content.includes("debug_prefix");
-                          const debugParts = hasDebug ? getDebugParts(msg.content) : null;
-                          return (
-                            <div
-                              key={msg.id}
-                              className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}
-                            >
-                              {msg.role === "bot" ? (
-                                <div className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
-                                  <Bot className="h-4 w-4 text-slate-500" />
-                                </div>
-                              ) : null}
+                    <div className="border-t border-slate-200 p-4 lg:border-l lg:border-t-0 flex max-h-[270px] flex-col overflow-hidden">
+                      <div className="relative flex-1 min-h-0 overflow-hidden">
+                        <div
+                          ref={(el) => {
+                            chatScrollRefs.current[model.id] = el;
+                          }}
+                          className="relative z-0 h-full space-y-4 overflow-auto pr-2 pl-2 pt-2 pb-12 scrollbar-hide bg-slate-50 rounded-xl"
+                        >
+                          {model.messages.map((msg) => {
+                            const hasDebug = msg.role === "bot" && msg.content.includes("debug_prefix");
+                            const debugParts = hasDebug ? getDebugParts(msg.content) : null;
+                            return (
                               <div
-                                className={cn(
-                                  "max-w-[75%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm",
-                                  msg.role === "user"
-                                    ? "bg-slate-900 text-white"
-                                    : "bg-slate-100 text-slate-700 border border-slate-200"
-                                )}
+                                key={msg.id}
+                                className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}
                               >
-                                {hasDebug && debugParts ? (
-                                  debugParts.answerHtml ? (
-                                    <span dangerouslySetInnerHTML={{ __html: debugParts.answerHtml }} />
+                                {msg.role === "bot" ? (
+                                  <div className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
+                                    <Bot className="h-4 w-4 text-slate-500" />
+                                  </div>
+                                ) : null}
+                                <div
+                                  className={cn(
+                                    "max-w-[75%] whitespace-pre-wrap rounded-2xl px-4 py-2 text-sm",
+                                    msg.role === "user"
+                                      ? "bg-slate-900 text-white"
+                                      : "bg-slate-100 text-slate-700 border border-slate-200"
+                                  )}
+                                >
+                                  {hasDebug && debugParts ? (
+                                    debugParts.answerHtml ? (
+                                      <span dangerouslySetInnerHTML={{ __html: debugParts.answerHtml }} />
+                                    ) : (
+                                      debugParts.answerText || ""
+                                    )
+                                  ) : msg.role === "bot" ? (
+                                    renderBotContent(msg.content)
                                   ) : (
-                                    debugParts.answerText || ""
-                                  )
-                                ) : msg.role === "bot" ? (
-                                  renderBotContent(msg.content)
-                                ) : (
-                                  msg.content
-                                )}
-                              </div>
-                              {msg.role === "user" ? (
-                                <div className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
-                                  <User className="h-4 w-4 text-slate-500" />
+                                    msg.content
+                                  )}
                                 </div>
-                              ) : null}
-                            </div>
-                          );
-                        })}
+                                {msg.role === "user" ? (
+                                  <div className="h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
+                                    <User className="h-4 w-4 text-slate-500" />
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="pointer-events-none absolute inset-x-0 bottom-4 z-10 h-8 bg-gradient-to-t from-white to-transparent" />
+                        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-white" />
                       </div>
-                      <form
-                        onSubmit={(e) => handleSend(e, model.id)}
-                        className="mt-auto flex gap-2 border-t border-slate-200 pt-4"
-                      >
+                      <form onSubmit={(e) => handleSend(e, model.id)} className="relative z-20 flex gap-2 bg-white">
                         <Input
                           value={model.input}
                           onChange={(e) =>

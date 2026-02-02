@@ -846,9 +846,10 @@ const adapters: Record<string, ToolAdapter> = {
       }
     }
 
-    let resolvedShippingCode = shippingCode;
-    if (!resolvedShippingCode) {
-      const fetchReceivers = async () => {
+      let resolvedShippingCode = shippingCode;
+      let receiverDefaults: Record<string, string> | null = null;
+      if (!resolvedShippingCode) {
+        const fetchReceivers = async () => {
         const receiversRes = await cafe24Request(cfg, `/orders/${encodeURIComponent(orderId)}/receivers`, {
           query: { shop_no: cfg.shopNo },
         });
@@ -870,30 +871,55 @@ const adapters: Record<string, ToolAdapter> = {
         return receiversRes;
       };
       const receiversRes = await fetchReceivers();
-      if (receiversRes.ok) {
-        const payload = receiversRes.data as { receivers?: unknown } | undefined;
-        const receiversNode = payload?.receivers as { receiver?: unknown } | undefined;
-        const list = Array.isArray(payload?.receivers)
-          ? (payload?.receivers as Array<Record<string, unknown>>)
-          : Array.isArray(receiversNode?.receiver)
-            ? (receiversNode?.receiver as Array<Record<string, unknown>>)
-            : [];
-        const first = list[0];
-        const firstCode = first ? String(first.shipping_code || "") : "";
-        if (firstCode) resolvedShippingCode = firstCode;
+        if (receiversRes.ok) {
+          const payload = receiversRes.data as { receivers?: unknown } | undefined;
+          const receiversNode = payload?.receivers as { receiver?: unknown } | undefined;
+          const list = Array.isArray(payload?.receivers)
+            ? (payload?.receivers as Array<Record<string, unknown>>)
+            : Array.isArray(receiversNode?.receiver)
+              ? (receiversNode?.receiver as Array<Record<string, unknown>>)
+              : [];
+          const first = list[0];
+          const firstCode = first ? String(first.shipping_code || "") : "";
+          if (firstCode) resolvedShippingCode = firstCode;
+          if (first) {
+            receiverDefaults = {
+              name: String(first.name || ""),
+              phone: String(first.phone || ""),
+              cellphone: String(first.cellphone || ""),
+              zipcode: String(first.zipcode || ""),
+              address1: String(first.address1 || first.address || ""),
+              address2: String(first.address2 || ""),
+            };
+          }
+        }
       }
-    }
 
-    if (!resolvedShippingCode) {
-      return {
-        status: "error",
-        error: { code: "INVALID_INPUT", message: "shipping_code is required (receiver lookup failed)" },
-      };
-    }
+      if (!resolvedShippingCode) {
+        return {
+          status: "error",
+          error: {
+            code: "INVALID_INPUT",
+            message: `shipping_code is required (receiver lookup failed${receiversRes?.ok === false ? `: ${receiversRes.error}` : ""})`,
+          },
+        };
+      }
 
-    const endpoint = resolvedShippingCode
-      ? `/orders/${encodeURIComponent(orderId)}/receivers/${encodeURIComponent(resolvedShippingCode)}`
-      : `/orders/${encodeURIComponent(orderId)}/receivers`;
+      if (resolvedShippingCode && !requestPayload.shipping_code) {
+        requestPayload.shipping_code = resolvedShippingCode;
+      }
+      if (receiverDefaults) {
+        if (!requestPayload.name && receiverDefaults.name) requestPayload.name = receiverDefaults.name;
+        if (!requestPayload.phone && receiverDefaults.phone) requestPayload.phone = receiverDefaults.phone;
+        if (!requestPayload.cellphone && receiverDefaults.cellphone) requestPayload.cellphone = receiverDefaults.cellphone;
+        if (!requestPayload.zipcode && receiverDefaults.zipcode) requestPayload.zipcode = receiverDefaults.zipcode;
+        if (!requestPayload.address1 && receiverDefaults.address1) requestPayload.address1 = receiverDefaults.address1;
+        if (!requestPayload.address2 && receiverDefaults.address2) requestPayload.address2 = receiverDefaults.address2;
+      }
+
+      const endpoint = resolvedShippingCode
+        ? `/orders/${encodeURIComponent(orderId)}/receivers/${encodeURIComponent(resolvedShippingCode)}`
+        : `/orders/${encodeURIComponent(orderId)}/receivers`;
     const body: Record<string, unknown> = { request: [requestPayload] };
     if (cfg.shopNo) body.shop_no = cfg.shopNo;
 
