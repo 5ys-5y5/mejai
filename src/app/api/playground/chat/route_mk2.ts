@@ -984,6 +984,58 @@ function isNoText(text: string) {
   return /^(아니|아니오|아니요|아뇨|no|n)$/.test(v);
 }
 
+function extractRestockChannel(text: string) {
+  const v = String(text || "");
+  if (/카카오|카톡/.test(v)) return "kakao";
+  if (/이메일|메일|email/i.test(v)) return "email";
+  if (/문자|sms/i.test(v)) return "sms";
+  return null;
+}
+
+function readProductShape(raw: unknown) {
+  const root = (raw || {}) as Record<string, unknown>;
+  const fromProduct = (root.product || {}) as Record<string, unknown>;
+  const fromProducts =
+    Array.isArray((root as any).products) && (root as any).products.length > 0
+      ? ((root as any).products[0] as Record<string, unknown>)
+      : null;
+  const product = (Object.keys(fromProduct).length > 0 ? fromProduct : fromProducts) || root;
+  const productName = String(
+    (product as any).product_name ||
+      (product as any).product_name_default ||
+      (product as any).name ||
+      ""
+  ).trim();
+  const rawQty =
+    (product as any).stock_quantity ??
+    (product as any).quantity ??
+    (product as any).total_stock ??
+    (product as any).stock;
+  const qtyNum =
+    rawQty === null || rawQty === undefined || rawQty === ""
+      ? null
+      : Number(String(rawQty).replace(/,/g, ""));
+  const soldOutRaw = String(
+    (product as any).sold_out ??
+      (product as any).soldout ??
+      (product as any).is_soldout ??
+      ""
+  )
+    .trim()
+    .toUpperCase();
+  const soldOut =
+    soldOutRaw === "T" ||
+    soldOutRaw === "TRUE" ||
+    soldOutRaw === "Y" ||
+    soldOutRaw === "1" ||
+    (Number.isFinite(qtyNum as number) && (qtyNum as number) <= 0);
+  return {
+    productName,
+    qty: Number.isFinite(qtyNum as number) ? (qtyNum as number) : null,
+    soldOut,
+  };
+}
+
 function buildAddressSearchKeywords(raw: string) {
   const cleaned = String(raw || "")
     .replace(/^(주소|배송지)\s*[:\-]?\s*/g, "")
@@ -1333,13 +1385,15 @@ export async function POST(req: NextRequest) {
     let derivedZipcode = extractZipcode(message);
     let derivedAddress = extractAddress(message, derivedOrderId, derivedPhone, derivedZipcode);
     let updateConfirmAcceptedThisTurn = false;
+    let refundConfirmAcceptedThisTurn = false;
+    let restockSubscribeAcceptedThisTurn = false;
     const lastAnswer =
       typeof lastTurn?.final_answer === "string"
         ? lastTurn?.final_answer
         : typeof lastTurn?.answer_text === "string"
           ? lastTurn?.answer_text
           : "";
-    const expectedInput = (() => {
+    let expectedInput = (() => {
       const text = String(lastAnswer || "");
       if (text.includes("인증번호")) return "otp_code";
       const addressPrompt = text.includes("주소") || text.includes("배송지");
@@ -1357,6 +1411,9 @@ export async function POST(req: NextRequest) {
       if (text.includes("주문번호")) return "order_id";
       return null;
     })();
+    if (expectedInput === "address" && /(환불|취소|반품|교환)/.test(message)) {
+      expectedInput = null;
+    }
     if (expectedInput === "otp_code") {
       derivedOrderId = null;
       derivedPhone = null;
@@ -1645,6 +1702,100 @@ export async function POST(req: NextRequest) {
               typeof prevBotContext.customer_verification_token === "string"
                 ? prevBotContext.customer_verification_token
                 : null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+    }
+    if (prevBotContext.refund_pending && prevBotContext.refund_stage === "awaiting_refund_confirm") {
+      const pendingOrderId = String(prevBotContext.pending_order_id || "").trim();
+      if (isYesText(message)) {
+        refundConfirmAcceptedThisTurn = true;
+        if (isLikelyOrderId(pendingOrderId)) derivedOrderId = pendingOrderId;
+      } else if (isNoText(message)) {
+        const reply = makeReply("취소/환불 요청을 진행하지 않았습니다. 다른 도움이 필요하면 말씀해 주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : prevSelectedOrderId,
+            customer_verification_token:
+              typeof prevBotContext.customer_verification_token === "string"
+                ? prevBotContext.customer_verification_token
+                : null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+      } else {
+        const reply = makeReply(
+          `주문번호 ${pendingOrderId || "-"}에 대해 취소/환불 요청을 접수할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : prevSelectedOrderId,
+            refund_pending: true,
+            refund_stage: "awaiting_refund_confirm",
+            pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+            customer_verification_token:
+              typeof prevBotContext.customer_verification_token === "string"
+                ? prevBotContext.customer_verification_token
+                : null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+    }
+    if (prevBotContext.restock_pending && prevBotContext.restock_stage === "awaiting_subscribe_confirm") {
+      const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
+      const pendingChannel = String(prevBotContext.pending_channel || "").trim();
+      if (isYesText(message)) {
+        restockSubscribeAcceptedThisTurn = true;
+      } else if (isNoText(message)) {
+        const reply = makeReply("재입고 알림 신청을 진행하지 않았습니다. 필요하면 상품명을 다시 알려주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            pending_channel: pendingChannel || null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+      } else {
+        const reply = makeReply(
+          `상품(${pendingProductId || "-"})에 ${pendingChannel || "sms"} 채널로 재입고 알림을 신청할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            restock_pending: true,
+            restock_stage: "awaiting_subscribe_confirm",
+            pending_product_id: pendingProductId || null,
+            pending_channel: pendingChannel || null,
           },
         });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
@@ -2969,6 +3120,19 @@ export async function POST(req: NextRequest) {
         );
         continue;
       }
+      if (
+        resolvedIntent === "refund_request" &&
+        call.name === "create_ticket" &&
+        !refundConfirmAcceptedThisTurn
+      ) {
+        noteMcpSkip(
+          "create_ticket",
+          "DEFERRED_TO_REFUND_CONFIRM",
+          { intent: resolvedIntent, order_id: resolvedOrderId || null },
+          call.args as Record<string, unknown>
+        );
+        continue;
+      }
       const result = await callMcpTool(
         context,
         call.name,
@@ -3804,6 +3968,331 @@ export async function POST(req: NextRequest) {
         { intent_name: resolvedIntent }
       );
       return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+    }
+
+    const createTicketSuccess = toolResults.find((tool) => tool.name === "create_ticket" && tool.ok);
+    const createTicketFailure = toolResults.find((tool) => tool.name === "create_ticket" && !tool.ok);
+    if (resolvedIntent === "refund_request") {
+      if (!resolvedOrderId) {
+        const reply = makeReply("환불/취소/반품은 주문 확인이 필요합니다. 주문번호 또는 휴대폰 번호를 알려주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: null,
+            customer_verification_token: customerVerificationToken,
+            mcp_actions: mcpActions,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+      }
+
+      if (!refundConfirmAcceptedThisTurn && !createTicketSuccess && !createTicketFailure) {
+        const reply = makeReply(
+          `주문번호 ${resolvedOrderId}에 대해 취소/환불 요청을 접수할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+            refund_pending: true,
+            refund_stage: "awaiting_refund_confirm",
+            pending_order_id: resolvedOrderId,
+            customer_verification_token: customerVerificationToken || null,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          { stage: "tool", action: "ASK_REFUND_CONFIRM", order_id: resolvedOrderId },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+      }
+
+      if (createTicketSuccess) {
+        const ticketId =
+          String((createTicketSuccess.data as any)?.ticket_id || (createTicketSuccess.data as any)?.id || "").trim() || "-";
+        const reply = makeReply(
+          `요약: 취소/환불 요청이 접수되었습니다.\n상세: 주문번호 ${resolvedOrderId} 기준으로 요청을 등록했습니다. (접수번호: ${ticketId})\n다음 액션: 처리 결과를 확인해드릴까요?`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+            customer_verification_token: customerVerificationToken || null,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          { answer: reply, model: "deterministic_refund_ticket_success" },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+      }
+
+      if (createTicketFailure) {
+        const errorText = String(createTicketFailure.error || "CREATE_TICKET_FAILED");
+        const reply = makeReply(
+          `요청 접수 중 오류가 발생했습니다.\n원인: ${errorText}\n다음 액션: 잠시 후 다시 시도하거나 관리자에게 취소 요청을 전달해 주세요.`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+            customer_verification_token: customerVerificationToken || null,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          { answer: reply, model: "deterministic_refund_ticket_error", error: errorText },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+      }
+    }
+
+    if (resolvedIntent === "restock_inquiry" || resolvedIntent === "restock_subscribe") {
+      const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
+      const pendingChannel = String(prevBotContext.pending_channel || "").trim();
+      let restockProductId =
+        String(productDecisionRes.decision?.product_id || "").trim() ||
+        pendingProductId ||
+        "";
+      let restockChannel = extractRestockChannel(message) || pendingChannel || "sms";
+
+      if (!restockProductId && canUseTool("resolve_product") && allowedToolNames.has("resolve_product")) {
+        const resolved = await callMcpTool(
+          context,
+          "resolve_product",
+          { query: message },
+          sessionId,
+          latestTurnId,
+          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+          allowedToolNames
+        );
+        noteMcp("resolve_product", resolved);
+        toolResults.push({
+          name: "resolve_product",
+          ok: resolved.ok,
+          data: resolved.ok ? (resolved.data as Record<string, unknown>) : undefined,
+          error: resolved.ok ? undefined : resolved.error,
+        });
+        mcpActions.push("resolve_product");
+        if (resolved.ok) {
+          const matched = Boolean((resolved.data as any)?.matched);
+          const candidate = String((resolved.data as any)?.product_id || "").trim();
+          if (matched && candidate) restockProductId = candidate;
+        }
+      }
+
+      if (!restockProductId) {
+        const reply = makeReply("확인할 상품명을 먼저 알려주세요. (예: 아드헬린 린넨 플레어 원피스)");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            customer_verification_token: customerVerificationToken || null,
+            restock_pending: true,
+            restock_stage: "awaiting_product",
+            pending_channel: restockChannel,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          { stage: "tool", action: "ASK_PRODUCT_NAME_FOR_RESTOCK" },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+      }
+
+      let readProductData: Record<string, unknown> | null = null;
+      if (canUseTool("read_product") && allowedToolNames.has("read_product")) {
+        const readRes = await callMcpTool(
+          context,
+          "read_product",
+          { product_no: restockProductId },
+          sessionId,
+          latestTurnId,
+          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+          allowedToolNames
+        );
+        noteMcp("read_product", readRes);
+        toolResults.push({
+          name: "read_product",
+          ok: readRes.ok,
+          data: readRes.ok ? (readRes.data as Record<string, unknown>) : undefined,
+          error: readRes.ok ? undefined : readRes.error,
+        });
+        mcpActions.push("read_product");
+        if (readRes.ok) readProductData = (readRes.data as Record<string, unknown>) || null;
+      }
+
+      const productView = readProductShape(readProductData || {});
+      const policyAnswerability = String(productDecisionRes.decision?.answerability || "UNKNOWN");
+      const policyRestock = String(productDecisionRes.decision?.restock_policy || "UNKNOWN");
+      const policyRestockAt = String(productDecisionRes.decision?.restock_at || "").trim();
+      const stockLine = productView.soldOut
+        ? "현재 상태: 품절"
+        : productView.qty === null
+          ? "현재 상태: 재고 수량 확인 필요"
+          : `현재 상태: 재고 ${productView.qty}개`;
+      const policyLine =
+        policyAnswerability === "UNKNOWN" && policyRestock === "UNKNOWN"
+          ? "KB 정책: 별도 재입고 정책 없음"
+          : `KB 정책: answerability=${policyAnswerability}, restock_policy=${policyRestock}${
+              policyRestockAt ? `, restock_at=${policyRestockAt}` : ""
+            }`;
+
+      if (resolvedIntent === "restock_subscribe") {
+        if (!restockSubscribeAcceptedThisTurn) {
+          const reply = makeReply(
+            `상품 ${productView.productName || restockProductId}에 ${restockChannel} 채널로 재입고 알림을 신청할까요?\n${stockLine}\n${policyLine}\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+          );
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              restock_pending: true,
+              restock_stage: "awaiting_subscribe_confirm",
+              pending_product_id: restockProductId,
+              pending_channel: restockChannel,
+              customer_verification_token: customerVerificationToken || null,
+              mcp_actions: mcpActions,
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "POLICY_DECISION",
+            { stage: "tool", action: "ASK_RESTOCK_SUBSCRIBE_CONFIRM", product_id: restockProductId },
+            { intent_name: resolvedIntent }
+          );
+          return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+        }
+
+        if (canUseTool("subscribe_restock") && allowedToolNames.has("subscribe_restock")) {
+          const subscribeRes = await callMcpTool(
+            context,
+            "subscribe_restock",
+            { product_id: restockProductId, channel: restockChannel, phone: policyContext.entity?.phone || undefined },
+            sessionId,
+            latestTurnId,
+            { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+            allowedToolNames
+          );
+          noteMcp("subscribe_restock", subscribeRes);
+          toolResults.push({
+            name: "subscribe_restock",
+            ok: subscribeRes.ok,
+            data: subscribeRes.ok ? (subscribeRes.data as Record<string, unknown>) : undefined,
+            error: subscribeRes.ok ? undefined : subscribeRes.error,
+          });
+          mcpActions.push("subscribe_restock");
+          if (subscribeRes.ok) {
+            const reply = makeReply(
+              `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${productView.productName || restockProductId} / 채널 ${restockChannel}\n${stockLine}\n${policyLine}`
+            );
+            await insertTurn({
+              session_id: sessionId,
+              seq: nextSeq,
+              transcript_text: message,
+              answer_text: reply,
+              final_answer: reply,
+              bot_context: {
+                intent_name: resolvedIntent,
+                entity: policyContext.entity,
+                customer_verification_token: customerVerificationToken || null,
+                mcp_actions: mcpActions,
+              },
+            });
+            return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+          }
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "MCP_TOOL_FAILED",
+            { tool: "subscribe_restock", error: subscribeRes.error },
+            { intent_name: resolvedIntent }
+          );
+        }
+      }
+
+      const inquiryReply = makeReply(
+        `요약: ${productView.productName || restockProductId} 재고/입고 상태를 확인했습니다.\n상세: ${stockLine}\n${policyLine}`
+      );
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: inquiryReply,
+        final_answer: inquiryReply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: policyContext.entity,
+          customer_verification_token: customerVerificationToken || null,
+          mcp_actions: mcpActions,
+        },
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "FINAL_ANSWER_READY",
+        { answer: inquiryReply, model: "deterministic_restock" },
+        { intent_name: resolvedIntent }
+      );
+      return respond({ session_id: sessionId, step: "final", message: inquiryReply, mcp_actions: mcpActions });
     }
 
     const productDecisionJson = productDecisionRes.decision ? JSON.stringify(productDecisionRes.decision) : "null";

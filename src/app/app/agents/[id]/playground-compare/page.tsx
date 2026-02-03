@@ -85,7 +85,7 @@ export default function AgentPlaygroundComparePage() {
     setRightInput("");
     setRightSending(true);
     try {
-      const data = await apiFetch<{ session_id: string; message?: string }>("/api/playground/chat_mk2", {
+      const data = await apiFetch<{ session_id: string; message?: string }>("/api/playground/shipping", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -100,8 +100,8 @@ export default function AgentPlaygroundComparePage() {
         setRightMessages((prev) => [...prev, { id: makeId(), role: "bot", content: reply }]);
       }
     } catch {
-      setRightMessages((prev) => [...prev, { id: makeId(), role: "bot", content: "MK2 응답 실패" }]);
-      toast.error("MK2 응답 실패");
+      setRightMessages((prev) => [...prev, { id: makeId(), role: "bot", content: "Shipping 응답 실패" }]);
+      toast.error("Shipping 응답 실패");
     } finally {
       setRightSending(false);
     }
@@ -112,7 +112,7 @@ export default function AgentPlaygroundComparePage() {
       <div className="mx-auto w-full max-w-6xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">대화 비교 (Legacy vs MK2)</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">대화 비교 (Legacy vs Shipping)</h1>
             <p className="mt-1 text-sm text-slate-500">
               동일한 입력으로 두 라우트를 동시에 실행합니다.
             </p>
@@ -185,8 +185,8 @@ export default function AgentPlaygroundComparePage() {
           <Card className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-sm font-semibold text-slate-900">MK2 route</div>
-                <div className="text-xs text-slate-500">/api/playground/chat_mk2</div>
+                <div className="text-sm font-semibold text-slate-900">Shipping route</div>
+                <div className="text-xs text-slate-500">/api/playground/shipping</div>
               </div>
               <div className="flex items-center gap-2 text-xs text-slate-500">
                 <span>세션 {rightSessionId || "-"}</span>

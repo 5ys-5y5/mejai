@@ -373,7 +373,7 @@ function createDefaultModel(): ModelState {
       kbId: "",
       adminKbIds: [],
       mcpToolIds: [],
-      route: "mk2",
+      route: "shipping",
     },
     sessionId: null,
     messages: [],
@@ -404,10 +404,13 @@ function describeRoute(route: string) {
   if (route === "legacy") {
     return "기존 /api/playground/chat 파이프라인 (llm.ts, 확인/요약 흐름 포함).";
   }
-  if (route === "v3") {
-    return "V3 /api/playground/chat_v3 (natural 모드 기반, 파이프라인 강제 최소화 실험 라우트).";
+  if (route === "orchestration") {
+    return "Orchestration /api/playground/orchestration (자연어 기반 상태 전이 + 도구 계획/실행).";
   }
-  return "신규 /api/playground/chat_mk2 파이프라인 (llm_mk2, 정책 기반 단순 흐름).";
+  if (route === "shipping") {
+    return "Shipping /api/playground/shipping (배송/주문 실행 특화).";
+  }
+  return "Shipping /api/playground/shipping (배송/주문 실행 특화).";
 }
 
 function describeLlm(llm: string) {
@@ -530,8 +533,8 @@ export default function LabolatoryPage() {
   const routeOptions = useMemo<SelectOption[]>(
     () => [
       { id: "legacy", label: "Legacy", description: "/api/playground/chat" },
-      { id: "mk2", label: "MK2", description: "/api/playground/chat_mk2" },
-      { id: "v3", label: "V3", description: "/api/playground/chat_v3 (natural)" },
+      { id: "shipping", label: "Shipping", description: "/api/playground/shipping (배송/주문 실행)" },
+      { id: "orchestration", label: "Orchestration", description: "/api/playground/orchestration (상태 전이 + 도구 오케스트레이션)" },
     ],
     []
   );

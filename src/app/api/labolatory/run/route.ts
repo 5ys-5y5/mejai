@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 function normalizeRoute(value?: string | null) {
-  if (!value) return "/api/playground/chat_mk2";
+  if (!value) return "/api/playground/shipping";
   if (value === "legacy" || value === "/api/playground/chat") return "/api/playground/chat";
-  if (value === "mk2" || value === "/api/playground/chat_mk2") return "/api/playground/chat_mk2";
-  if (value === "v3" || value === "/api/playground/chat_v3") return "/api/playground/chat_v3";
-  return "/api/playground/chat_mk2";
+  if (value === "shipping") return "/api/playground/shipping";
+  if (value === "orchestration") return "/api/playground/orchestration";
+  if (value === "/api/playground/shipping") return "/api/playground/shipping";
+  if (value === "/api/playground/orchestration") return "/api/playground/orchestration";
+  return "/api/playground/shipping";
 }
 
 export async function POST(req: NextRequest) {
