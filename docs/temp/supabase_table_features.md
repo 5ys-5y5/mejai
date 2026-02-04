@@ -51,7 +51,7 @@
 - `src/app/api/sessions/[id]/route.ts`
 - `src/app/api/sessions/[id]/turns/route.ts`
 - `src/app/api/sessions/[id]/audio-segments/route.ts`
-- `src/app/api/playground/chat/route.ts`
+- `src/app/api/runtime/chat/legacy/route.ts`
 
 ## 4) 처리 이벤트/검토/감사
 
@@ -79,8 +79,8 @@
 - `debug_log_view` (VIEW): 디버그 트리 가공 조회
 
 ### 주요 코드
-- `src/app/api/playground/chat/route.ts`
-- `src/app/api/playground/chat/route_mk2.ts`
+- `src/app/api/runtime/chat/legacy/route.ts`
+- `src/app/api/runtime/chat/legacy/route_mk2.ts`
 - `src/app/api/sessions/[id]/debug-logs/route.ts`
 - `src/app/api/labolatory/logs/route.ts`
 
@@ -100,7 +100,7 @@
 ### 주요 코드
 - `src/app/api/mcp/tools/route.ts`
 - `src/app/api/mcp/tools/call/route.ts`
-- `src/app/api/playground/chat/route.ts`
+- `src/app/api/runtime/chat/legacy/route.ts`
 - `src/app/api/labolatory/logs/route.ts`
 
 ## 7) 재입고/상품판정/본인인증 도메인
@@ -115,8 +115,8 @@
 - `otp_verifications`: OTP 발급/검증 상태
 
 ### 주요 코드
-- `src/app/api/playground/chat/route.ts`
-- `src/app/api/playground/chat/route_mk2.ts`
+- `src/app/api/runtime/chat/legacy/route.ts`
+- `src/app/api/runtime/chat/legacy/route_mk2.ts`
 - `src/lib/mcpAdapters.ts`
 
 ### 스키마 참고

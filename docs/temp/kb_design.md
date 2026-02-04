@@ -115,7 +115,7 @@ Admin KB는 content/content_json에 아래 구조(JSON)로 저장됨.
 
 ### 로직 위치
 - `src/lib/policyEngine.ts`: 정책 적용 엔진
-- `src/app/api/playground/chat/route.ts`: 적용 로직 연결
+- `src/app/api/runtime/chat/legacy/route.ts`: 적용 로직 연결
 
 ### 적용 단계
 - input gate → tool gate → output gate 순서
@@ -132,7 +132,7 @@ Admin KB는 content/content_json에 아래 구조(JSON)로 저장됨.
 
 - UI: `src/app/app/kb/new/page.tsx`
 - 정책 엔진: `src/lib/policyEngine.ts`
-- 플레이그라운드 적용: `src/app/api/playground/chat/route.ts`
+- 플레이그라운드 적용: `src/app/api/runtime/chat/legacy/route.ts`
 - 그룹 옵션 조회: `src/app/api/user-access/groups/route.ts`
 
 ## 9) 주의사항

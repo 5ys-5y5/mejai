@@ -38,6 +38,8 @@ type KbItem = {
 
 type MpcTool = {
   id: string;
+  tool_key?: string;
+  provider_key?: string;
   name: string;
   description?: string | null;
 };
@@ -327,7 +329,7 @@ export default function AgentDetailPage() {
     () =>
       mcpTools.map((tool) => ({
         id: tool.id,
-        label: tool.name,
+        label: tool.tool_key || (tool.provider_key ? `${tool.provider_key}:${tool.name}` : tool.name),
         description: tool.description || undefined,
       })),
     [mcpTools]
@@ -504,18 +506,11 @@ export default function AgentDetailPage() {
           </div>
           <div className="flex items-center gap-2">
             <Link
-              href={`/app/agents/${encodeURIComponent(agentId)}/playground`}
+              href={`/app/laboratory?agentId=${encodeURIComponent(agentId)}`}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               <Bot className="h-4 w-4" />
-              대화 테스트
-            </Link>
-            <Link
-              href={`/app/agents/${encodeURIComponent(agentId)}/playground-compare`}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-            >
-              <Bot className="h-4 w-4" />
-              비교 테스트
+              실험실에서 테스트
             </Link>
             <button
               type="button"

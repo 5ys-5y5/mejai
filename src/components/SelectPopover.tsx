@@ -9,6 +9,7 @@ export type SelectOption = {
   id: string;
   label: string;
   description?: string;
+  group?: string;
 };
 
 type SelectPopoverProps = {
@@ -224,6 +225,29 @@ export function MultiSelectPopover({
     return options.filter((o) => o.label.toLowerCase().includes(query));
   }, [options, q, searchable]);
 
+  const groupedFiltered = useMemo(() => {
+    const groups: Array<{ key: string; label: string; items: SelectOption[] }> = [];
+    const indexByKey = new Map<string, number>();
+    filtered.forEach((option) => {
+      const rawGroup = String(option.group || "").trim();
+      const key = rawGroup || "__ungrouped__";
+      const labelValue = rawGroup || "기타";
+      const idx = indexByKey.get(key);
+      if (idx === undefined) {
+        indexByKey.set(key, groups.length);
+        groups.push({ key, label: labelValue, items: [option] });
+      } else {
+        groups[idx].items.push(option);
+      }
+    });
+    return groups;
+  }, [filtered]);
+
+  const hasGroupedOptions = useMemo(
+    () => groupedFiltered.some((group) => group.key !== "__ungrouped__"),
+    [groupedFiltered]
+  );
+
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!open) return;
@@ -234,6 +258,41 @@ export function MultiSelectPopover({
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
+
+  const renderMultiOptionButton = (option: SelectOption) => {
+    const active = values.includes(option.id);
+    return (
+      <button
+        key={option.id}
+        type="button"
+        onClick={() => {
+          if (active) {
+            onChange(values.filter((v) => v !== option.id));
+          } else {
+            onChange([...values, option.id]);
+          }
+        }}
+        className={cn(
+          "h-8 w-full rounded-xl px-3 text-sm flex items-center justify-between",
+          active ? "bg-slate-100 text-slate-900" : "text-slate-700 hover:bg-slate-50"
+        )}
+      >
+        {renderOption ? (
+          renderOption(option, active)
+        ) : (
+          <div className="min-w-0 text-left">
+            <div className="flex items-center gap-2 truncate">
+              <span className="text-slate-900">{option.label}</span>
+              {option.description ? (
+                <span className="text-[10px] text-slate-500 whitespace-nowrap">{option.description}</span>
+              ) : null}
+            </div>
+          </div>
+        )}
+        {active ? <CheckCircle2 className="h-4 w-4 text-slate-900" /> : null}
+      </button>
+    );
+  };
 
   return (
     <div className={cn("relative", className)} ref={ref}>
@@ -320,40 +379,20 @@ export function MultiSelectPopover({
               </div>
             ) : null}
             <div className="flex max-h-72 flex-col gap-[5px] overflow-auto p-2">
-              {filtered.map((o) => {
-                const active = values.includes(o.id);
-                return (
-                  <button
-                    key={o.id}
-                    type="button"
-                    onClick={() => {
-                      if (active) {
-                        onChange(values.filter((v) => v !== o.id));
-                      } else {
-                        onChange([...values, o.id]);
-                      }
-                    }}
-                    className={cn(
-                      "h-8 w-full rounded-xl px-3 text-sm flex items-center justify-between",
-                      active ? "bg-slate-100 text-slate-900" : "text-slate-700 hover:bg-slate-50"
-                    )}
-                  >
-                    {renderOption ? (
-                      renderOption(o, active)
-                    ) : (
-                      <div className="min-w-0 text-left">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="text-slate-900">{o.label}</span>
-                          {o.description ? (
-                            <span className="text-[10px] text-slate-500 whitespace-nowrap">{o.description}</span>
-                          ) : null}
+              {hasGroupedOptions
+                ? groupedFiltered.map((group, index) => (
+                    <div key={group.key} className={cn(index > 0 ? "pt-2" : "")}>
+                      {group.key !== "__ungrouped__" ? (
+                        <div className="mb-1 border-t border-slate-200 px-2 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                          {group.label}
                         </div>
+                      ) : null}
+                      <div className="flex flex-col gap-[5px]">
+                        {group.items.map((option) => renderMultiOptionButton(option))}
                       </div>
-                    )}
-                    {active ? <CheckCircle2 className="h-4 w-4 text-slate-900" /> : null}
-                  </button>
-                );
-              })}
+                    </div>
+                  ))
+                : filtered.map((option) => renderMultiOptionButton(option))}
             </div>
           </motion.div>
         ) : null}

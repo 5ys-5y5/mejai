@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const [mcpRes, eventRes, debugRes] = await Promise.all([
     context.supabase
       .from("F_audit_mcp_tools")
-      .select("id, tool_name, status, request_payload, response_payload, policy_decision, latency_ms, created_at, session_id, turn_id")
+      .select("id, tool_name, tool_version, status, request_payload, response_payload, policy_decision, latency_ms, created_at, session_id, turn_id")
       .eq("org_id", context.orgId)
       .eq("session_id", sessionId)
       .order("created_at", { ascending: false })

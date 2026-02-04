@@ -6,6 +6,13 @@ export async function GET(
   req: NextRequest,
   context: { params: Promise<{ id: string }> | { id: string } }
 ) {
+  const getByPath = (obj: unknown, path: string) => {
+    if (!obj || typeof obj !== "object" || !path) return undefined;
+    return path.split(".").reduce<unknown>((acc, seg) => {
+      if (!acc || typeof acc !== "object") return undefined;
+      return (acc as Record<string, unknown>)[seg];
+    }, obj);
+  };
   const header = resolveAuthHeader(req.headers.get("authorization") || "", req.headers.get("cookie") || "");
   if (!header) {
     return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -44,14 +51,23 @@ export async function GET(
   if (seq !== null && !Number.isNaN(seq)) {
     query = query.eq("seq", seq);
   }
-  if (key && value) {
-    query = query.contains("prefix_json", { entries: [{ key, value }] });
-  }
-
   const { data, error } = await query;
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
-
-  return NextResponse.json(data || []);
+  let items = data || [];
+  if (key && value) {
+    items = items.filter((row) => {
+      const record = row as Record<string, unknown>;
+      const prefix = record?.prefix_json as Record<string, unknown> | undefined;
+      const direct = getByPath(prefix, key);
+      if (direct !== undefined && String(direct) === value) return true;
+      const entries = Array.isArray(prefix?.entries) ? prefix.entries : [];
+      return entries.some((entry) => {
+        const item = entry as Record<string, unknown>;
+        return item?.key === key && String(item?.value ?? "") === value;
+      });
+    });
+  }
+  return NextResponse.json(items);
 }

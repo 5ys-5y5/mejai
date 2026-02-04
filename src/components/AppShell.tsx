@@ -1,11 +1,18 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { AppSidebar } from "./AppSidebar";
 import { AppHeader } from "./AppHeader";
 import { MobileDrawer } from "./MobileDrawer";
 import { HelpPanel } from "./HelpPanel";
+import { apiFetch } from "@/lib/apiClient";
+import {
+  readPerformanceConfigFromStorage,
+  sanitizePerformanceConfig,
+  type PerformanceConfig,
+  writePerformanceConfigToStorage,
+} from "@/lib/performanceConfig";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -46,6 +53,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     return children;
   }, [children, headerSearch]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function bootstrapPerformanceConfig() {
+      try {
+        const res = await apiFetch<{ config?: PerformanceConfig }>("/api/performance-config");
+        if (!mounted) return;
+        const nextConfig = sanitizePerformanceConfig(res.config || {});
+        const currentConfig = readPerformanceConfigFromStorage();
+        if (JSON.stringify(currentConfig) !== JSON.stringify(nextConfig)) {
+          writePerformanceConfigToStorage(nextConfig);
+        }
+      } catch {
+        // ignore; default local config is used
+      }
+    }
+    bootstrapPerformanceConfig();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <div className="h-screen overflow-hidden bg-white text-slate-900 flex">

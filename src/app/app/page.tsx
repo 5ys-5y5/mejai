@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AgentSelectPopover } from "@/components/AgentSelectPopover";
 import { DateRangePopover } from "@/components/DateRangePopover";
@@ -8,6 +8,9 @@ import { ChevronRight, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { apiFetch } from "@/lib/apiClient";
+import { usePerformanceConfig } from "@/hooks/usePerformanceConfig";
+import { shouldRefreshOnAuthEvent } from "@/lib/performanceConfig";
+import { useMultiTabLeaderLock } from "@/lib/multiTabSync";
 
 type SessionRow = {
   id: string;
@@ -56,6 +59,7 @@ const resolvedSet = new Set(["해결", "Resolved", "resolved"]);
 const escalatedSet = new Set(["이관", "Escalated", "escalated"]);
 
 export default function DashboardPage() {
+  const { config } = usePerformanceConfig();
   const [selectedAgentId, setSelectedAgentId] = useState("all");
   const [range, setRange] = useState("last_month");
   const [sessions, setSessions] = useState<SessionRow[]>([]);
@@ -69,8 +73,20 @@ export default function DashboardPage() {
   const [simulateError, setSimulateError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [plan, setPlan] = useState("starter");
+  const loadInFlightRef = useRef(false);
+  const lastAuthRefreshRef = useRef(0);
+  const { isLeader, tabId } = useMultiTabLeaderLock(
+    "dashboard-polling",
+    config.multi_tab_leader_enabled,
+    config.multi_tab_leader_lock_ttl_ms
+  );
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (reason: "mount" | "poll" | "auth" | "manual" = "manual") => {
+    if (reason === "poll" && typeof document !== "undefined" && document.visibilityState !== "visible") {
+      return;
+    }
+    if (loadInFlightRef.current) return;
+    loadInFlightRef.current = true;
     setLoading(true);
     setError(null);
 
@@ -83,6 +99,7 @@ export default function DashboardPage() {
       setIsAdmin(false);
       setLoading(false);
       setError("Supabase 설정이 필요합니다.");
+      loadInFlightRef.current = false;
       return;
     }
 
@@ -94,6 +111,7 @@ export default function DashboardPage() {
       setOrgId(null);
       setIsAdmin(false);
       setLoading(false);
+      loadInFlightRef.current = false;
       return;
     }
 
@@ -114,6 +132,7 @@ export default function DashboardPage() {
         setReviewQueue([]);
         setAgents([]);
         setLoading(false);
+        loadInFlightRef.current = false;
         return;
       }
     } catch {
@@ -125,20 +144,22 @@ export default function DashboardPage() {
       setReviewQueue([]);
       setAgents([]);
       setLoading(false);
+      loadInFlightRef.current = false;
       return;
     }
 
     let sessionRows: SessionRow[] = [];
     let reviewRows: ReviewRow[] = [];
     try {
-      const sessionRes = await apiFetch<{ items: SessionRow[] }>("/api/sessions?limit=500");
+      const sessionRes = await apiFetch<{ items: SessionRow[] }>(`/api/sessions?limit=${config.dashboard_sessions_limit}`);
       sessionRows = sessionRes.items || [];
 
-      const reviewRes = await apiFetch<{ items: ReviewRow[] }>("/api/review-queue?limit=500");
+      const reviewRes = await apiFetch<{ items: ReviewRow[] }>(`/api/review-queue?limit=${config.dashboard_review_limit}`);
       reviewRows = reviewRes.items || [];
     } catch (err) {
       setError("세션 데이터를 불러오지 못했습니다.");
       setLoading(false);
+      loadInFlightRef.current = false;
       return;
     }
 
@@ -154,31 +175,109 @@ export default function DashboardPage() {
     setReviewQueue(reviewRows);
     setAgents([...agentMap.values()]);
     setLoading(false);
-  }, []);
+    loadInFlightRef.current = false;
+  }, [config.dashboard_review_limit, config.dashboard_sessions_limit]);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (!isLeader) return;
+    loadData("mount");
+  }, [isLeader, loadData]);
 
   useEffect(() => {
     const supabase = getSupabaseClient();
     if (!supabase) return () => {};
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      loadData();
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "INITIAL_SESSION") return;
+      if (!config.dashboard_refresh_on_auth_change) return;
+      if (!shouldRefreshOnAuthEvent(config.dashboard_auth_event_mode, event)) return;
+      const now = Date.now();
+      if (now - lastAuthRefreshRef.current < config.dashboard_auth_cooldown_ms) return;
+      lastAuthRefreshRef.current = now;
+      if (isLeader) {
+        loadData("auth");
+      }
     });
     return () => {
       sub.subscription.unsubscribe();
     };
-  }, [loadData]);
+  }, [
+    config.dashboard_auth_cooldown_ms,
+    config.dashboard_auth_event_mode,
+    config.dashboard_refresh_on_auth_change,
+    isLeader,
+    loadData,
+  ]);
 
   useEffect(() => {
+    if (!isLeader) return () => {};
     const timer = setInterval(() => {
-      loadData();
-    }, 600000);
+      loadData("poll");
+    }, config.dashboard_poll_ms);
     return () => {
       clearInterval(timer);
     };
-  }, [loadData]);
+  }, [config.dashboard_poll_ms, isLeader, loadData]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === "undefined") return () => {};
+    const channel = new BroadcastChannel("mejai:dashboard-polling");
+    channel.onmessage = (event: MessageEvent) => {
+      const payload = (event.data || {}) as {
+        sender?: string;
+        type?: string;
+        sessions?: SessionRow[];
+        reviewQueue?: ReviewRow[];
+        orgId?: string | null;
+        orgPending?: boolean;
+        isAdmin?: boolean;
+        plan?: string;
+      };
+      if (payload.sender === tabId) return;
+      if (payload.type === "sync") {
+        const nextSessions = payload.sessions || [];
+        setSessions(nextSessions);
+        setReviewQueue(payload.reviewQueue || []);
+        const agentMap = new Map<string, AgentOption>();
+        nextSessions.forEach((s) => {
+          const id = s.agent_id || "미지정";
+          if (!agentMap.has(id)) {
+            agentMap.set(id, { id, name: id });
+          }
+        });
+        setAgents([...agentMap.values()]);
+        setOrgId(payload.orgId || null);
+        setOrgPending(Boolean(payload.orgPending));
+        setIsAdmin(Boolean(payload.isAdmin));
+        setPlan(payload.plan || "starter");
+        setLoading(false);
+      }
+      if (payload.type === "request" && isLeader) {
+        loadData("auth");
+      }
+    };
+    if (!isLeader) {
+      channel.postMessage({ type: "request", sender: tabId, ts: Date.now() });
+    }
+    return () => channel.close();
+  }, [isLeader, loadData, tabId]);
+
+  useEffect(() => {
+    if (!isLeader) return;
+    if (typeof BroadcastChannel === "undefined") return;
+    const channel = new BroadcastChannel("mejai:dashboard-polling");
+    channel.postMessage({
+      type: "sync",
+      sender: tabId,
+      ts: Date.now(),
+      sessions,
+      reviewQueue,
+      orgId,
+      orgPending,
+      isAdmin,
+      plan,
+    });
+    channel.close();
+  }, [isAdmin, isLeader, orgId, orgPending, plan, reviewQueue, sessions, tabId]);
 
   const handleSimulate = useCallback(async () => {
     setSimulating(true);
@@ -189,7 +288,7 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ escalated: true }),
       });
-      await loadData();
+      await loadData("manual");
     } catch (err) {
       setSimulateError("시뮬레이션 생성에 실패했습니다.");
     } finally {
@@ -268,7 +367,7 @@ export default function DashboardPage() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <button
               type="button"
-              onClick={loadData}
+              onClick={() => loadData("manual")}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
               aria-label="대시보드 새로 고침"
             >

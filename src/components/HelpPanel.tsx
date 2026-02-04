@@ -10,6 +10,9 @@ import { Badge } from "./ui/Badge";
 import { apiFetch } from "@/lib/apiClient";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { formatKstDate } from "@/lib/kst";
+import { usePerformanceConfig } from "@/hooks/usePerformanceConfig";
+import { shouldRefreshOnAuthEvent } from "@/lib/performanceConfig";
+import { useMultiTabLeaderLock } from "@/lib/multiTabSync";
 
 type ReviewItem = {
   id: string;
@@ -32,7 +35,15 @@ export function HelpPanel() {
   const { enabled } = useHelpPanelEnabled();
   const { collapsed, setCollapsed } = useHelpPanelCollapsed();
   const pathname = usePathname();
-  const pollIntervalMs = pathname.startsWith("/app/review") ? 30_000 : 300_000;
+  const { config } = usePerformanceConfig();
+  const pollIntervalMs = pathname.startsWith("/app/review")
+    ? config.help_panel_poll_review_ms
+    : config.help_panel_poll_default_ms;
+  const { isLeader, tabId } = useMultiTabLeaderLock(
+    "help-panel-review-queue",
+    config.multi_tab_leader_enabled,
+    config.multi_tab_leader_lock_ttl_ms
+  );
   const [mounted, setMounted] = useState(false);
   const [reviewItems, setReviewItems] = useState<ReviewItem[]>([]);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -69,13 +80,35 @@ export function HelpPanel() {
     if (!enabled) return;
     let mounted = true;
     let timer: ReturnType<typeof setInterval> | null = null;
+    let inFlight = false;
+    let channel: BroadcastChannel | null = null;
+    let lastFocusRefreshAt = 0;
+    let lastAuthRefreshAt = 0;
+    const publish = (message: Record<string, unknown>) => {
+      channel?.postMessage({ ...message, sender: tabId, ts: Date.now() });
+    };
+    const canRunFocusRefresh = () => {
+      const now = Date.now();
+      if (now - lastFocusRefreshAt < config.help_panel_focus_cooldown_ms) return false;
+      lastFocusRefreshAt = now;
+      return true;
+    };
+    const canRunAuthRefresh = () => {
+      const now = Date.now();
+      if (now - lastAuthRefreshAt < config.help_panel_auth_cooldown_ms) return false;
+      lastAuthRefreshAt = now;
+      return true;
+    };
 
     async function loadProfile() {
       try {
         const profile = await apiFetch<UserProfile>("/api/user-profile");
-        if (mounted) setShowOnboarding(!profile.org_id);
+        const next = !profile.org_id;
+        if (mounted) setShowOnboarding(next);
+        return next;
       } catch {
         if (mounted) setShowOnboarding(false);
+        return false;
       }
     }
 
@@ -83,27 +116,79 @@ export function HelpPanel() {
       setReviewLoading(true);
       setReviewError(false);
       try {
-        const res = await apiFetch<{ items: ReviewItem[] }>("/api/review-queue?limit=50");
-        if (mounted) setReviewItems(res.items || []);
+        const res = await apiFetch<{ items: ReviewItem[] }>(`/api/review-queue?limit=${config.help_panel_review_limit}`);
+        const items = res.items || [];
+        if (mounted) setReviewItems(items);
+        return items;
       } catch {
         if (mounted) {
           setReviewItems([]);
           setReviewError(true);
         }
+        return [] as ReviewItem[];
       } finally {
         if (mounted) setReviewLoading(false);
       }
     }
 
-    function refresh() {
-      loadProfile();
-      loadReviewQueue();
+    async function refresh(reason: "mount" | "poll" | "focus" | "auth") {
+      if (!isLeader) return;
+      if (reason === "poll" && typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const [nextShowOnboarding, nextReviewItems] = await Promise.all([loadProfile(), loadReviewQueue()]);
+        publish({ type: "sync", reviewItems: nextReviewItems, showOnboarding: nextShowOnboarding });
+      } finally {
+        inFlight = false;
+      }
     }
 
-    refresh();
-    timer = setInterval(refresh, pollIntervalMs);
-    const onFocus = () => refresh();
-    window.addEventListener("focus", onFocus);
+    if (typeof BroadcastChannel !== "undefined") {
+      channel = new BroadcastChannel("mejai:help-panel-review-queue");
+      channel.onmessage = (event: MessageEvent) => {
+        const payload = (event.data || {}) as {
+          sender?: string;
+          type?: string;
+          reviewItems?: ReviewItem[];
+          showOnboarding?: boolean;
+        };
+        if (payload.sender === tabId) return;
+        if (payload.type === "sync" && mounted) {
+          if (Array.isArray(payload.reviewItems)) {
+            setReviewItems(payload.reviewItems);
+            setReviewError(false);
+            setReviewLoading(false);
+          }
+          if (typeof payload.showOnboarding === "boolean") {
+            setShowOnboarding(payload.showOnboarding);
+          }
+        }
+        if (payload.type === "request" && isLeader) {
+          refresh("auth");
+        }
+      };
+    }
+
+    if (isLeader) {
+      refresh("mount");
+      timer = setInterval(() => {
+        refresh("poll");
+      }, pollIntervalMs);
+    } else {
+      publish({ type: "request" });
+    }
+
+    const onFocus = () => {
+      if (!config.help_panel_refresh_on_focus) return;
+      if (!canRunFocusRefresh()) return;
+      refresh("focus");
+    };
+    if (config.help_panel_refresh_on_focus) {
+      window.addEventListener("focus", onFocus);
+    }
 
     const supabase = getSupabaseClient();
     if (!supabase) {
@@ -113,18 +198,37 @@ export function HelpPanel() {
         window.removeEventListener("focus", onFocus);
       };
     }
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
-      if (session) refresh();
+      if (event === "INITIAL_SESSION") return;
+      if (!config.help_panel_refresh_on_auth_change) return;
+      if (!shouldRefreshOnAuthEvent(config.help_panel_auth_event_mode, event)) return;
+      if (!session) return;
+      if (!canRunAuthRefresh()) return;
+      refresh("auth");
     });
 
     return () => {
       mounted = false;
       if (timer) clearInterval(timer);
-      window.removeEventListener("focus", onFocus);
+      if (channel) channel.close();
+      if (config.help_panel_refresh_on_focus) {
+        window.removeEventListener("focus", onFocus);
+      }
       sub.subscription.unsubscribe();
     };
-  }, [enabled, pollIntervalMs]);
+  }, [
+    config.help_panel_auth_cooldown_ms,
+    config.help_panel_auth_event_mode,
+    config.help_panel_focus_cooldown_ms,
+    config.help_panel_refresh_on_auth_change,
+    config.help_panel_refresh_on_focus,
+    config.help_panel_review_limit,
+    enabled,
+    isLeader,
+    pollIntervalMs,
+    tabId,
+  ]);
 
   if (!enabled || !mounted) return null;
 

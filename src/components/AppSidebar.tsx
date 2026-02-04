@@ -19,6 +19,9 @@ import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
 import { getSupabaseClient } from "@/lib/supabaseClient";
+import { usePerformanceConfig } from "@/hooks/usePerformanceConfig";
+import { shouldRefreshOnAuthEvent } from "@/lib/performanceConfig";
+import { useMultiTabLeaderLock } from "@/lib/multiTabSync";
 
 function BrandMark() {
   return (
@@ -86,33 +89,100 @@ function SidebarLink({
 export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () => void; collapsed: boolean }) {
   const pathname = usePathname();
   const [reviewCount, setReviewCount] = useState<number | null>(null);
-  const pollIntervalMs = pathname.startsWith("/app/review") ? 30_000 : 300_000;
+  const { config } = usePerformanceConfig();
+  const pollIntervalMs = pathname.startsWith("/app/review")
+    ? config.sidebar_poll_review_ms
+    : config.sidebar_poll_default_ms;
+  const reviewLimit = Math.max(1, config.sidebar_review_limit);
+  const { isLeader, tabId } = useMultiTabLeaderLock(
+    "sidebar-review-queue",
+    config.multi_tab_leader_enabled,
+    config.multi_tab_leader_lock_ttl_ms
+  );
 
   useEffect(() => {
     let mounted = true;
     let timer: ReturnType<typeof setInterval> | null = null;
-    async function loadCount() {
+    let inFlight = false;
+    let lastAuthRefreshAt = 0;
+    let channel: BroadcastChannel | null = null;
+    const canRunAuthRefresh = () => {
+      const now = Date.now();
+      if (now - lastAuthRefreshAt < config.sidebar_auth_cooldown_ms) return false;
+      lastAuthRefreshAt = now;
+      return true;
+    };
+    const publish = (message: Record<string, unknown>) => {
+      channel?.postMessage({ ...message, sender: tabId, ts: Date.now() });
+    };
+    async function loadCount(reason: "mount" | "poll" | "auth") {
+      if (!isLeader) return;
+      if (reason === "poll" && typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
+      if (inFlight) return;
+      inFlight = true;
       try {
-        const res = await apiFetch<{ total: number }>("/api/review-queue?limit=1&offset=0");
-        if (mounted) setReviewCount(res.total ?? 0);
+        const res = await apiFetch<{ total: number }>(`/api/review-queue?limit=${reviewLimit}&offset=0`);
+        const total = res.total ?? 0;
+        if (mounted) setReviewCount(total);
+        publish({ type: "sync", total });
       } catch {
         if (mounted) setReviewCount(0);
+      } finally {
+        inFlight = false;
       }
     }
-    loadCount();
-    timer = setInterval(loadCount, pollIntervalMs);
+    if (typeof BroadcastChannel !== "undefined") {
+      channel = new BroadcastChannel("mejai:sidebar-review-queue");
+      channel.onmessage = (event: MessageEvent) => {
+        const payload = (event.data || {}) as { sender?: string; type?: string; total?: number };
+        if (payload.sender === tabId) return;
+        if (payload.type === "sync" && typeof payload.total === "number" && mounted) {
+          setReviewCount(payload.total);
+        }
+        if (payload.type === "request" && isLeader) {
+          loadCount("auth");
+        }
+      };
+    }
+
+    if (isLeader) {
+      loadCount("mount");
+      timer = setInterval(() => {
+        loadCount("poll");
+      }, pollIntervalMs);
+    } else {
+      publish({ type: "request" });
+    }
     const supabase = getSupabaseClient();
     if (!supabase) return () => {};
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
-      if (session) loadCount();
+      if (event === "INITIAL_SESSION") return;
+      if (!config.sidebar_refresh_on_auth_change) return;
+      if (!shouldRefreshOnAuthEvent(config.sidebar_auth_event_mode, event)) return;
+      if (!session) return;
+      if (!canRunAuthRefresh()) return;
+      loadCount("auth");
     });
     return () => {
       mounted = false;
       if (timer) clearInterval(timer);
+      if (channel) channel.close();
       sub?.subscription.unsubscribe();
     };
-  }, [pollIntervalMs]);
+  }, [
+    config.multi_tab_leader_enabled,
+    config.multi_tab_leader_lock_ttl_ms,
+    config.sidebar_auth_cooldown_ms,
+    config.sidebar_auth_event_mode,
+    config.sidebar_refresh_on_auth_change,
+    isLeader,
+    pollIntervalMs,
+    reviewLimit,
+    tabId,
+  ]);
 
   const badgeCount = typeof reviewCount === "number" && reviewCount > 0 ? reviewCount : undefined;
   return (
@@ -154,7 +224,7 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
         <SidebarGroup header="구성" collapsed={collapsed}>
           <SidebarLink to="/app/agents" icon={Users} label="에이전트" collapsed={collapsed} onClick={onNavigate} />
           <SidebarLink
-            to="/app/labolatory"
+            to="/app/laboratory"
             icon={Bot}
             label="실험실"
             collapsed={collapsed}

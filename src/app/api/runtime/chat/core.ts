@@ -18,6 +18,7 @@ type Body = {
   kb_id?: string;
   admin_kb_ids?: string[];
   mcp_tool_ids?: string[];
+  mcp_provider_keys?: string[];
   mode?: string;
 };
 
@@ -80,7 +81,7 @@ const EXECUTION_GUARD_RULES = {
   },
 } as const;
 
-function buildDebugPrefix(payload: {
+type DebugPayload = {
   llmModel?: string | null;
   mcpTools?: string[];
   mcpProviders?: string[];
@@ -113,7 +114,201 @@ function buildDebugPrefix(payload: {
   mcpSkipped?: string[];
   policyInputRules?: string[];
   policyToolRules?: string[];
+  contextContamination?: string[];
+};
+
+type DebugEntry = { key: string; value: string | number };
+
+type RestockScheduleEntry = {
+  product_name: string;
+  month: number;
+  day: number;
+  raw_date: string;
+  source: string;
+};
+
+function buildFailedPayload(input: {
+  code: string;
+  summary: string;
+  intent?: string;
+  stage?: string;
+  tool?: string;
+  required_scope?: string;
+  retryable?: boolean;
+  detail?: Record<string, unknown>;
 }) {
+  return {
+    code: input.code,
+    summary: input.summary,
+    intent: input.intent || null,
+    stage: input.stage || null,
+    tool: input.tool || null,
+    required_scope: input.required_scope || null,
+    retryable: input.retryable ?? false,
+    detail: input.detail || null,
+    at: nowIso(),
+  };
+}
+
+function inferToolProvider(toolName: string, providerHints: string[]) {
+  const normalized = String(toolName || "").trim().toLowerCase();
+  if (normalized === "search_address") return "juso";
+  if (normalized === "send_otp" || normalized === "verify_otp") return "solapi";
+  if (
+    normalized === "list_orders" ||
+    normalized === "lookup_order" ||
+    normalized === "track_shipment" ||
+    normalized === "update_order_shipping_address" ||
+    normalized === "create_ticket" ||
+    normalized === "find_customer_by_phone" ||
+    normalized === "read_shipping" ||
+    normalized === "read_product" ||
+    normalized === "read_supply" ||
+    normalized === "resolve_product" ||
+    normalized === "subscribe_restock" ||
+    normalized === "trigger_restock"
+  ) {
+    return "cafe24";
+  }
+  if (normalized.startsWith("cafe24_") || normalized.startsWith("scope_")) return "cafe24";
+  if (providerHints.length === 1) return providerHints[0];
+  return "unknown";
+}
+
+function inferToolScope(toolName: string) {
+  const normalized = String(toolName || "").trim().toLowerCase();
+  if (
+    normalized.startsWith("list_") ||
+    normalized.startsWith("lookup_") ||
+    normalized.startsWith("resolve_") ||
+    normalized.startsWith("read_") ||
+    normalized.startsWith("search_") ||
+    normalized.startsWith("track_")
+  ) {
+    return "read";
+  }
+  if (
+    normalized.startsWith("update_") ||
+    normalized.startsWith("create_") ||
+    normalized.startsWith("trigger_") ||
+    normalized.startsWith("send_") ||
+    normalized.startsWith("verify_")
+  ) {
+    return "write";
+  }
+  return "unknown";
+}
+
+function buildStructuredDebugPrefix(payload: DebugPayload) {
+  const uniq = (items?: string[]) => Array.from(new Set(items || [])).filter(Boolean);
+  const providers = uniq(payload.mcpProviders);
+  const tools = uniq(payload.mcpTools).map((raw) => {
+    const value = String(raw || "").trim();
+    const parts = value.split(":");
+    const hasProvider = parts.length > 1;
+    const toolName = hasProvider ? parts.slice(1).join(":").trim() : value;
+    const provider = hasProvider ? parts[0].trim().toLowerCase() : inferToolProvider(toolName, providers);
+    return { provider, name: toolName, scope: inferToolScope(toolName), endpoint: toolName };
+  });
+  const providerMap = new Map<string, Array<{ name: string; scope: string; endpoint: string }>>();
+  tools.forEach((tool) => {
+    const list = providerMap.get(tool.provider) || [];
+    list.push({ name: tool.name, scope: tool.scope, endpoint: tool.endpoint });
+    providerMap.set(tool.provider, list);
+  });
+  const providerNodes = Array.from(providerMap.entries()).map(([provider, functions]) => ({ provider, functions }));
+  const providerConfig = Object.fromEntries(
+    Object.entries(payload.providerConfig || {}).filter(([, value]) => Boolean(value))
+  );
+  const mcpLast: Record<string, unknown> = {
+    function: payload.mcpLastFunction || null,
+    status: payload.mcpLastStatus || "none",
+    error: payload.mcpLastError || null,
+    result_count: payload.mcpLastCount ?? null,
+  };
+  return {
+    schema_version: 2,
+    ...(payload.llmModel ? { llm: { model: payload.llmModel } } : {}),
+    mcp: {
+      ...(providerNodes.length > 0 ? { providers: providerNodes } : {}),
+      last: mcpLast,
+      ...(uniq(payload.mcpCandidateCalls).length > 0 ? { candidate_calls: uniq(payload.mcpCandidateCalls) } : {}),
+      ...(uniq(payload.mcpSkipped).length > 0 ? { skipped: uniq(payload.mcpSkipped) } : {}),
+      ...(uniq(payload.mcpLogs).length > 0 ? { logs: uniq(payload.mcpLogs) } : {}),
+      ...(Object.keys(providerConfig).length > 0 ? { provider_config: providerConfig } : {}),
+    },
+    ...(uniq(payload.providerAvailable).length > 0 || payload.authSettingsId
+      ? {
+          auth: {
+            ...(uniq(payload.providerAvailable).length > 0 ? { providers: uniq(payload.providerAvailable) } : {}),
+            ...(payload.authSettingsId ? { settings_id: payload.authSettingsId } : {}),
+          },
+        }
+      : {}),
+    ...(uniq(payload.usedRuleIds).length > 0 ||
+    uniq(payload.usedTemplateIds).length > 0 ||
+    uniq(payload.usedToolPolicies).length > 0 ||
+    uniq(payload.kbAdminIds).length > 0 ||
+    payload.kbUserId
+      ? {
+          kb_admin: {
+            ...(uniq(payload.usedRuleIds).length > 0 ? { rule_ids: uniq(payload.usedRuleIds) } : {}),
+            ...(uniq(payload.usedTemplateIds).length > 0 ? { template_ids: uniq(payload.usedTemplateIds) } : {}),
+            ...(uniq(payload.usedToolPolicies).length > 0 ? { tool_policies: uniq(payload.usedToolPolicies) } : {}),
+            ...(uniq(payload.kbAdminIds).length > 0 ? { kb_admin_ids: uniq(payload.kbAdminIds) } : {}),
+            ...(payload.kbUserId ? { kb_user_id: payload.kbUserId } : {}),
+          },
+        }
+      : {}),
+    ...(uniq(payload.policyInputRules).length > 0 || uniq(payload.policyToolRules).length > 0
+      ? {
+          policy: {
+            ...(uniq(payload.policyInputRules).length > 0 ? { input_rules: uniq(payload.policyInputRules) } : {}),
+            ...(uniq(payload.policyToolRules).length > 0 ? { tool_rules: uniq(payload.policyToolRules) } : {}),
+          },
+        }
+      : {}),
+    ...(payload.slotExpectedInput ||
+    payload.slotOrderId ||
+    payload.slotPhone ||
+    payload.slotPhoneMasked ||
+    payload.slotZipcode ||
+    payload.slotAddress
+      ? {
+          slot: {
+            ...(payload.slotExpectedInput ? { expected_input: payload.slotExpectedInput } : {}),
+            ...(payload.slotOrderId ? { order_id: payload.slotOrderId } : {}),
+            ...(payload.slotPhone ? { phone: payload.slotPhone } : {}),
+            ...(payload.slotPhoneMasked ? { phone_masked: payload.slotPhoneMasked } : {}),
+            ...(payload.slotZipcode ? { zipcode: payload.slotZipcode } : {}),
+            ...(payload.slotAddress ? { address: payload.slotAddress } : {}),
+          },
+        }
+      : {}),
+    ...(uniq(payload.contextContamination).length > 0
+      ? {
+          context: {
+            contamination: uniq(payload.contextContamination),
+            contamination_count: uniq(payload.contextContamination).length,
+          },
+        }
+      : {}),
+    ...(payload.userId || payload.orgId || payload.userPlan || payload.userRole || payload.userIsAdmin !== undefined
+      ? {
+          user: {
+            ...(payload.userId ? { id: payload.userId } : {}),
+            ...(payload.orgId ? { org_id: payload.orgId } : {}),
+            ...(payload.userPlan ? { plan: payload.userPlan } : {}),
+            ...(payload.userRole ? { role: payload.userRole } : {}),
+            ...(payload.userIsAdmin !== undefined && payload.userIsAdmin !== null ? { is_admin: payload.userIsAdmin } : {}),
+          },
+        }
+      : {}),
+    ...(payload.conversationMode ? { mode: payload.conversationMode } : {}),
+  };
+}
+
+function buildDebugPrefix(payload: DebugPayload) {
   const entries = buildDebugEntries(payload);
   const escapeHtml = (value: string) =>
     value
@@ -156,41 +351,7 @@ function buildDebugPrefix(payload: {
   return `<div class="debug_prefix">${treeHtml}</div>`;
 }
 
-function buildDebugEntries(payload: {
-  llmModel?: string | null;
-  mcpTools?: string[];
-  mcpProviders?: string[];
-  mcpLastFunction?: string | null;
-  mcpLastStatus?: string | null;
-  mcpLastError?: string | null;
-  mcpLastCount?: number | null;
-  mcpLogs?: string[];
-  providerConfig?: Record<string, string | null>;
-  userId?: string | null;
-  orgId?: string | null;
-  userPlan?: string | null;
-  userIsAdmin?: boolean | null;
-  userRole?: string | null;
-  providerAvailable?: string[];
-  authSettingsId?: string | null;
-  kbUserId?: string | null;
-  kbAdminIds?: string[];
-  usedRuleIds?: string[];
-  usedTemplateIds?: string[];
-  usedToolPolicies?: string[];
-  conversationMode?: string | null;
-  slotExpectedInput?: string | null;
-  slotOrderId?: string | null;
-  slotPhone?: string | null;
-  slotPhoneMasked?: string | null;
-  slotZipcode?: string | null;
-  slotAddress?: string | null;
-  mcpCandidateCalls?: string[];
-  mcpSkipped?: string[];
-  policyInputRules?: string[];
-  policyToolRules?: string[];
-  contextContamination?: string[];
-}) {
+function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
   const uniq = (items?: string[]) => Array.from(new Set(items || [])).filter(Boolean);
   const providerConfig = payload.providerConfig || {};
   const configParts = Object.entries(providerConfig)
@@ -255,6 +416,10 @@ function buildDebugEntries(payload: {
       : [{ key: "MCP.skipped", value: "-" }]),
     { key: "MODE", value: payload.conversationMode || "-" },
   ];
+}
+
+function buildDebugPrefixJson(payload: DebugPayload) {
+  return buildStructuredDebugPrefix(payload) as Record<string, unknown>;
 }
 
 function isValidLlm(value?: string | null) {
@@ -641,7 +806,7 @@ async function createSession(context: any, agentId: string | null) {
     org_id: context.orgId,
     session_code: sessionCode,
     started_at: nowIso(),
-    channel: "playground",
+    channel: "runtime",
     agent_id: agentId,
   };
   const { data, error } = await context.supabase.from("D_conv_sessions").insert(payload).select("*").single();
@@ -678,7 +843,7 @@ async function insertEvent(
       bot_context: botContext,
     });
   } catch (error) {
-    console.warn("[playground/chat_mk2] failed to insert event log", {
+    console.warn("[runtime/chat_mk2] failed to insert event log", {
       eventType,
       sessionId,
       turnId,
@@ -704,7 +869,7 @@ async function upsertDebugLog(
       { onConflict: "turn_id" }
     );
   } catch (error) {
-    console.warn("[playground/chat_mk2] failed to upsert debug log", {
+    console.warn("[runtime/chat_mk2] failed to upsert debug log", {
       sessionId: payload.sessionId,
       turnId: payload.turnId,
       error: error instanceof Error ? error.message : String(error),
@@ -759,12 +924,18 @@ async function callMcpTool(
   sessionId: string,
   turnId: string | null,
   botContext: Record<string, unknown>,
-  allowedTools: Set<string> | undefined
+  allowedTools:
+    | {
+      keys: Set<string>;
+      byName: Map<string, string[]>;
+    }
+    | undefined
 ) {
   const auditBlocked = async (
     status: string,
     reason: string,
     toolId?: string | null,
+    toolVersion?: string | null,
     responsePayload?: Record<string, unknown> | null
   ) => {
     try {
@@ -773,6 +944,7 @@ async function callMcpTool(
         session_id: sessionId,
         turn_id: turnId,
         tool_id: toolId || null,
+        tool_version: toolVersion || null,
         tool_name: tool,
         request_payload: params,
         response_payload: responsePayload || null,
@@ -784,7 +956,7 @@ async function callMcpTool(
         bot_context: botContext,
       });
     } catch (error) {
-      console.warn("[playground/chat_mk2] failed to audit blocked MCP call", {
+      console.warn("[runtime/chat_mk2] failed to audit blocked MCP call", {
         tool,
         reason,
         error: error instanceof Error ? error.message : String(error),
@@ -792,61 +964,82 @@ async function callMcpTool(
     }
   };
   if (!allowedTools) {
-    console.warn("[playground/chat_mk2] allowedTools missing", { tool, sessionId, turnId });
+    console.warn("[runtime/chat_mk2] allowedTools missing", { tool, sessionId, turnId });
   }
-  const allowed = allowedTools ?? new Set<string>();
-  if (!allowed.has(tool)) {
+  const allowed =
+    allowedTools ??
+    ({
+      keys: new Set<string>(),
+      byName: new Map<string, string[]>(),
+    } as const);
+  const rawTool = String(tool || "").trim();
+  const directKey = rawTool.includes(":") ? rawTool : null;
+  const resolvedToolKey = (() => {
+    if (directKey) return directKey;
+    const candidates = allowed.byName.get(rawTool) || [];
+    if (candidates.length === 1) return candidates[0];
+    return null;
+  })();
+
+  if (!resolvedToolKey || !allowed.keys.has(resolvedToolKey)) {
     await auditBlocked("blocked", "TOOL_NOT_ALLOWED_FOR_AGENT");
     return { ok: false, error: "TOOL_NOT_ALLOWED_FOR_AGENT" };
   }
+  const [providerKey, toolName] = resolvedToolKey.split(":");
   const { data: toolRow } = await context.supabase
     .from("C_mcp_tools")
-    .select("id, name, version, schema_json")
-    .eq("name", tool)
+    .select("id, name, provider_key, scope_key, endpoint_path, http_method, version, schema_json, masking_rules, conditions")
+    .eq("provider_key", providerKey)
+    .eq("name", toolName)
     .eq("is_active", true)
     .maybeSingle();
   if (!toolRow) {
     await auditBlocked("blocked", "TOOL_NOT_FOUND");
     return { ok: false, error: "TOOL_NOT_FOUND" };
   }
-  const policy = await context.supabase
-    .from("C_mcp_tool_policies")
-    .select("is_allowed, allowed_scopes, rate_limit_per_min, masking_rules, conditions, adapter_key")
-    .eq("org_id", context.orgId)
-    .eq("tool_id", toolRow.id)
-    .maybeSingle();
-  if (!policy.data || !policy.data.is_allowed) {
-    await auditBlocked("blocked", "POLICY_BLOCK", toolRow.id);
-    return { ok: false, error: "POLICY_BLOCK" };
-  }
   const { callAdapter } = await import("@/lib/mcpAdapters");
   const { applyMasking, checkPolicyConditions, validateToolParams } = await import("@/lib/mcpPolicy");
 
+  const resolvedParams: Record<string, unknown> = { ...params };
+  if ((toolRow as any).endpoint_path && resolvedParams.path === undefined) {
+    resolvedParams.path = (toolRow as any).endpoint_path;
+  }
+  if ((toolRow as any).http_method && resolvedParams.method === undefined) {
+    resolvedParams.method = (toolRow as any).http_method;
+  }
+  if ((toolRow as any).scope_key && resolvedParams.required_scope === undefined) {
+    resolvedParams.required_scope = (toolRow as any).scope_key;
+  }
+
   const schema = (toolRow as any).schema_json || {};
-  const validation = validateToolParams(schema as Record<string, unknown>, params);
+  const validation = validateToolParams(schema as Record<string, unknown>, resolvedParams);
   if (!validation.ok) {
-    await auditBlocked("invalid_params", "INVALID_PARAMS", toolRow.id, {
+    await auditBlocked("invalid_params", "INVALID_PARAMS", toolRow.id, (toolRow as any).version || null, {
       error: validation.error || "INVALID_PARAMS",
     });
     return { ok: false, error: validation.error };
   }
 
-  const conditionCheck = checkPolicyConditions(policy.data.conditions, params);
+  const conditionCheck = checkPolicyConditions((toolRow as any).conditions || null, resolvedParams);
   if (!conditionCheck.ok) {
-    await auditBlocked("blocked", String(conditionCheck.error || "POLICY_CONDITION_BLOCK"), toolRow.id);
+    await auditBlocked("blocked", String(conditionCheck.error || "POLICY_CONDITION_BLOCK"), toolRow.id, (toolRow as any).version || null);
     return { ok: false, error: conditionCheck.error };
   }
 
   const start = Date.now();
-  const adapterKey = policy.data.adapter_key || tool;
   let result: any;
   let latency = 0;
   try {
-    result = await callAdapter(adapterKey, params, {
-      supabase: context.supabase,
-      orgId: context.orgId,
-      userId: context.user.id,
-    });
+    result = await callAdapter(
+      String((toolRow as any).provider_key || "unknown"),
+      resolvedParams,
+      {
+        supabase: context.supabase,
+        orgId: context.orgId,
+        userId: context.user.id,
+      },
+      { toolName: String((toolRow as any).name || "") }
+    );
     latency = Date.now() - start;
   } catch (error) {
     latency = Date.now() - start;
@@ -857,8 +1050,9 @@ async function callMcpTool(
         session_id: sessionId,
         turn_id: turnId,
         tool_id: toolRow.id,
+        tool_version: (toolRow as any).version || null,
         tool_name: tool,
-        request_payload: params,
+        request_payload: resolvedParams,
         response_payload: { error: message },
         status: "error",
         latency_ms: latency,
@@ -868,7 +1062,7 @@ async function callMcpTool(
         bot_context: botContext,
       });
     } catch (auditError) {
-      console.warn("[playground/chat_mk2] failed to audit MCP adapter error", {
+      console.warn("[runtime/chat_mk2] failed to audit MCP adapter error", {
         tool,
         error: auditError instanceof Error ? auditError.message : String(auditError),
       });
@@ -876,7 +1070,7 @@ async function callMcpTool(
     return { ok: false, error: `ADAPTER_ERROR: ${message}` };
   }
   const responsePayload = result.data ? { ...result.data } : {};
-  const masked = applyMasking(responsePayload, policy.data.masking_rules);
+  const masked = applyMasking(responsePayload, (toolRow as any).masking_rules || null);
 
   const responsePayloadWithError =
     result.status === "error"
@@ -888,8 +1082,9 @@ async function callMcpTool(
       session_id: sessionId,
       turn_id: turnId,
       tool_id: toolRow.id,
-      tool_name: toolRow.name,
-      request_payload: params,
+      tool_version: (toolRow as any).version || null,
+      tool_name: `${toolRow.provider_key}:${toolRow.name}`,
+      request_payload: resolvedParams,
       response_payload: responsePayloadWithError,
       status: result.status,
       latency_ms: latency,
@@ -899,7 +1094,7 @@ async function callMcpTool(
       bot_context: botContext,
     });
   } catch (auditError) {
-    console.warn("[playground/chat_mk2] failed to audit MCP result", {
+    console.warn("[runtime/chat_mk2] failed to audit MCP result", {
       tool,
       status: result.status,
       error: auditError instanceof Error ? auditError.message : String(auditError),
@@ -923,7 +1118,9 @@ const RESTOCK_KEYWORDS = /재입고|입고|재고|품절|다시\s*입고|다시\
 function isRestockSubscribe(text: string) {
   return (
     RESTOCK_KEYWORDS.test(text) &&
-    /(알림|알려|입고되면|재입고되면|문자|카카오|카톡|이메일|메일)/.test(text)
+    /(알림|신청|예약|구독|등록|받고|받을|문자|sms|카카오|카톡|이메일|메일|입고되면|재입고되면|notify|subscribe)/i.test(
+      text
+    )
   );
 }
 
@@ -984,12 +1181,155 @@ function isNoText(text: string) {
   return /^(아니|아니오|아니요|아뇨|no|n)$/.test(v);
 }
 
+function isExecutionAffirmativeText(text: string) {
+  const v = String(text || "").trim().toLowerCase();
+  if (!v) return false;
+  return /(도와|도움|진행|해줘|해주세요|부탁|신청할래|신청할게|신청해|예약해|등록해|알림해|해볼게|할래요|할게요)/.test(v);
+}
+
 function extractRestockChannel(text: string) {
   const v = String(text || "");
   if (/카카오|카톡/.test(v)) return "kakao";
   if (/이메일|메일|email/i.test(v)) return "email";
   if (/문자|sms/i.test(v)) return "sms";
   return null;
+}
+
+function normalizeKoreanMatchText(input: string) {
+  return String(input || "")
+    .toLowerCase()
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function stripRestockNoise(input: string) {
+  return normalizeKoreanMatchText(input)
+    .replace(/(재입고|입고|일정|언제|알고싶|알려|제품|상품|문의|확인|요|입니다|이에요|해요)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractRestockSectionLines(content: string) {
+  const lines = String(content || "").split(/\r?\n/);
+  const section: string[] = [];
+  let inRestockSection = false;
+  for (const raw of lines) {
+    const line = String(raw || "");
+    const heading = line.match(/^\s*#{1,6}\s*(.+?)\s*$/);
+    if (heading) {
+      const title = heading[1].trim();
+      inRestockSection = /재입고/.test(title);
+      continue;
+    }
+    if (inRestockSection) section.push(line);
+  }
+  return section.length > 0 ? section : lines;
+}
+
+function parseRestockEntriesFromContent(content: string, source: string): RestockScheduleEntry[] {
+  const lines = extractRestockSectionLines(content);
+  const out: RestockScheduleEntry[] = [];
+  for (const raw of lines) {
+    const line = String(raw || "")
+      .replace(/^\s*[-*•\d.)]+\s*/, "")
+      .trim();
+    if (!line) continue;
+    const m = line.match(/^(.*?)\s+(\d{1,2})\/(\d{1,2})(?:\D.*)?$/);
+    if (!m) continue;
+    const productName = m[1].trim();
+    const month = Number(m[2]);
+    const day = Number(m[3]);
+    if (!productName || !Number.isFinite(month) || !Number.isFinite(day)) continue;
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+    out.push({
+      product_name: productName,
+      month,
+      day,
+      raw_date: `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`,
+      source,
+    });
+  }
+  const dedup = new Map<string, RestockScheduleEntry>();
+  out.forEach((item) => {
+    const key = `${normalizeKoreanMatchText(item.product_name)}|${item.raw_date}`;
+    if (!dedup.has(key)) dedup.set(key, item);
+  });
+  return Array.from(dedup.values());
+}
+
+function rankRestockEntries(queryText: string, entries: RestockScheduleEntry[]) {
+  const query = stripRestockNoise(queryText);
+  const queryTokens = query.split(" ").filter(Boolean);
+  return entries
+    .map((entry) => {
+      const name = normalizeKoreanMatchText(entry.product_name);
+      const nameNoSpace = name.replace(/\s+/g, "");
+      const queryNoSpace = query.replace(/\s+/g, "");
+      let score = 0;
+      if (queryNoSpace && nameNoSpace.includes(queryNoSpace)) score += 4;
+      if (queryNoSpace && queryNoSpace.includes(nameNoSpace)) score += 2;
+      if (queryTokens.length > 0) {
+        const matched = queryTokens.filter((t) => t && name.includes(t)).length;
+        score += matched * 1.5;
+      }
+      return { entry, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+}
+
+function findBestRestockEntryByProductName(productName: string, entries: RestockScheduleEntry[]) {
+  const ranked = rankRestockEntries(productName, entries);
+  if (ranked.length <= 0) return null;
+
+  const best = ranked[0].entry;
+  const productNorm = stripRestockNoise(productName);
+  const entryNorm = stripRestockNoise(best.product_name);
+  const productNoSpace = productNorm.replace(/\s+/g, "");
+  const entryNoSpace = entryNorm.replace(/\s+/g, "");
+
+  // Strong exact-ish containment: safe to attach KB schedule.
+  if (productNoSpace && entryNoSpace && (productNoSpace.includes(entryNoSpace) || entryNoSpace.includes(productNoSpace))) {
+    return best;
+  }
+
+  // Otherwise require substantial token overlap to avoid brand-only false matches.
+  const tokens = (s: string) => s.split(" ").map((v) => v.trim()).filter((v) => v.length >= 2);
+  const productTokens = new Set(tokens(productNorm));
+  const entryTokens = new Set(tokens(entryNorm));
+  if (productTokens.size === 0 || entryTokens.size === 0) return null;
+
+  const overlap = Array.from(productTokens).filter((t) => entryTokens.has(t)).length;
+  const productCoverage = overlap / productTokens.size;
+  const entryCoverage = overlap / entryTokens.size;
+
+  if (overlap >= 2 && (productCoverage >= 0.5 || entryCoverage >= 0.5)) {
+    return best;
+  }
+  return null;
+}
+
+function parseIndexedChoice(text: string) {
+  const m = String(text || "").trim().match(/^(\d{1,2})\s*번?$/);
+  if (!m) return null;
+  const idx = Number(m[1]);
+  return Number.isFinite(idx) && idx > 0 ? idx : null;
+}
+
+function toRestockDueText(month: number, day: number, now = new Date()) {
+  const year = now.getFullYear();
+  const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let target = new Date(year, month - 1, day);
+  if (target.getTime() < base.getTime() - 1000 * 60 * 60 * 24 * 120) {
+    target = new Date(year + 1, month - 1, day);
+  }
+  const diffDays = Math.round((target.getTime() - base.getTime()) / (1000 * 60 * 60 * 24));
+  const targetText = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
+  const dday = diffDays > 0 ? `D-${diffDays}` : diffDays === 0 ? "D-Day" : `D+${Math.abs(diffDays)}`;
+  return { targetText, dday, diffDays };
 }
 
 function readProductShape(raw: unknown) {
@@ -1029,10 +1369,19 @@ function readProductShape(raw: unknown) {
     soldOutRaw === "Y" ||
     soldOutRaw === "1" ||
     (Number.isFinite(qtyNum as number) && (qtyNum as number) <= 0);
+  const thumbnailUrl = String(
+    (product as any).tiny_image ||
+      (product as any).small_image ||
+      (product as any).list_image ||
+      (product as any).image_url ||
+      (product as any).detail_image ||
+      ""
+  ).trim();
   return {
     productName,
     qty: Number.isFinite(qtyNum as number) ? (qtyNum as number) : null,
     soldOut,
+    thumbnailUrl,
   };
 }
 
@@ -1159,6 +1508,7 @@ async function callAddressSearchWithAudit(
       session_id: sessionId,
       turn_id: turnId,
       tool_id: null,
+      tool_version: null,
       tool_name: "search_address",
       request_payload: { keyword, search_keywords: keywords },
       response_payload: result.status === "success" ? result.data || {} : { error: result.error || null },
@@ -1176,7 +1526,7 @@ async function callAddressSearchWithAudit(
 }
 
 export async function POST(req: NextRequest) {
-  const debugEnabled = process.env.DEBUG_PLAYGROUND_CHAT === "1" || process.env.NODE_ENV !== "production";
+  const debugEnabled = process.env.DEBUG_RUNTIME_CHAT === "1" || process.env.NODE_ENV !== "production";
   let latestTurnId: string | null = null;
   const deriveQuickReplies = (message?: unknown) => {
     const text = typeof message === "string" ? message : "";
@@ -1212,7 +1562,7 @@ export async function POST(req: NextRequest) {
     const context = await getServerContext(authHeader, cookieHeader);
     if ("error" in context) {
       if (debugEnabled) {
-        console.debug("[playground/chat/mk2] auth error", context.error);
+        console.debug("[runtime/chat/mk2] auth error", context.error);
       }
       return respond({ error: context.error }, { status: 401 });
     }
@@ -1227,9 +1577,16 @@ export async function POST(req: NextRequest) {
     const overrideAdminKbIds = Array.isArray(body?.admin_kb_ids)
       ? body?.admin_kb_ids.map((id) => String(id)).filter(Boolean)
       : null;
-    const overrideMcpToolIds = Array.isArray(body?.mcp_tool_ids)
-      ? body?.mcp_tool_ids.map((id) => String(id)).filter(Boolean)
-      : [];
+    const overrideMcpToolIds = Array.from(
+      new Set(
+        [
+          ...(Array.isArray(body?.mcp_tool_ids) ? body.mcp_tool_ids : []),
+          ...(Array.isArray(body?.mcp_provider_keys) ? body.mcp_provider_keys : []),
+        ]
+          .map((id) => String(id).trim())
+          .filter(Boolean)
+      )
+    );
     if (!message) {
       return respond({ error: "INVALID_BODY" }, { status: 400 });
     }
@@ -1316,23 +1673,100 @@ export async function POST(req: NextRequest) {
 
     const allowedToolNames = new Set<string>();
     const allowedToolIdByName = new Map<string, string>();
+    const allowedToolVersionByName = new Map<string, string | null>();
+    const allowedToolByName = new Map<string, string[]>();
     if (agent.mcp_tool_ids && agent.mcp_tool_ids.length > 0) {
       const requestedToolIds = agent.mcp_tool_ids.map((id) => String(id)).filter(Boolean);
       const validToolIds = requestedToolIds.filter((id) => isUuidLike(id));
-      const { data: tools } = validToolIds.length
-        ? await context.supabase
+      const providerSelections = Array.from(
+        new Set(
+          requestedToolIds
+            .filter((id) => !isUuidLike(id))
+            .map((id) => id.trim().toLowerCase())
+            .filter(Boolean)
+        )
+      );
+      const [toolsById, toolsByProvider] = await Promise.all([
+        validToolIds.length
+          ? context.supabase
+            .from("C_mcp_tools")
+            .select("id, name, provider_key, scope_key, version, is_active")
+            .in("id", validToolIds)
+          : Promise.resolve({
+            data: [] as Array<{ id: string; name: string; provider_key: string; scope_key?: string | null; version?: string | null; is_active?: boolean | null }>,
+          }),
+        providerSelections.length
+          ? context.supabase
+            .from("C_mcp_tools")
+            .select("id, name, provider_key, scope_key, version, is_active")
+            .in("provider_key", providerSelections)
+            .eq("is_active", true)
+          : Promise.resolve({
+            data: [] as Array<{ id: string; name: string; provider_key: string; scope_key?: string | null; version?: string | null; is_active?: boolean | null }>,
+          }),
+      ]);
+      const tools = [...(toolsById.data || []), ...(toolsByProvider.data || [])];
+      const resolvedTools = new Map<string, { id: string; name: string; provider_key: string; version?: string | null }>();
+      (tools || [])
+        .filter((t) => t.is_active)
+        .forEach((t) => {
+          resolvedTools.set(String(t.id), {
+            id: String(t.id),
+            name: String(t.name || ""),
+            provider_key: String(t.provider_key || ""),
+            version: typeof (t as any).version === "string" ? String((t as any).version) : null,
+          });
+        });
+
+      const legacyScopes = Array.from(
+        new Set(
+          (tools || [])
+            .filter(
+              (t) =>
+                !t.is_active &&
+                String(t.provider_key || "") === "cafe24" &&
+                String(t.name || "").startsWith("scope_mall_") &&
+                String(t.scope_key || "").trim().length > 0
+            )
+            .map((t) => String(t.scope_key || ""))
+        )
+      );
+      if (legacyScopes.length > 0) {
+        const { data: expanded } = await context.supabase
           .from("C_mcp_tools")
-          .select("id, name")
-          .in("id", validToolIds)
-        : { data: [] as Array<{ id: string; name: string }> };
-      (tools || []).forEach((t) => {
+          .select("id, name, provider_key, version")
+          .eq("provider_key", "cafe24")
+          .eq("is_active", true)
+          .in("scope_key", legacyScopes);
+        (expanded || []).forEach((t) => {
+          resolvedTools.set(String(t.id), {
+            id: String(t.id),
+            name: String(t.name || ""),
+            provider_key: String(t.provider_key || ""),
+            version: typeof (t as any).version === "string" ? String((t as any).version) : null,
+          });
+        });
+      }
+
+      Array.from(resolvedTools.values()).forEach((t) => {
         const name = String(t.name || "").trim();
+        const key = `${String((t as any).provider_key || "").trim()}:${name}`;
         const id = String((t as any).id || "").trim();
         if (!name) return;
-        allowedToolNames.add(name);
-        if (id) allowedToolIdByName.set(name, id);
+        allowedToolNames.add(key);
+        const list = allowedToolByName.get(name) || [];
+        list.push(key);
+        allowedToolByName.set(name, list);
+        if (id && !allowedToolIdByName.has(name)) {
+          allowedToolIdByName.set(name, id);
+        }
+        if (!allowedToolVersionByName.has(name)) {
+          allowedToolVersionByName.set(name, (t as any).version || null);
+        }
       });
     }
+    const allowedTools = { keys: allowedToolNames, byName: allowedToolByName };
+    const hasAllowedToolName = (name: string) => (allowedToolByName.get(name)?.length || 0) > 0;
 
     let sessionId = String(body?.session_id || "").trim();
     if (!sessionId) {
@@ -1413,6 +1847,48 @@ export async function POST(req: NextRequest) {
     })();
     if (expectedInput === "address" && /(환불|취소|반품|교환)/.test(message)) {
       expectedInput = null;
+    }
+    if (prevBotContext.phone_reuse_pending) {
+      const pendingPhone = normalizePhoneDigits(String(prevBotContext.pending_phone || ""));
+      if (isYesText(message) && pendingPhone) {
+        derivedPhone = pendingPhone;
+        expectedInput = "phone";
+      } else if (isNoText(message)) {
+        const reply = makeReply("새로 조회할 휴대폰 번호를 알려주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            phone_reuse_pending: false,
+            pending_phone: null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      } else {
+        const masked = pendingPhone ? maskPhone(pendingPhone) : "-";
+        const reply = makeReply(`이전에 제공한 번호(${masked})를 그대로 사용해 조회할까요? 맞으면 '네', 아니면 '아니오'를 입력해 주세요.`);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            phone_reuse_pending: true,
+            pending_phone: pendingPhone || null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
     }
     if (expectedInput === "otp_code") {
       derivedOrderId = null;
@@ -1757,10 +2233,56 @@ export async function POST(req: NextRequest) {
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
     }
+    if (prevBotContext.restock_pending && prevBotContext.restock_stage === "awaiting_subscribe_suggestion") {
+      const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
+      const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
+      const pendingChannel = String(prevBotContext.pending_channel || "").trim();
+      if (isNoText(message)) {
+        const reply = makeReply("재입고 알림 신청을 진행하지 않았습니다. 필요하면 상품명을 다시 알려주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            pending_channel: pendingChannel || null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+      }
+      if (isYesText(message) || isExecutionAffirmativeText(message) || isRestockSubscribe(message)) {
+        const reply = makeReply(
+          `상품(${pendingProductName || pendingProductId || "-"})에 ${pendingChannel || "sms"} 채널로 재입고 알림을 신청할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: "restock_subscribe",
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            restock_pending: true,
+            restock_stage: "awaiting_subscribe_confirm",
+            pending_product_id: pendingProductId || null,
+            pending_product_name: pendingProductName || null,
+            pending_channel: pendingChannel || null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+    }
     if (prevBotContext.restock_pending && prevBotContext.restock_stage === "awaiting_subscribe_confirm") {
       const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
+      const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
       const pendingChannel = String(prevBotContext.pending_channel || "").trim();
-      if (isYesText(message)) {
+      if (isYesText(message) || isExecutionAffirmativeText(message)) {
         restockSubscribeAcceptedThisTurn = true;
       } else if (isNoText(message)) {
         const reply = makeReply("재입고 알림 신청을 진행하지 않았습니다. 필요하면 상품명을 다시 알려주세요.");
@@ -1780,7 +2302,7 @@ export async function POST(req: NextRequest) {
         return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
       } else {
         const reply = makeReply(
-          `상품(${pendingProductId || "-"})에 ${pendingChannel || "sms"} 채널로 재입고 알림을 신청할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+          `상품(${pendingProductName || pendingProductId || "-"})에 ${pendingChannel || "sms"} 채널로 재입고 알림을 신청할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
         );
         await insertTurn({
           session_id: sessionId,
@@ -1795,6 +2317,7 @@ export async function POST(req: NextRequest) {
             restock_pending: true,
             restock_stage: "awaiting_subscribe_confirm",
             pending_product_id: pendingProductId || null,
+            pending_product_name: pendingProductName || null,
             pending_channel: pendingChannel || null,
           },
         });
@@ -2149,30 +2672,30 @@ export async function POST(req: NextRequest) {
           { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
         );
         const toolId = allowedToolIdByName.get(skip.tool);
-        if (toolId) {
-          try {
-            await context.supabase.from("F_audit_mcp_tools").insert({
-              org_id: context.orgId,
-              session_id: sessionId,
-              turn_id: latestTurnId,
-              tool_id: toolId,
-              tool_name: skip.tool,
-              request_payload: skip.args || {},
-              response_payload: { skipped: true, reason: skip.reason, detail: skip.detail || null },
-              status: "skipped",
-              latency_ms: 0,
-              masked_fields: [],
-              policy_decision: { allowed: false, reason: skip.reason },
-              created_at: nowIso(),
-              bot_context: { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-            });
-          } catch (error) {
-            console.warn("[playground/chat_mk2] failed to insert MCP skip audit", {
-              tool: skip.tool,
-              reason: skip.reason,
-              error: error instanceof Error ? error.message : String(error),
-            });
-          }
+        const toolVersion = allowedToolVersionByName.get(skip.tool) || null;
+        try {
+          await context.supabase.from("F_audit_mcp_tools").insert({
+            org_id: context.orgId,
+            session_id: sessionId,
+            turn_id: latestTurnId,
+            tool_id: toolId || null,
+            tool_version: toolVersion,
+            tool_name: skip.tool,
+            request_payload: skip.args || {},
+            response_payload: { skipped: true, reason: skip.reason, detail: skip.detail || null },
+            status: "skipped",
+            latency_ms: 0,
+            masked_fields: [],
+            policy_decision: { allowed: false, reason: skip.reason },
+            created_at: nowIso(),
+            bot_context: { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+          });
+        } catch (error) {
+          console.warn("[runtime/chat_mk2] failed to insert MCP skip audit", {
+            tool: skip.tool,
+            reason: skip.reason,
+            error: error instanceof Error ? error.message : String(error),
+          });
         }
       }
       mcpSkipQueue.length = 0;
@@ -2238,7 +2761,7 @@ export async function POST(req: NextRequest) {
         contextContamination: contaminationSummaries,
         conversationMode,
       };
-      lastDebugPrefixJson = { entries: buildDebugEntries(debugPayload) };
+      lastDebugPrefixJson = buildDebugPrefixJson(debugPayload);
       return text;
     }
     async function insertTurn(payload: Record<string, unknown>) {
@@ -2278,7 +2801,10 @@ export async function POST(req: NextRequest) {
           contextContamination: contaminationSummaries,
           conversationMode,
         };
-        lastDebugPrefixJson = { entries: buildDebugEntries(debugPayload) };
+        lastDebugPrefixJson = buildDebugPrefixJson(debugPayload);
+      }
+      if (!Object.prototype.hasOwnProperty.call(payload, "failed")) {
+        payload.failed = null;
       }
       const result = await insertFinalTurn(context, payload, lastDebugPrefixJson);
       latestTurnId = result.data?.id || null;
@@ -2391,7 +2917,19 @@ export async function POST(req: NextRequest) {
           });
           return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
         }
-        if (!allowedToolNames.has("send_otp")) {
+        if (!hasAllowedToolName("send_otp")) {
+          mcpCandidateCalls = Array.from(new Set([...mcpCandidateCalls, "send_otp"]));
+          noteMcpSkip(
+            "send_otp",
+            "TOOL_NOT_ALLOWED_FOR_AGENT",
+            {
+              intent: resolvedIntent,
+              stage: "otp.awaiting_phone",
+              allowed_tool_names: Array.from(allowedToolNames),
+            },
+            { destination: phone }
+          );
+          await flushMcpSkipLogs();
           const reply = makeReply("본인인증을 진행할 수 없습니다. 잠시 후 다시 시도해 주세요.");
           await insertTurn({
             session_id: sessionId,
@@ -2414,8 +2952,7 @@ export async function POST(req: NextRequest) {
           sessionId,
           latestTurnId,
           { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-          allowedToolNames
-        );
+          allowedTools);
         noteMcp("send_otp", sendResult);
         mcpActions.push("send_otp");
         if (!sendResult.ok) {
@@ -2476,7 +3013,19 @@ export async function POST(req: NextRequest) {
         });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
-      if (!allowedToolNames.has("verify_otp")) {
+      if (!hasAllowedToolName("verify_otp")) {
+        mcpCandidateCalls = Array.from(new Set([...mcpCandidateCalls, "verify_otp"]));
+        noteMcpSkip(
+          "verify_otp",
+          "TOOL_NOT_ALLOWED_FOR_AGENT",
+          {
+            intent: resolvedIntent,
+            stage: "otp.awaiting_code",
+            allowed_tool_names: Array.from(allowedToolNames),
+          },
+          { code: otpCode ? "***" : null, otp_ref: otpRef || null }
+        );
+        await flushMcpSkipLogs();
         const reply = makeReply("본인인증을 진행할 수 없습니다. 잠시 후 다시 시도해 주세요.");
         await insertTurn({
           session_id: sessionId,
@@ -2499,8 +3048,7 @@ export async function POST(req: NextRequest) {
         sessionId,
         latestTurnId,
         { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-        allowedToolNames
-      );
+        allowedTools);
       noteMcp("verify_otp", verifyResult);
       mcpActions.push("verify_otp");
       if (!verifyResult.ok) {
@@ -2572,7 +3120,19 @@ export async function POST(req: NextRequest) {
         });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
-      if (!allowedToolNames.has("send_otp")) {
+      if (!hasAllowedToolName("send_otp")) {
+        mcpCandidateCalls = Array.from(new Set([...mcpCandidateCalls, "send_otp"]));
+        noteMcpSkip(
+          "send_otp",
+          "TOOL_NOT_ALLOWED_FOR_AGENT",
+          {
+            intent: resolvedIntent,
+            stage: "otp.pre_lookup_order",
+            allowed_tool_names: Array.from(allowedToolNames),
+          },
+          { destination: otpDestination }
+        );
+        await flushMcpSkipLogs();
         const reply = makeReply("본인인증을 진행할 수 없습니다. 잠시 후 다시 시도해 주세요.");
         await insertTurn({
           session_id: sessionId,
@@ -2595,8 +3155,7 @@ export async function POST(req: NextRequest) {
         sessionId,
         latestTurnId,
         { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-        allowedToolNames
-      );
+        allowedTools);
       noteMcp("send_otp", sendResult);
       mcpActions.push("send_otp");
       if (!sendResult.ok) {
@@ -2809,7 +3368,20 @@ export async function POST(req: NextRequest) {
         });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
-      if (!allowedToolNames.has("send_otp")) {
+      if (!hasAllowedToolName("send_otp")) {
+        mcpCandidateCalls = Array.from(new Set([...mcpCandidateCalls, "send_otp"]));
+        noteMcpSkip(
+          "send_otp",
+          "TOOL_NOT_ALLOWED_FOR_AGENT",
+          {
+            intent: resolvedIntent,
+            stage: "otp.pre_sensitive_call",
+            planned_calls: finalCalls.map((call) => call.name),
+            allowed_tool_names: Array.from(allowedToolNames),
+          },
+          { destination: otpDestination }
+        );
+        await flushMcpSkipLogs();
         const reply = makeReply("본인인증을 진행할 수 없습니다. 잠시 후 다시 시도해 주세요.");
         await insertTurn({
           session_id: sessionId,
@@ -2832,8 +3404,7 @@ export async function POST(req: NextRequest) {
         sessionId,
         latestTurnId,
         { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-        allowedToolNames
-      );
+        allowedTools);
       noteMcp("send_otp", sendResult);
       mcpActions.push("send_otp");
       if (!sendResult.ok) {
@@ -2884,7 +3455,7 @@ export async function POST(req: NextRequest) {
     ) {
       const phone = typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null;
       const hasListOrdersPolicy = Boolean(compiledPolicy.toolPolicies?.list_orders);
-      if (phone && hasListOrdersPolicy && allowedToolNames.has("list_orders") && canUseTool("list_orders")) {
+      if (phone && hasListOrdersPolicy && hasAllowedToolName("list_orders") && canUseTool("list_orders")) {
         noteMcpSkip(
           "list_orders",
           "NO_FORCED_TOOL_CALLS",
@@ -3111,7 +3682,7 @@ export async function POST(req: NextRequest) {
       label?: string;
     }> = [];
     for (const call of finalCalls) {
-      if (!allowedToolNames.has(call.name)) {
+      if (!hasAllowedToolName(call.name)) {
         noteMcpSkip(
           call.name,
           "TOOL_NOT_ALLOWED_FOR_AGENT",
@@ -3140,8 +3711,7 @@ export async function POST(req: NextRequest) {
         sessionId,
         latestTurnId,
         { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-        allowedToolNames
-      );
+        allowedTools);
       noteMcp(call.name, result);
       toolResults.push({ name: call.name, ok: result.ok, data: result.ok ? (result.data as Record<string, unknown>) : undefined, error: result.ok ? undefined : result.error });
       if (call.name === "list_orders") {
@@ -3155,7 +3725,7 @@ export async function POST(req: NextRequest) {
               string,
               { name: string; option: string; qty: string; price: string }
             >();
-            if (canUseTool("lookup_order") && allowedToolNames.has("lookup_order")) {
+            if (canUseTool("lookup_order") && hasAllowedToolName("lookup_order")) {
               for (const item of slice) {
                 const id = String(item?.order_id || item?.order_no || "").trim();
                 if (!id || detailMap.has(id)) continue;
@@ -3166,8 +3736,7 @@ export async function POST(req: NextRequest) {
                   sessionId,
                   latestTurnId,
                   { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-                  allowedToolNames
-                );
+                  allowedTools);
                 noteMcp("lookup_order", detail);
                 toolResults.push({
                   name: "lookup_order",
@@ -3266,7 +3835,7 @@ export async function POST(req: NextRequest) {
     await flushMcpSkipLogs();
 
     const hasToolResult = (name: string) => toolResults.some((tool) => tool.name === name);
-    if (resolvedOrderId && canUseTool("lookup_order") && allowedToolNames.has("lookup_order") && !hasToolResult("lookup_order")) {
+    if (resolvedOrderId && canUseTool("lookup_order") && hasAllowedToolName("lookup_order") && !hasToolResult("lookup_order")) {
       const lookup = await callMcpTool(
         context,
         "lookup_order",
@@ -3274,8 +3843,7 @@ export async function POST(req: NextRequest) {
         sessionId,
         latestTurnId,
         { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-        allowedToolNames
-      );
+        allowedTools);
       noteMcp("lookup_order", lookup);
       toolResults.push({
         name: "lookup_order",
@@ -3325,7 +3893,7 @@ export async function POST(req: NextRequest) {
       currentAddress &&
       resolvedOrderId &&
       canUseTool("update_order_shipping_address") &&
-      allowedToolNames.has("update_order_shipping_address") &&
+      hasAllowedToolName("update_order_shipping_address") &&
       !hasToolResult("update_order_shipping_address")
     ) {
       const lookupTool = toolResults.find((tool) => tool.name === "lookup_order" && tool.ok);
@@ -3580,8 +4148,7 @@ export async function POST(req: NextRequest) {
         sessionId,
         latestTurnId,
         { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-        allowedToolNames
-      );
+        allowedTools);
       noteMcp("update_order_shipping_address", update);
       toolResults.push({
         name: "update_order_shipping_address",
@@ -3599,7 +4166,7 @@ export async function POST(req: NextRequest) {
           { tool: "update_order_shipping_address", error: update.error },
           { intent_name: resolvedIntent }
         );
-        if (canUseTool("create_ticket") && allowedToolNames.has("create_ticket") && !hasToolResult("create_ticket")) {
+        if (canUseTool("create_ticket") && hasAllowedToolName("create_ticket") && !hasToolResult("create_ticket")) {
           const fallback = await callMcpTool(
             context,
             "create_ticket",
@@ -3611,8 +4178,7 @@ export async function POST(req: NextRequest) {
             sessionId,
             latestTurnId,
             { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-            allowedToolNames
-          );
+            allowedTools);
           noteMcp("create_ticket", fallback);
           toolResults.push({
             name: "create_ticket",
@@ -3638,7 +4204,12 @@ export async function POST(req: NextRequest) {
     if (toolResults.length > 0) {
       toolResults.forEach((tool) => {
         if (tool.ok) return;
-        if (tool.name === "lookup_order" || tool.name === "update_order_shipping_address" || tool.name === "create_ticket") {
+        if (
+          tool.name === "lookup_order" ||
+          tool.name === "update_order_shipping_address" ||
+          tool.name === "create_ticket" ||
+          tool.name === "list_orders"
+        ) {
           insertEvent(context, sessionId, latestTurnId, "MCP_TOOL_FAILED", { tool: tool.name, error: tool.error }, { intent_name: resolvedIntent });
         }
       });
@@ -3815,6 +4386,56 @@ export async function POST(req: NextRequest) {
         },
       });
       await insertEvent(context, sessionId, latestTurnId, "ORDER_CHOICES_EMPTY", {}, { intent_name: resolvedIntent });
+      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+    }
+
+    const listOrdersScopeFailure = toolResults.find(
+      (tool) =>
+        tool.name === "list_orders" &&
+        !tool.ok &&
+        String(tool.error || "").toUpperCase().includes("SCOPE_ERROR")
+    );
+    if (listOrdersScopeFailure) {
+      const maskedPhone =
+        typeof policyContext.entity?.phone === "string" ? maskPhone(policyContext.entity.phone) : "-";
+      const reply = makeReply(
+        `입력하신 번호(${maskedPhone})로 주문 조회를 시도했지만 현재 연동 권한에 \`mall.read_order\` 스코프가 없어 조회할 수 없습니다.\n관리자에게 Cafe24 연동 권한(주문 조회)을 추가해 달라고 요청해 주세요. 권한 추가 전에는 주문번호를 직접 알려주시면 이어서 처리할 수 있습니다.`
+      );
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: policyContext.entity,
+          selected_order_id: resolvedOrderId,
+          customer_verification_token: customerVerificationToken,
+          mcp_actions: mcpActions,
+        },
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "EXECUTION_GUARD_TRIGGERED",
+        {
+          reason: "MCP_SCOPE_MISSING",
+          tool: "list_orders",
+          required_scope: "mall.read_order",
+          error: String(listOrdersScopeFailure.error || "SCOPE_ERROR"),
+        },
+        { intent_name: resolvedIntent }
+      );
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "FINAL_ANSWER_READY",
+        { answer: reply, model: "deterministic_scope_guard" },
+        { intent_name: resolvedIntent }
+      );
       return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
     }
 
@@ -4086,16 +4707,351 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Handle pending restock product choice even if current turn intent is misclassified (e.g. "1" -> general).
+    const prevRestockCandidatesForAnyIntent = Array.isArray((prevBotContext as any).restock_candidates)
+      ? ((prevBotContext as any).restock_candidates as Array<Record<string, unknown>>)
+      : [];
+    const pickedIndexForAnyIntent = parseIndexedChoice(message);
+    const pickedFromPrevForAnyIntent =
+      prevBotContext.restock_pending &&
+      prevBotContext.restock_stage === "awaiting_product_choice" &&
+      pickedIndexForAnyIntent &&
+      prevRestockCandidatesForAnyIntent.length >= pickedIndexForAnyIntent
+        ? prevRestockCandidatesForAnyIntent[pickedIndexForAnyIntent - 1]
+        : null;
+    if (pickedFromPrevForAnyIntent) {
+      const productId = String(pickedFromPrevForAnyIntent.product_id || "").trim();
+      const productName = String(pickedFromPrevForAnyIntent.product_name || "").trim();
+      const month = Number(pickedFromPrevForAnyIntent.month || 0);
+      const day = Number(pickedFromPrevForAnyIntent.day || 0);
+      const pickedThumbnail = String(pickedFromPrevForAnyIntent.thumbnail_url || "").trim();
+      if (productName && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const due = toRestockDueText(month, day);
+        const reply = makeReply(
+          `요약: ${productName} 입고 예정일은 ${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}입니다.\n상세: 예정일 ${due.targetText} (${due.dday})\n다음 액션: 원하시면 재입고 알림 신청도 도와드릴게요.`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: "restock_inquiry",
+            entity: policyContext.entity,
+            restock_pending: true,
+            restock_stage: "awaiting_subscribe_suggestion",
+            pending_product_id: productId || null,
+            pending_product_name: productName || null,
+            pending_channel: "sms",
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          { stage: "tool", action: "RESTOCK_SCHEDULE_ANSWERED_BY_KB_CHOICE", product_name: productName },
+          { intent_name: "restock_inquiry" }
+        );
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          { answer: reply, model: "deterministic_restock_kb" },
+          { intent_name: "restock_inquiry" }
+        );
+        return respond({
+          session_id: sessionId,
+          step: "final",
+          message: reply,
+          mcp_actions: mcpActions,
+          product_cards: pickedThumbnail
+            ? [
+                {
+                  id: "restock-picked",
+                  title: productName,
+                  subtitle: `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")} 입고 예정`,
+                  description: due.dday,
+                  image_url: pickedThumbnail,
+                  value: String(pickedIndexForAnyIntent || 1),
+                },
+              ]
+            : [],
+        });
+      }
+    }
+
     if (resolvedIntent === "restock_inquiry" || resolvedIntent === "restock_subscribe") {
+      const restockKbEntries = [
+        ...parseRestockEntriesFromContent(String(kb.content || ""), `kb:${kb.id}`),
+        ...adminKbs.flatMap((item) =>
+          parseRestockEntriesFromContent(String(item.content || ""), `admin_kb:${item.id}`)
+        ),
+      ];
+      const prevRestockCandidates = Array.isArray((prevBotContext as any).restock_candidates)
+        ? ((prevBotContext as any).restock_candidates as Array<Record<string, unknown>>)
+        : [];
+      const pickedIndex = parseIndexedChoice(message);
+      const pickedFromPrev =
+        pickedIndex && prevRestockCandidates.length >= pickedIndex
+          ? prevRestockCandidates[pickedIndex - 1]
+          : null;
+      if (pickedFromPrev) {
+        const productId = String(pickedFromPrev.product_id || "").trim();
+        const productName = String(pickedFromPrev.product_name || "").trim();
+        const month = Number(pickedFromPrev.month || 0);
+        const day = Number(pickedFromPrev.day || 0);
+        const pickedThumbnail = String(pickedFromPrev.thumbnail_url || "").trim();
+        if (productName && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+          const due = toRestockDueText(month, day);
+          const reply = makeReply(
+            `요약: ${productName} 입고 예정일은 ${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}입니다.\n상세: 예정일 ${due.targetText} (${due.dday})\n다음 액션: 원하시면 재입고 알림 신청도 도와드릴게요.`
+          );
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              restock_pending: true,
+              restock_stage: "awaiting_subscribe_suggestion",
+              pending_product_id: productId || null,
+              pending_product_name: productName || null,
+              pending_channel: "sms",
+              mcp_actions: mcpActions,
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "POLICY_DECISION",
+            { stage: "tool", action: "RESTOCK_SCHEDULE_ANSWERED_BY_KB_CHOICE", product_name: productName },
+            { intent_name: resolvedIntent }
+          );
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "FINAL_ANSWER_READY",
+            { answer: reply, model: "deterministic_restock_kb" },
+            { intent_name: resolvedIntent }
+          );
+          return respond({
+            session_id: sessionId,
+            step: "final",
+            message: reply,
+            mcp_actions: mcpActions,
+            product_cards: pickedThumbnail
+              ? [
+                  {
+                    id: "restock-picked",
+                    title: productName,
+                    subtitle: `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")} 입고 예정`,
+                    description: due.dday,
+                    image_url: pickedThumbnail,
+                    value: String(pickedIndex || 1),
+                  },
+                ]
+              : [],
+          });
+        }
+      }
+
       const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
+      const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
       const pendingChannel = String(prevBotContext.pending_channel || "").trim();
       let restockProductId =
         String(productDecisionRes.decision?.product_id || "").trim() ||
         pendingProductId ||
         "";
       let restockChannel = extractRestockChannel(message) || pendingChannel || "sms";
+      const rankedFromMessage = rankRestockEntries(message, restockKbEntries);
 
-      if (!restockProductId && canUseTool("resolve_product") && allowedToolNames.has("resolve_product")) {
+      // Restock inquiry should stay strictly within KB schedule targets.
+      // If query doesn't map to KB restock items, do not expose non-target products via MCP fuzzy match.
+      if (resolvedIntent === "restock_inquiry" && restockKbEntries.length > 0 && rankedFromMessage.length === 0) {
+        const knownTargets = restockKbEntries
+          .slice(0, 5)
+          .map((item) => `- ${item.product_name} (${item.raw_date})`)
+          .join("\n");
+        const reply = makeReply(
+          `요청하신 상품은 현재 재입고 일정 안내 대상에 없습니다.\n안내 가능한 상품은 아래와 같습니다.\n${knownTargets}`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            customer_verification_token: customerVerificationToken || null,
+            restock_pending: false,
+            restock_stage: null,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          { stage: "tool", action: "RESTOCK_PRODUCT_NOT_IN_KB_TARGET" },
+          { intent_name: resolvedIntent }
+        );
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          { answer: reply, model: "deterministic_restock_kb" },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions, product_cards: [] });
+      }
+
+      if (rankedFromMessage.length > 1) {
+        const candidateRows = rankedFromMessage.map((row, idx) => ({
+          index: idx + 1,
+          product_name: row.entry.product_name,
+          month: row.entry.month,
+          day: row.entry.day,
+          raw_date: row.entry.raw_date,
+          product_id: null as string | null,
+          thumbnail_url: null as string | null,
+        }));
+        if (
+          canUseTool("resolve_product") &&
+          hasAllowedToolName("resolve_product") &&
+          canUseTool("read_product") &&
+          hasAllowedToolName("read_product")
+        ) {
+          for (const candidate of candidateRows.slice(0, 5)) {
+            const resolvedCandidate = await callMcpTool(
+              context,
+              "resolve_product",
+              { query: candidate.product_name },
+              sessionId,
+              latestTurnId,
+              { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+              allowedTools
+            );
+            noteMcp("resolve_product", resolvedCandidate);
+            toolResults.push({
+              name: "resolve_product",
+              ok: resolvedCandidate.ok,
+              data: resolvedCandidate.ok ? (resolvedCandidate.data as Record<string, unknown>) : undefined,
+              error: resolvedCandidate.ok ? undefined : resolvedCandidate.error,
+            });
+            mcpActions.push("resolve_product");
+            if (!resolvedCandidate.ok) continue;
+            const matched = Boolean((resolvedCandidate.data as any)?.matched);
+            const productId = String((resolvedCandidate.data as any)?.product_id || "").trim();
+            if (!matched || !productId) continue;
+            candidate.product_id = productId;
+            const readCandidate = await callMcpTool(
+              context,
+              "read_product",
+              { product_no: productId },
+              sessionId,
+              latestTurnId,
+              { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+              allowedTools
+            );
+            noteMcp("read_product", readCandidate);
+            toolResults.push({
+              name: "read_product",
+              ok: readCandidate.ok,
+              data: readCandidate.ok ? (readCandidate.data as Record<string, unknown>) : undefined,
+              error: readCandidate.ok ? undefined : readCandidate.error,
+            });
+            mcpActions.push("read_product");
+            if (!readCandidate.ok) continue;
+            const shape = readProductShape(readCandidate.data || {});
+            candidate.thumbnail_url = shape.thumbnailUrl || null;
+          }
+        }
+        const lines = candidateRows.map((candidate) => {
+          const due = toRestockDueText(candidate.month, candidate.day);
+          return `- ${candidate.index}번 | ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
+        });
+        const reply = makeReply(
+          `유사한 상품이 여러 개입니다. 아래에서 번호를 선택해 주세요.\n${lines.join("\n")}`
+        );
+        const productCards = candidateRows.map((candidate) => ({
+          id: `restock-${candidate.index}`,
+          title: candidate.product_name,
+          subtitle: `${candidate.raw_date} 입고 예정`,
+          description: `${toRestockDueText(candidate.month, candidate.day).dday}`,
+          image_url: candidate.thumbnail_url || null,
+          value: String(candidate.index),
+        }));
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            customer_verification_token: customerVerificationToken || null,
+            restock_pending: true,
+            restock_stage: "awaiting_product_choice",
+            restock_candidates: candidateRows,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          { stage: "tool", action: "ASK_RESTOCK_PRODUCT_CHOICE", candidate_count: rankedFromMessage.length },
+          { intent_name: resolvedIntent }
+        );
+        return respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: mcpActions,
+          product_cards: productCards,
+        });
+      }
+
+      if (!restockProductId && pendingProductName && canUseTool("resolve_product") && hasAllowedToolName("resolve_product")) {
+        const resolvedPending = await callMcpTool(
+          context,
+          "resolve_product",
+          { query: pendingProductName },
+          sessionId,
+          latestTurnId,
+          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+          allowedTools);
+        noteMcp("resolve_product", resolvedPending);
+        toolResults.push({
+          name: "resolve_product",
+          ok: resolvedPending.ok,
+          data: resolvedPending.ok ? (resolvedPending.data as Record<string, unknown>) : undefined,
+          error: resolvedPending.ok ? undefined : resolvedPending.error,
+        });
+        mcpActions.push("resolve_product");
+        if (resolvedPending.ok) {
+          const matched = Boolean((resolvedPending.data as any)?.matched);
+          const candidate = String((resolvedPending.data as any)?.product_id || "").trim();
+          if (matched && candidate) restockProductId = candidate;
+        }
+      }
+
+      if (!restockProductId && canUseTool("resolve_product") && hasAllowedToolName("resolve_product")) {
         const resolved = await callMcpTool(
           context,
           "resolve_product",
@@ -4103,8 +5059,7 @@ export async function POST(req: NextRequest) {
           sessionId,
           latestTurnId,
           { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-          allowedToolNames
-        );
+          allowedTools);
         noteMcp("resolve_product", resolved);
         toolResults.push({
           name: "resolve_product",
@@ -4118,9 +5073,203 @@ export async function POST(req: NextRequest) {
           const candidate = String((resolved.data as any)?.product_id || "").trim();
           if (matched && candidate) restockProductId = candidate;
         }
+        if (!resolved.ok && String(resolved.error || "").toUpperCase().includes("SCOPE_ERROR")) {
+          const reply = makeReply(
+            "상품 조회를 시도했지만 현재 연동 권한에 `mall.read_product` 스코프가 없어 진행할 수 없습니다.\n관리자에게 Cafe24 연동 권한(상품 조회)을 추가 요청해 주세요."
+          );
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            failed: buildFailedPayload({
+              code: "MCP_SCOPE_MISSING",
+              summary: "resolve_product failed: mall.read_product scope missing",
+              intent: resolvedIntent,
+              stage: "restock.resolve_product",
+              tool: "resolve_product",
+              required_scope: "mall.read_product",
+              retryable: false,
+            }),
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              customer_verification_token: customerVerificationToken || null,
+              mcp_actions: mcpActions,
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "POLICY_DECISION",
+            { stage: "tool", action: "INFORM_SCOPE_MISSING_RESTOCK_PRODUCT" },
+            { intent_name: resolvedIntent }
+          );
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "FINAL_ANSWER_READY",
+            { answer: reply, model: "deterministic_scope_guard" },
+            { intent_name: resolvedIntent }
+          );
+          return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+        }
       }
 
       if (!restockProductId) {
+        const ranked = rankRestockEntries(message, restockKbEntries);
+        if (ranked.length === 1) {
+          const item = ranked[0].entry;
+          const due = toRestockDueText(item.month, item.day);
+          const reply = makeReply(
+            `요약: ${item.product_name} 입고 예정일은 ${item.raw_date}입니다.\n상세: 예정일 ${due.targetText} (${due.dday})\n다음 액션: 원하시면 재입고 알림 신청도 도와드릴게요.`
+          );
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              customer_verification_token: customerVerificationToken || null,
+              restock_pending: true,
+              restock_stage: "awaiting_subscribe_suggestion",
+              pending_product_name: item.product_name,
+              pending_channel: "sms",
+              mcp_actions: mcpActions,
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "POLICY_DECISION",
+            { stage: "tool", action: "RESTOCK_SCHEDULE_ANSWERED_BY_KB", product_name: item.product_name },
+            { intent_name: resolvedIntent }
+          );
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "FINAL_ANSWER_READY",
+            { answer: reply, model: "deterministic_restock_kb" },
+            { intent_name: resolvedIntent }
+          );
+          return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions, product_cards: [] });
+        }
+        if (ranked.length > 1) {
+          const candidateRows = ranked.map((row, idx) => ({
+            index: idx + 1,
+            product_name: row.entry.product_name,
+            month: row.entry.month,
+            day: row.entry.day,
+            raw_date: row.entry.raw_date,
+            product_id: null as string | null,
+            thumbnail_url: null as string | null,
+          }));
+          if (
+            canUseTool("resolve_product") &&
+            hasAllowedToolName("resolve_product") &&
+            canUseTool("read_product") &&
+            hasAllowedToolName("read_product")
+          ) {
+            for (const candidate of candidateRows.slice(0, 5)) {
+              const resolvedCandidate = await callMcpTool(
+                context,
+                "resolve_product",
+                { query: candidate.product_name },
+                sessionId,
+                latestTurnId,
+                { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+                allowedTools
+              );
+              noteMcp("resolve_product", resolvedCandidate);
+              toolResults.push({
+                name: "resolve_product",
+                ok: resolvedCandidate.ok,
+                data: resolvedCandidate.ok ? (resolvedCandidate.data as Record<string, unknown>) : undefined,
+                error: resolvedCandidate.ok ? undefined : resolvedCandidate.error,
+              });
+              mcpActions.push("resolve_product");
+              if (!resolvedCandidate.ok) continue;
+              const matched = Boolean((resolvedCandidate.data as any)?.matched);
+              const productId = String((resolvedCandidate.data as any)?.product_id || "").trim();
+              if (!matched || !productId) continue;
+              candidate.product_id = productId;
+              const readCandidate = await callMcpTool(
+                context,
+                "read_product",
+                { product_no: productId },
+                sessionId,
+                latestTurnId,
+                { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+                allowedTools
+              );
+              noteMcp("read_product", readCandidate);
+              toolResults.push({
+                name: "read_product",
+                ok: readCandidate.ok,
+                data: readCandidate.ok ? (readCandidate.data as Record<string, unknown>) : undefined,
+                error: readCandidate.ok ? undefined : readCandidate.error,
+              });
+              mcpActions.push("read_product");
+              if (!readCandidate.ok) continue;
+              const shape = readProductShape(readCandidate.data || {});
+              candidate.thumbnail_url = shape.thumbnailUrl || null;
+            }
+          }
+          const lines = candidateRows.map((candidate) => {
+            const due = toRestockDueText(candidate.month, candidate.day);
+            return `- ${candidate.index}번 | ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
+          });
+          const reply = makeReply(
+            `유사한 상품이 여러 개입니다. 아래에서 번호를 선택해 주세요.\n${lines.join("\n")}`
+          );
+          const productCards = candidateRows.map((candidate) => ({
+            id: `restock-${candidate.index}`,
+            title: candidate.product_name,
+            subtitle: `${candidate.raw_date} 입고 예정`,
+            description: `${toRestockDueText(candidate.month, candidate.day).dday}`,
+            image_url: candidate.thumbnail_url || null,
+            value: String(candidate.index),
+          }));
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              customer_verification_token: customerVerificationToken || null,
+              restock_pending: true,
+              restock_stage: "awaiting_product_choice",
+              restock_candidates: candidateRows,
+              mcp_actions: mcpActions,
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "POLICY_DECISION",
+            { stage: "tool", action: "ASK_RESTOCK_PRODUCT_CHOICE", candidate_count: ranked.length },
+            { intent_name: resolvedIntent }
+          );
+          return respond({
+            session_id: sessionId,
+            step: "confirm",
+            message: reply,
+            mcp_actions: mcpActions,
+            product_cards: productCards,
+          });
+        }
         const reply = makeReply("확인할 상품명을 먼저 알려주세요. (예: 아드헬린 린넨 플레어 원피스)");
         await insertTurn({
           session_id: sessionId,
@@ -4150,7 +5299,7 @@ export async function POST(req: NextRequest) {
       }
 
       let readProductData: Record<string, unknown> | null = null;
-      if (canUseTool("read_product") && allowedToolNames.has("read_product")) {
+      if (canUseTool("read_product") && hasAllowedToolName("read_product")) {
         const readRes = await callMcpTool(
           context,
           "read_product",
@@ -4158,8 +5307,7 @@ export async function POST(req: NextRequest) {
           sessionId,
           latestTurnId,
           { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-          allowedToolNames
-        );
+          allowedTools);
         noteMcp("read_product", readRes);
         toolResults.push({
           name: "read_product",
@@ -4172,6 +5320,14 @@ export async function POST(req: NextRequest) {
       }
 
       const productView = readProductShape(readProductData || {});
+      const scheduleEntry =
+        findBestRestockEntryByProductName(productView.productName || String(restockProductId), restockKbEntries);
+      const scheduleLine = scheduleEntry
+        ? (() => {
+            const due = toRestockDueText(scheduleEntry.month, scheduleEntry.day);
+            return `입고 예정: ${scheduleEntry.raw_date} (${due.dday})`;
+          })()
+        : "입고 예정: 확인된 일정 정보 없음";
       const policyAnswerability = String(productDecisionRes.decision?.answerability || "UNKNOWN");
       const policyRestock = String(productDecisionRes.decision?.restock_policy || "UNKNOWN");
       const policyRestockAt = String(productDecisionRes.decision?.restock_at || "").trim();
@@ -4190,7 +5346,7 @@ export async function POST(req: NextRequest) {
       if (resolvedIntent === "restock_subscribe") {
         if (!restockSubscribeAcceptedThisTurn) {
           const reply = makeReply(
-            `상품 ${productView.productName || restockProductId}에 ${restockChannel} 채널로 재입고 알림을 신청할까요?\n${stockLine}\n${policyLine}\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+            `상품 ${productView.productName || restockProductId} 정보입니다.\n${scheduleLine}\n${stockLine}\n${policyLine}\n원하시면 ${restockChannel} 채널로 재입고 알림을 신청할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
           );
           await insertTurn({
             session_id: sessionId,
@@ -4220,7 +5376,7 @@ export async function POST(req: NextRequest) {
           return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
         }
 
-        if (canUseTool("subscribe_restock") && allowedToolNames.has("subscribe_restock")) {
+        if (canUseTool("subscribe_restock") && hasAllowedToolName("subscribe_restock")) {
           const subscribeRes = await callMcpTool(
             context,
             "subscribe_restock",
@@ -4228,8 +5384,7 @@ export async function POST(req: NextRequest) {
             sessionId,
             latestTurnId,
             { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
-            allowedToolNames
-          );
+            allowedTools);
           noteMcp("subscribe_restock", subscribeRes);
           toolResults.push({
             name: "subscribe_restock",
@@ -4240,7 +5395,7 @@ export async function POST(req: NextRequest) {
           mcpActions.push("subscribe_restock");
           if (subscribeRes.ok) {
             const reply = makeReply(
-              `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${productView.productName || restockProductId} / 채널 ${restockChannel}\n${stockLine}\n${policyLine}`
+              `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${productView.productName || restockProductId} / 채널 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}`
             );
             await insertTurn({
               session_id: sessionId,
@@ -4269,7 +5424,7 @@ export async function POST(req: NextRequest) {
       }
 
       const inquiryReply = makeReply(
-        `요약: ${productView.productName || restockProductId} 재고/입고 상태를 확인했습니다.\n상세: ${stockLine}\n${policyLine}`
+        `요약: ${productView.productName || restockProductId} 재고/입고 상태를 확인했습니다.\n상세: ${scheduleLine}\n${stockLine}\n${policyLine}\n다음 액션: 원하시면 재입고 알림 신청도 도와드릴게요.`
       );
       await insertTurn({
         session_id: sessionId,
@@ -4281,6 +5436,11 @@ export async function POST(req: NextRequest) {
           intent_name: resolvedIntent,
           entity: policyContext.entity,
           customer_verification_token: customerVerificationToken || null,
+          restock_pending: true,
+          restock_stage: "awaiting_subscribe_suggestion",
+          pending_product_id: restockProductId || null,
+          pending_product_name: productView.productName || null,
+          pending_channel: restockChannel || "sms",
           mcp_actions: mcpActions,
         },
       });
@@ -4292,7 +5452,60 @@ export async function POST(req: NextRequest) {
         { answer: inquiryReply, model: "deterministic_restock" },
         { intent_name: resolvedIntent }
       );
-      return respond({ session_id: sessionId, step: "final", message: inquiryReply, mcp_actions: mcpActions });
+      return respond({
+        session_id: sessionId,
+        step: "final",
+        message: inquiryReply,
+        mcp_actions: mcpActions,
+        product_cards: productView.thumbnailUrl
+          ? [
+              {
+                id: `restock-${restockProductId}`,
+                title: productView.productName || restockProductId,
+                subtitle: "상품 확인",
+                description: stockLine.replace(/^현재 상태:\s*/, ""),
+                image_url: productView.thumbnailUrl,
+                value: "1",
+              },
+            ]
+          : [],
+      });
+    }
+
+    if (resolvedIntent === "general" && finalCalls.length === 0 && allowed.size === 0) {
+      const reply = makeReply(
+        "현재 정책/지식 범위에서 바로 처리할 수 없는 요청입니다. 상담사 연결로 이어서 도와드릴게요."
+      );
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        failed: buildFailedPayload({
+          code: "POLICY_NOT_COVERED",
+          summary: "No policy/tool path for this request; escalated to human support",
+          intent: resolvedIntent,
+          stage: "pre_llm",
+          retryable: false,
+        }),
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: policyContext.entity,
+          selected_order_id: resolvedOrderId,
+          customer_verification_token: customerVerificationToken,
+          mcp_actions: mcpActions,
+        },
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "FINAL_ANSWER_READY",
+        { answer: reply, model: "deterministic_escalation_guard" },
+        { intent_name: resolvedIntent }
+      );
+      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
     }
 
     const productDecisionJson = productDecisionRes.decision ? JSON.stringify(productDecisionRes.decision) : "null";
@@ -4346,10 +5559,23 @@ ${mcpSummary || "(없음)"}`;
     if (outputGate.actions.outputFormat) {
       finalAnswer = formatOutputDefault(finalAnswer);
     }
+    let phoneReusePending = false;
     if (outputGate.actions.forcedResponse) {
-      finalAnswer = normalizeOrderChangeAddressPrompt(resolvedIntent, outputGate.actions.forcedResponse);
+      const forcedTemplate = normalizeOrderChangeAddressPrompt(resolvedIntent, outputGate.actions.forcedResponse);
+      const rawPhone = typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : "";
+      const normalizedPhone = normalizePhoneDigits(rawPhone);
+      const hasReusablePhone = normalizedPhone.length >= 10;
+      const isNeedOrderIdTemplate =
+        forcedTemplate === (compiledPolicy.templates?.order_change_need_order_id || "") ||
+        usedTemplateIds.includes("order_change_need_order_id");
+      if (resolvedIntent === "order_change" && isNeedOrderIdTemplate && hasReusablePhone && !listOrdersCalled) {
+        phoneReusePending = true;
+        finalAnswer = `이미 제공해주신 휴대폰 번호(${maskPhone(normalizedPhone)})로 주문을 조회할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+      } else {
+        finalAnswer = forcedTemplate;
+      }
       if (debugEnabled) {
-        console.log("[playground/chat/mk2] forcing template", { reason: outputGate.actions.forceReason });
+        console.log("[runtime/chat/mk2] forcing template", { reason: outputGate.actions.forceReason });
       }
     }
 
@@ -4380,6 +5606,18 @@ ${mcpSummary || "(없음)"}`;
           match_type: productDecisionRes.alias.match_type,
         } : null,
         mcp_actions: mcpActions,
+        ...(phoneReusePending
+          ? {
+              phone_reuse_pending: true,
+              pending_phone:
+                typeof policyContext.entity?.phone === "string"
+                  ? normalizePhoneDigits(policyContext.entity.phone) || null
+                  : null,
+            }
+          : {
+              phone_reuse_pending: false,
+              pending_phone: null,
+            }),
       },
     });
 
@@ -4400,7 +5638,7 @@ ${mcpSummary || "(없음)"}`;
     });
   } catch (err) {
     if (debugEnabled) {
-      console.error("[playground/chat/mk2] unhandled error", err);
+      console.error("[runtime/chat/mk2] unhandled error", err);
     }
     const message = err instanceof Error ? err.message : "INTERNAL_ERROR";
     const fallback = "처리 중 오류가 발생했습니다. 같은 내용을 한 번 더 보내주세요.";
@@ -4413,6 +5651,8 @@ ${mcpSummary || "(없음)"}`;
     });
   }
 }
+
+
 
 
 

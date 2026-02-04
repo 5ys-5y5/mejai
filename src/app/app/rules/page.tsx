@@ -1,34 +1,51 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Minus, Plus } from "lucide-react";
-import { Badge } from "@/components/ui/Badge";
+import { ChevronRight, Copy, Minus, Play, Plus } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { apiFetch } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-type MpcTool = {
+type McpAction = {
   id: string;
+  tool_key?: string;
+  provider_key?: string;
   name: string;
+  usage_count?: number;
   description?: string | null;
   schema?: Record<string, unknown> | null;
   version?: string | null;
+  provider?: string;
+  meta?: {
+    visibility?: "public";
+    access?: "open_world";
+    destructive?: boolean;
+  };
   policy?: {
     is_allowed?: boolean | null;
     rate_limit_per_min?: number | null;
-    adapter_key?: string | null;
   } | null;
+};
+
+type McpProvider = {
+  key: string;
+  title: string;
+  description: string;
+  initials: string;
+  connected: boolean;
+  action_count: number;
+  actions: McpAction[];
+};
+
+type McpPayload = {
+  summary?: { provider_count: number; action_count: number };
+  providers: McpProvider[];
 };
 
 type RunState = {
   loading: boolean;
   error?: string | null;
-};
-
-type PanelState = {
-  input: boolean;
-  output: boolean;
 };
 
 function pickExampleValue(key: string, schema?: Record<string, unknown>) {
@@ -46,6 +63,8 @@ function pickExampleValue(key: string, schema?: Record<string, unknown>) {
     if (normalizedKey.includes("address1")) return "서울시 관악구 신림동 1515-7";
     if (normalizedKey.includes("address2")) return "406";
     if (normalizedKey.endsWith("id")) return "example_id";
+    if (normalizedKey.includes("path")) return "/orders/setting";
+    if (normalizedKey.includes("method")) return "GET";
     return "example";
   }
   if (fallbackType === "number" || fallbackType === "integer") return 1;
@@ -63,13 +82,12 @@ function buildExampleParams(toolName: string, schema?: Record<string, unknown> |
   const requiredList = Array.isArray(schema.required) ? (schema.required as string[]) : [];
   const required = new Set(requiredList);
   const keys = Object.keys(properties);
-  let pickedKeys = required.size > 0 ? keys.filter((key) => required.has(key)) : keys.slice(0, 2);
+  let pickedKeys = required.size > 0 ? keys.filter((key) => required.has(key)) : keys.slice(0, 3);
 
-  // Special case for update_order_shipping_address
   if (toolName === "update_order_shipping_address") {
     const forcedOrder = ["order_id", "address1", "address2", "zipcode"];
-    const otherKeys = pickedKeys.filter(k => !forcedOrder.includes(k));
-    pickedKeys = [...forcedOrder, ...otherKeys].filter(k => keys.includes(k));
+    const otherKeys = pickedKeys.filter((k) => !forcedOrder.includes(k));
+    pickedKeys = [...forcedOrder, ...otherKeys].filter((k) => keys.includes(k));
   }
 
   const result: Record<string, unknown> = {};
@@ -84,380 +102,418 @@ function buildExampleParams(toolName: string, schema?: Record<string, unknown> |
   return result;
 }
 
+function providerTone(key: string) {
+  if (key === "cafe24") return "from-blue-50 to-cyan-50 border-blue-200 text-blue-700";
+  if (key === "solapi") return "from-emerald-50 to-green-50 border-emerald-200 text-emerald-700";
+  if (key === "juso") return "from-amber-50 to-orange-50 border-amber-200 text-amber-700";
+  return "from-slate-50 to-slate-100 border-slate-200 text-slate-700";
+}
+
 export default function RulesPage() {
-  const [tools, setTools] = useState<MpcTool[]>([]);
+  const [providers, setProviders] = useState<McpProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [selectedProviderKey, setSelectedProviderKey] = useState<string>("");
+  const [selectedActionId, setSelectedActionId] = useState<string>("");
   const [inputByTool, setInputByTool] = useState<Record<string, string>>({});
   const [outputByTool, setOutputByTool] = useState<Record<string, string>>({});
+  const [outputExpandedByTool, setOutputExpandedByTool] = useState<Record<string, boolean>>({});
   const [runStateByTool, setRunStateByTool] = useState<Record<string, RunState>>({});
-  const [panelByTool, setPanelByTool] = useState<Record<string, PanelState>>({});
-
+  const GRID_COLS = "grid-cols-[minmax(0,0.5fr)_minmax(0,1fr)_minmax(0,0.5fr)_minmax(56px,0.25fr)]";
   useEffect(() => {
     let mounted = true;
-    async function loadTools() {
+    async function loadMcp() {
       setLoading(true);
       setError(null);
       try {
-        const res = await apiFetch<{ items: MpcTool[] }>("/api/mcp/tools");
+        const res = await apiFetch<McpPayload>("/api/mcp");
         if (!mounted) return;
-        setTools(res.items || []);
+        const loadedProviders = res.providers || [];
+        setProviders(loadedProviders);
+        if (loadedProviders.length > 0) {
+          const firstProvider = loadedProviders[0];
+          setSelectedProviderKey(firstProvider.key);
+          if (firstProvider.actions?.length > 0) {
+            setSelectedActionId(firstProvider.actions[0].id);
+          }
+        }
       } catch (err) {
         if (!mounted) return;
-        const message = err instanceof Error ? err.message : "MCP 목록을 불러오지 못했습니다.";
-        setError(message);
+        setError(err instanceof Error ? err.message : "MCP 목록을 불러오지 못했습니다.");
       } finally {
         if (mounted) setLoading(false);
       }
     }
-    loadTools();
+    loadMcp();
     return () => {
       mounted = false;
     };
   }, []);
 
-  const toolCount = useMemo(() => tools.length, [tools]);
-
+  const allActions = useMemo(() => providers.flatMap((provider) => provider.actions || []), [providers]);
+  const selectedProvider = useMemo(
+    () => providers.find((provider) => provider.key === selectedProviderKey) || providers[0] || null,
+    [providers, selectedProviderKey]
+  );
+  const selectedAction = useMemo(() => {
+    if (!selectedProvider) return null;
+    return (
+      selectedProvider.actions.find((action) => action.id === selectedActionId) ||
+      selectedProvider.actions[0] ||
+      null
+    );
+  }, [selectedProvider, selectedActionId]);
+  const providersSorted = useMemo(
+    () => [...providers].sort((a, b) => (b.action_count || 0) - (a.action_count || 0)),
+    [providers]
+  );
   useEffect(() => {
-    if (tools.length === 0) return;
+    if (!allActions.length) return;
     setInputByTool((prev) => {
       const next = { ...prev };
-      tools.forEach((tool) => {
-        if (next[tool.id] !== undefined) return;
-        const example = buildExampleParams(tool.name, tool.schema || undefined);
-        next[tool.id] = JSON.stringify(example, null, 2);
+      allActions.forEach((action) => {
+        if (next[action.id] !== undefined) return;
+        next[action.id] = JSON.stringify(buildExampleParams(action.name, action.schema || undefined), null, 2);
       });
       return next;
     });
-  }, [tools]);
+  }, [allActions]);
 
-  async function handleRun(tool: MpcTool) {
-    setRunStateByTool((prev) => ({
-      ...prev,
-      [tool.id]: { loading: true, error: null },
-    }));
+  async function handleRun(action: McpAction) {
+    setRunStateByTool((prev) => ({ ...prev, [action.id]: { loading: true, error: null } }));
     let params: Record<string, unknown> = {};
-    const rawInput = inputByTool[tool.id] || "{}";
+    const rawInput = inputByTool[action.id] || "{}";
     try {
       params = JSON.parse(rawInput);
     } catch (parseError) {
       const message = parseError instanceof Error ? parseError.message : "JSON 파싱에 실패했습니다.";
-      setRunStateByTool((prev) => ({
-        ...prev,
-        [tool.id]: { loading: false, error: message },
-      }));
-      setOutputByTool((prev) => ({
-        ...prev,
-        [tool.id]: message,
-      }));
+      setRunStateByTool((prev) => ({ ...prev, [action.id]: { loading: false, error: message } }));
+      setOutputByTool((prev) => ({ ...prev, [action.id]: message }));
       return;
     }
 
     try {
       const res = await apiFetch<Record<string, unknown>>("/api/mcp/tools/call", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tool: tool.name,
+          tool_key: action.tool_key,
+          provider_key: action.provider_key || action.provider,
+          name: action.name,
           params,
         }),
       });
-      setOutputByTool((prev) => ({
-        ...prev,
-        [tool.id]: JSON.stringify(res, null, 2),
-      }));
-      setRunStateByTool((prev) => ({
-        ...prev,
-        [tool.id]: { loading: false, error: null },
-      }));
+      setOutputByTool((prev) => ({ ...prev, [action.id]: JSON.stringify(res, null, 2) }));
+      setRunStateByTool((prev) => ({ ...prev, [action.id]: { loading: false, error: null } }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "도구 호출에 실패했습니다.";
-      setOutputByTool((prev) => ({
-        ...prev,
-        [tool.id]: message,
-      }));
-      setRunStateByTool((prev) => ({
-        ...prev,
-        [tool.id]: { loading: false, error: message },
-      }));
+      setOutputByTool((prev) => ({ ...prev, [action.id]: message }));
+      setRunStateByTool((prev) => ({ ...prev, [action.id]: { loading: false, error: message } }));
     }
   }
 
-  async function handleCopy(tool: MpcTool) {
-    const input = inputByTool[tool.id] || "";
-    const output = outputByTool[tool.id] || "";
+  async function handleCopy(action: McpAction) {
+    const input = inputByTool[action.id] || "";
+    const output = outputByTool[action.id] || "";
     const payload = `Input (JSON)\n${input}\n\nOutput\n${output}`;
     try {
       await navigator.clipboard.writeText(payload);
       toast.success("Input/Output을 복사했습니다.");
     } catch {
-      const textarea = document.createElement("textarea");
-      textarea.value = payload;
-      textarea.style.position = "fixed";
-      textarea.style.top = "0";
-      textarea.style.left = "0";
-      textarea.style.opacity = "0";
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-      toast.success("Input/Output을 복사했습니다.");
+      toast.error("복사에 실패했습니다.");
     }
   }
 
   return (
-    <div className="px-5 md:px-8 py-6">
-      <div className="mx-auto w-full max-w-6xl">
-        <h1 className="text-2xl font-semibold text-slate-900">규칙</h1>
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <Card className="p-4">
-            <div className="text-sm font-semibold text-slate-900">라우팅 규칙</div>
-            <div className="mt-2 text-xs text-slate-500">
-              예: 환불/결제 → 결제 큐, 배송 → 배송 큐, 분쟁 → 사람 상담 이관
-            </div>
-            <div className="mt-3 space-y-2">
-              <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-900">규칙 #12</span>
-                  <Badge variant="green">활성</Badge>
-                </div>
-                <div className="mt-1 text-slate-500">의도=환불 또는 정책=차지백 → 사람 이관</div>
-              </div>
-              <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-900">규칙 #05</span>
-                  <Badge variant="amber">초안</Badge>
-                </div>
-                <div className="mt-1 text-slate-500">의도=배송 → 도구=배송조회</div>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="p-4">
-            <div className="text-sm font-semibold text-slate-900">에스컬레이션 정책</div>
-            <div className="mt-2 text-xs text-slate-500">
-              예: 본인 확인 실패, 개인정보 요청, 고위험 민원 시 강제 이관
-            </div>
-            <div className="mt-3 space-y-2">
-              <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-900">개인정보 요청</span>
-                  <Badge variant="green">활성</Badge>
-                </div>
-                <div className="mt-1 text-slate-500">마스킹 필수, 실패 시 사람 이관</div>
-              </div>
-            </div>
-          </Card>
+    <div className="px-5 py-6 md:px-8">
+      <div className="mx-auto w-full max-w-7xl space-y-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-slate-900">규칙</h1>
+          <p className="mt-1 text-sm text-slate-500">
+            MCP를 공급자(Provider) &gt; 액션(Action) 계층으로 관리하고 즉시 실행할 수 있습니다.
+          </p>
         </div>
 
-        <Card className="mt-4 p-4">
-          <div className="text-sm font-semibold text-slate-900">MCP의 역할 (툴/시스템 통합)</div>
-          <div className="mt-2 text-xs text-slate-500">
-            MCP를 쓰면, LLM이 직접 DB나 내부 API를 무작정 두드리는 형태가 아니라 표준화된 Tool 서버로
-            기능을 호출합니다.
-          </div>
+        {error ? <Card className="p-4 text-sm text-rose-600">{error}</Card> : null}
 
-          <div className="mt-4 grid grid-cols-1 gap-3 text-xs md:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="text-slate-900 font-medium">표준화된 Tool 제공</div>
-              <div className="mt-1 text-slate-500">
-                주문조회, 배송추적, 환불정책 조회, 상담 티켓 생성, 인증(OTP) 발송 등을
-                표준화된 Tool 서버로 제공합니다.
-              </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_minmax(0,1fr)]">
+          <Card className="overflow-hidden">
+            <div className="border-b border-slate-200 px-4 py-4">
+              <div className="text-lg font-medium text-slate-900">활성화된 MCP</div>
+              <div className="mt-1 text-xs text-slate-500">연결된 공급자와 액션을 선택하세요</div>
             </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="text-slate-900 font-medium">테넌트별 허용 범위</div>
-              <div className="mt-1 text-slate-500">
-                브랜드별로 허용된 Tool만 노출하고 파라미터 스키마를 엄격히 강제합니다.
-              </div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="text-slate-900 font-medium">백엔드 다변화 대응</div>
-              <div className="mt-1 text-slate-500">
-                브랜드 A는 Shopify, 브랜드 B는 카페24, 브랜드 C는 자체 ERP처럼 백엔드가 달라도
-                LLM 입장에서는 동일한 인터페이스로 사용합니다.
-              </div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white p-3">
-              <div className="text-slate-900 font-medium">안전한 기능 카탈로그</div>
-              <div className="mt-1 text-slate-500">
-                MCP는 LLM이 쓸 수 있는 안전한 기능 카탈로그를 제공하고,
-                도구 호출의 권한/감사로그/속도제한/마스킹을 중앙에서 수행하기 좋습니다.
-              </div>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="mt-4">
-          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-            <div className="text-sm font-semibold text-slate-900">MCP 도구 목록</div>
-            <div className="text-xs text-slate-500">총 {loading ? "-" : toolCount}건</div>
-          </div>
-          {error ? <div className="p-4 text-sm text-rose-600">{error}</div> : null}
-          {!error && !loading && toolCount === 0 ? (
-            <div className="p-4 text-sm text-slate-500">연결 가능한 MCP 도구가 없습니다.</div>
-          ) : null}
-          <div className="divide-y divide-slate-200">
-            {tools.map((tool) => {
-              const allowed = tool.policy?.is_allowed ?? true;
-              const rate = tool.policy?.rate_limit_per_min ?? null;
-              const isExpanded = Boolean(expanded[tool.id]);
-              const runState = runStateByTool[tool.id];
-              return (
-                <div key={tool.id} className="p-4 hover:bg-slate-50">
+            <div className="max-h-[720px] overflow-y-auto px-2 py-4">
+              {loading ? <div className="p-3 text-sm text-slate-500">불러오는 중...</div> : null}
+              {!loading && providers.length === 0 ? (
+                <div className="p-3 text-sm text-slate-500">연결된 MCP가 없습니다.</div>
+              ) : null}
+              {providersSorted.map((provider) => {
+                const selected = provider.key === selectedProvider?.key;
+                return (
                   <button
+                    key={provider.key}
                     type="button"
-                    onClick={() => setExpanded((prev) => ({ ...prev, [tool.id]: !prev[tool.id] }))}
-                    className="flex w-full flex-wrap items-start justify-between gap-3 text-left"
-                    aria-expanded={isExpanded}
+                    onClick={() => {
+                      setSelectedProviderKey(provider.key);
+                      if (provider.actions?.length > 0) setSelectedActionId(provider.actions[0].id);
+                    }}
+                    className={cn(
+                      "mb-2 flex w-full items-center justify-between rounded-xl border p-3 text-left transition",
+                      selected ? "border-slate-300 bg-slate-50" : "border-transparent hover:border-slate-200 hover:bg-slate-50"
+                    )}
                   >
-                    <div>
-                      <div className="text-sm font-semibold text-slate-900">{tool.name}</div>
-                      <div className="mt-1 text-xs text-slate-500">{tool.description || "설명 없음"}</div>
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
-                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
-                          버전 {tool.version || "v1"}
-                        </span>
-                        <span
-                          className={cn(
-                            "rounded-full border px-2 py-0.5",
-                            allowed
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : "border-rose-200 bg-rose-50 text-rose-700"
-                          )}
-                        >
-                          {allowed ? "허용됨" : "차단"}
-                        </span>
-                        {rate !== null ? (
-                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
-                            분당 {rate}회
-                          </span>
-                        ) : null}
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div
+                        className={cn(
+                          "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border bg-gradient-to-br text-sm font-semibold",
+                          providerTone(provider.key)
+                        )}
+                      >
+                        {provider.initials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium text-slate-900">{provider.title}</div>
+                        <div className="truncate text-xs text-slate-500">{provider.description}</div>
                       </div>
                     </div>
-                    <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-500">
-                      {isExpanded ? "접기" : "Input/Output 보기"}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] text-slate-600">
+                        {provider.action_count}
+                      </span>
+                      <ChevronRight className="h-4 w-4 text-slate-400" />
+                    </div>
                   </button>
+                );
+              })}
+            </div>
+          </Card>
 
-                  {isExpanded ? (
-                    <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="grid grid-cols-1 items-stretch gap-3 md:grid-cols-2">
-                      <div className="relative flex h-full flex-col">
-                        <div className="flex min-h-[28px] items-center justify-between">
-                          <div className="text-[11px] font-semibold text-slate-700">Input (JSON)</div>
-                          <span className="h-7 w-[64px] rounded-lg border border-transparent px-3 py-1 text-[11px] opacity-0">
-                            실행
-                          </span>
-                        </div>
-                        <div className="relative mt-2 overflow-visible">
-                          <div
-                            className={cn(
-                              "rounded-lg border border-slate-200 bg-white p-2 overflow-hidden",
-                              panelByTool[tool.id]?.input ? "h-[600px]" : "h-[100px]"
-                            )}
-                          >
-                            <textarea
-                              className="h-full w-full resize-none overflow-auto bg-transparent font-mono text-[11px] text-slate-700 focus:outline-none"
-                              value={inputByTool[tool.id] || ""}
-                              onChange={(event) =>
-                                setInputByTool((prev) => ({
-                                  ...prev,
-                                  [tool.id]: event.target.value,
-                                }))
-                              }
-                              spellCheck={false}
-                            />
-                          </div>
-                          <div className="pointer-events-none absolute left-1/2 bottom-0 z-10 -translate-x-1/2 translate-y-1/2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPanelByTool((prev) => ({
-                                  ...prev,
-                                  [tool.id]: {
-                                    input: !(prev[tool.id]?.input ?? false),
-                                    output: prev[tool.id]?.output ?? false,
-                                  },
-                                }))
-                              }
-                              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                              aria-label={panelByTool[tool.id]?.input ? "인풋 높이 줄이기" : "인풋 높이 늘리기"}
-                            >
-                              {panelByTool[tool.id]?.input ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                            </button>
-                          </div>
-                        </div>
-                        {runState?.error ? (
-                          <div className="mt-2 text-[11px] text-rose-600">{runState.error}</div>
-                        ) : null}
-                      </div>
-                      <div className="relative flex flex-col pb-3">
-                        <div className="flex min-h-[28px] items-center justify-between gap-2">
-                          <div className="text-[11px] font-semibold text-slate-700">Output</div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              type="button"
-                              onClick={() => handleCopy(tool)}
-                              className="h-7 rounded-lg border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300"
-                            >
-                              복사
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRun(tool)}
-                              className="h-7 rounded-lg border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold text-slate-700 transition hover:border-slate-300"
-                            >
-                              {runState?.loading ? "실행 중..." : "실행"}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="relative mt-2 overflow-visible">
-                          <div
-                            className={cn(
-                              "rounded-lg border border-slate-200 bg-white p-2 overflow-auto",
-                              panelByTool[tool.id]?.output ? "h-[600px]" : "h-[100px]"
-                            )}
-                          >
-                            <pre className="whitespace-pre-wrap font-mono text-[11px] text-slate-700">
-                              {outputByTool[tool.id] || "아직 실행하지 않았습니다."}
-                            </pre>
-                          </div>
-                          <div className="pointer-events-none absolute left-1/2 bottom-0 z-10 -translate-x-1/2 translate-y-1/2">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setPanelByTool((prev) => ({
-                                  ...prev,
-                                  [tool.id]: {
-                                    input: prev[tool.id]?.input ?? false,
-                                    output: !(prev[tool.id]?.output ?? false),
-                                  },
-                                }))
-                              }
-                              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                              aria-label={panelByTool[tool.id]?.output ? "아웃풋 높이 줄이기" : "아웃풋 높이 늘리기"}
-                            >
-                              {panelByTool[tool.id]?.output ? <Minus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-                            </button>
-                          </div>
-                        </div>
-                        {runState?.error ? (
-                          <div className="mt-2 text-[11px] text-rose-600">{runState.error}</div>
-                        ) : null}
-                      </div>
+          <Card className="overflow-hidden">
+            {!selectedProvider ? (
+              <div className="p-6 text-sm text-slate-500">선택된 MCP가 없습니다.</div>
+            ) : (
+              <div>
+                <div className="border-b border-slate-200 px-4 py-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        "inline-block h-[5px] w-[5px] rounded-full",
+                        selectedProvider.connected ? "bg-emerald-500" : "bg-rose-500"
+                      )}
+                      aria-label={selectedProvider.connected ? "연결됨" : "미연결"}
+                    />
+                    <div className="text-lg font-medium text-slate-900">{selectedProvider.title}</div>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">{selectedProvider.description}</div>
+                </div>
+
+                {/* 스크롤 컨테이너(헤더+바디 공통) */}
+                <div className="border-b border-slate-200 px-4 py-4">
+                  <div className="max-h-[360px] overflow-y-auto rounded-xl border border-slate-200 [scrollbar-gutter:auto]">
+                    {/* 헤더(컬럼명) 고정 영역 */}
+                    <div className="sticky top-0 z-10 bg-white">
+                      <div className={cn("grid border-b border-slate-200 text-left", GRID_COLS)}>
+                        <span className="flex min-h-[40px] items-center px-2 py-2 text-left text-[11px] font-semibold text-slate-500">
+                          액션
+                        </span>
+                        <span className="flex min-h-[40px] items-center px-2 py-2 text-left text-[11px] font-semibold text-slate-500">
+                          설명
+                        </span>
+                        <span className="flex min-h-[40px] items-center px-2 py-2 text-left text-[11px] font-semibold text-slate-500">
+                          메타데이터
+                        </span>
+                        <span className="flex min-h-[40px] items-center justify-end px-2 py-2 text-right text-[11px] font-semibold text-slate-500">
+                          사용 빈도
+                        </span>
                       </div>
                     </div>
-                  ) : null}
+
+                    {/* 스크롤 되는 바디(리스트) 영역 */}
+                    <ul className="divide-y divide-slate-200">
+                      {selectedProvider.actions.map((action) => {
+                        const selected = action.id === selectedAction?.id;
+                        const allowed = action.policy?.is_allowed ?? true;
+
+                        const metaText = [
+                          "공개적으로 쓰기",
+                          "오픈 월드",
+                          action.meta?.destructive ? "파괴적" : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ");
+
+                        return (
+                          <li
+                            key={action.id}
+                            className={cn(
+                              "grid text-left transition",
+                              GRID_COLS,
+                              selected ? "bg-slate-50" : "hover:bg-slate-50"
+                            )}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => setSelectedActionId(action.id)}
+                              className="flex min-h-[44px] min-w-0 items-center justify-start px-2 py-2 text-left font-mono text-xs font-medium text-slate-900"
+                            >
+                              <span
+                                className={cn(
+                                  "mr-0 inline-block h-1.5 w-1.5 shrink-0 rounded-full",
+                                  allowed ? "bg-emerald-500" : "bg-rose-500"
+                                )}
+                                aria-label={allowed ? "허용" : "차단"}
+                                title={allowed ? "허용" : "차단"}
+                              />
+                              <span className="min-w-0 truncate whitespace-nowrap">{action.name}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedActionId(action.id)}
+                              className="flex min-h-[44px] min-w-0 items-center justify-start px-2 py-2 text-left text-xs text-slate-600"
+                            >
+                              <span className="min-w-0 truncate whitespace-nowrap">
+                                {action.description || "설명 없음"}
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setSelectedActionId(action.id)}
+                              className="flex min-h-[44px] min-w-0 items-center justify-start px-2 py-2 text-left"
+                            >
+                              <span className="min-w-0 truncate whitespace-nowrap text-[11px] font-semibold text-slate-600">
+                                {metaText || "메타데이터 없음"}
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedActionId(action.id)}
+                              className="flex min-h-[44px] min-w-0 items-center justify-end px-2 py-2 text-right"
+                            >
+                              <span className="text-xs font-semibold tabular-nums text-slate-700">
+                                {Number(action.usage_count || 0).toLocaleString("ko-KR")}
+                              </span>
+                            </button>
+
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        </Card>
+
+                {selectedAction ? (
+                  <div className="space-y-3 p-4">
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_auto] gap-x-2 gap-y-1 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="col-start-1 row-start-1 flex flex-wrap items-center justify-left gap-4">
+                        <div className="font-mono text-sm font-semibold text-slate-900">
+                          {selectedAction.name}
+                        </div>
+                        <div className="flex items-center gap-2 text-[9px] text-slate-500">
+                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                            버전 {selectedAction.version || "v1"}
+                          </span>
+                          {selectedAction.policy?.rate_limit_per_min ? (
+                            <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5">
+                              분당 {selectedAction.policy.rate_limit_per_min}회
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="col-start-1 row-start-2 text-xs text-slate-500">
+                        {selectedAction.description || "설명 없음"}
+                      </div>
+                      <div className="col-start-2 row-span-2 row-start-1 flex items-stretch justify-end gap-2 self-stretch">
+                        {Boolean((outputByTool[selectedAction.id] || "").trim()) ? (
+                          <button
+                            type="button"
+                            onClick={() => handleCopy(selectedAction)}
+                            className="inline-flex h-full aspect-square items-center justify-center rounded-lg bg-slate-200 text-black transition hover:bg-slate-400"
+                            aria-label="입력/출력 복사"
+                            title="입력/출력 복사"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          onClick={() => handleRun(selectedAction)}
+                          className="inline-flex h-full aspect-square items-center justify-center rounded-lg bg-slate-900 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-400"
+                          aria-label={runStateByTool[selectedAction.id]?.loading ? "실행 중" : "실행"}
+                          title={runStateByTool[selectedAction.id]?.loading ? "실행 중..." : "실행"}
+                          disabled={runStateByTool[selectedAction.id]?.loading}
+                        >
+                          <Play className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <div>
+                        <div className="mb-1 flex min-h-7 items-center justify-between gap-2">
+                          <div className="text-[11px] font-semibold text-slate-700">Input (JSON)</div>
+                          <div className="invisible flex items-center gap-2" aria-hidden="true">
+                            <span className="h-7 w-[52px] rounded-lg border border-slate-200" />
+                            <span className="h-7 w-[52px] rounded-lg border border-slate-200" />
+                          </div>
+                        </div>
+                        <textarea
+                          className="h-[200px] w-full resize-y rounded-lg border border-slate-200 bg-white p-2 font-mono text-[11px] text-slate-700 focus:outline-none"
+                          value={inputByTool[selectedAction.id] || ""}
+                          onChange={(event) =>
+                            setInputByTool((prev) => ({ ...prev, [selectedAction.id]: event.target.value }))
+                          }
+                          spellCheck={false}
+                        />
+                      </div>
+                      <div>
+                        <div className="mb-1 flex min-h-7 items-center justify-between gap-2">
+                          <div className="text-[11px] font-semibold text-slate-700">Output</div>
+                          <div />
+                        </div>
+                        <div className="relative">
+                          <pre
+                            className={cn(
+                              "overflow-auto rounded-lg border border-slate-200 bg-white p-2 font-mono text-[11px] text-slate-700 whitespace-pre-wrap transition-[height] duration-200",
+                              outputExpandedByTool[selectedAction.id] ? "h-[600px]" : "h-[200px]"
+                            )}
+                          >
+                            {outputByTool[selectedAction.id] || "아직 실행하지 않았습니다."}
+                          </pre>
+                          <div className="pointer-events-none absolute left-1/2 bottom-0 z-20 -translate-x-1/2 translate-y-1/2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setOutputExpandedByTool((prev) => ({
+                                  ...prev,
+                                  [selectedAction.id]: !prev[selectedAction.id],
+                                }))
+                              }
+                              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-400 bg-white text-slate-600 hover:bg-slate-50"
+                              aria-label={
+                                outputExpandedByTool[selectedAction.id] ? "아웃풋 높이 줄이기" : "아웃풋 높이 늘리기"
+                              }
+                            >
+                              {outputExpandedByTool[selectedAction.id] ? (
+                                <Minus className="h-5 w-5" />
+                              ) : (
+                                <Plus className="h-5 w-5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    {runStateByTool[selectedAction.id]?.error ? (
+                      <div className="text-xs text-rose-600">{runStateByTool[selectedAction.id]?.error}</div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </Card>
+        </div>
       </div>
     </div>
   );

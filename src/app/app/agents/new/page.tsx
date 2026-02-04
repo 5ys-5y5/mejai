@@ -9,6 +9,8 @@ import { formatKstDateTime } from "@/lib/kst";
 
 type MpcTool = {
   id: string;
+  tool_key?: string;
+  provider_key?: string;
   name: string;
   description?: string | null;
 };
@@ -20,12 +22,14 @@ type KbItem = {
   version: string | null;
   is_active: boolean | null;
   created_at?: string | null;
+  is_admin?: boolean | null;
 };
 
 type KbParentGroup = {
   parentId: string;
   title: string;
   versions: KbItem[];
+  isAdmin: boolean;
 };
 
 const llmOptions = [
@@ -82,11 +86,12 @@ export default function NewAgentPage() {
   const [step, setStep] = useState(0);
   const [llm, setLlm] = useState<"chatgpt" | "gemini">("chatgpt");
   const [mcpTools, setMcpTools] = useState<MpcTool[]>([]);
-  const [selectedMcpIds, setSelectedMcpIds] = useState<string[]>([]);
+  const [selectedMcpProviders, setSelectedMcpProviders] = useState<string[]>([]);
   const [kbItems, setKbItems] = useState<KbItem[]>([]);
   const [selectedParentId, setSelectedParentId] = useState("");
   const [selectedKbId, setSelectedKbId] = useState("");
   const [plan, setPlan] = useState("starter");
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const [loading, setLoading] = useState(true);
   const [agentName, setAgentName] = useState("");
   const [website, setWebsite] = useState("");
@@ -97,9 +102,14 @@ export default function NewAgentPage() {
     return normalized !== "starter" && normalized !== "free" && normalized !== "";
   }, [plan]);
 
+  const visibleKbItems = useMemo(() => {
+    if (isAdminUser) return kbItems;
+    return kbItems.filter((item) => !item.is_admin);
+  }, [kbItems, isAdminUser]);
+
   const kbParents = useMemo(() => {
     const byParent = new Map<string, KbItem[]>();
-    kbItems.forEach((item) => {
+    visibleKbItems.forEach((item) => {
       const parentId = item.parent_id ?? item.id;
       if (!byParent.has(parentId)) byParent.set(parentId, []);
       byParent.get(parentId)?.push(item);
@@ -107,9 +117,10 @@ export default function NewAgentPage() {
     return Array.from(byParent.entries()).map(([parentId, versions]) => {
       const sorted = [...versions].sort(compareVersions);
       const title = sorted[0]?.title || "제목 없음";
-      return { parentId, title, versions: sorted } satisfies KbParentGroup;
+      const isAdmin = sorted.some((item) => item.is_admin);
+      return { parentId, title, versions: sorted, isAdmin } satisfies KbParentGroup;
     });
-  }, [kbItems]);
+  }, [visibleKbItems]);
 
   const selectedGroup = useMemo(() => {
     return kbParents.find((group) => group.parentId === selectedParentId) || null;
@@ -126,21 +137,34 @@ export default function NewAgentPage() {
     return agentName.trim().length > 0 && goal.trim().length > 0 && Boolean(selectedKbId);
   }, [agentName, goal, selectedKbId]);
 
+  const mcpProviderOptions = useMemo(() => {
+    const byProvider = new Map<string, { key: string; count: number }>();
+    mcpTools.forEach((tool) => {
+      const key = String(tool.provider_key || "").trim().toLowerCase();
+      if (!key) return;
+      const current = byProvider.get(key) || { key, count: 0 };
+      current.count += 1;
+      byProvider.set(key, current);
+    });
+    return Array.from(byProvider.values()).sort((a, b) => a.key.localeCompare(b.key));
+  }, [mcpTools]);
+
   useEffect(() => {
     let mounted = true;
     async function load() {
       setLoading(true);
       try {
         const [profile, toolsRes, kbRes] = await Promise.all([
-          apiFetch<{ plan?: string }>("/api/user-profile").catch(() => null),
+          apiFetch<{ plan?: string; is_admin?: boolean }>("/api/user-profile").catch(() => null),
           apiFetch<{ items: MpcTool[] }>("/api/mcp/tools").catch(() => ({ items: [] })),
           apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
         ]);
         if (!mounted) return;
         setPlan(profile?.plan || "starter");
+        setIsAdminUser(Boolean(profile?.is_admin));
         setMcpTools(toolsRes?.items || []);
         setKbItems(kbRes?.items || []);
-      } catch (err) {
+      } catch {
         if (!mounted) return;
         toast.error("에이전트 설정 데이터를 불러오지 못했습니다.");
       } finally {
@@ -157,6 +181,21 @@ export default function NewAgentPage() {
     if (selectedParentId) return;
     if (kbParents.length === 0) return;
     const firstParent = kbParents[0];
+    setSelectedParentId(firstParent.parentId);
+    const defaultVersion = pickDefaultKbVersion(firstParent.versions);
+    setSelectedKbId(defaultVersion?.id || "");
+  }, [kbParents, selectedParentId]);
+
+  useEffect(() => {
+    if (!selectedParentId) return;
+    const exists = kbParents.some((group) => group.parentId === selectedParentId);
+    if (exists) return;
+    const firstParent = kbParents[0];
+    if (!firstParent) {
+      setSelectedParentId("");
+      setSelectedKbId("");
+      return;
+    }
     setSelectedParentId(firstParent.parentId);
     const defaultVersion = pickDefaultKbVersion(firstParent.versions);
     setSelectedKbId(defaultVersion?.id || "");
@@ -185,15 +224,15 @@ export default function NewAgentPage() {
     setSelectedKbId(next?.id || "");
   };
 
-  const toggleMcpTool = (toolId: string) => {
-    setSelectedMcpIds((prev) => {
-      if (prev.includes(toolId)) return prev.filter((id) => id !== toolId);
-      return [...prev, toolId];
+  const toggleMcpProvider = (providerKey: string) => {
+    setSelectedMcpProviders((prev) => {
+      if (prev.includes(providerKey)) return prev.filter((id) => id !== providerKey);
+      return [...prev, providerKey];
     });
   };
 
   const handleClearMcp = () => {
-    setSelectedMcpIds([]);
+    setSelectedMcpProviders([]);
   };
 
   const handleCreate = async () => {
@@ -206,7 +245,7 @@ export default function NewAgentPage() {
         name: agentName.trim(),
         llm,
         kb_id: selectedKbId,
-        mcp_tool_ids: isPaid ? selectedMcpIds : [],
+        mcp_tool_ids: isPaid ? selectedMcpProviders : [],
         website: website.trim() || null,
         goal: goal.trim(),
       };
@@ -263,12 +302,12 @@ export default function NewAgentPage() {
           <div className="mt-8 space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
               MCP 연결은 유료 플랜에서만 사용할 수 있습니다.
-              {isPaid ? " 연결할 도구를 선택하세요." : " 현재 플랜에서는 비활성화됩니다."}
+              {isPaid ? " 연결할 공급자를 선택하세요." : " 현재 플랜에서는 비활성화됩니다."}
             </div>
             {loading ? (
-              <div className="text-sm text-slate-500">MCP 도구를 불러오는 중...</div>
-            ) : mcpTools.length === 0 ? (
-              <div className="text-sm text-slate-500">연결 가능한 MCP 도구가 없습니다.</div>
+              <div className="text-sm text-slate-500">MCP 공급자를 불러오는 중...</div>
+            ) : mcpProviderOptions.length === 0 ? (
+              <div className="text-sm text-slate-500">연결 가능한 MCP 공급자가 없습니다.</div>
             ) : (
               <div className="grid gap-3">
                 <button
@@ -277,7 +316,7 @@ export default function NewAgentPage() {
                   disabled={!isPaid}
                   className={cn(
                     "flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
-                    selectedMcpIds.length === 0 ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white",
+                    selectedMcpProviders.length === 0 ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white",
                     !isPaid ? "cursor-not-allowed opacity-60" : "hover:bg-slate-50"
                   )}
                 >
@@ -288,19 +327,19 @@ export default function NewAgentPage() {
                   <span
                     className={cn(
                       "mt-1 inline-flex h-6 items-center rounded-full px-2 text-[11px] font-semibold",
-                      selectedMcpIds.length === 0 ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"
+                      selectedMcpProviders.length === 0 ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"
                     )}
                   >
-                    {selectedMcpIds.length === 0 ? "선택됨" : "미선택"}
+                    {selectedMcpProviders.length === 0 ? "선택됨" : "미선택"}
                   </span>
                 </button>
-                {mcpTools.map((tool) => {
-                  const selected = selectedMcpIds.includes(tool.id);
+                {mcpProviderOptions.map((provider) => {
+                  const selected = selectedMcpProviders.includes(provider.key);
                   return (
                     <button
-                      key={tool.id}
+                      key={provider.key}
                       type="button"
-                      onClick={() => (isPaid ? toggleMcpTool(tool.id) : null)}
+                      onClick={() => (isPaid ? toggleMcpProvider(provider.key) : null)}
                       disabled={!isPaid}
                       className={cn(
                         "flex items-start justify-between gap-3 rounded-2xl border px-4 py-3 text-left transition-colors",
@@ -309,8 +348,8 @@ export default function NewAgentPage() {
                       )}
                     >
                       <div>
-                        <div className="text-sm font-semibold text-slate-900">{tool.name}</div>
-                        <div className="mt-1 text-xs text-slate-500">{tool.description || "설명 없음"}</div>
+                        <div className="text-sm font-semibold text-slate-900">{provider.key}</div>
+                        <div className="mt-1 text-xs text-slate-500">활성 MCP {provider.count}개</div>
                       </div>
                       <span
                         className={cn(
@@ -330,6 +369,11 @@ export default function NewAgentPage() {
 
         {step === 2 ? (
           <div className="mt-8 space-y-5">
+            {isAdminUser ? (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+                admin KB는 <span className="font-semibold text-slate-900">ADMIN</span> 배지로 표시됩니다.
+              </div>
+            ) : null}
             <div className="text-sm font-semibold text-slate-900">KB 부모 선택</div>
             {loading ? (
               <div className="text-sm text-slate-500">KB 목록을 불러오는 중...</div>
@@ -349,7 +393,14 @@ export default function NewAgentPage() {
                         : "border-slate-200 bg-white hover:bg-slate-50"
                     )}
                   >
-                    <div className="text-sm font-semibold text-slate-900">{group.title}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm font-semibold text-slate-900">{group.title}</div>
+                      {group.isAdmin ? (
+                        <span className="inline-flex h-5 items-center rounded-full bg-amber-100 px-2 text-[10px] font-semibold text-amber-700">
+                          ADMIN
+                        </span>
+                      ) : null}
+                    </div>
                     <div className="mt-1 text-xs text-slate-500">버전 {group.versions.length}개</div>
                   </button>
                 ))}
@@ -373,8 +424,13 @@ export default function NewAgentPage() {
                         )}
                       >
                         <div>
-                          <div className="text-sm font-semibold text-slate-900">
-                            {version.version || "버전 없음"}
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-semibold text-slate-900">{version.version || "버전 없음"}</div>
+                            {version.is_admin ? (
+                              <span className="inline-flex h-5 items-center rounded-full bg-amber-100 px-2 text-[10px] font-semibold text-amber-700">
+                                ADMIN
+                              </span>
+                            ) : null}
                           </div>
                           <div className="mt-1 text-xs text-slate-500">
                             {formatKstDateTime(version.created_at)}

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
+import { loadMcpToolsForOrg } from "@/lib/mcpToolsService";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -31,62 +32,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
-  const { data: policies, error: policyError } = await context.supabase
-    .from("C_mcp_tool_policies")
-    .select("tool_id, is_allowed, allowed_scopes, rate_limit_per_min, masking_rules, conditions, adapter_key")
-    .eq("org_id", context.orgId);
-
-  if (policyError) {
-    return NextResponse.json({ error: policyError.message }, { status: 400 });
+  try {
+    const items = await loadMcpToolsForOrg(context.supabase, context.orgId);
+    return NextResponse.json({ items });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "MCP_TOOLS_LOAD_FAILED" },
+      { status: 400 }
+    );
   }
-
-  const toolIds = (policies || []).map((p) => p.tool_id);
-  if (toolIds.length === 0) {
-    return NextResponse.json({ items: [] });
-  }
-
-  const { data: tools, error: toolError } = await context.supabase
-    .from("C_mcp_tools")
-    .select("id, name, description, schema_json, version, is_active")
-    .in("id", toolIds)
-    .eq("is_active", true);
-
-  if (toolError) {
-    return NextResponse.json({ error: toolError.message }, { status: 400 });
-  }
-
-  const policyByTool = new Map(policies?.map((p) => [p.tool_id, p]) || []);
-  const items = (tools || []).map((tool) => ({
-    id: tool.id,
-    name: tool.name,
-    description: tool.description,
-    schema: tool.schema_json,
-    version: tool.version,
-    policy: policyByTool.get(tool.id) || null,
-  }));
-
-  items.push({
-    id: "search-address",
-    name: "search_address",
-    description: "Search Korean address by keyword to get zipcode (Mock for 1515-7)",
-    schema: {
-      type: "object",
-      properties: {
-        keyword: { type: "string", example: "서울시 관악구 신림동 1515-7" }
-      },
-      required: ["keyword"]
-    },
-    version: "v1",
-    policy: {
-      tool_id: "search-address",
-      is_allowed: true,
-      allowed_scopes: [],
-      rate_limit_per_min: 60,
-      masking_rules: null,
-      conditions: null,
-      adapter_key: "search_address"
-    }
-  });
-
-  return NextResponse.json({ items });
 }

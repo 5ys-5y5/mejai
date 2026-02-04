@@ -1790,8 +1790,8 @@ function AgentsPage() {
 
         <div className="mt-4 flex items-center justify-between gap-3">
           <div className="flex gap-2">
-            <Link to="/app/agents/playground" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
-              Playground
+            <Link to="/app/agents/runtime" className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
+              Runtime
             </Link>
             <Link to="/app/agents/new" className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800">
               <Plus className="inline h-4 w-4 mr-2" />

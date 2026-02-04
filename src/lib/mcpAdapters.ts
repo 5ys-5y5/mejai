@@ -18,6 +18,12 @@ type AdapterContext = {
 };
 
 type ToolAdapter = (params: Record<string, unknown>, ctx?: AdapterContext) => Promise<ToolCallResult>;
+const CAFE24_SCOPE_TOOL_PREFIX = "cafe24_scope_";
+
+function adapterKeyToCafe24Scope(adapterKey: string) {
+  if (!adapterKey.startsWith(CAFE24_SCOPE_TOOL_PREFIX)) return null;
+  return adapterKey.slice(CAFE24_SCOPE_TOOL_PREFIX.length).replace(/_/g, ".");
+}
 
 function maskValue(value: string) {
   if (value.length <= 4) return "*".repeat(value.length);
@@ -223,10 +229,26 @@ async function getCafe24Config(ctx?: AdapterContext) {
   }
   const row = data as AuthSettingsRow;
   let cafe24 = row.providers?.cafe24 || {};
+  const envScope = readEnv("CAFE24_SCOPE");
   if (!cafe24.mall_id || !cafe24.access_token || !cafe24.refresh_token) {
     const bootstrapped = await bootstrapCafe24FromEnv(ctx, row);
     if (bootstrapped) {
       cafe24 = bootstrapped;
+    }
+  }
+  // Backward compatibility: older provider rows may miss scope.
+  // Fall back to env scope so C_mcp_tools.scope_key checks can work.
+  if ((!cafe24.scope || String(cafe24.scope).trim().length === 0) && envScope) {
+    cafe24 = { ...cafe24, scope: envScope };
+    try {
+      const providers = (row.providers || {}) as Record<string, Cafe24ProviderConfig | undefined>;
+      providers.cafe24 = { ...(providers.cafe24 || {}), scope: envScope };
+      await supabase
+        .from("A_iam_auth_settings")
+        .update({ providers, updated_at: new Date().toISOString() })
+        .eq("id", row.id);
+    } catch {
+      // no-op: fallback in memory is enough for runtime
     }
   }
   if (!cafe24.mall_id || !cafe24.access_token || !cafe24.refresh_token) {
@@ -238,6 +260,7 @@ async function getCafe24Config(ctx?: AdapterContext) {
     ok: true as const,
     settingsId: row.id,
     mallId: cafe24.mall_id,
+    scope: cafe24.scope || "",
     accessToken: cafe24.access_token,
     refreshToken: cafe24.refresh_token,
     expiresAt: cafe24.expires_at || "",
@@ -275,7 +298,7 @@ async function cafe24Request(
   if (!res.ok) {
     return {
       ok: false as const,
-      error: `Cafe24 API error ${res.status}: ${text || res.statusText}`,
+      error: `Cafe24 API error ${res.status} [${options?.method || "GET"} ${path}]: ${text || res.statusText}`,
     };
   }
   try {
@@ -283,6 +306,75 @@ async function cafe24Request(
   } catch {
     return { ok: true as const, data: { raw: text } };
   }
+}
+
+function toQueryRecord(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {} as Record<string, string>;
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (raw === null || raw === undefined) continue;
+    out[key] = String(raw);
+  }
+  return out;
+}
+
+function hasCafe24Scope(scopeText: string, requiredScope: string) {
+  const set = new Set(
+    String(scopeText || "")
+      .split(/[\s,]+/)
+      .map((v) => v.trim())
+      .filter(Boolean)
+  );
+  return set.has(requiredScope);
+}
+
+async function requestCafe24WithRetry(
+  cfg: {
+    settingsId: string;
+    mallId: string;
+    accessToken: string;
+    refreshToken: string;
+    expiresAt: string;
+    baseUrl: string;
+  },
+  ctx: AdapterContext,
+  path: string,
+  options?: { method?: string; query?: Record<string, string>; body?: Record<string, unknown> }
+) {
+  const method = options?.method || "GET";
+  const query = options?.query || {};
+  const body = options?.body;
+  const run = (token: string) => cafe24Request({ baseUrl: cfg.baseUrl, accessToken: token }, path, { method, query, body });
+
+  if (isTokenExpired(cfg.expiresAt)) {
+    const refreshed = await refreshCafe24Token({
+      settingsId: cfg.settingsId,
+      mallId: cfg.mallId,
+      refreshToken: cfg.refreshToken,
+      supabase: ctx.supabase,
+    });
+    if (refreshed.ok) {
+      cfg.accessToken = refreshed.accessToken;
+    } else {
+      return { ok: false as const, error: `TOKEN_REFRESH_FAILED: ${refreshed.error}` };
+    }
+  }
+
+  const first = await run(cfg.accessToken);
+  if (!first.ok && first.error.includes("401")) {
+    const refreshed = await refreshCafe24Token({
+      settingsId: cfg.settingsId,
+      mallId: cfg.mallId,
+      refreshToken: cfg.refreshToken,
+      supabase: ctx.supabase,
+    });
+    if (refreshed.ok) {
+      cfg.accessToken = refreshed.accessToken;
+      return run(cfg.accessToken);
+    }
+    return { ok: false as const, error: `TOKEN_REFRESH_FAILED: ${refreshed.error}` };
+  }
+  return first;
 }
 
 async function searchJusoAddress(keyword: string) {
@@ -1138,16 +1230,96 @@ const adapters: Record<string, ToolAdapter> = {
       priority?: number | null;
     }>;
     const best = chooseBestAlias(query, aliases);
-    if (!best) {
+    if (best) {
+      return {
+        status: "success",
+        data: {
+          matched: true,
+          product_id: best.product_id,
+          alias: best.alias,
+          match_type: best.match_type,
+        },
+      };
+    }
+    // Fallback: try Cafe24 product search when alias dictionary has no match.
+    const cfg = await getCafe24Config(ctx);
+    if (!cfg.ok) {
+      return { status: "success", data: { matched: false } };
+    }
+    if (!hasCafe24Scope(cfg.scope, "mall.read_product")) {
+      return {
+        status: "error",
+        error: { code: "SCOPE_ERROR", message: "mall.read_product scope is required for this request" },
+      };
+    }
+    const normalizedQuery = normalizeMatchText(query).replace(/\s+/g, " ").trim();
+    const queries: Array<Record<string, string>> = [
+      { shop_no: cfg.shopNo, product_name: query, limit: "20" },
+      { shop_no: cfg.shopNo, search: "product_name", keyword: query, limit: "20" },
+      { shop_no: cfg.shopNo, keyword: query, limit: "20" },
+    ];
+    let products: Array<Record<string, unknown>> = [];
+    for (const q of queries) {
+      const searchResult = await requestCafe24WithRetry(cfg, ctx, "/products", {
+        method: "GET",
+        query: q,
+      });
+      if (!searchResult.ok) continue;
+      const list = Array.isArray((searchResult.data as any)?.products)
+        ? ((searchResult.data as any).products as Array<Record<string, unknown>>)
+        : [];
+      if (list.length > 0) {
+        products = list;
+        break;
+      }
+    }
+    if (products.length === 0) {
+      return { status: "success", data: { matched: false } };
+    }
+    let bestProduct: Record<string, unknown> | null = null;
+    let bestScore = 0;
+    for (const product of products) {
+      const name = String(
+        (product as any).product_name ||
+          (product as any).product_name_default ||
+          (product as any).name ||
+          ""
+      ).trim();
+      if (!name) continue;
+      const normalizedName = normalizeMatchText(name);
+      const qNoSpace = normalizedQuery.replace(/\s+/g, "");
+      const nNoSpace = normalizedName.replace(/\s+/g, "");
+      let score = 0;
+      if (qNoSpace && nNoSpace.includes(qNoSpace)) score += 4;
+      if (qNoSpace && qNoSpace.includes(nNoSpace)) score += 2;
+      const qTokens = normalizedQuery.split(" ").filter(Boolean);
+      score += qTokens.filter((token) => normalizedName.includes(token)).length;
+      if (score > bestScore) {
+        bestScore = score;
+        bestProduct = product;
+      }
+    }
+    const productId = String(
+      (bestProduct as any)?.product_no ||
+        (bestProduct as any)?.product_id ||
+        ""
+    ).trim();
+    const productName = String(
+      (bestProduct as any)?.product_name ||
+        (bestProduct as any)?.product_name_default ||
+        (bestProduct as any)?.name ||
+        ""
+    ).trim();
+    if (!productId || bestScore <= 0) {
       return { status: "success", data: { matched: false } };
     }
     return {
       status: "success",
       data: {
         matched: true,
-        product_id: best.product_id,
-        alias: best.alias,
-        match_type: best.match_type,
+        product_id: productId,
+        product_name: productName || null,
+        match_type: "cafe24_fuzzy",
       },
     };
   },
@@ -1250,6 +1422,123 @@ const adapters: Record<string, ToolAdapter> = {
         if (retry.ok) return { status: "success", data: retry.data };
       }
     }
+    if (!result.ok) {
+      return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
+    }
+    return { status: "success", data: result.data };
+  },
+  read_order_settings: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const cfg = await getCafe24Config(ctx);
+    if (!cfg.ok) {
+      return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
+    }
+    if (!hasCafe24Scope(cfg.scope, "mall.read_store")) {
+      return { status: "error", error: { code: "SCOPE_ERROR", message: "mall.read_store scope is required" } };
+    }
+    const query = { shop_no: String(params.shop_no || cfg.shopNo) };
+    const result = await requestCafe24WithRetry(cfg, ctx, "/orders/setting", { method: "GET", query });
+    if (!result.ok) {
+      return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
+    }
+    return { status: "success", data: result.data };
+  },
+  update_order_settings: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const cfg = await getCafe24Config(ctx);
+    if (!cfg.ok) {
+      return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
+    }
+    if (!hasCafe24Scope(cfg.scope, "mall.write_store")) {
+      return { status: "error", error: { code: "SCOPE_ERROR", message: "mall.write_store scope is required" } };
+    }
+    const shopNo = String(params.shop_no || cfg.shopNo);
+    const rawRequest =
+      typeof params.request === "object" && params.request !== null && !Array.isArray(params.request)
+        ? (params.request as Record<string, unknown>)
+        : Object.fromEntries(
+            Object.entries(params).filter(([key, value]) => key !== "shop_no" && value !== undefined)
+          );
+    if (Object.keys(rawRequest).length === 0) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "request payload is required" } };
+    }
+
+    const candidates: Array<Record<string, unknown>> = [
+      { request: [rawRequest] },
+      { request: rawRequest },
+      rawRequest,
+    ];
+    for (const body of candidates) {
+      const result = await requestCafe24WithRetry(cfg, ctx, "/orders/setting", {
+        method: "PUT",
+        query: { shop_no: shopNo },
+        body,
+      });
+      if (result.ok) {
+        return { status: "success", data: result.data };
+      }
+      if (!String(result.error || "").includes("400")) {
+        return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
+      }
+    }
+    return {
+      status: "error",
+      error: { code: "CAFE24_ERROR", message: "Cafe24 API rejected all request payload formats for /orders/setting" },
+    };
+  },
+  list_activitylogs: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const cfg = await getCafe24Config(ctx);
+    if (!cfg.ok) {
+      return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
+    }
+    const query = toQueryRecord(params);
+    if (!query.shop_no) query.shop_no = cfg.shopNo;
+    const result = await requestCafe24WithRetry(cfg, ctx, "/activitylogs", { method: "GET", query });
+    if (!result.ok) {
+      return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
+    }
+    return { status: "success", data: result.data };
+  },
+  cafe24_admin_request: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const cfg = await getCafe24Config(ctx);
+    if (!cfg.ok) {
+      return { status: "error", error: { code: "CONFIG_ERROR", message: cfg.error } };
+    }
+    const rawPath = String(params.path || "").trim();
+    if (!rawPath) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "path is required" } };
+    }
+    if (/^https?:\/\//i.test(rawPath)) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "path must not include protocol/domain" } };
+    }
+    const pathValue = rawPath.startsWith("/") ? rawPath : `/${rawPath}`;
+    const method = String(params.method || "GET").trim().toUpperCase();
+    const query = toQueryRecord(params.query);
+    if (!query.shop_no) query.shop_no = cfg.shopNo;
+    const requiredScope = String(params.required_scope || "").trim();
+    if (requiredScope && !hasCafe24Scope(cfg.scope, requiredScope)) {
+      return {
+        status: "error",
+        error: { code: "SCOPE_ERROR", message: `${requiredScope} scope is required for this request` },
+      };
+    }
+    const body =
+      method === "GET" || method === "DELETE"
+        ? undefined
+        : (typeof params.body === "object" && params.body !== null
+            ? (params.body as Record<string, unknown>)
+            : undefined);
+    const result = await requestCafe24WithRetry(cfg, ctx, pathValue, { method, query, body });
     if (!result.ok) {
       return { status: "error", error: { code: "CAFE24_ERROR", message: result.error } };
     }
@@ -1490,9 +1779,72 @@ const adapters: Record<string, ToolAdapter> = {
 export async function callAdapter(
   key: string,
   params: Record<string, unknown>,
-  ctx?: AdapterContext
+  ctx?: AdapterContext,
+  options?: { toolName?: string }
 ): Promise<ToolCallResult> {
-  const adapter = adapters[key];
+  const normalizedKey = String(key || "").trim().toLowerCase();
+  const normalizedToolName = String(options?.toolName || "").trim();
+  let adapter = adapters[key] || adapters[normalizedKey];
+  // Prefer concrete tool adapters (e.g. list_orders, resolve_product) even when key is provider_key.
+  if (!adapter && normalizedToolName) {
+    adapter = adapters[normalizedToolName] || adapters[normalizedToolName.toLowerCase()];
+  }
+  if (!adapter && normalizedKey === "cafe24") {
+    adapter = async (incomingParams, incomingCtx) =>
+      adapters.cafe24_admin_request(
+        {
+          ...incomingParams,
+          method: String(incomingParams.method || "GET")
+            .trim()
+            .toUpperCase(),
+        },
+        incomingCtx
+      );
+  }
+  if (!adapter && normalizedKey === "juso") {
+    if (normalizedToolName && normalizedToolName !== "search_address") {
+      return {
+        status: "error",
+        error: { code: "ADAPTER_NOT_FOUND", message: `tool ${normalizedToolName} is not supported for provider ${normalizedKey}` },
+      };
+    }
+    adapter = adapters.search_address;
+  }
+  if (!adapter && normalizedKey === "solapi") {
+    if (normalizedToolName === "send_otp") adapter = adapters.send_otp;
+    if (normalizedToolName === "verify_otp") adapter = adapters.verify_otp;
+    if (!adapter) {
+      return {
+        status: "error",
+        error: { code: "ADAPTER_NOT_FOUND", message: `tool ${normalizedToolName || "-"} is not supported for provider ${normalizedKey}` },
+      };
+    }
+  }
+  if (!adapter) {
+    const scope = adapterKeyToCafe24Scope(key);
+    if (scope) {
+      adapter = async (incomingParams, incomingCtx) => {
+        const isReadScope = scope.includes(".read_");
+        const method = String(incomingParams.method || (isReadScope ? "GET" : "POST"))
+          .trim()
+          .toUpperCase();
+        if (isReadScope && method !== "GET") {
+          return {
+            status: "error",
+            error: { code: "INVALID_INPUT", message: `${key} supports only GET` },
+          };
+        }
+        return adapters.cafe24_admin_request(
+          {
+            ...incomingParams,
+            method,
+            required_scope: scope,
+          },
+          incomingCtx
+        );
+      };
+    }
+  }
   if (!adapter) {
     return { status: "error", error: { code: "ADAPTER_NOT_FOUND", message: `adapter ${key} not found` } };
   }

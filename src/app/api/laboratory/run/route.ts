@@ -1,13 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 function normalizeRoute(value?: string | null) {
-  if (!value) return "/api/playground/shipping";
-  if (value === "legacy" || value === "/api/playground/chat") return "/api/playground/chat";
-  if (value === "shipping") return "/api/playground/shipping";
-  if (value === "orchestration") return "/api/playground/orchestration";
-  if (value === "/api/playground/shipping") return "/api/playground/shipping";
-  if (value === "/api/playground/orchestration") return "/api/playground/orchestration";
-  return "/api/playground/shipping";
+  // Runtime chat is now a single core endpoint.
+  if (!value) return "/api/runtime/chat";
+  return "/api/runtime/chat";
 }
 
 export async function POST(req: NextRequest) {
@@ -21,6 +17,15 @@ export async function POST(req: NextRequest) {
     const targetUrl = new URL(targetPath, req.nextUrl.origin);
     const authHeader = req.headers.get("authorization") || "";
     const cookieHeader = req.headers.get("cookie") || "";
+    const requestToolIds = Array.isArray(body.mcp_tool_ids) ? body.mcp_tool_ids : [];
+    const requestProviderKeys = Array.isArray(body.mcp_provider_keys) ? body.mcp_provider_keys : [];
+    const mergedMcpSelectors = Array.from(
+      new Set(
+        [...requestToolIds, ...requestProviderKeys]
+          .map((value) => String(value).trim())
+          .filter(Boolean)
+      )
+    );
 
     const res = await fetch(targetUrl.toString(), {
       method: "POST",
@@ -32,10 +37,12 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         message: String(body.message || ""),
         session_id: body.session_id || undefined,
+        agent_id: body.agent_id || undefined,
         llm: body.llm,
         kb_id: body.kb_id,
         admin_kb_ids: Array.isArray(body.admin_kb_ids) ? body.admin_kb_ids : [],
-        mcp_tool_ids: Array.isArray(body.mcp_tool_ids) ? body.mcp_tool_ids : [],
+        mcp_tool_ids: mergedMcpSelectors,
+        mcp_provider_keys: requestProviderKeys,
         mode: body.mode,
       }),
     });
@@ -43,7 +50,7 @@ export async function POST(req: NextRequest) {
     const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
   } catch (error) {
-    console.error("[labolatory/run] proxy failed", error);
+    console.error("[laboratory/run] proxy failed", error);
     return NextResponse.json(
       {
         step: "final",

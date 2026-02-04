@@ -212,7 +212,7 @@ export default function AgentsPage() {
     }
     setNoticeVisible(false);
     setNoticeLeaving(false);
-    return () => {};
+    return () => { };
   }, [issueNotice]);
 
   useEffect(() => {
@@ -319,17 +319,18 @@ export default function AgentsPage() {
         <div className="mt-4 flex items-center justify-between gap-3">
           <div className="flex gap-2">
             <Link
-              href="/app/agents/playground"
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
-            >
-              플레이그라운드
-            </Link>
-            <Link
               href="/app/agents/new"
               className="rounded-xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
             >
               <Plus className="mr-2 inline h-4 w-4" />
               새 에이전트
+            </Link>
+            <Link
+              href="/app/laboratory"
+              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
+            >
+              <Bot className="mr-2 inline h-4 w-4" />
+              실험실
             </Link>
           </div>
           <div className="text-xs text-slate-500">총 {loading ? "-" : activeAgents.length}건</div>
@@ -389,14 +390,7 @@ export default function AgentsPage() {
                         </button>
                       ) : null}
                       <Link
-                        href={`/app/agents/${encodeURIComponent(agent.id)}/playground-compare`}
-                        aria-label="비교 테스트"
-                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                      >
-                        <Bot className="h-4 w-4" />
-                      </Link>
-                      <Link
-                        href={`/app/agents/${encodeURIComponent(agent.id)}/playground`}
+                        href={`/app/laboratory?agentId=${encodeURIComponent(agent.id)}`}
                         aria-label="대화 테스트"
                         className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                       >

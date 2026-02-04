@@ -16,9 +16,9 @@
 ## 구성 요소
 
 ### 1) 실행 파이프라인(핵심)
-- Legacy 파이프라인: `src/app/api/playground/chat/route.ts`
-- MK2 파이프라인: `src/app/api/playground/chat/route_mk2.ts`
-- 파이프라인 포워딩: `src/app/api/playground/chat_mk2/route.ts`
+- Legacy 파이프라인: `src/app/api/runtime/chat/legacy/route.ts`
+- MK2 파이프라인: `src/app/api/runtime/chat/legacy/route_mk2.ts`
+- 파이프라인 포워딩: `src/app/api/runtime/chat/shipping/route.ts`
 
 이 라우트들이 **실제 답변 생성 파이프라인**을 담당합니다.
 입력 처리 → 정책 평가 → MCP 호출 → KB+LLM 응답 → 로그/세션 저장의 흐름이 여기에 구현되어 있습니다.
@@ -69,6 +69,6 @@ MCP는 실제 운영 연동(주문 조회, 티켓 생성 등)을 담당합니다
 좌/우 조합으로 LLM/KB/MCP/실행 파이프라인 성과를 비교합니다.
 
 ## 요약
-24시간 AI 콜센터의 실제 동작은 **Playground 파이프라인(legacy/mk2)**에서 구현되며,
+24시간 AI 콜센터의 실제 동작은 **Runtime 파이프라인(legacy/mk2)**에서 구현되며,
 에이전트는 **LLM+KB+MCP+실행 파이프라인 조합**으로 구성됩니다.
 정책/로그/도구 호출 레이어가 함께 동작해야 운영 가능한 콜센터가 됩니다.

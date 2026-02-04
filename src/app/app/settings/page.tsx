@@ -10,8 +10,9 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
 import { ExternalLink, Eye, EyeOff, Pencil } from "lucide-react";
 import { toast } from "sonner";
+import { PerformanceSettingsPanel } from "@/components/settings/PerformanceSettingsPanel";
 
-type TabKey = "profile" | "workspaces" | "team" | "audit" | "env";
+type TabKey = "profile" | "workspaces" | "team" | "audit" | "env" | "performance";
 type ProviderKey = "cafe24" | "shopify";
 
 type Cafe24ProviderDraft = {
@@ -156,6 +157,7 @@ export default function SettingsPage() {
     ];
     if (isAdmin) {
       base.push({ key: "env", label: "환경 변수" });
+      base.push({ key: "performance", label: "성능" });
     }
     return base;
   }, [isAdmin]);
@@ -949,6 +951,8 @@ export default function SettingsPage() {
                 </Card>
               ))}
             </div>
+          ) : tab === "performance" && isAdmin ? (
+            <PerformanceSettingsPanel />
           ) : tab === "env" && isAdmin ? (
             <div className="space-y-4">
               <Card className="p-4">
