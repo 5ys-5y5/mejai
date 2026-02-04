@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { AlertTriangle, Bot, Check, Copy, ExternalLink, Info, Minus, Plus, RefreshCw, Send, Trash2, User, X } from "lucide-react";
+import { AlertTriangle, Bot, Check, Copy, CornerDownRight, ExternalLink, Info, Loader2, Minus, Plus, RefreshCw, Send, Settings2, Trash2, User, X } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -43,7 +43,10 @@ type ChatMessage = {
   id: string;
   role: "user" | "bot";
   content: string;
+  richHtml?: string;
   turnId?: string | null;
+  isLoading?: boolean;
+  loadingLogs?: string[];
   quickReplies?: Array<{ label: string; value: string }>;
   productCards?: Array<{
     id: string;
@@ -165,6 +168,9 @@ type ModelState = {
   conversationMode: ConversationMode;
   editSessionId: string | null;
   setupMode: SetupMode;
+  adminLogControlsOpen: boolean;
+  showAdminLogs: boolean;
+  chatSelectionEnabled: boolean;
 };
 
 const MAX_MODELS = 5;
@@ -172,6 +178,10 @@ const WS_URL = process.env.NEXT_PUBLIC_CALL_WS_URL || "";
 const EXPANDED_PANEL_HEIGHT = 600;
 function makeId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function makeTraceId(prefix: string) {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function toTimestamp(value?: string | null) {
@@ -184,6 +194,60 @@ function renderBotContent(content: string) {
   if (!content.includes("debug_prefix")) return content;
   const html = content.replace(/\n/g, "<br/>");
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
+}
+
+function renderStructuredChoiceContent(content: string) {
+  if (!content) return null;
+  const lines = content
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return null;
+  const items = lines
+    .map((line) => {
+      const match = line.match(/^-\s*(\d{1,2})번\s*\|\s*(.+)$/);
+      if (!match) return null;
+      const idx = match[1];
+      const cols = String(match[2] || "")
+        .split("|")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      if (cols.length === 0) return null;
+      return { idx, cols };
+    })
+    .filter((row): row is { idx: string; cols: string[] } => Boolean(row));
+  if (items.length === 0) return null;
+  const example = lines.find((line) => /^예\s*:/.test(line));
+  return (
+    <div className="space-y-2">
+      <div className="font-semibold text-slate-700">{lines[0]}</div>
+      <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+        <table className="w-full table-fixed border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-100 text-slate-600">
+              <th className="w-12 border-b border-slate-200 px-2 py-1.5 text-center font-semibold">번호</th>
+              <th className="border-b border-slate-200 px-2 py-1.5 text-left font-semibold">항목</th>
+              <th className="w-28 border-b border-slate-200 px-2 py-1.5 text-left font-semibold">상세</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((row) => {
+              const main = row.cols[0] || "";
+              const detail = row.cols.slice(1).join(" / ");
+              return (
+                <tr key={`${row.idx}-${row.cols.join("|")}`} className="text-slate-700">
+                  <td className="border-b border-slate-100 px-2 py-1.5 text-center font-semibold">{row.idx}</td>
+                  <td className="border-b border-slate-100 px-2 py-1.5 break-words">{main}</td>
+                  <td className="border-b border-slate-100 px-2 py-1.5 text-slate-500 break-words">{detail || "-"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {example ? <div className="text-[11px] text-slate-500">입력 예시: {example.replace(/^예\s*:\s*/, "")}</div> : null}
+    </div>
+  );
 }
 
 function getDebugParts(content: string) {
@@ -386,7 +450,20 @@ function isEventIssue(log: MessageLogBundle["event_logs"][number]) {
 
 function getDebugEntryMap(log: MessageLogBundle["debug_logs"][number]) {
   const entries = Array.isArray(log.prefix_json?.entries) ? log.prefix_json?.entries : [];
-  return new Map(entries.map((entry: any) => [String(entry.key), String(entry.value ?? "")]));
+  const map = new Map(entries.map((entry: any) => [String(entry.key), String(entry.value ?? "")]));
+  const prefix = (log.prefix_json || {}) as Record<string, unknown>;
+  const mcp = (prefix.mcp || {}) as Record<string, unknown>;
+  const mcpLast = (mcp.last || {}) as Record<string, unknown>;
+  if (!map.has("MCP.last_function") && typeof mcpLast.function === "string") {
+    map.set("MCP.last_function", String(mcpLast.function));
+  }
+  if (!map.has("MCP.last_status") && typeof mcpLast.status === "string") {
+    map.set("MCP.last_status", String(mcpLast.status));
+  }
+  if (!map.has("MCP.last_error") && mcpLast.error !== undefined && mcpLast.error !== null) {
+    map.set("MCP.last_error", String(mcpLast.error));
+  }
+  return map;
 }
 
 function buildIssueSummary(bundle?: MessageLogBundle, turnId?: string | null) {
@@ -509,6 +586,9 @@ function createDefaultModel(): ModelState {
     conversationMode: "new",
     editSessionId: null,
     setupMode: "existing",
+    adminLogControlsOpen: false,
+    showAdminLogs: true,
+    chatSelectionEnabled: true,
   };
 }
 
@@ -560,6 +640,25 @@ function describeLlm(llm: string) {
   return "모델 정보 없음.";
 }
 
+function parseLeadDayValue(value: string) {
+  const m = String(value || "").match(/\d+/);
+  if (!m) return null;
+  const n = Number(m[0]);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function isLeadDaySelectionPrompt(content: string, quickReplies: Array<{ label: string; value: string }>) {
+  if (!content || !quickReplies || quickReplies.length === 0) return false;
+  if (content.includes("예약 알림일을 선택해 주세요")) return true;
+  return quickReplies.every((item) => /^D-\d+$/i.test(String(item.label || "").trim()));
+}
+
+function parseMinLeadDayRequired(content: string) {
+  const m = String(content || "").match(/최소\s*(\d+)/);
+  const n = m ? Number(m[1]) : 1;
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
 export default function LabolatoryPage() {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -568,10 +667,13 @@ export default function LabolatoryPage() {
   const [mcpProviders, setMcpProviders] = useState<McpProvider[]>([]);
   const [tools, setTools] = useState<MpcTool[]>([]);
   const [agents, setAgents] = useState<AgentItem[]>([]);
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const [wsStatus, setWsStatus] = useState("연결 대기");
   const wsRef = useRef<WebSocket | null>(null);
 
   const [models, setModels] = useState<ModelState[]>(() => [createDefaultModel()]);
+  const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
+  const [lockedReplySelections, setLockedReplySelections] = useState<Record<string, string[]>>({});
   const initialAgentSelectionAppliedRef = useRef(false);
   const chatScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const leftPaneRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -585,14 +687,18 @@ export default function LabolatoryPage() {
       setLoading(true);
       setError(null);
       try {
-        const [kbRes, mcpRes, agentRes] = await Promise.all([
+        const [kbRes, agentRes, profileRes] = await Promise.all([
           apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
-          apiFetch<{ providers?: McpProvider[] }>("/api/mcp").catch(() => ({ providers: [] })),
           apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200").catch(() => ({ items: [] })),
+          apiFetch<{ is_admin?: boolean }>("/api/user-profile").catch(() => ({ is_admin: false })),
         ]);
+        const mcpRes = await apiFetch<{ providers?: McpProvider[] }>("/api/mcp").catch(() => ({
+          providers: [],
+        }));
         if (!mounted) return;
         setKbItems(kbRes.items || []);
         setAgents(agentRes.items || []);
+        setIsAdminUser(Boolean(profileRes?.is_admin));
         const providers = mcpRes.providers || [];
         setMcpProviders(providers);
         const flattened = providers.flatMap((provider) =>
@@ -754,6 +860,11 @@ export default function LabolatoryPage() {
       description: `${kb.applies_to_user ? "적용됨" : "미적용"} · ${makeSnippet(kb.content)}`,
     }));
   }, [kbItems]);
+  const adminKbIdSet = useMemo(() => new Set(kbItems.filter((kb) => kb.is_admin).map((kb) => kb.id)), [kbItems]);
+  const latestAdminKbId = useMemo(
+    () => kbItems.find((kb) => kb.is_admin && kb.applies_to_user !== false)?.id || kbItems.find((kb) => kb.is_admin)?.id || "",
+    [kbItems]
+  );
 
   const providerOptions = useMemo<SelectOption[]>(() => {
     return mcpProviders.map((provider) => ({
@@ -905,6 +1016,29 @@ export default function LabolatoryPage() {
       return [...prev, createDefaultModel()];
     });
   };
+
+  useEffect(() => {
+    if (!isAdminUser || !latestAdminKbId) return;
+    setModels((prev) => {
+      let changed = false;
+      const next = prev.map((model) => {
+        if (model.setupMode !== "new") return model;
+        const hasValidAdminKb =
+          model.config.adminKbIds.length > 0 &&
+          model.config.adminKbIds.some((id) => adminKbIdSet.has(id));
+        if (hasValidAdminKb) return model;
+        changed = true;
+        return {
+          ...model,
+          config: {
+            ...model.config,
+            adminKbIds: [latestAdminKbId],
+          },
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [adminKbIdSet, isAdminUser, latestAdminKbId]);
 
   const handleRemoveModel = (id: string) => {
     setModels((prev) => {
@@ -1104,36 +1238,74 @@ export default function LabolatoryPage() {
     config: ModelConfig,
     sessionId: string | null,
     message: string,
-    selectedAgentId?: string
+    selectedAgentId?: string,
+    hooks?: { onProgress?: (line: string) => void }
   ) => {
-    return apiFetch<{
-      session_id: string;
-      message?: string;
-      turn_id?: string | null;
-      quick_replies?: Array<{ label?: string; value?: string }>;
-      product_cards?: Array<{
-        id?: string;
-        title?: string;
-        subtitle?: string;
-        description?: string;
-        image_url?: string | null;
-        value?: string;
-      }>;
-    }>("/api/laboratory/run", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        route: config.route,
-        llm: config.llm,
-        kb_id: config.kbId,
-        admin_kb_ids: config.adminKbIds,
-        mcp_tool_ids: config.mcpToolIds,
-        mcp_provider_keys: config.mcpProviderKeys,
-        message,
-        session_id: sessionId || undefined,
-        agent_id: selectedAgentId || undefined,
-      }),
+    const traceId = makeTraceId("labc");
+    const startedAt = performance.now();
+    hooks?.onProgress?.(`요청 시작 (trace=${traceId})`);
+    console.info("[laboratory/client][timing]", {
+      trace_id: traceId,
+      phase: "request_start",
+      is_first_turn: !sessionId,
+      has_agent_id: Boolean(selectedAgentId),
+      message_len: message.length,
     });
+    try {
+      const res = await apiFetch<{
+        session_id: string;
+        trace_id?: string;
+        message?: string;
+        rich_message_html?: string;
+        turn_id?: string | null;
+        quick_replies?: Array<{ label?: string; value?: string }>;
+        product_cards?: Array<{
+          id?: string;
+          title?: string;
+          subtitle?: string;
+          description?: string;
+          image_url?: string | null;
+          value?: string;
+        }>;
+      }>("/api/laboratory/run", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-runtime-trace-id": traceId,
+        },
+        body: JSON.stringify({
+          route: config.route,
+          llm: config.llm,
+          kb_id: config.kbId,
+          admin_kb_ids: config.adminKbIds,
+          mcp_tool_ids: config.mcpToolIds,
+          mcp_provider_keys: config.mcpProviderKeys,
+          message,
+          session_id: sessionId || undefined,
+          agent_id: selectedAgentId || undefined,
+        }),
+      });
+      console.info("[laboratory/client][timing]", {
+        trace_id: traceId,
+        phase: "request_done",
+        total_ms: Number((performance.now() - startedAt).toFixed(1)),
+        session_id: res.session_id || null,
+        turn_id: res.turn_id || null,
+      });
+      hooks?.onProgress?.(
+        `응답 수신 (${Number((performance.now() - startedAt).toFixed(1))}ms, session=${res.session_id || "-"})`
+      );
+      return res;
+    } catch (error) {
+      console.info("[laboratory/client][timing]", {
+        trace_id: traceId,
+        phase: "request_failed",
+        total_ms: Number((performance.now() - startedAt).toFixed(1)),
+        error: error instanceof Error ? error.message : String(error),
+      });
+      hooks?.onProgress?.(`요청 실패: ${error instanceof Error ? error.message : String(error)}`);
+      throw error;
+    }
   };
 
   const submitMessage = async (modelId: string, text: string) => {
@@ -1149,7 +1321,7 @@ export default function LabolatoryPage() {
       return;
     }
     if (target.conversationMode === "history") return;
-    if (!target.config.kbId) {
+    if (target.setupMode === "existing" && !target.config.kbId) {
       toast.error("KB를 선택하세요.");
       return;
     }
@@ -1160,76 +1332,159 @@ export default function LabolatoryPage() {
     }));
 
     const userMessage = { id: makeId(), role: "user" as const, content: text };
+    const loadingMessageId = makeId();
+    const loadingStartedAt = Date.now();
+    const appendLoadingLog = (line: string) => {
+      if (!isAdminUser) return;
+      const safe = String(line || "").trim();
+      if (!safe) return;
+      updateModel(modelId, (model) => ({
+        ...model,
+        messages: model.messages.map((msg) => {
+          if (msg.id !== loadingMessageId || msg.role !== "bot" || !msg.isLoading) return msg;
+          const nextLogs = [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} ${safe}`].slice(-12);
+          return { ...msg, loadingLogs: nextLogs };
+        }),
+      }));
+    };
     updateModel(modelId, (model) => ({
       ...model,
-      messages: [...model.messages, userMessage],
+      messages: [
+        ...model.messages,
+        userMessage,
+        {
+          id: loadingMessageId,
+          role: "bot",
+          content: "답변 생성 중...",
+          isLoading: true,
+          loadingLogs: isAdminUser ? ["요청 준비 중..."] : undefined,
+        },
+      ],
     }));
+    appendLoadingLog("요청 페이로드 구성 완료");
 
-    // In "new" mode, the first turn creates a session, and subsequent turns must reuse it.
-    const activeSessionId =
-      target.conversationMode === "new" ? target.sessionId : await ensureEditableSession(target);
+    const loadingTicker = isAdminUser
+      ? window.setInterval(() => {
+        const elapsedSec = Math.max(1, Math.floor((Date.now() - loadingStartedAt) / 1000));
+        appendLoadingLog(`응답 대기 중... ${elapsedSec}s`);
+      }, 2500)
+      : null;
 
-    const result = await sendMessage(target.config, activeSessionId, text, target.selectedAgentId).then(
-      (value) => ({ status: "fulfilled" as const, value }),
-      (reason) => ({ status: "rejected" as const, reason })
-    );
+    try {
+      // In "new" mode, the first turn creates a session, and subsequent turns must reuse it.
+      const activeSessionId =
+        target.conversationMode === "new" ? target.sessionId : await ensureEditableSession(target);
+      appendLoadingLog(activeSessionId ? `기존 세션 사용: ${activeSessionId}` : "신규 세션으로 요청");
 
-    if (result.status === "fulfilled") {
-      const res = result.value;
-      const botMessageId = res.message ? makeId() : null;
-      const quickReplies = Array.isArray(res.quick_replies)
-        ? res.quick_replies
-          .map((item) => ({
-            label: String(item?.label || item?.value || "").trim(),
-            value: String(item?.value || item?.label || "").trim(),
-          }))
-          .filter((item) => item.label && item.value)
-        : [];
-      const productCards = Array.isArray(res.product_cards)
-        ? res.product_cards
-          .map((item, idx) => ({
-            id: String(item?.id || `card-${idx}`).trim(),
-            title: String(item?.title || "").trim(),
-            subtitle: String(item?.subtitle || "").trim(),
-            description: String(item?.description || "").trim(),
-            imageUrl: String(item?.image_url || "").trim(),
-            value: String(item?.value || "").trim(),
-          }))
-          .filter((item) => item.title && item.value)
-        : [];
-      updateModel(modelId, (model) => ({
-        ...model,
-        sessionId: res.session_id || model.sessionId,
-        messages: botMessageId
-          ? [
-            ...model.messages,
-            {
-              id: botMessageId,
+      const result = await sendMessage(
+        target.config,
+        activeSessionId,
+        text,
+        target.selectedAgentId,
+        { onProgress: appendLoadingLog }
+      ).then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (reason) => ({ status: "rejected" as const, reason })
+      );
+
+      if (result.status === "fulfilled") {
+        const res = result.value;
+        const botMessageId = res.message ? loadingMessageId : null;
+        const quickReplies = Array.isArray(res.quick_replies)
+          ? res.quick_replies
+            .map((item) => ({
+              label: String(item?.label || item?.value || "").trim(),
+              value: String(item?.value || item?.label || "").trim(),
+            }))
+            .filter((item) => item.label && item.value)
+          : [];
+        const productCards = Array.isArray(res.product_cards)
+          ? res.product_cards
+            .map((item, idx) => ({
+              id: String(item?.id || `card-${idx}`).trim(),
+              title: String(item?.title || "").trim(),
+              subtitle: String(item?.subtitle || "").trim(),
+              description: String(item?.description || "").trim(),
+              imageUrl: String(item?.image_url || "").trim(),
+              value: String(item?.value || "").trim(),
+            }))
+            .filter((item) => item.title && item.value)
+          : [];
+        updateModel(modelId, (model) => ({
+          ...model,
+          sessionId: res.session_id || model.sessionId,
+          messages: model.messages.map((msg) => {
+            if (msg.id !== loadingMessageId || msg.role !== "bot") return msg;
+            if (!res.message) {
+              return { ...msg, isLoading: false, content: "" };
+            }
+            const persistedLogs = isAdminUser
+              ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} 답변 생성 완료`].slice(-20)
+              : undefined;
+            return {
+              id: loadingMessageId,
               role: "bot",
               content: res.message || "",
+              richHtml: typeof res.rich_message_html === "string" ? res.rich_message_html : undefined,
               turnId: res.turn_id || null,
+              isLoading: false,
+              loadingLogs: persistedLogs,
               quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
               productCards: productCards.length > 0 ? productCards : undefined,
-            },
-          ]
-          : model.messages,
-        sending: false,
-      }));
-      if (botMessageId) {
-        await loadLogs(modelId, botMessageId, res.session_id || target.sessionId);
+            };
+          }).filter((msg) => !(msg.id === loadingMessageId && msg.role === "bot" && !msg.content)),
+          sending: false,
+        }));
+        if (botMessageId) {
+          await loadLogs(modelId, botMessageId, res.session_id || target.sessionId);
+        }
+      } else {
+        updateModel(modelId, (model) => ({
+          ...model,
+          messages: model.messages.map((msg) =>
+            msg.id === loadingMessageId && msg.role === "bot"
+              ? {
+                ...msg,
+                isLoading: false,
+                content: "응답 실패",
+                loadingLogs: isAdminUser
+                  ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} 응답 실패`].slice(-20)
+                  : undefined,
+              }
+              : msg
+          ),
+          sending: false,
+        }));
+        toast.error("응답에 실패했습니다.");
       }
-    } else {
+    } catch (err) {
       updateModel(modelId, (model) => ({
         ...model,
-        messages: [...model.messages, { id: makeId(), role: "bot", content: "응답 실패" }],
+        messages: model.messages.map((msg) =>
+          msg.id === loadingMessageId && msg.role === "bot"
+            ? {
+              ...msg,
+              isLoading: false,
+              content: err instanceof Error ? `응답 실패: ${err.message}` : "응답 실패",
+              loadingLogs: isAdminUser
+                ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} 예외 발생`].slice(-20)
+                : undefined,
+            }
+            : msg
+        ),
         sending: false,
       }));
       toast.error("응답에 실패했습니다.");
+    } finally {
+      if (loadingTicker) {
+        window.clearInterval(loadingTicker);
+      }
     }
   };
 
   const toggleMessageSelection = (modelId: string, messageId: string) => {
     updateModel(modelId, (model) => {
+      if (!model.chatSelectionEnabled) return model;
       const exists = model.selectedMessageIds.includes(messageId);
       return {
         ...model,
@@ -1340,12 +1595,11 @@ export default function LabolatoryPage() {
       const getDebugFunctions = () => {
         const functions = new Set<string>();
         allDebugLogs.forEach((log) => {
-          const entries = Array.isArray((log.prefix_json as any)?.entries) ? (log.prefix_json as any).entries : [];
-          entries.forEach((entry: any) => {
-            if (String(entry.key) === "MCP.last_function" && entry.value && entry.value !== "-") {
-              functions.add(String(entry.value));
-            }
-          });
+          const map = getDebugEntryMap(log);
+          const lastFunction = map.get("MCP.last_function");
+          if (lastFunction && lastFunction !== "-" && lastFunction !== "none") {
+            functions.add(lastFunction);
+          }
         });
         return Array.from(functions);
       };
@@ -1414,16 +1668,17 @@ export default function LabolatoryPage() {
         } else {
           expected.debug_functions.forEach((fn) => {
             const logs = allDebugLogs.filter((log) => {
-              const entries = Array.isArray((log.prefix_json as any)?.entries) ? (log.prefix_json as any).entries : [];
-              return entries.some((entry: any) => entry.key === "MCP.last_function" && entry.value === fn);
+              const map = getDebugEntryMap(log);
+              return map.get("MCP.last_function") === fn;
             });
             const missing = logs.some((log) => {
               const prefix = log.prefix_json as any;
               const entries = Array.isArray(prefix?.entries) ? prefix.entries : [];
-              return !prefix || entries.length === 0;
+              const map = getDebugEntryMap(log);
+              return !prefix || (entries.length === 0 && !map.get("MCP.last_function"));
             });
             if (missing) {
-              const reasons = ["prefix_json.entries 누락"];
+              const reasons = ["MCP.last_function 누락"];
               incomplete.set(`debug.${fn}`, reasons);
             } else {
               completed.add(`debug.${fn}`);
@@ -1618,9 +1873,11 @@ export default function LabolatoryPage() {
           ) : null}
           {error ? <div className="text-sm text-rose-600">{error}</div> : null}
           {!loading && !error && kbItems.length === 0 ? (
-            <div className="text-sm text-slate-500">비교할 KB가 없습니다.</div>
+            <div className="text-sm text-slate-500">
+              비교할 KB가 없습니다. 신규 모델은 KB 없이도 실행할 수 있고, 기존 모델은 KB/에이전트가 필요합니다.
+            </div>
           ) : null}
-          {!loading && !error && kbItems.length > 0 ? (
+          {!loading && !error ? (
             models.map((model, index) => {
               const filteredToolOptions = toolOptions.filter((option) => {
                 if (model.config.mcpProviderKeys.length === 0) return false;
@@ -1768,6 +2025,10 @@ export default function LabolatoryPage() {
                                   historyMessages: [],
                                   editSessionId: null,
                                   sessionId: null,
+                                  config: {
+                                    ...m.config,
+                                    adminKbIds: isAdminUser && latestAdminKbId ? [latestAdminKbId] : [],
+                                  },
                                 }))
                               }
                               className={cn(
@@ -1965,58 +2226,65 @@ export default function LabolatoryPage() {
                                 />
                               ) : null}
                             </div>
-                            <div>
-                              <div className="mb-1 text-[11px] font-semibold text-slate-600">관리자 KB 선택</div>
-                              <div className="flex items-center gap-2">
-                                <MultiSelectPopover
-                                  values={model.config.adminKbIds}
-                                  onChange={(values) => {
-                                    updateModel(model.id, (m) => ({
-                                      ...m,
-                                      config: { ...m.config, adminKbIds: values },
-                                    }));
-                                    resetModel(model.id);
-                                  }}
-                                  options={adminKbOptions}
-                                  placeholder="관리자 KB 선택"
-                                  displayMode="count"
-                                  showBulkActions
-                                  className="flex-1 min-w-0"
-                                />
-                                <button
-                                  type="button"
-                                  className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-                                  onClick={() =>
-                                    updateModel(model.id, (m) => ({
-                                      ...m,
-                                      detailsOpen: { ...m.detailsOpen, adminKb: !m.detailsOpen.adminKb },
-                                    }))
-                                  }
-                                  aria-label="관리자 KB 정보"
-                                >
-                                  <Info className="h-4 w-4" />
-                                </button>
+                            {isAdminUser ? (
+                              <div>
+                                <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+                                  <span>관리자 KB 선택</span>
+                                  <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                                    ADMIN
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <MultiSelectPopover
+                                    values={model.config.adminKbIds}
+                                    onChange={(values) => {
+                                      updateModel(model.id, (m) => ({
+                                        ...m,
+                                        config: { ...m.config, adminKbIds: values },
+                                      }));
+                                      resetModel(model.id);
+                                    }}
+                                    options={adminKbOptions}
+                                    placeholder="관리자 KB 선택"
+                                    displayMode="count"
+                                    showBulkActions
+                                    className="flex-1 min-w-0"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+                                    onClick={() =>
+                                      updateModel(model.id, (m) => ({
+                                        ...m,
+                                        detailsOpen: { ...m.detailsOpen, adminKb: !m.detailsOpen.adminKb },
+                                      }))
+                                    }
+                                    aria-label="관리자 KB 정보"
+                                  >
+                                    <Info className="h-4 w-4" />
+                                  </button>
+                                </div>
+                                {model.detailsOpen.adminKb ? (
+                                  <textarea
+                                    readOnly
+                                    value={
+                                      model.config.adminKbIds.length === 0
+                                        ? "선택된 관리자 KB 없음"
+                                        : model.config.adminKbIds
+                                          .map((id) => {
+                                            const kb = kbItems.find((item) => item.id === id);
+                                            if (!kb) return null;
+                                            const status = kb.applies_to_user ? "적용됨" : "미적용";
+                                            return `• ${kb.title} (${status})\n${kb.content || "내용 없음"}`;
+                                          })
+                                          .filter(Boolean)
+                                          .join("\n\n")
+                                    }
+                                    className="mt-2 min-h-[80px] w-full resize-y rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap break-words"
+                                  />
+                                ) : null}
                               </div>
-                              {model.detailsOpen.adminKb ? (
-                                <textarea
-                                  readOnly
-                                  value={
-                                    model.config.adminKbIds.length === 0
-                                      ? "선택된 관리자 KB 없음"
-                                      : model.config.adminKbIds
-                                        .map((id) => {
-                                          const kb = kbItems.find((item) => item.id === id);
-                                          if (!kb) return null;
-                                          const status = kb.applies_to_user ? "적용됨" : "미적용";
-                                          return `• ${kb.title} (${status})\n${kb.content || "내용 없음"}`;
-                                        })
-                                        .filter(Boolean)
-                                        .join("\n\n")
-                                  }
-                                  className="mt-2 min-h-[80px] w-full resize-y rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap break-words"
-                                />
-                              ) : null}
-                            </div>
+                            ) : null}
                             <div>
                               <div className="mb-1 text-[11px] font-semibold text-slate-600">MCP 프로바이더 선택</div>
                               <div className="flex items-center gap-2">
@@ -2162,121 +2430,383 @@ export default function LabolatoryPage() {
                       }
                     >
                       <div className="relative flex-1 min-h-0 overflow-hidden">
+                        {isAdminUser ? (
+                          <div className="absolute right-2 top-2 z-20">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateModel(model.id, (m) => ({
+                                  ...m,
+                                  adminLogControlsOpen: !m.adminLogControlsOpen,
+                                }))
+                              }
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                              aria-label="로그 설정"
+                              title="로그 설정"
+                            >
+                              <Settings2 className="h-4 w-4" />
+                            </button>
+                            {model.adminLogControlsOpen ? (
+                              <div className="absolute right-0 mt-1 w-36 rounded-md border border-slate-200 bg-white p-1.5 shadow-sm">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateModel(model.id, (m) => ({
+                                      ...m,
+                                      chatSelectionEnabled: !m.chatSelectionEnabled,
+                                      selectedMessageIds: !m.chatSelectionEnabled ? m.selectedMessageIds : [],
+                                    }))
+                                  }
+                                  className={cn(
+                                    "mb-1 w-full rounded-md border px-2 py-1 text-[11px] font-semibold",
+                                    model.chatSelectionEnabled
+                                      ? "border-slate-900 bg-slate-900 text-white"
+                                      : "border-slate-300 bg-white text-slate-600"
+                                  )}
+                                >
+                                  선택 {model.chatSelectionEnabled ? "ON" : "OFF"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    updateModel(model.id, (m) => ({
+                                      ...m,
+                                      showAdminLogs: !m.showAdminLogs,
+                                    }))
+                                  }
+                                  className={cn(
+                                    "w-full rounded-md border px-2 py-1 text-[11px] font-semibold",
+                                    model.showAdminLogs
+                                      ? "border-slate-900 bg-slate-900 text-white"
+                                      : "border-slate-300 bg-white text-slate-600"
+                                  )}
+                                >
+                                  로그 {model.showAdminLogs ? "ON" : "OFF"}
+                                </button>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                         <div
                           ref={(el) => {
                             chatScrollRefs.current[model.id] = el;
                           }}
-                          className="relative z-0 h-full space-y-4 overflow-auto pr-2 pl-2 pt-2 pb-4 scrollbar-hide bg-slate-50 rounded-xl"
+                          className={cn(
+                            "relative z-0 h-full space-y-4 overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-t-xl rounded-b-none",
+                            isAdminUser ? "pt-10" : "pt-2"
+                          )}
                         >
-                          {visibleMessages.map((msg) => {
-                            const hasDebug = msg.role === "bot" && msg.content.includes("debug_prefix");
-                            const debugParts = hasDebug ? getDebugParts(msg.content) : null;
-                            const isSelected = model.selectedMessageIds.includes(msg.id);
-                            return (
+                          {(() => {
+                            const latestVisibleMessageId = visibleMessages[visibleMessages.length - 1]?.id || "";
+                            return visibleMessages.map((msg) => {
+                              const isLatestVisibleMessage = msg.id === latestVisibleMessageId;
+                              const hasDebug = msg.role === "bot" && msg.content.includes("debug_prefix");
+                              const debugParts = hasDebug ? getDebugParts(msg.content) : null;
+                              const isSelected = model.selectedMessageIds.includes(msg.id);
+                              return (
                               <div
                                 key={msg.id}
-                                className={cn("flex gap-3", msg.role === "user" ? "justify-end" : "justify-start")}
+                                className={cn(
+                                  "flex gap-3",
+                                  msg.role === "user" ? "justify-end" : "justify-start",
+                                  model.chatSelectionEnabled && isSelected && "rounded-xl bg-amber-200 px-1 py-1"
+                                )}
                               >
+                          
                                 {msg.role === "bot" ? (
                                   <div
                                     className={cn(
-                                      "h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center",
-                                      isSelected && "ring-2 ring-emerald-400"
+                                      "h-8 w-8 rounded-full border flex items-center justify-center",
+                                      isSelected
+                                        ? "border-slate-900 bg-slate-900"
+                                        : "border-slate-200 bg-white"
                                     )}
                                   >
                                     {isSelected ? (
-                                      <Check className="h-4 w-4 text-emerald-600" />
+                                      <Check className="h-4 w-4 text-white" />
                                     ) : (
                                       <Bot className="h-4 w-4 text-slate-500" />
                                     )}
                                   </div>
                                 ) : null}
-                                <div
-                                  onClick={() => toggleMessageSelection(model.id, msg.id)}
-                                  className={cn(
-                                    "relative max-w-[75%] whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm cursor-pointer transition",
-                                    msg.role === "user"
-                                      ? "bg-slate-900 text-white"
-                                      : "bg-slate-100 text-slate-700 border border-slate-200",
-                                    isSelected && "ring-2 ring-emerald-400 ring-offset-1"
-                                  )}
-                                >
-                                  {hasDebug && debugParts ? (
-                                    debugParts.answerHtml ? (
-                                      <span dangerouslySetInnerHTML={{ __html: debugParts.answerHtml }} />
+                                <div className="relative max-w-[75%]">
+                                  <div
+                                    onClick={() => {
+                                      if (model.chatSelectionEnabled) {
+                                        toggleMessageSelection(model.id, msg.id);
+                                      }
+                                    }}
+                                    className={cn(
+                                      "relative whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm transition",
+                                      model.chatSelectionEnabled ? "cursor-pointer" : "cursor-default",
+                                      msg.role === "user"
+                                        ? "bg-slate-900 text-white"
+                                        : "bg-slate-100 text-slate-700 border border-slate-200"
+                                    )}
+                                  >
+                                    {hasDebug && debugParts ? (
+                                      debugParts.answerHtml ? (
+                                        <span dangerouslySetInnerHTML={{ __html: debugParts.answerHtml }} />
+                                      ) : (
+                                        debugParts.answerText || ""
+                                      )
+                                    ) : msg.role === "bot" && msg.isLoading ? (
+                                      <div className="space-y-2">
+                                        <div className="flex items-center gap-2 text-slate-700">
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                          <span>답변 생성 중...</span>
+                                        </div>
+                                      </div>
+                                    ) : msg.role === "bot" ? (
+                                      msg.richHtml ? (
+                                        <span dangerouslySetInnerHTML={{ __html: msg.richHtml }} />
+                                      ) : (
+                                      renderStructuredChoiceContent(msg.content) || renderBotContent(msg.content)
+                                      )
                                     ) : (
-                                      debugParts.answerText || ""
-                                    )
-                                  ) : msg.role === "bot" ? (
-                                    renderBotContent(msg.content)
-                                  ) : (
-                                    msg.content
-                                  )}
-                                  {msg.role === "bot" && msg.quickReplies && msg.quickReplies.length > 0 ? (
-                                    <div className="mt-3 flex flex-wrap gap-2">
-                                      {msg.quickReplies.map((item, idx) => (
-                                        <button
-                                          key={`${msg.id}-quick-${idx}-${item.value}`}
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            void submitMessage(model.id, item.value);
-                                          }}
-                                          disabled={model.sending}
-                                          className={cn(
-                                            "rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700",
-                                            "hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                          )}
-                                        >
-                                          {item.label}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  ) : null}
-                                  {msg.role === "bot" && msg.productCards && msg.productCards.length > 0 ? (
-                                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                                      {msg.productCards.map((card, idx) => (
-                                        <button
-                                          key={`${msg.id}-card-${card.id}-${idx}`}
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            void submitMessage(model.id, card.value);
-                                          }}
-                                          disabled={model.sending}
-                                          className={cn(
-                                            "relative text-left rounded-xl border border-slate-300 bg-white p-2 hover:bg-slate-50",
-                                            "disabled:cursor-not-allowed disabled:opacity-50"
-                                          )}
-                                        >
-                                          <span className="absolute left-2 top-2 h-5 w-5 rounded-full bg-slate-900 text-white text-[11px] font-semibold flex items-center justify-center">
-                                            {card.value}
+                                      msg.content
+                                    )}
+                                    {msg.role === "bot" &&
+                                      isAdminUser &&
+                                      model.showAdminLogs &&
+                                      msg.loadingLogs &&
+                                      msg.loadingLogs.length > 0 ? (
+                                      <div className="mt-2 rounded-md border border-slate-200 bg-white/70 px-2 py-1.5">
+                                        <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                                          <span>진행 로그</span>
+                                          <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                                            ADMIN
                                           </span>
-                                          {card.imageUrl ? (
-                                            <img
-                                              src={card.imageUrl}
-                                              alt={card.title}
-                                              className="h-24 w-full rounded-md object-cover bg-slate-100"
-                                            />
-                                          ) : (
-                                            <div className="h-24 w-full rounded-md bg-slate-100 flex items-center justify-center text-[11px] text-slate-500">
-                                              이미지 없음
+                                        </div>
+                                        <div className="space-y-1 text-[11px] text-slate-600">
+                                          {msg.loadingLogs.map((line, idx) => (
+                                            <div key={`${msg.id}-loading-log-${idx}`}>{line}</div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  {msg.role === "bot" &&
+                                    msg.quickReplies &&
+                                    msg.quickReplies.length > 0
+                                    ? (() => {
+                                      const isLeadDayPrompt = isLeadDaySelectionPrompt(msg.content, msg.quickReplies || []);
+                                      const cardValues = new Set((msg.productCards || []).map((card) => String(card.value)));
+                                      const allQuickRepliesMappedToCards =
+                                        !isLeadDayPrompt &&
+                                        !!msg.productCards?.length &&
+                                        msg.quickReplies.every((item) => cardValues.has(String(item.value)));
+                                      if (allQuickRepliesMappedToCards) {
+                                        return null;
+                                      }
+
+                                      const draftKey = `${model.id}:${msg.id}:quick`;
+                                      const selected = quickReplyDrafts[draftKey] || [];
+                                      const locked = lockedReplySelections[draftKey] || [];
+                                      const effectiveSelection = locked.length > 0 ? locked : selected;
+                                      const isLocked = locked.length > 0;
+                                      const minRequired = isLeadDayPrompt ? parseMinLeadDayRequired(msg.content) : 1;
+                                      const canConfirm = !isLocked && selected.length >= minRequired;
+
+                                      return (
+                                        <>
+                                          <div className="mt-[5px]">
+                                            <div
+                                              className="grid gap-2"
+                                              style={{
+                                                gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, msg.quickReplies.length))}, minmax(0, 1fr))`,
+                                              }}
+                                            >
+                                              {msg.quickReplies.map((item, idx) => {
+                                                const num = parseLeadDayValue(item.value);
+                                                const normalized = num ? String(num) : String(item.value);
+                                                const picked = effectiveSelection.includes(normalized);
+                                                return (
+                                                  <button
+                                                    key={`${msg.id}-quick-${idx}-${item.value}`}
+                                                    type="button"
+                                                    onClick={() => {
+                                                      if (isLocked || !isLatestVisibleMessage) return;
+                                                      setQuickReplyDrafts((prev) => {
+                                                        const now = prev[draftKey] || [];
+                                                        const next = isLeadDayPrompt
+                                                          ? now.includes(normalized)
+                                                            ? now.filter((v) => v !== normalized)
+                                                            : [...now, normalized]
+                                                          : now[0] === normalized
+                                                            ? []
+                                                            : [normalized];
+                                                        return { ...prev, [draftKey]: next };
+                                                      });
+                                                    }}
+                                                    disabled={model.sending || isLocked || !isLatestVisibleMessage}
+                                                    className={cn(
+                                                      "w-full rounded-lg border px-3 py-2 text-xs font-semibold",
+                                                      picked
+                                                        ? "border-slate-900 bg-slate-900 text-white"
+                                                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+                                                      "disabled:cursor-not-allowed disabled:opacity-50"
+                                                    )}
+                                              >
+                                                {item.label}
+                                              </button>
+                                            );
+                                          })}
                                             </div>
-                                          )}
-                                        </button>
-                                      ))}
-                                    </div>
+                                          </div>
+                                          {isLatestVisibleMessage && !isLocked ? (
+                                          <div className="mt-[5px] flex justify-end">
+                                            <button
+                                              type="button"
+                                              aria-label="선택 확인"
+                                              title="선택 확인"
+                                              onClick={() => {
+                                                const picked = isLeadDayPrompt
+                                                  ? selected
+                                                    .map((v) => Number(v))
+                                                    .filter((v) => Number.isFinite(v))
+                                                    .sort((a, b) => a - b)
+                                                    .map((v) => String(v))
+                                                  : selected.slice(0, 1);
+                                                if (picked.length < minRequired) return;
+                                                setLockedReplySelections((prev) => ({ ...prev, [draftKey]: picked }));
+                                                setQuickReplyDrafts((prev) => {
+                                                  const next = { ...prev };
+                                                  delete next[draftKey];
+                                                  return next;
+                                                });
+                                                void submitMessage(model.id, isLeadDayPrompt ? picked.join(",") : picked[0]);
+                                              }}
+                                              disabled={model.sending || !canConfirm}
+                                              className={cn(
+                                                "inline-flex h-8 w-8 items-center justify-center rounded-lg border",
+                                                canConfirm
+                                                  ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
+                                                  : "border-slate-300 bg-slate-100 text-slate-400",
+                                                "disabled:cursor-not-allowed disabled:opacity-80"
+                                              )}
+                                            >
+                                              <CornerDownRight className="h-4 w-4" />
+                                            </button>
+                                          </div>
+                                          ) : null}
+                                        </>
+                                      );
+                                    })()
+                                    : null}
+                                  {msg.role === "bot" && msg.productCards && msg.productCards.length > 0 ? (
+                                    (() => {
+                                      const draftKey = `${model.id}:${msg.id}:card`;
+                                      const selectedCard = (quickReplyDrafts[draftKey] || [])[0] || "";
+                                      const lockedCard = (lockedReplySelections[draftKey] || [])[0] || "";
+                                      const effectiveSelectedCard = lockedCard || selectedCard;
+                                      const isLocked = Boolean(lockedCard);
+                                      const canConfirm = !isLocked && Boolean(selectedCard);
+                                      return (
+                                        <>
+                                          <div className="mt-[5px]">
+                                            <div
+                                              className="grid gap-2"
+                                              style={{ gridTemplateColumns: `repeat(${Math.min(3, msg.productCards.length)}, minmax(0, 1fr))` }}
+                                            >
+                                              {msg.productCards.map((card, idx) => {
+                                                const picked = effectiveSelectedCard === String(card.value);
+                                                return (
+                                                  <button
+                                                    key={`${msg.id}-card-${card.id}-${idx}`}
+                                                    type="button"
+                                                    onClick={() => {
+                                                      if (isLocked || !isLatestVisibleMessage) return;
+                                                      setQuickReplyDrafts((prev) => {
+                                                        const next = picked ? [] : [String(card.value)];
+                                                        return { ...prev, [draftKey]: next };
+                                                      });
+                                                    }}
+                                                    disabled={model.sending || isLocked || !isLatestVisibleMessage}
+                                                    className={cn(
+                                                      "relative flex w-full flex-col text-left rounded-xl border bg-white p-2 hover:bg-slate-50",
+                                                      picked ? "border-slate-900 ring-2 ring-slate-300" : "border-slate-300",
+                                                      "disabled:cursor-not-allowed disabled:opacity-50"
+                                                    )}
+                                                  >
+                                                    <span className="absolute left-2 top-2 h-5 w-5 rounded-full bg-slate-900 text-white text-[11px] font-semibold flex items-center justify-center">
+                                                      {card.value}
+                                                    </span>
+                                                    {card.imageUrl ? (
+                                                      <img
+                                                        src={card.imageUrl}
+                                                        alt={card.title}
+                                                        className="h-24 w-full rounded-md object-cover bg-slate-100"
+                                                      />
+                                                    ) : (
+                                                      <div className="h-24 w-full rounded-md bg-slate-100 flex items-center justify-center text-[11px] text-slate-500">
+                                                        이미지 없음
+                                                      </div>
+                                                    )}
+                                                    <div
+                                                      className="mt-2 flex h-10 items-start justify-center overflow-hidden text-center text-xs font-semibold leading-5 text-slate-700 whitespace-normal break-keep"
+                                                      style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}
+                                                    >
+                                                      {card.title}
+                                                    </div>
+                                                    {card.subtitle ? (
+                                                      <div
+                                                        className="mt-0.5 overflow-hidden text-center text-[11px] leading-4 text-slate-500 whitespace-normal break-keep"
+                                                        style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}
+                                                      >
+                                                        {card.subtitle}
+                                                      </div>
+                                                    ) : null}
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
+                                          </div>
+                                          {isLatestVisibleMessage && !isLocked ? (
+                                          <div className="mt-[5px] flex justify-end">
+                                            <button
+                                              type="button"
+                                              aria-label="선택 확인"
+                                              title="선택 확인"
+                                              onClick={() => {
+                                                if (!selectedCard) return;
+                                                setLockedReplySelections((prev) => ({ ...prev, [draftKey]: [selectedCard] }));
+                                                setQuickReplyDrafts((prev) => {
+                                                  const next = { ...prev };
+                                                  delete next[draftKey];
+                                                  return next;
+                                                });
+                                                void submitMessage(model.id, selectedCard);
+                                              }}
+                                              disabled={model.sending || !canConfirm}
+                                              className={cn(
+                                                "inline-flex h-8 w-8 items-center justify-center rounded-lg border",
+                                                canConfirm
+                                                  ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
+                                                  : "border-slate-300 bg-slate-100 text-slate-400",
+                                                "disabled:cursor-not-allowed disabled:opacity-80"
+                                              )}
+                                            >
+                                              <CornerDownRight className="h-4 w-4" />
+                                            </button>
+                                          </div>
+                                          ) : null}
+                                        </>
+                                      );
+                                    })()
                                   ) : null}
                                 </div>
                                 {msg.role === "user" ? (
                                   <div
                                     className={cn(
-                                      "h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center",
-                                      isSelected && "ring-2 ring-emerald-400"
+                                      "h-8 w-8 rounded-full border flex items-center justify-center",
+                                      isSelected
+                                        ? "border-slate-900 bg-slate-900"
+                                        : "border-slate-200 bg-white"
                                     )}
                                   >
                                     {isSelected ? (
-                                      <Check className="h-4 w-4 text-emerald-600" />
+                                      <Check className="h-4 w-4 text-white" />
                                     ) : (
                                       <User className="h-4 w-4 text-slate-500" />
                                     )}
@@ -2284,7 +2814,8 @@ export default function LabolatoryPage() {
                                 ) : null}
                               </div>
                             );
-                          })}
+                            });
+                          })()}
                         </div>
                         <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-gradient-to-t from-white to-transparent" />
                       </div>
@@ -2335,7 +2866,7 @@ export default function LabolatoryPage() {
                             (model.setupMode === "existing" && model.conversationMode === "history") ||
                             !model.input.trim() ||
                             model.sending ||
-                            !model.config.kbId ||
+                            (model.setupMode === "existing" && !model.config.kbId) ||
                             (model.setupMode === "existing" &&
                               (!model.selectedAgentId ||
                                 (model.conversationMode !== "new" && !model.selectedSessionId)))

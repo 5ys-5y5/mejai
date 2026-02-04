@@ -166,6 +166,7 @@ function inferToolProvider(toolName: string, providerHints: string[]) {
     normalized === "read_supply" ||
     normalized === "resolve_product" ||
     normalized === "subscribe_restock" ||
+    normalized === "subscribe_notification" ||
     normalized === "trigger_restock"
   ) {
     return "cafe24";
@@ -221,7 +222,7 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
     Object.entries(payload.providerConfig || {}).filter(([, value]) => Boolean(value))
   );
   const mcpLast: Record<string, unknown> = {
-    function: payload.mcpLastFunction || null,
+    function: payload.mcpLastFunction || "none",
     status: payload.mcpLastStatus || "none",
     error: payload.mcpLastError || null,
     result_count: payload.mcpLastCount ?? null,
@@ -361,7 +362,7 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
     { key: "LLM.model", value: payload.llmModel || "-" },
     { key: "MCP.functions", value: uniq(payload.mcpTools).join(", ") || "-" },
     { key: "MCP.provider", value: uniq(payload.mcpProviders).join(", ") || "-" },
-    { key: "MCP.last_function", value: payload.mcpLastFunction || "-" },
+    { key: "MCP.last_function", value: payload.mcpLastFunction || "none" },
     { key: "MCP.last_status", value: payload.mcpLastStatus || "-" },
     { key: "MCP.last_error", value: payload.mcpLastError || "-" },
     { key: "MCP.last_result_count", value: payload.mcpLastCount ?? "-" },
@@ -679,6 +680,30 @@ function extractChoiceIndex(text: string, max: number) {
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+type RuntimeTimingStage = {
+  stage: string;
+  ms: number;
+  at: string;
+  detail?: Record<string, unknown>;
+};
+
+const ENABLE_RUNTIME_TIMING = false;
+
+function pushRuntimeTimingStage(
+  stages: RuntimeTimingStage[],
+  stage: string,
+  startedAt: number,
+  detail?: Record<string, unknown>
+) {
+  if (!ENABLE_RUNTIME_TIMING) return;
+  stages.push({
+    stage,
+    ms: Date.now() - startedAt,
+    at: nowIso(),
+    ...(detail ? { detail } : {}),
+  });
 }
 
 function buildDefaultOrderRange() {
@@ -1138,6 +1163,34 @@ function detectIntent(text: string) {
   return "general";
 }
 
+function detectIntentCandidates(text: string) {
+  const out: string[] = [];
+  if (isRestockSubscribe(text)) out.push("restock_subscribe");
+  if (isRestockInquiry(text)) out.push("restock_inquiry");
+  if (/문의|문의사항|질문|도움|상담/.test(text)) out.push("faq");
+  if (/주소|배송지|수령인|연락처/.test(text)) out.push("order_change");
+  if (/환불|취소|반품|교환/.test(text)) out.push("refund_request");
+  if (out.length === 0) out.push("general");
+  return Array.from(new Set(out));
+}
+
+function intentLabel(intent: string) {
+  switch (intent) {
+    case "restock_inquiry":
+      return "재입고 일정 안내";
+    case "restock_subscribe":
+      return "재입고 알림 신청";
+    case "faq":
+      return "일반 문의";
+    case "order_change":
+      return "배송지 변경";
+    case "refund_request":
+      return "취소/환불";
+    default:
+      return "기타 문의";
+  }
+}
+
 function isAddressChangeUtterance(text: string) {
   const v = String(text || "");
   return /(주소|배송지|수령지|받는\s*곳).*(바꿔|바꾸|변경|수정|고쳐|옮겨)|(?:바꿔|바꾸|변경|수정|고쳐|옮겨).*(주소|배송지|수령지|받는\s*곳)/.test(
@@ -1187,6 +1240,27 @@ function isExecutionAffirmativeText(text: string) {
   return /(도와|도움|진행|해줘|해주세요|부탁|신청할래|신청할게|신청해|예약해|등록해|알림해|해볼게|할래요|할게요)/.test(v);
 }
 
+function isEndConversationText(text: string) {
+  const v = String(text || "").trim().toLowerCase();
+  if (!v) return false;
+  return /^(대화\s*종료|종료|끝|그만|close|end)$/.test(v) || isNoText(v);
+}
+
+function isOtherInquiryText(text: string) {
+  const v = String(text || "").trim().toLowerCase();
+  if (!v) return false;
+  return /^(다른\s*문의|다른문의|추가\s*문의|계속|other|new)$/.test(v);
+}
+
+function parseSatisfactionScore(text: string) {
+  const v = String(text || "").trim();
+  if (!v) return null;
+  const match = v.match(/[1-5]/);
+  if (!match) return null;
+  const score = Number(match[0]);
+  return Number.isFinite(score) && score >= 1 && score <= 5 ? score : null;
+}
+
 function extractRestockChannel(text: string) {
   const v = String(text || "");
   if (/카카오|카톡/.test(v)) return "kakao";
@@ -1209,6 +1283,12 @@ function stripRestockNoise(input: string) {
     .replace(/(재입고|입고|일정|언제|알고싶|알려|제품|상품|문의|확인|요|입니다|이에요|해요)/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function normalizeKoreanQueryToken(token: string) {
+  const v = normalizeKoreanMatchText(token);
+  if (!v) return "";
+  return v.replace(/(은|는|이|가|을|를|와|과|도|에|에서|으로|로|랑|이나|나|만)$/g, "");
 }
 
 function extractRestockSectionLines(content: string) {
@@ -1261,12 +1341,15 @@ function parseRestockEntriesFromContent(content: string, source: string): Restoc
 
 function rankRestockEntries(queryText: string, entries: RestockScheduleEntry[]) {
   const query = stripRestockNoise(queryText);
-  const queryTokens = query.split(" ").filter(Boolean);
+  const queryTokens = query
+    .split(" ")
+    .map((t) => normalizeKoreanQueryToken(t))
+    .filter((t) => t.length > 0);
+  const queryNoSpace = queryTokens.join("");
   return entries
     .map((entry) => {
       const name = normalizeKoreanMatchText(entry.product_name);
       const nameNoSpace = name.replace(/\s+/g, "");
-      const queryNoSpace = query.replace(/\s+/g, "");
       let score = 0;
       if (queryNoSpace && nameNoSpace.includes(queryNoSpace)) score += 4;
       if (queryNoSpace && queryNoSpace.includes(nameNoSpace)) score += 2;
@@ -1319,6 +1402,30 @@ function parseIndexedChoice(text: string) {
   return Number.isFinite(idx) && idx > 0 ? idx : null;
 }
 
+function parseIndexedChoices(text: string, max: number) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+  const values = (raw.match(/\d{1,2}/g) || [])
+    .map((v) => Number(v))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= max);
+  return Array.from(new Set(values));
+}
+
+const RESTOCK_LEAD_DAY_OPTIONS = [1, 2, 3, 7, 14] as const;
+
+function availableRestockLeadDays(diffDays: number) {
+  const remain = Math.max(0, Math.floor(diffDays));
+  return RESTOCK_LEAD_DAY_OPTIONS.filter((day) => day <= remain);
+}
+
+function parseLeadDaysSelection(text: string, available: number[]) {
+  const raw = String(text || "").trim();
+  if (!raw) return [];
+  if (/전체|all|모두/i.test(raw)) return [...available];
+  const picked = Array.from(new Set((raw.match(/\d{1,2}/g) || []).map((v) => Number(v)).filter(Number.isFinite)));
+  return picked.filter((n) => available.includes(n)).sort((a, b) => a - b);
+}
+
 function toRestockDueText(month: number, day: number, now = new Date()) {
   const year = now.getFullYear();
   const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1330,6 +1437,12 @@ function toRestockDueText(month: number, day: number, now = new Date()) {
   const targetText = `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
   const dday = diffDays > 0 ? `D-${diffDays}` : diffDays === 0 ? "D-Day" : `D+${Math.abs(diffDays)}`;
   return { targetText, dday, diffDays };
+}
+
+function buildRestockFinalAnswerWithChoices(productName: string, due: { targetText: string; dday: string; month?: number; day?: number }) {
+  const mmddMatch = due.targetText.match(/^\d{4}-(\d{2})-(\d{2})$/);
+  const mmdd = mmddMatch ? `${mmddMatch[1]}/${mmddMatch[2]}` : due.targetText;
+  return `요약: ${productName} 입고 예정일은 ${mmdd}입니다.\n상세: 예정일 ${due.targetText} (${due.dday})\n다음 선택: 재입고 알림 신청 / 대화 종료`;
 }
 
 function readProductShape(raw: unknown) {
@@ -1527,10 +1640,45 @@ async function callAddressSearchWithAudit(
 
 export async function POST(req: NextRequest) {
   const debugEnabled = process.env.DEBUG_RUNTIME_CHAT === "1" || process.env.NODE_ENV !== "production";
+  const requestStartedAt = Date.now();
+  const runtimeTraceId =
+    String(req.headers.get("x-runtime-trace-id") || "").trim() ||
+    `rt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const timingStages: RuntimeTimingStage[] = [];
+  let timingLogged = false;
+  let runtimeContext: any = null;
+  let currentSessionId: string | null = null;
+  let firstTurnInSession = false;
   let latestTurnId: string | null = null;
+  let lastDebugPrefixJson: Record<string, unknown> | null = null;
+  let auditMessage: string | null = null;
+  let auditConversationMode: string | null = null;
+  let auditIntent: string | null = null;
+  let auditEntity: Record<string, unknown> = {};
   const deriveQuickReplies = (message?: unknown) => {
     const text = typeof message === "string" ? message : "";
     if (!text) return [] as Array<{ label: string; value: string }>;
+    if (/지금\s+\S+\s+재입고 알림 신청을 진행할까요\?/u.test(text)) {
+      return [
+        { label: "재입고 알림 신청", value: "네" },
+        { label: "대화 종료", value: "대화 종료" },
+      ];
+    }
+    if (text.includes("다음 선택: 대화 종료 / 다른 문의")) {
+      return [
+        { label: "대화 종료", value: "대화 종료" },
+        { label: "다른 문의", value: "다른 문의" },
+      ];
+    }
+    if (text.includes("이번 상담은 만족하셨나요?") || text.includes("상담이 도움이 되었나요?")) {
+      return [
+        { label: "1점", value: "1" },
+        { label: "2점", value: "2" },
+        { label: "3점", value: "3" },
+        { label: "4점", value: "4" },
+        { label: "5점", value: "5" },
+      ];
+    }
     if (text.includes("맞으면 '네', 아니면 '아니오'")) {
       return [
         { label: "네", value: "네" },
@@ -1544,34 +1692,153 @@ export async function POST(req: NextRequest) {
       const uniq = Array.from(new Set(numberMatches)).slice(0, 9);
       return uniq.map((n) => ({ label: `${n}번`, value: String(n) }));
     }
+    const dayMatches = /(선택 가능|알림일|쉼표)/.test(text)
+      ? Array.from(text.matchAll(/D-(\d{1,2})/g))
+          .map((m) => Number(m[1]))
+          .filter((n) => Number.isFinite(n) && n > 0)
+      : [];
+    if (dayMatches.length > 0) {
+      const uniqDays = Array.from(new Set(dayMatches)).sort((a, b) => a - b);
+      return uniqDays.slice(0, 7).map((n) => ({ label: `D-${n}`, value: String(n) }));
+    }
     return [] as Array<{ label: string; value: string }>;
   };
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  const deriveRichMessageHtml = (message?: unknown) => {
+    const text = typeof message === "string" ? message : "";
+    if (!text) return null;
+    const lines = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (lines.length < 2) return null;
+    const title = lines[0];
+    const itemRows = lines
+      .map((line) => {
+        const match = line.match(/^-\s*(\d{1,2})번\s*\|\s*(.+)$/);
+        if (!match) return null;
+        const index = match[1];
+        const cols = String(match[2] || "")
+          .split("|")
+          .map((part) => part.trim())
+          .filter(Boolean);
+        if (cols.length === 0) return null;
+        return { index, cols };
+      })
+      .filter((row): row is { index: string; cols: string[] } => Boolean(row));
+    if (itemRows.length === 0) return null;
+    const example = lines.find((line) => /^예\s*:/.test(line)) || "";
+    const itemsHtml = itemRows
+      .map((row) => {
+        const detail = row.cols.map((col) => `<span>${escapeHtml(col)}</span>`).join(" · ");
+        return `<li style="display:flex;gap:8px;align-items:flex-start;padding:6px 8px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">
+<span style="display:inline-flex;min-width:20px;height:20px;align-items:center;justify-content:center;border-radius:9999px;background:#0f172a;color:#fff;font-size:11px;font-weight:700;">${escapeHtml(row.index)}</span>
+<span style="font-size:12px;color:#334155;line-height:1.45;">${detail}</span>
+</li>`;
+      })
+      .join("");
+    const exampleHtml = example
+      ? `<div style="margin-top:8px;font-size:11px;color:#475569;"><strong>입력 예시</strong>: ${escapeHtml(
+          example.replace(/^예\s*:\s*/, "")
+        )}</div>`
+      : "";
+    return `<div style="display:block;">
+<div style="font-size:13px;font-weight:600;color:#334155;">${escapeHtml(title)}</div>
+<ol style="margin:8px 0 0 0;padding:0;display:grid;gap:6px;list-style:none;">
+${itemsHtml}
+</ol>
+${exampleHtml}
+</div>`;
+  };
   const respond = (payload: Record<string, unknown>, init?: ResponseInit) => {
+    if (ENABLE_RUNTIME_TIMING && !timingLogged) {
+      timingLogged = true;
+      const responseStatus = init?.status || 200;
+      const hasError = Boolean(payload.error);
+      console.info("[runtime/chat/mk2][timing]", {
+        trace_id: runtimeTraceId,
+        status: responseStatus,
+        result: hasError ? "error" : "ok",
+        session_id: currentSessionId,
+        turn_id: latestTurnId,
+        is_first_turn: firstTurnInSession,
+        total_ms: Date.now() - requestStartedAt,
+        stage_count: timingStages.length,
+        stages: timingStages,
+      });
+      if (runtimeContext && currentSessionId) {
+        void runtimeContext.supabase
+          .from("F_audit_events")
+          .insert({
+            session_id: currentSessionId,
+            turn_id: latestTurnId,
+            event_type: "RUNTIME_TIMING",
+            payload: {
+              trace_id: runtimeTraceId,
+              status: responseStatus,
+              result: hasError ? "error" : "ok",
+              is_first_turn: firstTurnInSession,
+              total_ms: Date.now() - requestStartedAt,
+              stages: timingStages,
+            },
+            created_at: nowIso(),
+            bot_context: { trace_id: runtimeTraceId },
+          })
+          .catch((error: unknown) => {
+            console.warn("[runtime/chat_mk2] failed to insert runtime timing event", {
+              trace_id: runtimeTraceId,
+              session_id: currentSessionId,
+              turn_id: latestTurnId,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
+      }
+    }
     const quickReplies =
       Array.isArray(payload.quick_replies) && payload.quick_replies.length > 0
         ? payload.quick_replies
         : deriveQuickReplies(payload.message);
+    const richMessageHtml = deriveRichMessageHtml(payload.message);
     return NextResponse.json(
-      { ...payload, turn_id: latestTurnId, ...(quickReplies.length > 0 ? { quick_replies: quickReplies } : {}) },
+      {
+        ...payload,
+        trace_id: runtimeTraceId,
+        turn_id: latestTurnId,
+        ...(richMessageHtml ? { rich_message_html: richMessageHtml } : {}),
+        ...(quickReplies.length > 0 ? { quick_replies: quickReplies } : {}),
+      },
       init
     );
   };
   try {
     const authHeader = req.headers.get("authorization") || "";
     const cookieHeader = req.headers.get("cookie") || "";
+    const authStartedAt = Date.now();
     const context = await getServerContext(authHeader, cookieHeader);
+    pushRuntimeTimingStage(timingStages, "auth_context", authStartedAt);
     if ("error" in context) {
       if (debugEnabled) {
         console.debug("[runtime/chat/mk2] auth error", context.error);
       }
       return respond({ error: context.error }, { status: 401 });
     }
+    runtimeContext = context;
     const authContext = context;
 
+    const parseBodyStartedAt = Date.now();
     const body = (await req.json().catch(() => null)) as Body | null;
+    pushRuntimeTimingStage(timingStages, "parse_body", parseBodyStartedAt);
     const agentId = String(body?.agent_id || "").trim();
     const message = String(body?.message || "").trim();
     const conversationMode = String(body?.mode || "").trim().toLowerCase() === "natural" ? "natural" : "mk2";
+    auditMessage = message;
+    auditConversationMode = conversationMode;
     const overrideLlm = body?.llm;
     const overrideKbId = body?.kb_id;
     const overrideAdminKbIds = Array.isArray(body?.admin_kb_ids)
@@ -1592,6 +1859,7 @@ export async function POST(req: NextRequest) {
     }
 
     let agent: AgentRow | null = null;
+    const agentLookupStartedAt = Date.now();
     if (agentId) {
       const agentRes = await fetchAgent(context, agentId);
       if (!agentRes.data) {
@@ -1599,30 +1867,46 @@ export async function POST(req: NextRequest) {
       }
       agent = agentRes.data;
     } else {
-      if (!isValidLlm(overrideLlm) || !overrideKbId) {
+      if (!isValidLlm(overrideLlm)) {
         return respond({ error: "INVALID_BODY" }, { status: 400 });
       }
       agent = {
         id: null,
         name: "Labolatory",
         llm: overrideLlm,
-        kb_id: overrideKbId,
+        kb_id: overrideKbId ? String(overrideKbId) : null,
         mcp_tool_ids: overrideMcpToolIds,
       };
     }
+    pushRuntimeTimingStage(timingStages, "resolve_agent", agentLookupStartedAt, { has_agent_id: Boolean(agentId) });
     if (!agent) {
       return respond({ error: "AGENT_NOT_FOUND" }, { status: 404 });
     }
-    if (!agent.kb_id) {
-      return respond({ error: "AGENT_KB_MISSING" }, { status: 400 });
+    const kbLookupStartedAt = Date.now();
+    let kb: KbRow;
+    if (agent.kb_id) {
+      const kbRes = await fetchKb(context, agent.kb_id);
+      pushRuntimeTimingStage(timingStages, "load_primary_kb", kbLookupStartedAt);
+      if (!kbRes.data) {
+        return respond({ error: kbRes.error || "KB_NOT_FOUND" }, { status: 404 });
+      }
+      kb = kbRes.data;
+    } else {
+      pushRuntimeTimingStage(timingStages, "load_primary_kb", kbLookupStartedAt, { skipped: true });
+      kb = {
+        id: "__LAB_NO_KB__",
+        title: "KB 미선택",
+        content: null,
+        is_active: true,
+        version: null,
+        is_admin: false,
+        apply_groups: null,
+        apply_groups_mode: null,
+        content_json: null,
+      };
     }
 
-    const kbRes = await fetchKb(context, agent.kb_id);
-    if (!kbRes.data) {
-      return respond({ error: kbRes.error || "KB_NOT_FOUND" }, { status: 404 });
-    }
-    const kb = kbRes.data;
-
+    const iamLookupStartedAt = Date.now();
     const { data: accessRow } = await context.supabase
       .from("A_iam_user_access_maps")
       .select("group, plan, is_admin, org_role, org_id")
@@ -1651,7 +1935,9 @@ export async function POST(req: NextRequest) {
       shop_no: (cafe24Provider as any)?.shop_no ? String((cafe24Provider as any).shop_no) : null,
       board_no: (cafe24Provider as any)?.board_no ? String((cafe24Provider as any).board_no) : null,
     };
+    pushRuntimeTimingStage(timingStages, "load_auth_settings", iamLookupStartedAt);
 
+    const adminKbStartedAt = Date.now();
     const adminKbRes = await fetchAdminKbs(context);
     let adminKbs = adminKbRes.data || [];
     if (overrideAdminKbIds !== null) {
@@ -1670,11 +1956,16 @@ export async function POST(req: NextRequest) {
       .filter((item) => item.content_json)
       .map((item) => item.content_json as PolicyPack);
     const compiledPolicy = compilePolicy(policyPacks);
+    pushRuntimeTimingStage(timingStages, "load_admin_kb_and_compile_policy", adminKbStartedAt, {
+      admin_kb_count: adminKbs.length,
+      policy_pack_count: policyPacks.length,
+    });
 
     const allowedToolNames = new Set<string>();
     const allowedToolIdByName = new Map<string, string>();
     const allowedToolVersionByName = new Map<string, string | null>();
     const allowedToolByName = new Map<string, string[]>();
+    const allowedToolsStartedAt = Date.now();
     if (agent.mcp_tool_ids && agent.mcp_tool_ids.length > 0) {
       const requestedToolIds = agent.mcp_tool_ids.map((id) => String(id)).filter(Boolean);
       const validToolIds = requestedToolIds.filter((id) => isUuidLike(id));
@@ -1765,9 +2056,14 @@ export async function POST(req: NextRequest) {
         }
       });
     }
+    pushRuntimeTimingStage(timingStages, "resolve_allowed_tools", allowedToolsStartedAt, {
+      requested_tool_count: agent.mcp_tool_ids?.length || 0,
+      allowed_tool_count: allowedToolNames.size,
+    });
     const allowedTools = { keys: allowedToolNames, byName: allowedToolByName };
     const hasAllowedToolName = (name: string) => (allowedToolByName.get(name)?.length || 0) > 0;
 
+    const sessionPrepareStartedAt = Date.now();
     let sessionId = String(body?.session_id || "").trim();
     if (!sessionId) {
       const sessionRes = await createSession(context, agent.id);
@@ -1776,16 +2072,25 @@ export async function POST(req: NextRequest) {
       }
       sessionId = sessionRes.data.id;
     }
+    currentSessionId = sessionId;
+    pushRuntimeTimingStage(timingStages, "prepare_session", sessionPrepareStartedAt, {
+      reused_session: Boolean(body?.session_id),
+    });
 
+    const recentTurnsStartedAt = Date.now();
     const recentTurnsRes = await getRecentTurns(context, sessionId, 15);
     const recentTurns = (recentTurnsRes.data || []) as any[];
+    firstTurnInSession = recentTurns.length === 0;
+    pushRuntimeTimingStage(timingStages, "load_recent_turns", recentTurnsStartedAt, {
+      recent_turn_count: recentTurns.length,
+      is_first_turn: firstTurnInSession,
+    });
     const lastTurn = recentTurns[0] as any;
     const nextSeq = lastTurn?.seq ? Number(lastTurn.seq) + 1 : 1;
     const prevBotContext = (lastTurn?.bot_context || {}) as Record<string, unknown>;
     const prevIntent =
       typeof prevBotContext.intent_name === "string" ? String(prevBotContext.intent_name) : null;
     let resolvedIntent = prevIntent || "general";
-    let lastDebugPrefixJson: Record<string, unknown> | null = null;
     const prevEntity = (prevBotContext.entity || {}) as Record<string, unknown>;
     const prevSelectedOrderId =
       typeof prevBotContext.selected_order_id === "string" ? prevBotContext.selected_order_id : null;
@@ -1821,6 +2126,15 @@ export async function POST(req: NextRequest) {
     let updateConfirmAcceptedThisTurn = false;
     let refundConfirmAcceptedThisTurn = false;
     let restockSubscribeAcceptedThisTurn = false;
+    const isRestockSubscribeStage =
+      prevBotContext.restock_pending === true &&
+      [
+        "awaiting_subscribe_suggestion",
+        "awaiting_subscribe_confirm",
+        "awaiting_subscribe_phone",
+        "awaiting_subscribe_lead_days",
+      ].includes(String(prevBotContext.restock_stage || ""));
+    let lockIntentToRestockSubscribe = isRestockSubscribeStage;
     const lastAnswer =
       typeof lastTurn?.final_answer === "string"
         ? lastTurn?.final_answer
@@ -1847,6 +2161,184 @@ export async function POST(req: NextRequest) {
     })();
     if (expectedInput === "address" && /(환불|취소|반품|교환)/.test(message)) {
       expectedInput = null;
+    }
+    if (isRestockInquiry(message) || isRestockSubscribe(message)) {
+      expectedInput = null;
+    }
+    let forcedIntentQueue: string[] = [];
+    let pendingIntentQueue: string[] = [];
+    let slotDebug: {
+      expectedInput: string | null;
+      orderId: string | null;
+      phone: string | null;
+      zipcode: string | null;
+      address: string | null;
+    } = {
+      expectedInput,
+      orderId: null,
+      phone: typeof prevEntity.phone === "string" ? prevEntity.phone : null,
+      zipcode: typeof prevEntity.zipcode === "string" ? prevEntity.zipcode : null,
+      address: typeof prevEntity.address === "string" ? prevEntity.address : null,
+    };
+    let usedRuleIds: string[] = [];
+    let usedTemplateIds: string[] = [];
+    let inputRuleIds: string[] = [];
+    let toolRuleIds: string[] = [];
+    let usedToolPolicies: string[] = [];
+    let usedProviders: string[] = [];
+    let mcpActions: string[] = [];
+    let mcpCandidateCalls: string[] = [];
+    let mcpSkipLogs: string[] = [];
+    let mcpSkipQueue: Array<{
+      tool: string;
+      reason: string;
+      args?: Record<string, unknown>;
+      detail?: Record<string, unknown>;
+    }> = [];
+    let lastMcpFunction: string | null = null;
+    let lastMcpStatus: string | null = null;
+    let lastMcpError: string | null = null;
+    let lastMcpCount: number | null = null;
+    let contaminationSummaries: string[] = [];
+    let toolResults: Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }> = [];
+    let disambiguationSelection: number[] = [];
+    const intentDisambiguationSourceText =
+      typeof prevBotContext.intent_disambiguation_source_text === "string"
+        ? String(prevBotContext.intent_disambiguation_source_text)
+        : "";
+    let effectiveMessageForIntent = message;
+    if (prevBotContext.intent_disambiguation_pending) {
+      const options = Array.isArray((prevBotContext as any).intent_disambiguation_options)
+        ? ((prevBotContext as any).intent_disambiguation_options as string[]).map((v) => String(v)).filter(Boolean)
+        : [];
+      const picked = parseIndexedChoices(message, options.length);
+      if (picked.length === 0) {
+        const lines = options.map((intent, idx) => `- ${idx + 1}번 | ${intentLabel(intent)}`);
+        const reply = makeReply(
+          `요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)\n${lines.join("\n")}\n예: 1,2`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: prevIntent || "general",
+            entity: prevEntity,
+            intent_disambiguation_pending: true,
+            intent_disambiguation_options: options,
+            intent_disambiguation_source_text: intentDisambiguationSourceText || null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      disambiguationSelection = picked;
+      forcedIntentQueue = picked.map((idx) => options[idx - 1]).filter(Boolean);
+      pendingIntentQueue = forcedIntentQueue.slice(1);
+      const isSelectionOnlyText = /^[\d\s,./-]+$/.test(String(message || "").trim());
+      if (isSelectionOnlyText && intentDisambiguationSourceText) {
+        effectiveMessageForIntent = intentDisambiguationSourceText;
+      }
+    } else if (
+      expectedInput === null &&
+      !prevBotContext.restock_pending &&
+      !prevBotContext.phone_reuse_pending
+    ) {
+      const queuedIntents = Array.isArray((prevBotContext as any).intent_queue)
+        ? ((prevBotContext as any).intent_queue as string[]).map((v) => String(v)).filter(Boolean)
+        : [];
+      if (queuedIntents.length > 0 && (isYesText(message) || /다음|계속/.test(message))) {
+        forcedIntentQueue = [queuedIntents[0]];
+        pendingIntentQueue = queuedIntents.slice(1);
+      }
+      const candidates = detectIntentCandidates(message).filter((intent) => intent !== "general");
+      if (forcedIntentQueue.length === 0 && candidates.length > 1) {
+        const lines = candidates.map((intent, idx) => `- ${idx + 1}번 | ${intentLabel(intent)}`);
+        const reply = makeReply(
+          `요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)\n${lines.join("\n")}\n예: 1,2`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: "general",
+            entity: prevEntity,
+            intent_disambiguation_pending: true,
+            intent_disambiguation_options: candidates,
+            intent_disambiguation_source_text: message,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          { stage: "input", action: "ASK_INTENT_DISAMBIGUATION", options: candidates },
+          { intent_name: "general" }
+        );
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          { answer: reply, model: "deterministic_intent_disambiguation" },
+          { intent_name: "general" }
+        );
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+    }
+    if (disambiguationSelection.length > 0) {
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_DECISION",
+        {
+          stage: "input",
+          action: "INTENT_DISAMBIGUATION_SELECTED",
+          selected_indexes: disambiguationSelection,
+          selected_intents: forcedIntentQueue,
+          source_text_present: Boolean(intentDisambiguationSourceText),
+          source_text_used: effectiveMessageForIntent !== message,
+        },
+        { intent_name: forcedIntentQueue[0] || resolvedIntent }
+      );
+    }
+    if (prevBotContext.conversation_closed === true) {
+      const reply = makeReply("이미 종료된 대화입니다. 새 문의는 새 대화에서 시작해 주세요.");
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: prevEntity,
+          conversation_closed: true,
+        },
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_DECISION",
+        { stage: "input", action: "CONVERSATION_ALREADY_CLOSED" },
+        { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      );
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "FINAL_ANSWER_READY",
+        { answer: reply, model: "deterministic_conversation_closed_guard" },
+        { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      );
+      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
     }
     if (prevBotContext.phone_reuse_pending) {
       const pendingPhone = normalizePhoneDigits(String(prevBotContext.pending_phone || ""));
@@ -1944,7 +2436,11 @@ export async function POST(req: NextRequest) {
       // So we should only run this if expectedInput is null (General conversation).
       // Or if expectedInput matched but regex failed?
       // Let's run it if expectedInput is null.
+      const extractEntityLlmStartedAt = Date.now();
       const llmExt = await extractEntitiesWithLlm(message, agent.llm);
+      pushRuntimeTimingStage(timingStages, "llm_extract_entities", extractEntityLlmStartedAt, {
+        extracted: Boolean(llmExt),
+      });
       if (llmExt) {
         if (llmExt.order_id && !derivedOrderId) derivedOrderId = String(llmExt.order_id).trim();
         if (llmExt.phone && !derivedPhone) derivedPhone = String(llmExt.phone).trim();
@@ -2237,6 +2733,39 @@ export async function POST(req: NextRequest) {
       const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
       const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
       const pendingChannel = String(prevBotContext.pending_channel || "").trim();
+      if (isEndConversationText(message)) {
+        const reply = makeReply("대화를 종료합니다. 이용해 주셔서 감사합니다.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            conversation_closed: true,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          { stage: "tool", action: "END_CONVERSATION_FROM_RESTOCK_SUGGESTION" },
+          { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+        );
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          { answer: reply, model: "deterministic_conversation_end" },
+          { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+        );
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+      }
       if (isNoText(message)) {
         const reply = makeReply("재입고 알림 신청을 진행하지 않았습니다. 필요하면 상품명을 다시 알려주세요.");
         await insertTurn({
@@ -2255,6 +2784,10 @@ export async function POST(req: NextRequest) {
         return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
       }
       if (isYesText(message) || isExecutionAffirmativeText(message) || isRestockSubscribe(message)) {
+        restockSubscribeAcceptedThisTurn = true;
+        resolvedIntent = "restock_subscribe";
+        lockIntentToRestockSubscribe = true;
+      } else {
         const reply = makeReply(
           `상품(${pendingProductName || pendingProductId || "-"})에 ${pendingChannel || "sms"} 채널로 재입고 알림을 신청할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
         );
@@ -2278,12 +2811,163 @@ export async function POST(req: NextRequest) {
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
     }
+    if (prevBotContext.restock_pending && prevBotContext.restock_stage === "awaiting_subscribe_phone") {
+      const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
+      const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
+      const pendingChannel = String(prevBotContext.pending_channel || "").trim() || "sms";
+      const pendingLeadDays = Array.isArray((prevBotContext as any).pending_lead_days)
+        ? ((prevBotContext as any).pending_lead_days as number[]).map((n) => Number(n)).filter((n) => Number.isFinite(n))
+        : [];
+      const extractedPhone = normalizePhoneDigits(extractPhone(message));
+      if (!extractedPhone) {
+        const reply = makeReply("재입고 알림 신청을 위해 휴대폰 번호를 알려주세요. (예: 01012345678)");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: "restock_subscribe",
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            restock_pending: true,
+            restock_stage: "awaiting_subscribe_phone",
+            pending_product_id: pendingProductId || null,
+            pending_product_name: pendingProductName || null,
+            pending_channel: pendingChannel,
+            pending_lead_days: pendingLeadDays,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      const reply = makeReply(
+        `휴대폰 번호(${maskPhone(extractedPhone)})로 ${pendingChannel} 재입고 알림을 신청할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+      );
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: "restock_subscribe",
+          entity: { ...prevEntity, phone: extractedPhone },
+          selected_order_id: prevSelectedOrderId,
+          restock_pending: true,
+          restock_stage: "awaiting_subscribe_confirm",
+          pending_product_id: pendingProductId || null,
+          pending_product_name: pendingProductName || null,
+          pending_channel: pendingChannel,
+          pending_lead_days: pendingLeadDays,
+        },
+      });
+      return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+    }
+    if (prevBotContext.restock_pending && prevBotContext.restock_stage === "awaiting_subscribe_lead_days") {
+      const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
+      const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
+      const pendingChannel = String(prevBotContext.pending_channel || "").trim() || "sms";
+      const availableLeadDays = Array.isArray((prevBotContext as any).available_lead_days)
+        ? ((prevBotContext as any).available_lead_days as number[]).map((n) => Number(n)).filter((n) => Number.isFinite(n))
+        : [];
+      const minLeadDays =
+        Number.isFinite(Number((prevBotContext as any).min_lead_days || 0))
+          ? Math.max(1, Number((prevBotContext as any).min_lead_days || 1))
+          : 1;
+      const selectedLeadDays = parseLeadDaysSelection(message, availableLeadDays);
+      if (selectedLeadDays.length < minLeadDays) {
+        const optionLine = availableLeadDays.length > 0 ? availableLeadDays.map((v) => `D-${v}`).join(", ") : "-";
+        const reply = makeReply(
+          `알림일을 선택해 주세요. 현재 선택 가능한 값은 ${optionLine} 입니다.\n쉼표(,)로 ${minLeadDays}개 이상 입력해 주세요. 예: ${availableLeadDays.slice(0, Math.max(minLeadDays, 3)).join(",")}`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: "restock_subscribe",
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            restock_pending: true,
+            restock_stage: "awaiting_subscribe_lead_days",
+            pending_product_id: pendingProductId || null,
+            pending_product_name: pendingProductName || null,
+            pending_channel: pendingChannel,
+            available_lead_days: availableLeadDays,
+            min_lead_days: minLeadDays,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      const reply = makeReply(
+        `선택하신 알림일(D-${selectedLeadDays.join(", D-")}) 기준으로 ${pendingChannel} 예약 알림을 신청할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+      );
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: "restock_subscribe",
+          entity: prevEntity,
+          selected_order_id: prevSelectedOrderId,
+          restock_pending: true,
+          restock_stage: "awaiting_subscribe_confirm",
+          pending_product_id: pendingProductId || null,
+          pending_product_name: pendingProductName || null,
+          pending_channel: pendingChannel,
+          pending_lead_days: selectedLeadDays,
+        },
+      });
+      return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+    }
     if (prevBotContext.restock_pending && prevBotContext.restock_stage === "awaiting_subscribe_confirm") {
       const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
       const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
       const pendingChannel = String(prevBotContext.pending_channel || "").trim();
+      const pendingLeadDays = Array.isArray((prevBotContext as any).pending_lead_days)
+        ? ((prevBotContext as any).pending_lead_days as number[]).map((n) => Number(n)).filter((n) => Number.isFinite(n))
+        : [];
+      if (isEndConversationText(message)) {
+        const reply = makeReply("대화를 종료합니다. 이용해 주셔서 감사합니다.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            conversation_closed: true,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          { stage: "tool", action: "END_CONVERSATION_FROM_RESTOCK_CONFIRM" },
+          { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+        );
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          { answer: reply, model: "deterministic_conversation_end" },
+          { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+        );
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+      }
       if (isYesText(message) || isExecutionAffirmativeText(message)) {
         restockSubscribeAcceptedThisTurn = true;
+        lockIntentToRestockSubscribe = true;
       } else if (isNoText(message)) {
         const reply = makeReply("재입고 알림 신청을 진행하지 않았습니다. 필요하면 상품명을 다시 알려주세요.");
         await insertTurn({
@@ -2319,12 +3003,212 @@ export async function POST(req: NextRequest) {
             pending_product_id: pendingProductId || null,
             pending_product_name: pendingProductName || null,
             pending_channel: pendingChannel || null,
+            pending_lead_days: pendingLeadDays,
           },
         });
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
       }
     }
-    const contaminationSummaries: string[] = [];
+    if (prevBotContext.post_action_stage === "awaiting_choice") {
+      if (isEndConversationText(message)) {
+        const reply = makeReply("상담이 도움이 되었나요? 만족도를 선택해 주세요. (1~5점)");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            post_action_stage: "awaiting_satisfaction",
+          },
+        });
+        return respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
+          quick_replies: [
+            { label: "1점", value: "1" },
+            { label: "2점", value: "2" },
+            { label: "3점", value: "3" },
+            { label: "4점", value: "4" },
+            { label: "5점", value: "5" },
+          ],
+        });
+      }
+      if (isOtherInquiryText(message) || isYesText(message)) {
+        const reply = makeReply("좋아요. 다른 문의 내용을 입력해 주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: "general",
+            entity: prevEntity,
+            post_action_stage: null,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      const reply = makeReply("다음 중 선택해 주세요: 대화 종료 / 다른 문의");
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: prevEntity,
+          post_action_stage: "awaiting_choice",
+        },
+      });
+      return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+    }
+    if (prevBotContext.post_action_stage === "awaiting_satisfaction") {
+      const score = parseSatisfactionScore(message);
+      if (!score) {
+        const reply = makeReply("만족도를 1~5 중에서 선택해 주세요. (예: 4)");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            post_action_stage: "awaiting_satisfaction",
+          },
+        });
+        return respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
+          quick_replies: [
+            { label: "1점", value: "1" },
+            { label: "2점", value: "2" },
+            { label: "3점", value: "3" },
+            { label: "4점", value: "4" },
+            { label: "5점", value: "5" },
+          ],
+        });
+      }
+      const { data: currentSessionRow } = await context.supabase
+        .from("D_conv_sessions")
+        .select("id, metadata")
+        .eq("id", sessionId)
+        .maybeSingle();
+      const currentMeta =
+        currentSessionRow && currentSessionRow.metadata && typeof currentSessionRow.metadata === "object"
+          ? (currentSessionRow.metadata as Record<string, unknown>)
+          : {};
+      const baseMeta = { ...currentMeta, csat: { ...(currentMeta.csat as Record<string, unknown> | undefined), score } };
+      await context.supabase
+        .from("D_conv_sessions")
+        .update({ satisfaction: score, ended_at: new Date().toISOString(), metadata: baseMeta })
+        .eq("id", sessionId);
+
+      if (score <= 2) {
+        const reply = makeReply("불편을 드려 죄송합니다. 개선을 위해 이유를 알려주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            post_action_stage: "awaiting_satisfaction_reason",
+            post_action_satisfaction: score,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+
+      const reply = makeReply("소중한 평가 감사합니다. 좋은 하루 되세요!");
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: prevEntity,
+          post_action_stage: null,
+          conversation_closed: true,
+        },
+      });
+      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+    }
+    if (prevBotContext.post_action_stage === "awaiting_satisfaction_reason") {
+      const reason = String(message || "").trim();
+      if (reason.length < 2) {
+        const reply = makeReply("이유를 조금 더 자세히 알려주세요.");
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            post_action_stage: "awaiting_satisfaction_reason",
+            post_action_satisfaction: Number(prevBotContext.post_action_satisfaction || 1),
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      const { data: currentSessionRow } = await context.supabase
+        .from("D_conv_sessions")
+        .select("id, metadata")
+        .eq("id", sessionId)
+        .maybeSingle();
+      const currentMeta =
+        currentSessionRow && currentSessionRow.metadata && typeof currentSessionRow.metadata === "object"
+          ? (currentSessionRow.metadata as Record<string, unknown>)
+          : {};
+      const priorCsat =
+        currentMeta.csat && typeof currentMeta.csat === "object"
+          ? (currentMeta.csat as Record<string, unknown>)
+          : {};
+      const nextMeta = {
+        ...currentMeta,
+        csat: {
+          ...priorCsat,
+          reason,
+          rated_at: new Date().toISOString(),
+        },
+      };
+      await context.supabase
+        .from("D_conv_sessions")
+        .update({ metadata: nextMeta, ended_at: new Date().toISOString() })
+        .eq("id", sessionId);
+      const reply = makeReply("의견 감사합니다. 남겨주신 내용을 바탕으로 개선하겠습니다. 대화를 종료합니다.");
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: prevEntity,
+          post_action_stage: null,
+          conversation_closed: true,
+        },
+      });
+      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+    }
+    contaminationSummaries = [];
     const noteContamination = (info: {
       slot: string;
       reason: string;
@@ -2540,7 +3424,16 @@ export async function POST(req: NextRequest) {
       Boolean(derivedAddress) ||
       (typeof prevEntity.address === "string" && Boolean(prevEntity.address.trim())) ||
       Boolean(prevBotContext.address_pending);
-    let seededIntent = detectedIntent === "general" ? (prevIntent || "general") : detectedIntent;
+    let seededIntent =
+      forcedIntentQueue.length > 0
+        ? forcedIntentQueue[0]
+        : detectedIntent === "general"
+          ? (prevIntent || "general")
+          : detectedIntent;
+    // Keep subscribe flow locked when previous turn already moved into restock subscribe stages.
+    if (lockIntentToRestockSubscribe) {
+      seededIntent = "restock_subscribe";
+    }
     if (seededIntent === "shipping_inquiry" && hasAddressSignal && isAddressChangeUtterance(message)) {
       seededIntent = "order_change";
     }
@@ -2567,6 +3460,8 @@ export async function POST(req: NextRequest) {
       user: { confirmed: explicitUserConfirmed },
       conversation: { repeat_count: 0, flags: {} },
     };
+    auditIntent = resolvedIntent;
+    auditEntity = (policyContext.entity || {}) as Record<string, unknown>;
 
     const inputGate = runPolicyStage(compiledPolicy, "input", policyContext);
     const extractTemplateIds = (rules: Array<{ enforce?: { actions?: Array<Record<string, unknown>> } }>) => {
@@ -2583,32 +3478,27 @@ export async function POST(req: NextRequest) {
     };
     const matchedRuleIds = inputGate.matched.map((rule) => rule.id);
     const matchedTemplateIds = extractTemplateIds(inputGate.matched as any[]);
-    let usedRuleIds = [...matchedRuleIds];
-    let usedTemplateIds = [...matchedTemplateIds];
-    const inputRuleIds = [...matchedRuleIds];
-    let toolRuleIds: string[] = [];
-    const usedToolPolicies: string[] = [];
-    const usedProviders: string[] = [];
-    const mcpActions: string[] = [];
-    let mcpCandidateCalls: string[] = [];
-    const mcpSkipLogs: string[] = [];
-    const mcpSkipQueue: Array<{
-      tool: string;
-      reason: string;
-      args?: Record<string, unknown>;
-      detail?: Record<string, unknown>;
-    }> = [];
-    const slotDebug = {
+    usedRuleIds = [...matchedRuleIds];
+    usedTemplateIds = [...matchedTemplateIds];
+    inputRuleIds = [...matchedRuleIds];
+    toolRuleIds = [];
+    usedToolPolicies = [];
+    usedProviders = [];
+    mcpActions = [];
+    mcpCandidateCalls = [];
+    mcpSkipLogs = [];
+    mcpSkipQueue = [];
+    slotDebug = {
       expectedInput,
       orderId: resolvedOrderId,
       phone: typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null,
       zipcode: typeof policyContext.entity?.zipcode === "string" ? policyContext.entity.zipcode : null,
       address: typeof policyContext.entity?.address === "string" ? policyContext.entity.address : null,
     };
-    let lastMcpFunction: string | null = null;
-    let lastMcpStatus: string | null = null;
-    let lastMcpError: string | null = null;
-    let lastMcpCount: number | null = null;
+    lastMcpFunction = null;
+    lastMcpStatus = null;
+    lastMcpError = null;
+    lastMcpCount = null;
     const toolProviderMap: Record<string, string> = {
       find_customer_by_phone: "cafe24",
       lookup_order: "cafe24",
@@ -2700,68 +3590,81 @@ export async function POST(req: NextRequest) {
       }
       mcpSkipQueue.length = 0;
     };
-    const toolResults: Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }> = [];
     function makeReply(text: string, llmModel?: string | null, tools?: string[]) {
-      slotDebug.orderId = resolvedOrderId;
-      slotDebug.phone = typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null;
-      slotDebug.zipcode = typeof policyContext.entity?.zipcode === "string" ? policyContext.entity.zipcode : null;
-      slotDebug.address = typeof policyContext.entity?.address === "string" ? policyContext.entity.address : null;
-      const mcpLogLines = toolResults.map((tool) => {
-        const status = tool.ok ? "success" : "error";
-        const error = tool.ok ? "" : String(tool.error || "MCP_ERROR");
-        let count: number | null = null;
-        if (tool.ok && tool.data) {
-          const data = tool.data as any;
-          if (Array.isArray(data)) count = data.length;
-          else if (data && typeof data === "object") {
-            if (typeof data.count === "number") count = data.count;
-            else if (Array.isArray(data.items)) count = data.items.length;
-            else if (Array.isArray(data.orders)) count = data.orders.length;
-            else if (data.orders && Array.isArray(data.orders.order)) count = data.orders.order.length;
+      try {
+        const mcpLogLines = toolResults.map((tool) => {
+          const status = tool.ok ? "success" : "error";
+          const error = tool.ok ? "" : String(tool.error || "MCP_ERROR");
+          let count: number | null = null;
+          if (tool.ok && tool.data) {
+            const data = tool.data as any;
+            if (Array.isArray(data)) count = data.length;
+            else if (data && typeof data === "object") {
+              if (typeof data.count === "number") count = data.count;
+              else if (Array.isArray(data.items)) count = data.items.length;
+              else if (Array.isArray(data.orders)) count = data.orders.length;
+              else if (data.orders && Array.isArray(data.orders.order)) count = data.orders.order.length;
+            }
           }
-        }
-        const countText = count !== null ? ` (count=${count})` : "";
-        return error
-          ? `${tool.name}: ${status}${countText} - ${error}`
-          : `${tool.name}: ${status}${countText}`;
-      });
-      const allMcpLogs = [...mcpLogLines, ...mcpSkipLogs];
-      const debugPayload = {
-        llmModel: llmModel || null,
-        mcpTools: tools || mcpActions,
-        mcpProviders: usedProviders,
-        mcpLastFunction: lastMcpFunction,
-        mcpLastStatus: lastMcpStatus,
-        mcpLastError: lastMcpError,
-        mcpLastCount: lastMcpCount,
-        mcpLogs: allMcpLogs,
-        providerConfig: usedProviders.includes("cafe24") ? providerConfig : {},
-        providerAvailable,
-        authSettingsId: authSettings?.id || null,
-        userId: authContext.user.id,
-        orgId: userOrgId || authContext.orgId,
-        userPlan,
-        userIsAdmin,
-        userRole,
-        kbUserId: kb.id,
-        kbAdminIds: adminKbs.map((item) => item.id),
-        usedRuleIds,
-        usedTemplateIds,
-        usedToolPolicies,
-        slotExpectedInput: slotDebug.expectedInput,
-        slotOrderId: slotDebug.orderId,
-        slotPhone: slotDebug.phone,
-        slotPhoneMasked: maskPhone(slotDebug.phone),
-        slotZipcode: slotDebug.zipcode,
-        slotAddress: slotDebug.address,
-        mcpCandidateCalls,
-        mcpSkipped: mcpSkipLogs,
-        policyInputRules: inputRuleIds,
-        policyToolRules: toolRuleIds,
-        contextContamination: contaminationSummaries,
-        conversationMode,
-      };
-      lastDebugPrefixJson = buildDebugPrefixJson(debugPayload);
+          const countText = count !== null ? ` (count=${count})` : "";
+          return error
+            ? `${tool.name}: ${status}${countText} - ${error}`
+            : `${tool.name}: ${status}${countText}`;
+        });
+        const allMcpLogs = [...mcpLogLines, ...mcpSkipLogs];
+        const debugPayload = {
+          llmModel: llmModel || null,
+          mcpTools: tools || mcpActions,
+          mcpProviders: usedProviders,
+          mcpLastFunction: lastMcpFunction,
+          mcpLastStatus: lastMcpStatus,
+          mcpLastError: lastMcpError,
+          mcpLastCount: lastMcpCount,
+          mcpLogs: allMcpLogs,
+          providerConfig: usedProviders.includes("cafe24") ? providerConfig : {},
+          providerAvailable,
+          authSettingsId: authSettings?.id || null,
+          userId: authContext.user.id,
+          orgId: userOrgId || authContext.orgId,
+          userPlan,
+          userIsAdmin,
+          userRole,
+          kbUserId: kb.id,
+          kbAdminIds: adminKbs.map((item) => item.id),
+          usedRuleIds,
+          usedTemplateIds,
+          usedToolPolicies,
+          slotExpectedInput: slotDebug.expectedInput,
+          slotOrderId: slotDebug.orderId,
+          slotPhone: slotDebug.phone,
+          slotPhoneMasked: maskPhone(slotDebug.phone),
+          slotZipcode: slotDebug.zipcode,
+          slotAddress: slotDebug.address,
+          mcpCandidateCalls,
+          mcpSkipped: mcpSkipLogs,
+          policyInputRules: inputRuleIds,
+          policyToolRules: toolRuleIds,
+          contextContamination: contaminationSummaries,
+          conversationMode,
+        };
+        lastDebugPrefixJson = buildDebugPrefixJson(debugPayload);
+      } catch (error) {
+        // Early confirm branches can call makeReply before slot debug state is initialized.
+        lastDebugPrefixJson =
+          lastDebugPrefixJson ||
+          buildDebugPrefixJson({
+            llmModel: llmModel || null,
+            mcpTools: tools || [],
+            mcpProviders: [],
+            mcpLastFunction: "none",
+            mcpLastStatus: "none",
+            mcpLastError: null,
+            mcpLastCount: null,
+            mcpLogs: [`make_reply_debug_fallback: ${error instanceof Error ? error.message : String(error)}`],
+            providerAvailable: [],
+            conversationMode,
+          });
+      }
       return text;
     }
     async function insertTurn(payload: Record<string, unknown>) {
@@ -2806,6 +3709,18 @@ export async function POST(req: NextRequest) {
       if (!Object.prototype.hasOwnProperty.call(payload, "failed")) {
         payload.failed = null;
       }
+      if (pendingIntentQueue.length > 0) {
+        const currentBotContext =
+          payload.bot_context && typeof payload.bot_context === "object"
+            ? ({ ...(payload.bot_context as Record<string, unknown>) } as Record<string, unknown>)
+            : ({} as Record<string, unknown>);
+        payload.bot_context = {
+          ...currentBotContext,
+          intent_queue: pendingIntentQueue,
+          intent_disambiguation_pending: false,
+          intent_disambiguation_source_text: null,
+        };
+      }
       const result = await insertFinalTurn(context, payload, lastDebugPrefixJson);
       latestTurnId = result.data?.id || null;
       return result;
@@ -2814,7 +3729,14 @@ export async function POST(req: NextRequest) {
       ? String(inputGate.actions.flags.intent_name)
       : "general";
     if (intentFromPolicy !== "general") {
-      if (intentFromPolicy === "shipping_inquiry" && resolvedIntent === "order_change" && hasAddressSignal) {
+      if (lockIntentToRestockSubscribe) {
+        resolvedIntent = "restock_subscribe";
+      } else if (
+        intentFromPolicy === "faq" &&
+        (detectedIntent === "restock_inquiry" || detectedIntent === "restock_subscribe")
+      ) {
+        resolvedIntent = detectedIntent;
+      } else if (intentFromPolicy === "shipping_inquiry" && resolvedIntent === "order_change" && hasAddressSignal) {
         // 주소 변경 문맥을 배송조회로 덮어써서 파이프라인이 튀는 현상 방지
         resolvedIntent = "order_change";
       } else {
@@ -2825,6 +3747,8 @@ export async function POST(req: NextRequest) {
       ...policyContext,
       intent: { name: resolvedIntent },
     };
+    auditIntent = resolvedIntent;
+    auditEntity = (policyContext.entity || {}) as Record<string, unknown>;
     const activePolicyConflicts = (compiledPolicy.conflicts || []).filter((c) => {
       if (c.intentScope === "*") return true;
       return c.intentScope.split(",").map((v) => v.trim()).includes(resolvedIntent);
@@ -2850,6 +3774,10 @@ export async function POST(req: NextRequest) {
       "SLOT_EXTRACTED",
       {
         expected_input: expectedInput || null,
+        query_source:
+          effectiveMessageForIntent !== message
+            ? "intent_disambiguation_source_text"
+            : "current_message",
         derived: {
           order_id: derivedOrderId || null,
           phone: derivedPhone || null,
@@ -3078,6 +4006,7 @@ export async function POST(req: NextRequest) {
         ...policyContext,
         user: { ...(policyContext.user || {}), confirmed: true },
       };
+      auditEntity = (policyContext.entity || {}) as Record<string, unknown>;
       await context.supabase.from("D_conv_turns").update({
         confirmation_response: message,
         user_confirmed: true,
@@ -3209,6 +4138,7 @@ export async function POST(req: NextRequest) {
           restock_at: decision.restock_at ?? null,
         },
       };
+      auditEntity = (policyContext.entity || {}) as Record<string, unknown>;
     }
 
     const toolGate = runPolicyStage(compiledPolicy, "tool", policyContext);
@@ -3260,6 +4190,15 @@ export async function POST(req: NextRequest) {
     });
 
     finalCalls = finalCalls.filter((call) => {
+      if (resolvedIntent === "restock_subscribe" && call.name === "subscribe_restock") {
+        noteMcpSkip(
+          call.name,
+          "DEFERRED_TO_DETERMINISTIC_RESTOCK_SUBSCRIBE",
+          { intent: resolvedIntent },
+          call.args as Record<string, unknown>
+        );
+        return false;
+      }
       if (resolvedIntent === "order_change" && call.name === "update_order_shipping_address") {
         noteMcpSkip(
           call.name,
@@ -3472,6 +4411,14 @@ export async function POST(req: NextRequest) {
       "PRE_MCP_DECISION",
       {
         intent: resolvedIntent,
+        query_source:
+          effectiveMessageForIntent !== message
+            ? "intent_disambiguation_source_text"
+            : "current_message",
+        query_text:
+          effectiveMessageForIntent !== message
+            ? effectiveMessageForIntent
+            : message,
         forced_calls: forcedCalls.map((call) => ({ name: call.name, args: call.args })),
         final_calls: finalCalls.map((call) => ({ name: call.name, args: call.args })),
         denied: Array.from(denied),
@@ -4724,12 +5671,9 @@ export async function POST(req: NextRequest) {
       const productName = String(pickedFromPrevForAnyIntent.product_name || "").trim();
       const month = Number(pickedFromPrevForAnyIntent.month || 0);
       const day = Number(pickedFromPrevForAnyIntent.day || 0);
-      const pickedThumbnail = String(pickedFromPrevForAnyIntent.thumbnail_url || "").trim();
       if (productName && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
         const due = toRestockDueText(month, day);
-        const reply = makeReply(
-          `요약: ${productName} 입고 예정일은 ${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}입니다.\n상세: 예정일 ${due.targetText} (${due.dday})\n다음 액션: 원하시면 재입고 알림 신청도 도와드릴게요.`
-        );
+        const reply = makeReply(buildRestockFinalAnswerWithChoices(productName, due));
         await insertTurn({
           session_id: sessionId,
           seq: nextSeq,
@@ -4768,18 +5712,11 @@ export async function POST(req: NextRequest) {
           step: "final",
           message: reply,
           mcp_actions: mcpActions,
-          product_cards: pickedThumbnail
-            ? [
-                {
-                  id: "restock-picked",
-                  title: productName,
-                  subtitle: `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")} 입고 예정`,
-                  description: due.dday,
-                  image_url: pickedThumbnail,
-                  value: String(pickedIndexForAnyIntent || 1),
-                },
-              ]
-            : [],
+          quick_replies: [
+            { label: "재입고 알림 신청", value: "네" },
+            { label: "대화 종료", value: "대화 종료" },
+          ],
+          product_cards: [],
         });
       }
     }
@@ -4804,12 +5741,9 @@ export async function POST(req: NextRequest) {
         const productName = String(pickedFromPrev.product_name || "").trim();
         const month = Number(pickedFromPrev.month || 0);
         const day = Number(pickedFromPrev.day || 0);
-        const pickedThumbnail = String(pickedFromPrev.thumbnail_url || "").trim();
         if (productName && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
           const due = toRestockDueText(month, day);
-          const reply = makeReply(
-            `요약: ${productName} 입고 예정일은 ${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}입니다.\n상세: 예정일 ${due.targetText} (${due.dday})\n다음 액션: 원하시면 재입고 알림 신청도 도와드릴게요.`
-          );
+          const reply = makeReply(buildRestockFinalAnswerWithChoices(productName, due));
           await insertTurn({
             session_id: sessionId,
             seq: nextSeq,
@@ -4848,18 +5782,11 @@ export async function POST(req: NextRequest) {
             step: "final",
             message: reply,
             mcp_actions: mcpActions,
-            product_cards: pickedThumbnail
-              ? [
-                  {
-                    id: "restock-picked",
-                    title: productName,
-                    subtitle: `${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")} 입고 예정`,
-                    description: due.dday,
-                    image_url: pickedThumbnail,
-                    value: String(pickedIndex || 1),
-                  },
-                ]
-              : [],
+            quick_replies: [
+              { label: "재입고 알림 신청", value: "네" },
+              { label: "대화 종료", value: "대화 종료" },
+            ],
+            product_cards: [],
           });
         }
       }
@@ -4867,16 +5794,85 @@ export async function POST(req: NextRequest) {
       const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
       const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
       const pendingChannel = String(prevBotContext.pending_channel || "").trim();
+      const restockQueryText =
+        resolvedIntent === "restock_inquiry" || resolvedIntent === "restock_subscribe"
+          ? effectiveMessageForIntent
+          : message;
       let restockProductId =
         String(productDecisionRes.decision?.product_id || "").trim() ||
         pendingProductId ||
         "";
-      let restockChannel = extractRestockChannel(message) || pendingChannel || "sms";
-      const rankedFromMessage = rankRestockEntries(message, restockKbEntries);
+      const restockChannel = extractRestockChannel(message) || pendingChannel || "sms";
+      const rankedFromMessage = rankRestockEntries(restockQueryText, restockKbEntries);
+      const queryCoreNoSpace = normalizeKoreanQueryToken(stripRestockNoise(restockQueryText)).replace(/\s+/g, "");
+      const broadCandidates =
+        queryCoreNoSpace.length > 0
+          ? restockKbEntries
+              .filter((item) =>
+                normalizeKoreanMatchText(item.product_name).replace(/\s+/g, "").includes(queryCoreNoSpace)
+              )
+              .slice(0, 5)
+          : [];
 
       // Restock inquiry should stay strictly within KB schedule targets.
       // If query doesn't map to KB restock items, do not expose non-target products via MCP fuzzy match.
-      if (resolvedIntent === "restock_inquiry" && restockKbEntries.length > 0 && rankedFromMessage.length === 0) {
+      if (
+        resolvedIntent === "restock_inquiry" &&
+        restockKbEntries.length > 0 &&
+        rankedFromMessage.length === 0 &&
+        !lockIntentToRestockSubscribe &&
+        !restockSubscribeAcceptedThisTurn &&
+        !pendingProductId
+      ) {
+        if (broadCandidates.length > 1) {
+          const lines = broadCandidates.map((item, idx) => {
+            const due = toRestockDueText(item.month, item.day);
+            return `- ${idx + 1}번 | ${item.product_name} | ${item.raw_date} (${due.dday})`;
+          });
+          const reply = makeReply(`유사한 상품이 여러 개입니다. 아래에서 번호를 선택해 주세요.\n${lines.join("\n")}`);
+          const candidateRows = broadCandidates.map((item, idx) => ({
+            index: idx + 1,
+            product_name: item.product_name,
+            month: item.month,
+            day: item.day,
+            raw_date: item.raw_date,
+            product_id: null as string | null,
+            thumbnail_url: null as string | null,
+          }));
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              customer_verification_token: customerVerificationToken || null,
+              restock_pending: true,
+              restock_stage: "awaiting_product_choice",
+              restock_candidates: candidateRows,
+              mcp_actions: mcpActions,
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "POLICY_DECISION",
+            { stage: "tool", action: "ASK_RESTOCK_PRODUCT_CHOICE", candidate_count: candidateRows.length },
+            { intent_name: resolvedIntent }
+          );
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "FINAL_ANSWER_READY",
+            { answer: reply, model: "deterministic_restock_kb" },
+            { intent_name: resolvedIntent }
+          );
+          return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions, product_cards: [] });
+        }
         const knownTargets = restockKbEntries
           .slice(0, 5)
           .map((item) => `- ${item.product_name} (${item.raw_date})`)
@@ -5055,7 +6051,7 @@ export async function POST(req: NextRequest) {
         const resolved = await callMcpTool(
           context,
           "resolve_product",
-          { query: message },
+          { query: restockQueryText },
           sessionId,
           latestTurnId,
           { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
@@ -5120,13 +6116,11 @@ export async function POST(req: NextRequest) {
       }
 
       if (!restockProductId) {
-        const ranked = rankRestockEntries(message, restockKbEntries);
+        const ranked = rankRestockEntries(restockQueryText, restockKbEntries);
         if (ranked.length === 1) {
           const item = ranked[0].entry;
           const due = toRestockDueText(item.month, item.day);
-          const reply = makeReply(
-            `요약: ${item.product_name} 입고 예정일은 ${item.raw_date}입니다.\n상세: 예정일 ${due.targetText} (${due.dday})\n다음 액션: 원하시면 재입고 알림 신청도 도와드릴게요.`
-          );
+          const reply = makeReply(buildRestockFinalAnswerWithChoices(item.product_name, due));
           await insertTurn({
             session_id: sessionId,
             seq: nextSeq,
@@ -5160,7 +6154,17 @@ export async function POST(req: NextRequest) {
             { answer: reply, model: "deterministic_restock_kb" },
             { intent_name: resolvedIntent }
           );
-          return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions, product_cards: [] });
+          return respond({
+            session_id: sessionId,
+            step: "final",
+            message: reply,
+            mcp_actions: mcpActions,
+            quick_replies: [
+              { label: "재입고 알림 신청", value: "네" },
+              { label: "대화 종료", value: "대화 종료" },
+            ],
+            product_cards: [],
+          });
         }
         if (ranked.length > 1) {
           const candidateRows = ranked.map((row, idx) => ({
@@ -5376,11 +6380,118 @@ export async function POST(req: NextRequest) {
           return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
         }
 
+        const subscribePhone =
+          typeof policyContext.entity?.phone === "string" ? normalizePhoneDigits(policyContext.entity.phone) : "";
+        const pendingLeadDaysFromContext = Array.isArray((prevBotContext as any).pending_lead_days)
+          ? ((prevBotContext as any).pending_lead_days as number[]).map((n) => Number(n)).filter((n) => Number.isFinite(n))
+          : [];
+        const scheduleDue = scheduleEntry ? toRestockDueText(scheduleEntry.month, scheduleEntry.day) : null;
+        const availableLeadDays = scheduleDue ? availableRestockLeadDays(scheduleDue.diffDays) : [];
+        const minLeadDays = availableLeadDays.length >= 3 ? 3 : Math.max(availableLeadDays.length, 1);
+
+        if (availableLeadDays.length > 0 && pendingLeadDaysFromContext.length < minLeadDays) {
+          const optionLine = availableLeadDays.map((v) => `D-${v}`).join(", ");
+          const reply = makeReply(
+            `예약 알림일을 선택해 주세요. (최소 ${minLeadDays}개)\n선택 가능: ${optionLine}\n쉼표(,)로 입력해 주세요. 예: ${availableLeadDays.slice(0, Math.max(minLeadDays, 3)).join(",")}`
+          );
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: "restock_subscribe",
+              entity: policyContext.entity,
+              restock_pending: true,
+              restock_stage: "awaiting_subscribe_lead_days",
+              pending_product_id: restockProductId || null,
+              pending_product_name: productView.productName || null,
+              pending_channel: restockChannel,
+              available_lead_days: availableLeadDays,
+              min_lead_days: minLeadDays,
+              customer_verification_token: customerVerificationToken || null,
+              mcp_actions: mcpActions,
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "POLICY_DECISION",
+            {
+              stage: "tool",
+              action: "ASK_RESTOCK_SUBSCRIBE_LEAD_DAYS",
+              options: availableLeadDays,
+              min_required: minLeadDays,
+              product_id: restockProductId || null,
+            },
+            { intent_name: resolvedIntent }
+          );
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "FINAL_ANSWER_READY",
+            { answer: reply, model: "deterministic_restock_subscribe_lead_days" },
+            { intent_name: resolvedIntent }
+          );
+          return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+        }
+
+        if (restockChannel === "sms" && !subscribePhone) {
+          const reply = makeReply("재입고 알림 신청을 위해 휴대폰 번호를 알려주세요. (예: 01012345678)");
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: "restock_subscribe",
+              entity: policyContext.entity,
+              restock_pending: true,
+              restock_stage: "awaiting_subscribe_phone",
+              pending_product_id: restockProductId || null,
+              pending_product_name: productView.productName || null,
+              pending_channel: restockChannel,
+              pending_lead_days: pendingLeadDaysFromContext,
+              customer_verification_token: customerVerificationToken || null,
+              mcp_actions: mcpActions,
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "POLICY_DECISION",
+            { stage: "tool", action: "ASK_RESTOCK_SUBSCRIBE_PHONE", product_id: restockProductId || null, channel: restockChannel },
+            { intent_name: resolvedIntent }
+          );
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "FINAL_ANSWER_READY",
+            { answer: reply, model: "deterministic_restock_subscribe_phone" },
+            { intent_name: resolvedIntent }
+          );
+          return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+        }
+
         if (canUseTool("subscribe_restock") && hasAllowedToolName("subscribe_restock")) {
           const subscribeRes = await callMcpTool(
             context,
             "subscribe_restock",
-            { product_id: restockProductId, channel: restockChannel, phone: policyContext.entity?.phone || undefined },
+            {
+              product_id: restockProductId,
+              channel: restockChannel,
+              phone: subscribePhone || undefined,
+              session_id: sessionId,
+              mall_id: providerConfig.mall_id || undefined,
+              restock_at: scheduleDue?.targetText || undefined,
+              lead_days: pendingLeadDaysFromContext,
+            },
             sessionId,
             latestTurnId,
             { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
@@ -5395,7 +6506,7 @@ export async function POST(req: NextRequest) {
           mcpActions.push("subscribe_restock");
           if (subscribeRes.ok) {
             const reply = makeReply(
-              `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${productView.productName || restockProductId} / 채널 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}`
+              `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${productView.productName || restockProductId} / 채널 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}\n다음 선택: 대화 종료 / 다른 문의`
             );
             await insertTurn({
               session_id: sessionId,
@@ -5407,10 +6518,20 @@ export async function POST(req: NextRequest) {
                 intent_name: resolvedIntent,
                 entity: policyContext.entity,
                 customer_verification_token: customerVerificationToken || null,
+                post_action_stage: "awaiting_choice",
                 mcp_actions: mcpActions,
               },
             });
-            return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+            return respond({
+              session_id: sessionId,
+              step: "final",
+              message: reply,
+              mcp_actions: mcpActions,
+              quick_replies: [
+                { label: "대화 종료", value: "대화 종료" },
+                { label: "다른 문의", value: "다른 문의" },
+              ],
+            });
           }
           await insertEvent(
             context,
@@ -5420,11 +6541,36 @@ export async function POST(req: NextRequest) {
             { tool: "subscribe_restock", error: subscribeRes.error },
             { intent_name: resolvedIntent }
           );
+          const reply = makeReply(
+            "재입고 알림 신청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요. 문제가 반복되면 관리자에게 문의해 주세요."
+          );
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              customer_verification_token: customerVerificationToken || null,
+              mcp_actions: mcpActions,
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "FINAL_ANSWER_READY",
+            { answer: reply, model: "deterministic_restock_subscribe_error" },
+            { intent_name: resolvedIntent }
+          );
+          return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
         }
       }
 
       const inquiryReply = makeReply(
-        `요약: ${productView.productName || restockProductId} 재고/입고 상태를 확인했습니다.\n상세: ${scheduleLine}\n${stockLine}\n${policyLine}\n다음 액션: 원하시면 재입고 알림 신청도 도와드릴게요.`
+        `요약: ${productView.productName || restockProductId} 재고/입고 상태를 확인했습니다.\n상세: ${scheduleLine}\n${stockLine}\n${policyLine}\n지금 ${restockChannel} 재입고 알림 신청을 진행할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
       );
       await insertTurn({
         session_id: sessionId,
@@ -5550,7 +6696,12 @@ ${mcpSummary || "(없음)"}`;
     });
     messages.push({ role: "user", content: userPrompt });
 
+    const finalLlmStartedAt = Date.now();
     const answerRes = await runLlm(agent.llm, messages);
+    pushRuntimeTimingStage(timingStages, "llm_generate_final_answer", finalLlmStartedAt, {
+      model: answerRes.model,
+      prompt_message_count: messages.length,
+    });
     let finalAnswer = answerRes.text.trim();
 
     const outputGate = runPolicyStage(compiledPolicy, "output", policyContext);
@@ -5580,6 +6731,7 @@ ${mcpSummary || "(없음)"}`;
     }
 
     const reply = makeReply(finalAnswer, answerRes.model, mcpActions);
+    const finalPersistStartedAt = Date.now();
     await insertTurn({
       session_id: sessionId,
       seq: nextSeq,
@@ -5629,6 +6781,10 @@ ${mcpSummary || "(없음)"}`;
       { answer: reply, model: answerRes.model },
       { intent_name: resolvedIntent }
     );
+    pushRuntimeTimingStage(timingStages, "persist_turn_and_final_event", finalPersistStartedAt, {
+      mcp_action_count: mcpActions.length,
+      final_answer_length: reply.length,
+    });
 
     return respond({
       session_id: sessionId,
@@ -5640,14 +6796,103 @@ ${mcpSummary || "(없음)"}`;
     if (debugEnabled) {
       console.error("[runtime/chat/mk2] unhandled error", err);
     }
-    const message = err instanceof Error ? err.message : "INTERNAL_ERROR";
+    const errorMessage = err instanceof Error ? err.message : "INTERNAL_ERROR";
     const fallback = "처리 중 오류가 발생했습니다. 같은 내용을 한 번 더 보내주세요.";
+    const failed = buildFailedPayload({
+      code: "INTERNAL_ERROR",
+      summary: errorMessage || "INTERNAL_ERROR",
+      intent: auditIntent || undefined,
+      stage: "runtime.chat.post",
+      retryable: true,
+      detail: debugEnabled && err instanceof Error ? { stack: err.stack || null } : undefined,
+    });
+
+    if (runtimeContext && currentSessionId) {
+      const errorBotContext = {
+        intent_name: auditIntent || "general",
+        entity: auditEntity || {},
+        mode: auditConversationMode || "mk2",
+      };
+      await insertEvent(
+        runtimeContext,
+        currentSessionId,
+        latestTurnId,
+        "UNHANDLED_ERROR_CAUGHT",
+        {
+          code: "INTERNAL_ERROR",
+          summary: errorMessage || "INTERNAL_ERROR",
+          stage: "runtime.chat.post",
+          has_previous_turn_id: Boolean(latestTurnId),
+        },
+        errorBotContext
+      );
+
+      let fallbackTurnId: string | null = latestTurnId;
+      try {
+        const recentRes = await getRecentTurns(runtimeContext, currentSessionId, 1);
+        const recentTurns = (recentRes.data || []) as Array<{ seq?: number }>;
+        const fallbackSeq = (recentTurns[0]?.seq ? Number(recentTurns[0].seq) : 0) + 1;
+        const fallbackPrefixJson =
+          lastDebugPrefixJson ||
+          buildDebugPrefixJson({
+            llmModel: null,
+            mcpTools: [],
+            mcpProviders: [],
+            mcpLastFunction: "none",
+            mcpLastStatus: "error",
+            mcpLastError: errorMessage || "INTERNAL_ERROR",
+            mcpLastCount: null,
+            mcpLogs: [`unhandled_error: ${errorMessage || "INTERNAL_ERROR"}`],
+            providerAvailable: [],
+            conversationMode: auditConversationMode || "mk2",
+          });
+        const fallbackTurnRes = await insertFinalTurn(
+          runtimeContext,
+          {
+            session_id: currentSessionId,
+            seq: fallbackSeq,
+            transcript_text: auditMessage || "",
+            answer_text: fallback,
+            final_answer: fallback,
+            failed,
+            bot_context: {
+              intent_name: auditIntent || "general",
+              entity: auditEntity || {},
+              mcp_actions: [],
+              error_code: "INTERNAL_ERROR",
+              error_stage: "runtime.chat.post",
+            },
+          },
+          fallbackPrefixJson
+        );
+        if (fallbackTurnRes?.data?.id) {
+          fallbackTurnId = String(fallbackTurnRes.data.id);
+          latestTurnId = fallbackTurnId;
+        }
+      } catch (persistError) {
+        console.warn("[runtime/chat_mk2] failed to persist fallback error turn", {
+          session_id: currentSessionId,
+          turn_id: latestTurnId,
+          error: persistError instanceof Error ? persistError.message : String(persistError),
+        });
+      }
+
+      await insertEvent(
+        runtimeContext,
+        currentSessionId,
+        fallbackTurnId,
+        "FINAL_ANSWER_READY",
+        { answer: fallback, model: "deterministic_error_fallback", failed },
+        errorBotContext
+      );
+    }
+
     return respond({
       step: "final",
       message: fallback,
       mcp_actions: [],
       error: "INTERNAL_ERROR",
-      detail: debugEnabled ? { message, stack: err instanceof Error ? err.stack : null } : undefined,
+      detail: debugEnabled ? { message: errorMessage, stack: err instanceof Error ? err.stack : null } : undefined,
     });
   }
 }

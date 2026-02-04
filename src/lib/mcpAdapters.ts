@@ -308,6 +308,126 @@ async function cafe24Request(
   }
 }
 
+async function solapiScheduleMessage(params: { to: string; text: string; from: string; scheduledAt: string }) {
+  const apiKey = readEnv("SOLAPI_API_KEY");
+  const apiSecret = readEnv("SOLAPI_API_SECRET");
+  if (!apiKey || !apiSecret) {
+    return { ok: false as const, error: "SOLAPI_CONFIG_MISSING" };
+  }
+  const auth = buildSolapiAuthHeader(apiKey, apiSecret);
+  const res = await fetch("https://api.solapi.com/messages/v4/send-many/detail", {
+    method: "POST",
+    headers: {
+      Authorization: auth,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      scheduledDate: params.scheduledAt,
+      messages: [
+        {
+          to: params.to,
+          from: params.from,
+          text: params.text,
+        },
+      ],
+    }),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    return { ok: false as const, error: `SOLAPI_ERROR_${res.status}: ${text || res.statusText}` };
+  }
+  try {
+    return { ok: true as const, data: text ? JSON.parse(text) : {} };
+  } catch {
+    return { ok: true as const, data: { raw: text } };
+  }
+}
+
+async function registerSolapiReservationsForSubscription(
+  ctx: AdapterContext,
+  subscriptionId: string,
+  fallbackMessage: string
+) {
+  const bypass = isEnvTrue("SOLAPI_BYPASS");
+  if (bypass) {
+    return { ok: true as const, scheduledCount: 0, skippedReason: "SOLAPI_BYPASS" };
+  }
+  const from = readEnv("SOLAPI_FROM");
+  if (!from) {
+    return { ok: false as const, error: "SOLAPI_FROM_MISSING", scheduledCount: 0 };
+  }
+
+  const { data, error } = await ctx.supabase
+    .from("G_com_restock_message_queue")
+    .select("id,phone,scheduled_for,message_text,attempts")
+    .eq("subscription_id", subscriptionId)
+    .eq("status", "pending")
+    .order("scheduled_for", { ascending: true });
+  if (error) {
+    return { ok: false as const, error: `QUEUE_FETCH_FAILED: ${error.message}`, scheduledCount: 0 };
+  }
+
+  const rows = (data || []) as Array<{
+    id: string;
+    phone: string;
+    scheduled_for: string;
+    message_text: string | null;
+    attempts: number | null;
+  }>;
+  if (rows.length === 0) {
+    return { ok: true as const, scheduledCount: 0 };
+  }
+
+  let scheduledCount = 0;
+  const errors: string[] = [];
+  for (const row of rows) {
+    const destination = String(row.phone || "").trim();
+    const scheduledAtIso = new Date(String(row.scheduled_for || "")).toISOString();
+    if (!destination || Number.isNaN(Date.parse(scheduledAtIso))) {
+      errors.push(`${row.id}:INVALID_ROW`);
+      continue;
+    }
+    const text = String(row.message_text || "").trim() || fallbackMessage;
+    const sent = await solapiScheduleMessage({
+      to: destination,
+      from,
+      text,
+      scheduledAt: scheduledAtIso,
+    });
+    if (!sent.ok) {
+      errors.push(`${row.id}:${sent.error}`);
+      continue;
+    }
+    const payload = (sent.data || {}) as Record<string, unknown>;
+    const messageId =
+      payload.messageId ||
+      payload.message_id ||
+      (Array.isArray((payload as any).messageList) ? (payload as any).messageList?.[0]?.messageId : null) ||
+      null;
+    const { error: updateError } = await ctx.supabase
+      .from("G_com_restock_message_queue")
+      .update({
+        status: "sent",
+        sent_at: new Date().toISOString(),
+        last_error: null,
+        solapi_message_id: messageId ? String(messageId) : null,
+        attempts: Number(row.attempts || 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", row.id);
+    if (updateError) {
+      errors.push(`${row.id}:QUEUE_UPDATE_FAILED:${updateError.message}`);
+      continue;
+    }
+    scheduledCount += 1;
+  }
+  if (errors.length > 0) {
+    return { ok: false as const, error: errors.slice(0, 3).join(" | "), scheduledCount };
+  }
+  return { ok: true as const, scheduledCount };
+}
+
 function toQueryRecord(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {} as Record<string, string>;
   const out: Record<string, string> = {};
@@ -1593,26 +1713,164 @@ const adapters: Record<string, ToolAdapter> = {
     }
     const productId = String(params.product_id || "").trim();
     const channel = String(params.channel || "").trim();
-    if (!productId || !channel) {
-      return { status: "error", error: { code: "INVALID_INPUT", message: "product_id and channel are required" } };
+    const mallId = String(params.mall_id || "").trim();
+    const sessionId = String(params.session_id || "").trim();
+    const topicTypeRaw = String(params.topic_type || "").trim().toLowerCase();
+    const topicType = topicTypeRaw || "restock";
+    const topicKey = String(params.topic_key || productId || "").trim();
+    const scheduleModeRaw = String(params.schedule_mode || "").trim().toLowerCase();
+    const scheduleMode =
+      scheduleModeRaw && ["restock_lead_days", "scheduled_at", "custom_plan"].includes(scheduleModeRaw)
+        ? scheduleModeRaw
+        : "restock_lead_days";
+    if (!channel) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "channel is required" } };
     }
+    if (!mallId) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "mall_id is required" } };
+    }
+    if (!sessionId) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "session_id is required" } };
+    }
+    if (scheduleMode === "restock_lead_days" && !productId) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "product_id is required" } };
+    }
+    if (!topicKey) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "topic_key is required" } };
+    }
+    const leadDays = Array.isArray(params.lead_days)
+      ? Array.from(
+          new Set(
+            (params.lead_days as unknown[])
+              .map((value) => Number(value))
+              .filter((value) => Number.isFinite(value) && value > 0)
+          )
+        ).sort((a, b) => a - b)
+      : [];
+    const restockAtRaw = String(params.restock_at || "").trim();
+    const restockAt = /^\d{4}-\d{2}-\d{2}$/.test(restockAtRaw) ? restockAtRaw : null;
+    const scheduleAtRaw = String(params.schedule_at || "").trim();
+    const scheduleAt =
+      scheduleAtRaw && !Number.isNaN(Date.parse(scheduleAtRaw)) ? new Date(scheduleAtRaw).toISOString() : null;
+    const schedulePlan =
+      Array.isArray(params.schedule_plan) || (params.schedule_plan && typeof params.schedule_plan === "object")
+        ? params.schedule_plan
+        : [];
     const payload = {
       org_id: ctx.orgId,
-      product_id: productId,
+      mall_id: mallId,
+      session_id: sessionId,
+      product_id: productId || topicKey,
+      topic_type: topicType,
+      topic_key: topicKey,
+      topic_label: params.topic_label ? String(params.topic_label) : null,
+      intent_name: params.intent_name ? String(params.intent_name) : null,
       channel,
       phone: params.phone ? String(params.phone) : null,
       customer_id: params.customer_id ? String(params.customer_id) : null,
       trigger_type: params.trigger_type ? String(params.trigger_type) : "status_change",
       trigger_value: params.trigger_value ?? null,
       actions: Array.isArray(params.actions) ? params.actions : ["notify_only"],
+      restock_at: restockAt,
+      lead_days: leadDays,
+      schedule_tz: String(params.schedule_tz || "Asia/Seoul"),
+      schedule_hour_local: Number(params.schedule_hour_local || 17),
+      schedule_mode: scheduleMode,
+      schedule_at: scheduleAt,
+      schedule_plan: schedulePlan,
+      message_template: params.message_template ? String(params.message_template) : null,
+      metadata: params.metadata && typeof params.metadata === "object" ? params.metadata : {},
       status: "active",
       created_at: new Date().toISOString(),
     };
-    const { data, error } = await ctx.supabase.from("G_com_restock_subscriptions").insert(payload).select("id").single();
+    const { data, error } = await ctx.supabase
+      .from("G_com_restock_subscriptions")
+      .upsert(payload, {
+        onConflict: "org_id,mall_id,topic_type,topic_key,channel,phone,session_id",
+      })
+      .select("id")
+      .single();
+    if (error && /Could not find the '(.+)' column/i.test(error.message || "")) {
+      const legacyPayload = {
+        org_id: ctx.orgId,
+        mall_id: mallId,
+        session_id: sessionId,
+        product_id: productId || topicKey,
+        channel,
+        phone: params.phone ? String(params.phone) : null,
+        customer_id: params.customer_id ? String(params.customer_id) : null,
+        trigger_type: params.trigger_type ? String(params.trigger_type) : "status_change",
+        trigger_value: params.trigger_value ?? null,
+        actions: Array.isArray(params.actions) ? params.actions : ["notify_only"],
+        restock_at: restockAt,
+        lead_days: leadDays,
+        schedule_tz: String(params.schedule_tz || "Asia/Seoul"),
+        schedule_hour_local: Number(params.schedule_hour_local || 17),
+        status: "active",
+        created_at: new Date().toISOString(),
+      };
+      const legacyRes = await ctx.supabase
+        .from("G_com_restock_subscriptions")
+        .upsert(legacyPayload, {
+          onConflict: "org_id,mall_id,product_id,channel,phone,session_id",
+        })
+        .select("id")
+        .single();
+      if (!legacyRes.error) {
+        const subscriptionId = String(legacyRes.data?.id || "").trim();
+        if (subscriptionId) {
+          const reservation = await registerSolapiReservationsForSubscription(
+            ctx,
+            subscriptionId,
+            `[알림] ${topicKey}`
+          );
+          return {
+            status: "success",
+            data: {
+              subscription_id: subscriptionId,
+              reservation_scheduled_count: reservation.scheduledCount || 0,
+              reservation_ok: reservation.ok,
+              reservation_error: reservation.ok ? null : reservation.error,
+              ...legacyPayload,
+            },
+          };
+        }
+        return { status: "success", data: { subscription_id: legacyRes.data?.id ?? null, ...legacyPayload } };
+      }
+      return { status: "error", error: { code: "DB_ERROR", message: legacyRes.error.message } };
+    }
     if (error) {
       return { status: "error", error: { code: "DB_ERROR", message: error.message } };
     }
+    const subscriptionId = String(data?.id || "").trim();
+    if (subscriptionId) {
+      const reservation = await registerSolapiReservationsForSubscription(
+        ctx,
+        subscriptionId,
+        `[알림] ${payload.topic_label || topicKey || productId}`
+      );
+      return {
+        status: "success",
+        data: {
+          subscription_id: subscriptionId,
+          reservation_scheduled_count: reservation.scheduledCount || 0,
+          reservation_ok: reservation.ok,
+          reservation_error: reservation.ok ? null : reservation.error,
+          ...payload,
+        },
+      };
+    }
     return { status: "success", data: { subscription_id: data?.id ?? null, ...payload } };
+  },
+  subscribe_notification: async (params, ctx) => {
+    return adapters.subscribe_restock(
+      {
+        ...params,
+        topic_type: params.topic_type || "general",
+        schedule_mode: params.schedule_mode || "scheduled_at",
+      },
+      ctx
+    );
   },
   trigger_restock: async (params, ctx) => {
     if (!ctx) {

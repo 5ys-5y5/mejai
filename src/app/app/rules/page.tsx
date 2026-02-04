@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronRight, Copy, Minus, Play, Plus } from "lucide-react";
+import { SelectPopover } from "@/components/SelectPopover";
 import { Card } from "@/components/ui/Card";
 import { apiFetch } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
@@ -47,6 +48,14 @@ type RunState = {
   loading: boolean;
   error?: string | null;
 };
+
+const ACTION_SEARCH_COLUMN_OPTIONS = [
+  { id: "all", label: "전체 컬럼" },
+  { id: "name", label: "액션" },
+  { id: "description", label: "설명" },
+  { id: "meta", label: "메타데이터" },
+  { id: "usage_count", label: "사용 빈도" },
+];
 
 function pickExampleValue(key: string, schema?: Record<string, unknown>) {
   const normalizedKey = key.toLowerCase();
@@ -115,6 +124,10 @@ export default function RulesPage() {
   const [error, setError] = useState<string | null>(null);
   const [selectedProviderKey, setSelectedProviderKey] = useState<string>("");
   const [selectedActionId, setSelectedActionId] = useState<string>("");
+  const [actionSearch, setActionSearch] = useState("");
+  const [actionSearchColumn, setActionSearchColumn] = useState<
+    "all" | "name" | "description" | "meta" | "usage_count"
+  >("all");
   const [inputByTool, setInputByTool] = useState<Record<string, string>>({});
   const [outputByTool, setOutputByTool] = useState<Record<string, string>>({});
   const [outputExpandedByTool, setOutputExpandedByTool] = useState<Record<string, boolean>>({});
@@ -155,14 +168,33 @@ export default function RulesPage() {
     () => providers.find((provider) => provider.key === selectedProviderKey) || providers[0] || null,
     [providers, selectedProviderKey]
   );
+  const filteredActions = useMemo(() => {
+    if (!selectedProvider) return [];
+    const query = actionSearch.trim().toLowerCase();
+    return selectedProvider.actions.filter((action) => {
+      const name = action.name.toLowerCase();
+      const description = (action.description || "").toLowerCase();
+      const metaText = [action.meta?.destructive ? "파괴적" : "", action.provider_key || action.provider || ""]
+        .join(" ")
+        .toLowerCase();
+      const usageText = String(action.usage_count ?? 0);
+      if (query.length === 0) return true;
+      if (actionSearchColumn === "name") return name.includes(query);
+      if (actionSearchColumn === "description") return description.includes(query);
+      if (actionSearchColumn === "meta") return metaText.includes(query);
+      if (actionSearchColumn === "usage_count") return usageText.includes(query);
+      if (actionSearchColumn === "all") {
+        return (
+          name.includes(query) || description.includes(query) || metaText.includes(query) || usageText.includes(query)
+        );
+      }
+      return true;
+    });
+  }, [selectedProvider, actionSearch, actionSearchColumn]);
   const selectedAction = useMemo(() => {
-    if (!selectedProvider) return null;
-    return (
-      selectedProvider.actions.find((action) => action.id === selectedActionId) ||
-      selectedProvider.actions[0] ||
-      null
-    );
-  }, [selectedProvider, selectedActionId]);
+    if (!filteredActions.length) return null;
+    return filteredActions.find((action) => action.id === selectedActionId) || filteredActions[0] || null;
+  }, [filteredActions, selectedActionId]);
   const providersSorted = useMemo(
     () => [...providers].sort((a, b) => (b.action_count || 0) - (a.action_count || 0)),
     [providers]
@@ -178,6 +210,16 @@ export default function RulesPage() {
       return next;
     });
   }, [allActions]);
+  useEffect(() => {
+    if (!selectedProvider) return;
+    if (filteredActions.length === 0) {
+      setSelectedActionId("");
+      return;
+    }
+    if (!filteredActions.some((action) => action.id === selectedActionId)) {
+      setSelectedActionId(filteredActions[0].id);
+    }
+  }, [selectedProvider, filteredActions, selectedActionId]);
 
   async function handleRun(action: McpAction) {
     setRunStateByTool((prev) => ({ ...prev, [action.id]: { loading: true, error: null } }));
@@ -309,6 +351,28 @@ export default function RulesPage() {
 
                 {/* 스크롤 컨테이너(헤더+바디 공통) */}
                 <div className="border-b border-slate-200 px-4 py-4">
+                  <div className="mb-3 w-full">
+                    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center">
+                      <SelectPopover
+                        value={actionSearchColumn}
+                        onChange={(value) =>
+                          setActionSearchColumn(
+                            value as "all" | "name" | "description" | "meta" | "usage_count"
+                          )
+                        }
+                        options={ACTION_SEARCH_COLUMN_OPTIONS}
+                        className="w-[150px] shrink-0"
+                        placeholder="검색 컬럼"
+                      />
+                      <input
+                        type="text"
+                        value={actionSearch}
+                        onChange={(event) => setActionSearch(event.target.value)}
+                        placeholder="액션 검색"
+                        className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs text-slate-700 outline-none placeholder:text-slate-400 focus:border-slate-300"
+                      />
+                    </div>
+                  </div>
                   <div className="max-h-[360px] overflow-y-auto rounded-xl border border-slate-200 [scrollbar-gutter:auto]">
                     {/* 헤더(컬럼명) 고정 영역 */}
                     <div className="sticky top-0 z-10 bg-white">
@@ -330,7 +394,7 @@ export default function RulesPage() {
 
                     {/* 스크롤 되는 바디(리스트) 영역 */}
                     <ul className="divide-y divide-slate-200">
-                      {selectedProvider.actions.map((action) => {
+                      {filteredActions.map((action) => {
                         const selected = action.id === selectedAction?.id;
                         const allowed = action.policy?.is_allowed ?? true;
 
@@ -400,6 +464,9 @@ export default function RulesPage() {
                         );
                       })}
                     </ul>
+                    {filteredActions.length === 0 ? (
+                      <div className="px-3 py-6 text-center text-xs text-slate-500">검색/필터 결과가 없습니다.</div>
+                    ) : null}
                   </div>
                 </div>
 
