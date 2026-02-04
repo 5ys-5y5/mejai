@@ -1413,26 +1413,28 @@ export default function LabolatoryPage() {
         updateModel(modelId, (model) => ({
           ...model,
           sessionId: res.session_id || model.sessionId,
-          messages: model.messages.map((msg) => {
-            if (msg.id !== loadingMessageId || msg.role !== "bot") return msg;
-            if (!res.message) {
-              return { ...msg, isLoading: false, content: "" };
-            }
-            const persistedLogs = isAdminUser
-              ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} 답변 생성 완료`].slice(-20)
-              : undefined;
-            return {
-              id: loadingMessageId,
-              role: "bot",
-              content: res.message || "",
-              richHtml: typeof res.rich_message_html === "string" ? res.rich_message_html : undefined,
-              turnId: res.turn_id || null,
-              isLoading: false,
-              loadingLogs: persistedLogs,
-              quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
-              productCards: productCards.length > 0 ? productCards : undefined,
-            };
-          }).filter((msg) => !(msg.id === loadingMessageId && msg.role === "bot" && !msg.content)),
+          messages: model.messages
+            .map((msg): ChatMessage => {
+              if (msg.id !== loadingMessageId || msg.role !== "bot") return msg;
+              if (!res.message) {
+                return { ...msg, role: "bot", isLoading: false, content: "" };
+              }
+              const persistedLogs = isAdminUser
+                ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} 답변 생성 완료`].slice(-20)
+                : undefined;
+              return {
+                id: loadingMessageId,
+                role: "bot",
+                content: res.message || "",
+                richHtml: typeof res.rich_message_html === "string" ? res.rich_message_html : undefined,
+                turnId: res.turn_id || null,
+                isLoading: false,
+                loadingLogs: persistedLogs,
+                quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
+                productCards: productCards.length > 0 ? productCards : undefined,
+              };
+            })
+            .filter((msg) => !(msg.id === loadingMessageId && msg.role === "bot" && !msg.content)),
           sending: false,
         }));
         if (botMessageId) {
