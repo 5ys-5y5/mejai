@@ -1,36 +1,90 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# mejai
 
-## Getting Started
+mejai는 Next.js + Supabase 기반 상담 런타임 프로젝트입니다.  
+코어 실행 엔드포인트는 `POST /api/runtime/chat`입니다.
 
-First, run the development server:
+## Local Run
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+브라우저: `http://localhost:3000`
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## WebSocket Run
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+npm run ws
+```
 
-## Learn More
+필수 환경 변수:
 
-To learn more about Next.js, take a look at the following resources:
+```env
+NEXT_PUBLIC_CALL_WS_URL=ws://localhost:8080
+APP_BASE_URL=http://localhost:3000
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- WS 서버는 `ws-server.js`에서 `/api/runtime/chat`를 호출합니다.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## `/call/{token}` Usage
 
-## Deploy on Vercel
+- 기본: `/call/{token}`
+- 권장:
+  - `/call/{token}?agent_id={agentId}&mode={mk2|natural}&llm={chatgpt|gemini}&session_id={sessionId}`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+파라미터:
+- `token` (필수): 통화/웹입력 세션 식별자
+- `agent_id` (권장): 에이전트 기반 실행
+- `session_id` (선택): 기존 런타임 세션 이어서 실행
+- `mode` (선택): `mk2`(기본), `natural`
+- `llm` (선택): `chatgpt`(기본), `gemini` (`agent_id` 미지정 시 사용)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Reference Docs
+
+- `quick_start.md`
+- `docs/bot_spec.md`
+
+## Environment Variables
+
+### Supabase
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+### LLM
+
+```env
+OPENAI_API_KEY=
+GEMINI_API_KEY=
+```
+
+### Cafe24 OAuth/API
+
+```env
+CAFE24_CLIENT_ID=
+CAFE24_CLIENT_SECRET_KEY=
+CAFE24_REDIRECT_URI=
+CAFE24_SCOPE=
+CAFE24_OAUTH_STATE_SECRET=
+```
+
+### Solapi / Juso
+
+```env
+SOLAPI_API_KEY=
+SOLAPI_API_SECRET=
+SOLAPI_FROM=
+SOLAPI_TEMP=
+SOLAPI_BYPASS=
+JUSO_API_KEY=
+```
+
+### Cron
+
+```env
+CRON_SECRET=
+```

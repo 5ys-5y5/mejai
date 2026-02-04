@@ -25,7 +25,17 @@ function sendJson(ws, payload) {
   ws.send(JSON.stringify(payload));
 }
 
-wss.on("connection", (ws) => {
+wss.on("connection", (ws, req) => {
+  const reqUrl = new URL(req.url || "/", "http://localhost");
+  const connectionState = {
+    token: reqUrl.searchParams.get("token") || "",
+    accessToken: reqUrl.searchParams.get("access_token") || "",
+    agentId: reqUrl.searchParams.get("agent_id") || "",
+    sessionId: reqUrl.searchParams.get("session_id") || "",
+    llm: reqUrl.searchParams.get("llm") || "chatgpt",
+    mode: reqUrl.searchParams.get("mode") || "mk2",
+  };
+
   sendJson(ws, { type: "ready", ts: Date.now() });
 
   ws.on("message", (raw) => {
@@ -41,34 +51,75 @@ wss.on("connection", (ws) => {
     }
 
     if (message.type === "join") {
+      if (typeof message.token === "string" && message.token.trim()) {
+        connectionState.token = message.token.trim();
+      }
+      if (typeof message.access_token === "string" && message.access_token.trim()) {
+        connectionState.accessToken = message.access_token.trim();
+      }
+      if (typeof message.agent_id === "string" && message.agent_id.trim()) {
+        connectionState.agentId = message.agent_id.trim();
+      }
+      if (typeof message.session_id === "string" && message.session_id.trim()) {
+        connectionState.sessionId = message.session_id.trim();
+      }
+      if (typeof message.llm === "string" && message.llm.trim()) {
+        connectionState.llm = message.llm.trim();
+      }
+      if (typeof message.mode === "string" && message.mode.trim()) {
+        connectionState.mode = message.mode.trim();
+      }
       sendJson(ws, { type: "joined", ts: Date.now() });
       return;
     }
 
     if (message.type === "user_message") {
-      const accessToken = message.access_token || "";
-      const agentId = message.agent_id || "";
+      const accessToken =
+        (typeof message.access_token === "string" && message.access_token.trim()) ||
+        connectionState.accessToken ||
+        "";
+      const agentId =
+        (typeof message.agent_id === "string" && message.agent_id.trim()) ||
+        connectionState.agentId ||
+        "";
       const text = message.text || "";
-      const sessionId = message.session_id || "";
-      const mode = message.mode || "";
-      if (!accessToken || !agentId || !text) {
-        sendJson(ws, { type: "error", error: "MISSING_FIELDS" });
+      const sessionId =
+        (typeof message.session_id === "string" && message.session_id.trim()) ||
+        connectionState.sessionId ||
+        "";
+      const mode =
+        (typeof message.mode === "string" && message.mode.trim()) ||
+        connectionState.mode ||
+        "mk2";
+      const llm =
+        (typeof message.llm === "string" && message.llm.trim()) ||
+        connectionState.llm ||
+        "chatgpt";
+
+      if (!accessToken) {
+        sendJson(ws, { type: "error", error: "MISSING_ACCESS_TOKEN" });
+        return;
+      }
+      if (!text) {
+        sendJson(ws, { type: "error", error: "MISSING_TEXT" });
         return;
       }
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 60_000);
-      fetch(`${APP_BASE_URL}/api/playground/chat`, {
+      const requestBody = {
+        message: String(text),
+        ...(sessionId ? { session_id: sessionId } : {}),
+        mode: mode || "mk2",
+        ...(agentId ? { agent_id: agentId } : { llm }),
+      };
+
+      fetch(`${APP_BASE_URL}/api/runtime/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        body: JSON.stringify({
-          agent_id: agentId,
-          message: String(text),
-          session_id: sessionId || null,
-          mode: mode || "guided",
-        }),
+        body: JSON.stringify(requestBody),
         signal: controller.signal,
       })
         .then(async (res) => {
@@ -81,6 +132,9 @@ wss.on("connection", (ws) => {
               status: res.status,
             });
             return;
+          }
+          if (typeof payload.session_id === "string" && payload.session_id) {
+            connectionState.sessionId = payload.session_id;
           }
           sendJson(ws, {
             type: "assistant_message",

@@ -1,11 +1,12 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Send, Phone, User, Bot, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getAccessToken } from "@/lib/apiClient";
 
 type ChatMessage = {
   id: string;
@@ -17,7 +18,18 @@ const WS_URL = process.env.NEXT_PUBLIC_CALL_WS_URL || "";
 
 export default function WebInputPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const token = useMemo(() => String(params?.token || ""), [params]);
+  const initialAgentId = useMemo(() => String(searchParams?.get("agent_id") || "").trim(), [searchParams]);
+  const initialSessionId = useMemo(() => String(searchParams?.get("session_id") || "").trim(), [searchParams]);
+  const requestedMode = useMemo(
+    () => (String(searchParams?.get("mode") || "").trim().toLowerCase() === "natural" ? "natural" : "mk2"),
+    [searchParams]
+  );
+  const requestedLlm = useMemo(() => {
+    const llm = String(searchParams?.get("llm") || "").trim().toLowerCase();
+    return llm === "gemini" ? "gemini" : "chatgpt";
+  }, [searchParams]);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -27,34 +39,77 @@ export default function WebInputPage() {
     },
   ]);
   const [inputValue, setInputValue] = useState("");
-  const [status, setStatus] = useState("연결 대기");
+  const [status, setStatus] = useState(WS_URL ? "연결 대기" : "실시간 서버 주소가 설정되지 않았습니다.");
+  const [accessToken, setAccessToken] = useState("");
+  const [runtimeSessionId, setRuntimeSessionId] = useState(initialSessionId);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    if (!WS_URL) {
-      setStatus("실시간 서버 주소가 설정되지 않았습니다.");
-      return;
-    }
+    let mounted = true;
+    getAccessToken()
+      .then((tokenValue) => {
+        if (!mounted) return;
+        setAccessToken(tokenValue || "");
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setAccessToken("");
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!WS_URL) return;
 
     const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(token)}`);
     wsRef.current = ws;
 
     ws.addEventListener("open", () => {
       setStatus("연결됨");
-      ws.send(JSON.stringify({ type: "join", token }));
+      ws.send(
+        JSON.stringify({
+          type: "join",
+          token,
+          access_token: accessToken || undefined,
+          agent_id: initialAgentId || undefined,
+          session_id: runtimeSessionId || undefined,
+          mode: requestedMode,
+          llm: requestedLlm,
+        })
+      );
     });
 
     ws.addEventListener("message", (event) => {
-      let payload: any = null;
+      let payload: Record<string, unknown> | null = null;
       try {
-        payload = JSON.parse(event.data);
+        payload = JSON.parse(event.data) as Record<string, unknown>;
       } catch {
         payload = { text: String(event.data), role: "assistant" };
       }
 
       const role =
         payload.role === "user" ? "user" : payload.role === "system" ? "system" : "bot";
-      const content = payload.text || payload.message || "";
+      const content =
+        (typeof payload.text === "string" ? payload.text : "") ||
+        (typeof payload.message === "string" ? payload.message : "");
+      if (typeof payload.session_id === "string" && payload.session_id) {
+        setRuntimeSessionId(payload.session_id);
+      }
+      if (payload.type === "error") {
+        const errorText = (typeof payload.error === "string" && payload.error) || "REQUEST_FAILED";
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            role: "system",
+            content: `오류: ${errorText}`,
+          },
+        ]);
+        setStatus("응답 오류");
+        return;
+      }
       if (!content) return;
 
       setMessages((prev) => [
@@ -74,7 +129,7 @@ export default function WebInputPage() {
     return () => {
       ws.close();
     };
-  }, [token]);
+  }, [token, accessToken, initialAgentId, runtimeSessionId, requestedMode, requestedLlm]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,7 +143,16 @@ export default function WebInputPage() {
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(
-        JSON.stringify({ type: "user_message", token, text: inputValue })
+        JSON.stringify({
+          type: "user_message",
+          token,
+          text: inputValue,
+          access_token: accessToken || undefined,
+          agent_id: initialAgentId || undefined,
+          session_id: runtimeSessionId || undefined,
+          mode: requestedMode,
+          llm: requestedLlm,
+        })
       );
     } else {
       setStatus("메시지 전송 실패: 연결 상태를 확인하세요.");

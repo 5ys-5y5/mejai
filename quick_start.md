@@ -46,7 +46,9 @@ APP_BASE_URL=http://localhost:3000
 - `/app/team` : 설정 탭(팀/권한)으로 이동
 - `/app/audit` : 설정 탭(감사로그)으로 이동
 - `/app/billing` : 결제/플랜
-- `/call/{token}` : 통화 중 웹 입력 실시간 대화 (예: `/call/demo-token`)
+- `/call/{token}` : 통화 중 웹 입력 실시간 대화
+  - 기본 예시: `/call/demo-token`
+  - 권장 예시: `/call/demo-token?agent_id=<agentId>&mode=mk2&llm=chatgpt`
 
 ## 실시간 채팅 연결
 통화 중 웹 입력은 WebSocket으로 LLM과 실시간 연결됩니다.
@@ -58,6 +60,23 @@ APP_BASE_URL=http://localhost:3000
 ```
 NEXT_PUBLIC_CALL_WS_URL=ws://localhost:8080
 ```
+
+### `/call/{token}` URL 파라미터
+- `token` (path, 필수): 통화/웹입력 세션 식별자
+- `agent_id` (query, 권장): 지정 시 해당 에이전트 기준으로 Runtime 호출
+- `session_id` (query, 선택): 기존 런타임 세션 이어서 대화
+- `mode` (query, 선택): `mk2`(기본) 또는 `natural`
+- `llm` (query, 선택): `chatgpt`(기본) 또는 `gemini` (`agent_id` 미지정 시 사용)
+
+### WS 메시지 규격(현재)
+- 클라이언트 → WS (`join`):
+  - `type`, `token`, `access_token`, `agent_id`, `session_id`, `mode`, `llm`
+- 클라이언트 → WS (`user_message`):
+  - `type`, `text`, `access_token`, `agent_id`, `session_id`, `mode`, `llm`
+- WS → 클라이언트 (`assistant_message`):
+  - `type`, `role`, `text`, `step`, `session_id`, `mcp_actions`
+- WS → 클라이언트 (`error`):
+  - `type`, `error`, `detail?`, `status?`
 
 ## 참고
 - 보호된 경로는 로그인 후 접근 가능합니다.
