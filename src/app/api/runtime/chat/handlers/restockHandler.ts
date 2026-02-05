@@ -789,6 +789,13 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           const reply = makeReply(
             `예약 알림일을 선택해 주세요. (최소 ${minLeadDays}개)\n선택 가능: ${optionLine}\n쉼표(,)로 입력해 주세요. 예: ${availableLeadDays.slice(0, Math.max(minLeadDays, 3)).join(",")}`
           );
+          const quickReplyConfig = {
+            selection_mode: "multi" as const,
+            min_select: minLeadDays,
+            max_select: availableLeadDays.length,
+            submit_format: "csv" as const,
+            criteria: "policy:ASK_RESTOCK_SUBSCRIBE_LEAD_DAYS",
+          };
           await insertTurn({
             session_id: sessionId,
             seq: nextSeq,
@@ -828,10 +835,16 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             sessionId,
             latestTurnId,
             "FINAL_ANSWER_READY",
-            { answer: reply, model: "deterministic_restock_subscribe_lead_days" },
+            { answer: reply, model: "deterministic_restock_subscribe_lead_days", quick_reply_config: quickReplyConfig },
             { intent_name: resolvedIntent }
           );
-          return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+          return respond({
+            session_id: sessionId,
+            step: "confirm",
+            message: reply,
+            mcp_actions: mcpActions,
+            quick_reply_config: quickReplyConfig,
+          });
         }
 
         if (restockChannel === "sms" && !subscribePhone) {

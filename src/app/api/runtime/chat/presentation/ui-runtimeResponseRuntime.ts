@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { deriveQuickReplies, deriveRichMessageHtml } from "./ui-responseDecorators";
+import { deriveQuickReplies, deriveQuickReplyConfig, deriveRichMessageHtml } from "./ui-responseDecorators";
 import { ENABLE_RUNTIME_TIMING, nowIso, type RuntimeTimingStage } from "../runtime/runtimeSupport";
 
 export function createRuntimeResponder(input: {
@@ -76,6 +76,10 @@ export function createRuntimeResponder(input: {
       Array.isArray(payload.quick_replies) && payload.quick_replies.length > 0
         ? payload.quick_replies
         : deriveQuickReplies(payload.message, quickReplyMax);
+    const quickReplyConfig =
+      payload.quick_reply_config && typeof payload.quick_reply_config === "object"
+        ? payload.quick_reply_config
+        : deriveQuickReplyConfig(payload.message, quickReplies);
     const richMessageHtml = deriveRichMessageHtml(payload.message);
     return NextResponse.json(
       {
@@ -84,6 +88,7 @@ export function createRuntimeResponder(input: {
         turn_id: getLatestTurnId(),
         ...(richMessageHtml ? { rich_message_html: richMessageHtml } : {}),
         ...(quickReplies.length > 0 ? { quick_replies: quickReplies } : {}),
+        ...(quickReplyConfig ? { quick_reply_config: quickReplyConfig } : {}),
       },
       init
     );

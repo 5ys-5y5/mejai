@@ -1,4 +1,13 @@
 export type RuntimeQuickReply = { label: string; value: string };
+export type RuntimeQuickReplyConfig = {
+  selection_mode: "single" | "multi";
+  min_select?: number;
+  max_select?: number;
+  submit_format?: "single" | "csv";
+  criteria?: string;
+  source_function?: string;
+  source_module?: string;
+};
 
 function escapeHtml(value: string) {
   return value
@@ -56,6 +65,41 @@ export function deriveQuickReplies(message: unknown, quickReplyMax: number): Run
     return uniqDays.slice(0, 7).map((n) => ({ label: `D-${n}`, value: String(n) }));
   }
   return [];
+}
+
+export function deriveQuickReplyConfig(
+  message: unknown,
+  quickReplies: RuntimeQuickReply[]
+): RuntimeQuickReplyConfig | null {
+  if (!Array.isArray(quickReplies) || quickReplies.length === 0) return null;
+  const text = typeof message === "string" ? message : "";
+  if (/복수 선택 가능/u.test(text) && /의도 확인/u.test(text)) {
+    return {
+      selection_mode: "multi",
+      min_select: 1,
+      max_select: quickReplies.length,
+      submit_format: "csv",
+      criteria: "decorator:intent_disambiguation_text",
+    };
+  }
+  if (/예약 알림일/u.test(text) || text.includes("쉼표(,)")) {
+    const minMatch = text.match(/최소\s*(\d+)/);
+    const minSelect = minMatch ? Math.max(1, Number(minMatch[1])) : 1;
+    return {
+      selection_mode: "multi",
+      min_select: minSelect,
+      max_select: quickReplies.length,
+      submit_format: "csv",
+      criteria: "decorator:lead_days_text",
+    };
+  }
+  return {
+    selection_mode: "single",
+    min_select: 1,
+    max_select: 1,
+    submit_format: "single",
+    criteria: "decorator:default_single",
+  };
 }
 
 export function deriveRichMessageHtml(message: unknown) {

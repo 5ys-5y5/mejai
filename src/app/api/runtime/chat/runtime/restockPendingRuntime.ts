@@ -221,6 +221,13 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
       const reply = makeReply(
         `알림일을 선택해 주세요. 현재 선택 가능한 값은 ${optionLine} 입니다.\n쉼표(,)로 ${minLeadDays}개 이상 입력해 주세요. 예: ${availableLeadDays.slice(0, Math.max(minLeadDays, 3)).join(",")}`
       );
+      const quickReplyConfig = {
+        selection_mode: "multi" as const,
+        min_select: minLeadDays,
+        max_select: availableLeadDays.length,
+        submit_format: "csv" as const,
+        criteria: "state:awaiting_subscribe_lead_days",
+      };
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -240,7 +247,18 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           min_lead_days: minLeadDays,
         },
       });
-      return { response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }), resolvedIntent: nextResolvedIntent, restockSubscribeAcceptedThisTurn: nextAccepted, lockIntentToRestockSubscribe: nextLocked };
+      return {
+        response: respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
+          quick_reply_config: quickReplyConfig,
+        }),
+        resolvedIntent: nextResolvedIntent,
+        restockSubscribeAcceptedThisTurn: nextAccepted,
+        lockIntentToRestockSubscribe: nextLocked,
+      };
     }
     const reply = makeReply(
       `선택하신 알림일(D-${selectedLeadDays.join(", D-")}) 기준으로 ${pendingChannel} 예약 알림을 신청할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`

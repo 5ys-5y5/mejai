@@ -36,6 +36,56 @@ type DisambiguationResult = {
   response: unknown | null;
 };
 
+type QuickReplyConfig = {
+  selection_mode: "single" | "multi";
+  min_select: number;
+  max_select: number;
+  submit_format: "single" | "csv";
+  criteria: string;
+  source_function: string;
+  source_module: string;
+};
+
+function clampSelectionRange(value: number, min: number, max: number) {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function resolveIntentDisambiguationQuickReplyConfig(input: {
+  options: string[];
+  prevBotContext: Record<string, unknown>;
+  sourceText: string;
+}): QuickReplyConfig {
+  const optionsCount = Math.max(1, input.options.length);
+  const configuredMinRaw = Number((input.prevBotContext as any).intent_disambiguation_min_select ?? 0);
+  const configuredMaxRaw = Number((input.prevBotContext as any).intent_disambiguation_max_select ?? 0);
+  const explicitMulti = Boolean((input.prevBotContext as any).intent_disambiguation_multi === true);
+  const connectorSignal = /(,|\/|그리고|및|and)/i.test(String(input.sourceText || ""));
+  const selectionMode: "single" | "multi" =
+    explicitMulti || optionsCount > 1 || connectorSignal ? "multi" : "single";
+  const maxSelect =
+    configuredMaxRaw > 0 ? clampSelectionRange(configuredMaxRaw, 1, optionsCount) : selectionMode === "multi" ? optionsCount : 1;
+  const minSelect =
+    configuredMinRaw > 0
+      ? clampSelectionRange(configuredMinRaw, 1, maxSelect)
+      : selectionMode === "multi"
+        ? 1
+        : 1;
+  return {
+    selection_mode: selectionMode,
+    min_select: minSelect,
+    max_select: maxSelect,
+    submit_format: selectionMode === "multi" ? "csv" : "single",
+    source_function: "resolveIntentDisambiguationQuickReplyConfig",
+    source_module: "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
+    criteria: configuredMinRaw > 0 || configuredMaxRaw > 0 || explicitMulti
+      ? "bot_context:intent_disambiguation_rules"
+      : connectorSignal
+        ? "source_text:intent_connector_signal"
+        : "policy:ASK_INTENT_DISAMBIGUATION",
+  };
+}
+
 export async function resolveIntentDisambiguation(params: DisambiguationParams): Promise<DisambiguationResult> {
   const {
     context,
@@ -78,6 +128,11 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
       const reply = makeReply(
         `요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)\n${lines.join("\n")}\n예: 1,2`
       );
+      const quickReplyConfig = resolveIntentDisambiguationQuickReplyConfig({
+        options,
+        prevBotContext,
+        sourceText: intentDisambiguationSourceText || message,
+      });
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -98,7 +153,13 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
         disambiguationSelection,
         intentDisambiguationSourceText,
         effectiveMessageForIntent,
-        response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
+        response: respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
+          quick_reply_config: quickReplyConfig,
+        }),
       };
     }
     disambiguationSelection = picked;
@@ -126,6 +187,11 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
       const reply = makeReply(
         `요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)\n${lines.join("\n")}\n예: 1,2`
       );
+      const quickReplyConfig = resolveIntentDisambiguationQuickReplyConfig({
+        options: candidates,
+        prevBotContext,
+        sourceText: message,
+      });
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -153,7 +219,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
         sessionId,
         latestTurnId,
         "FINAL_ANSWER_READY",
-        { answer: reply, model: "deterministic_intent_disambiguation" },
+        { answer: reply, model: "deterministic_intent_disambiguation", quick_reply_config: quickReplyConfig },
         { intent_name: "general" }
       );
       return {
@@ -162,7 +228,13 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
         disambiguationSelection,
         intentDisambiguationSourceText,
         effectiveMessageForIntent,
-        response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
+        response: respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
+          quick_reply_config: quickReplyConfig,
+        }),
       };
     }
   }

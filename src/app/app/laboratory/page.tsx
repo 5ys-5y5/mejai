@@ -48,6 +48,15 @@ type ChatMessage = {
   isLoading?: boolean;
   loadingLogs?: string[];
   quickReplies?: Array<{ label: string; value: string }>;
+  quickReplyConfig?: {
+    selection_mode: "single" | "multi";
+    min_select?: number;
+    max_select?: number;
+    submit_format?: "single" | "csv";
+    criteria?: string;
+    source_function?: string;
+    source_module?: string;
+  };
   productCards?: Array<{
     id: string;
     title: string;
@@ -349,6 +358,22 @@ function extractDebugText(content: string) {
   return [prefixText, answerText].filter(Boolean).join("\n");
 }
 
+function stringifyPretty(value: unknown) {
+  try {
+    return JSON.stringify(value ?? {}, null, 2);
+  } catch {
+    return JSON.stringify({ error: "SERIALIZE_FAILED" }, null, 2);
+  }
+}
+
+function indentBlock(value: string, spaces = 2) {
+  const pad = " ".repeat(Math.max(0, spaces));
+  return String(value || "")
+    .split("\n")
+    .map((line) => `${pad}${line}`)
+    .join("\n");
+}
+
 function formatLogBundle(bundle?: MessageLogBundle, turnId?: string | null) {
   if (!bundle) return "";
   const lines: string[] = [];
@@ -362,7 +387,10 @@ function formatLogBundle(bundle?: MessageLogBundle, turnId?: string | null) {
     lines.push("DEBUG 로그:");
     debugLogs.forEach((log) => {
       lines.push(`- ${log.id || "-"} (turn_id=${log.turn_id || "-"}) (${log.created_at || "-"})`);
-      lines.push(`  prefix_json: ${JSON.stringify(log.prefix_json || {})}`);
+      const codeRef = formatDecisionCodeRef((log.prefix_json as any)?.decision);
+      if (codeRef) lines.push(`  code_ref: ${codeRef}`);
+      lines.push("  prefix_json:");
+      lines.push(indentBlock(stringifyPretty(log.prefix_json || {}), 4));
     });
   }
   const summary = buildIssueSummary(bundle, turnId);
@@ -377,8 +405,10 @@ function formatLogBundle(bundle?: MessageLogBundle, turnId?: string | null) {
       lines.push(
         `- ${log.id || "-"} ${log.tool_name}@${log.tool_version || "-"}: ${log.status} (${log.created_at || "-"}) (turn_id=${turnLabel})`
       );
-      lines.push(`  request: ${JSON.stringify(log.request_payload || {})}`);
-      lines.push(`  response: ${JSON.stringify(log.response_payload || log.policy_decision || {})}`);
+      lines.push("  request:");
+      lines.push(indentBlock(stringifyPretty(log.request_payload || {}), 4));
+      lines.push("  response:");
+      lines.push(indentBlock(stringifyPretty(log.response_payload || log.policy_decision || {}), 4));
     });
   }
   if (bundle.event_logs.length > 0) {
@@ -387,7 +417,10 @@ function formatLogBundle(bundle?: MessageLogBundle, turnId?: string | null) {
       const turnLabel = log.turn_id || turnId || "-";
       const safePayload = sanitizeEventPayloadForDisplay(log.event_type, log.payload || {});
       lines.push(`- ${log.id || "-"} ${log.event_type} (${log.created_at || "-"}) (turn_id=${turnLabel})`);
-      lines.push(`  payload: ${JSON.stringify(safePayload)}`);
+      const codeRef = formatDecisionCodeRef((safePayload as any)?._decision);
+      if (codeRef) lines.push(`  code_ref: ${codeRef}`);
+      lines.push("  payload:");
+      lines.push(indentBlock(stringifyPretty(safePayload), 4));
     });
   }
   return lines.join("\n");
@@ -426,6 +459,18 @@ function sanitizeEventPayloadForDisplay(eventType: string, payload: Record<strin
     allowed_tool_names_total: allowed.length,
     allowed_tool_names: filtered.slice(0, 30),
   };
+}
+
+function formatDecisionCodeRef(decision: any) {
+  if (!decision || typeof decision !== "object") return null;
+  const modulePath = String(decision.module_path || "").trim();
+  const functionName = String(decision.function_name || "").trim();
+  const line = Number(decision.line || 0);
+  const column = Number(decision.column || 0);
+  if (!modulePath || modulePath === "unknown") return null;
+  const fnPart = functionName ? `#${functionName}` : "";
+  const linePart = line > 0 ? `:${line}${column > 0 ? `:${column}` : ""}` : "";
+  return `${modulePath}${linePart}${fnPart}`;
 }
 
 function isDebugIssue(log: MessageLogBundle["debug_logs"][number]) {
@@ -506,7 +551,10 @@ function formatIssueBundle(bundle?: MessageLogBundle, turnId?: string | null) {
     lines.push("DEBUG 로그:");
     debugLogs.forEach((log) => {
       lines.push(`- ${log.id || "-"} (turn_id=${log.turn_id || "-"}) (${log.created_at || "-"})`);
-      lines.push(`  prefix_json: ${JSON.stringify(log.prefix_json || {})}`);
+      const codeRef = formatDecisionCodeRef((log.prefix_json as any)?.decision);
+      if (codeRef) lines.push(`  code_ref: ${codeRef}`);
+      lines.push("  prefix_json:");
+      lines.push(indentBlock(stringifyPretty(log.prefix_json || {}), 4));
     });
   }
   const summary = buildIssueSummary(bundle, turnId);
@@ -522,8 +570,10 @@ function formatIssueBundle(bundle?: MessageLogBundle, turnId?: string | null) {
       lines.push(
         `- ${log.id || "-"} ${log.tool_name}@${log.tool_version || "-"}: ${log.status} (${log.created_at || "-"}) (turn_id=${turnLabel})`
       );
-      lines.push(`  request: ${JSON.stringify(log.request_payload || {})}`);
-      lines.push(`  response: ${JSON.stringify(log.response_payload || log.policy_decision || {})}`);
+      lines.push("  request:");
+      lines.push(indentBlock(stringifyPretty(log.request_payload || {}), 4));
+      lines.push("  response:");
+      lines.push(indentBlock(stringifyPretty(log.response_payload || log.policy_decision || {}), 4));
     });
   }
   const eventLogs = bundle.event_logs.filter((log) => isEventIssue(log));
@@ -533,7 +583,10 @@ function formatIssueBundle(bundle?: MessageLogBundle, turnId?: string | null) {
       const turnLabel = log.turn_id || turnId || "-";
       const safePayload = sanitizeEventPayloadForDisplay(log.event_type, log.payload || {});
       lines.push(`- ${log.id || "-"} ${log.event_type} (${log.created_at || "-"}) (turn_id=${turnLabel})`);
-      lines.push(`  payload: ${JSON.stringify(safePayload)}`);
+      const codeRef = formatDecisionCodeRef((safePayload as any)?._decision);
+      if (codeRef) lines.push(`  code_ref: ${codeRef}`);
+      lines.push("  payload:");
+      lines.push(indentBlock(stringifyPretty(safePayload), 4));
     });
   }
   return lines.join("\n");
@@ -551,9 +604,18 @@ function inferRuntimeUsageSummary(
     shared: new Set<string>(),
   };
   const add = (bucket: keyof typeof buckets, path: string) => buckets[bucket].add(path);
-
-  add("runtime", "src/app/api/runtime/chat/route.ts");
-  add("runtime", "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts");
+  const addByPath = (rawPath?: string | null) => {
+    const path = String(rawPath || "").trim().replace(/\\/g, "/");
+    if (!path) return false;
+    if (!path.includes("/src/app/api/runtime/chat/")) return false;
+    if (path.includes("/runtime/")) add("runtime", path.slice(path.indexOf("/src/") + 1));
+    else if (path.includes("/handlers/")) add("handlers", path.slice(path.indexOf("/src/") + 1));
+    else if (path.includes("/services/")) add("services", path.slice(path.indexOf("/src/") + 1));
+    else if (path.includes("/policies/")) add("policies", path.slice(path.indexOf("/src/") + 1));
+    else if (path.includes("/shared/")) add("shared", path.slice(path.indexOf("/src/") + 1));
+    else return false;
+    return true;
+  };
 
   const botMessages = selectedMessages.filter((msg) => msg.role === "bot");
   const bundles = botMessages
@@ -562,62 +624,77 @@ function inferRuntimeUsageSummary(
   const allMcpLogs = bundles.flatMap((bundle) => bundle.mcp_logs || []);
   const allEventLogs = bundles.flatMap((bundle) => bundle.event_logs || []);
   const allDebugLogs = bundles.flatMap((bundle) => bundle.debug_logs || []);
-  const eventTypes = new Set(allEventLogs.map((log) => String(log.event_type || "").toUpperCase()).filter(Boolean));
-  const toolNames = new Set(allMcpLogs.map((log) => String(log.tool_name || "").trim()).filter(Boolean));
+  let tracedCount = 0;
+  allEventLogs.forEach((log) => {
+    const decision = (log.payload as any)?._decision;
+    if (addByPath(typeof decision?.module_path === "string" ? decision.module_path : null)) tracedCount += 1;
+  });
+  allDebugLogs.forEach((log) => {
+    const decision = (log.prefix_json as any)?.decision;
+    if (addByPath(typeof decision?.module_path === "string" ? decision.module_path : null)) tracedCount += 1;
+  });
 
-  if (allDebugLogs.length > 0) {
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeConversationIoRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeSupport.ts");
-  }
-  if (allEventLogs.length > 0) {
-    add("services", "src/app/api/runtime/chat/services/auditRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/presentation/ui-runtimeResponseRuntime.ts");
-  }
-  if (allMcpLogs.length > 0) {
-    add("runtime", "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/toolRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts");
-    add("services", "src/app/api/runtime/chat/services/mcpRuntime.ts");
-  }
+  if (tracedCount === 0) {
+    const eventTypes = new Set(allEventLogs.map((log) => String(log.event_type || "").toUpperCase()).filter(Boolean));
+    const toolNames = new Set(allMcpLogs.map((log) => String(log.tool_name || "").trim()).filter(Boolean));
 
-  if (eventTypes.has("SLOT_EXTRACTED") || eventTypes.has("POLICY_STATIC_CONFLICT")) {
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/policyInputRuntime.ts");
-  }
-  if (eventTypes.has("PRE_MCP_DECISION") || eventTypes.has("MCP_CALL_SKIPPED")) {
-    add("runtime", "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts");
-  }
-  if (eventTypes.has("FINAL_ANSWER_READY")) {
-    add("runtime", "src/app/api/runtime/chat/runtime/finalizeRuntime.ts");
-  }
-  if (eventTypes.has("CONTEXT_CONTAMINATION_DETECTED")) {
-    add("runtime", "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts");
-  }
+    add("runtime", "src/app/api/runtime/chat/route.ts");
+    add("runtime", "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts");
 
-  const hasRestockSignal =
-    Array.from(toolNames).some((name) => ["resolve_product", "read_product", "subscribe_restock"].includes(name)) ||
-    botMessages.some((msg) => /재입고|유사한 상품|입고 예정/.test(msg.content));
-  if (hasRestockSignal) {
-    add("handlers", "src/app/api/runtime/chat/handlers/restockHandler.ts");
-    add("policies", "src/app/api/runtime/chat/policies/restockResponsePolicy.ts");
-  }
-  if (toolNames.has("update_order_shipping_address")) {
-    add("handlers", "src/app/api/runtime/chat/handlers/orderChangeHandler.ts");
-  }
-  if (toolNames.has("create_ticket")) {
-    add("handlers", "src/app/api/runtime/chat/handlers/refundHandler.ts");
-  }
+    if (allDebugLogs.length > 0) {
+      add("runtime", "src/app/api/runtime/chat/runtime/runtimeConversationIoRuntime.ts");
+      add("runtime", "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts");
+      add("runtime", "src/app/api/runtime/chat/runtime/runtimeSupport.ts");
+    }
+    if (allEventLogs.length > 0) {
+      add("services", "src/app/api/runtime/chat/services/auditRuntime.ts");
+      add("runtime", "src/app/api/runtime/chat/presentation/ui-runtimeResponseRuntime.ts");
+    }
+    if (allMcpLogs.length > 0) {
+      add("runtime", "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts");
+      add("runtime", "src/app/api/runtime/chat/runtime/toolRuntime.ts");
+      add("runtime", "src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts");
+      add("services", "src/app/api/runtime/chat/services/mcpRuntime.ts");
+    }
 
-  add("runtime", "src/app/api/runtime/chat/runtime/runtimeBootstrap.ts");
-  add("runtime", "src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts");
-  add("runtime", "src/app/api/runtime/chat/runtime/runtimeStepContracts.ts");
-  add("runtime", "src/app/api/runtime/chat/runtime/runtimePipelineState.ts");
-  add("policies", "src/app/api/runtime/chat/policies/principles.ts");
-  add("policies", "src/app/api/runtime/chat/policies/intentSlotPolicy.ts");
-  add("shared", "src/app/api/runtime/chat/shared/slotUtils.ts");
-  add("shared", "src/app/api/runtime/chat/shared/types.ts");
-  add("services", "src/app/api/runtime/chat/services/dataAccess.ts");
+    if (eventTypes.has("SLOT_EXTRACTED") || eventTypes.has("POLICY_STATIC_CONFLICT")) {
+      add("runtime", "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts");
+      add("runtime", "src/app/api/runtime/chat/runtime/policyInputRuntime.ts");
+    }
+    if (eventTypes.has("PRE_MCP_DECISION") || eventTypes.has("MCP_CALL_SKIPPED")) {
+      add("runtime", "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts");
+    }
+    if (eventTypes.has("FINAL_ANSWER_READY")) {
+      add("runtime", "src/app/api/runtime/chat/runtime/finalizeRuntime.ts");
+    }
+    if (eventTypes.has("CONTEXT_CONTAMINATION_DETECTED")) {
+      add("runtime", "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts");
+    }
+
+    const hasRestockSignal =
+      Array.from(toolNames).some((name) => ["resolve_product", "read_product", "subscribe_restock"].includes(name)) ||
+      botMessages.some((msg) => /재입고|유사한 상품|입고 예정/.test(msg.content));
+    if (hasRestockSignal) {
+      add("handlers", "src/app/api/runtime/chat/handlers/restockHandler.ts");
+      add("policies", "src/app/api/runtime/chat/policies/restockResponsePolicy.ts");
+    }
+    if (toolNames.has("update_order_shipping_address")) {
+      add("handlers", "src/app/api/runtime/chat/handlers/orderChangeHandler.ts");
+    }
+    if (toolNames.has("create_ticket")) {
+      add("handlers", "src/app/api/runtime/chat/handlers/refundHandler.ts");
+    }
+
+    add("runtime", "src/app/api/runtime/chat/runtime/runtimeBootstrap.ts");
+    add("runtime", "src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts");
+    add("runtime", "src/app/api/runtime/chat/runtime/runtimeStepContracts.ts");
+    add("runtime", "src/app/api/runtime/chat/runtime/runtimePipelineState.ts");
+    add("policies", "src/app/api/runtime/chat/policies/principles.ts");
+    add("policies", "src/app/api/runtime/chat/policies/intentSlotPolicy.ts");
+    add("shared", "src/app/api/runtime/chat/shared/slotUtils.ts");
+    add("shared", "src/app/api/runtime/chat/shared/types.ts");
+    add("services", "src/app/api/runtime/chat/services/dataAccess.ts");
+  }
 
   return {
     runtime: Array.from(buckets.runtime),
@@ -676,8 +753,8 @@ function createDefaultModel(): ModelState {
     editSessionId: null,
     setupMode: "existing",
     adminLogControlsOpen: false,
-    showAdminLogs: true,
-    chatSelectionEnabled: true,
+    showAdminLogs: false,
+    chatSelectionEnabled: false,
   };
 }
 
@@ -740,6 +817,12 @@ function isLeadDaySelectionPrompt(content: string, quickReplies: Array<{ label: 
   if (!content || !quickReplies || quickReplies.length === 0) return false;
   if (content.includes("예약 알림일을 선택해 주세요")) return true;
   return quickReplies.every((item) => /^D-\d+$/i.test(String(item.label || "").trim()));
+}
+
+function isIntentDisambiguationMultiSelectPrompt(content: string, quickReplies: Array<{ label: string; value: string }>) {
+  if (!content || !quickReplies || quickReplies.length === 0) return false;
+  if (!content.includes("의도 확인") || !content.includes("복수 선택 가능")) return false;
+  return quickReplies.every((item) => /^\d{1,2}$/.test(String(item.value || "").trim()));
 }
 
 function parseMinLeadDayRequired(content: string) {
@@ -1348,6 +1431,15 @@ export default function LabolatoryPage() {
         rich_message_html?: string;
         turn_id?: string | null;
         quick_replies?: Array<{ label?: string; value?: string }>;
+        quick_reply_config?: {
+          selection_mode?: "single" | "multi";
+          min_select?: number;
+          max_select?: number;
+          submit_format?: "single" | "csv";
+          criteria?: string;
+          source_function?: string;
+          source_module?: string;
+        };
         product_cards?: Array<{
           id?: string;
           title?: string;
@@ -1487,6 +1579,21 @@ export default function LabolatoryPage() {
             }))
             .filter((item) => item.label && item.value)
           : [];
+        const quickReplyConfig: ChatMessage["quickReplyConfig"] = res.quick_reply_config
+          ? {
+            selection_mode: res.quick_reply_config.selection_mode === "multi" ? "multi" : "single",
+            min_select: Number.isFinite(Number(res.quick_reply_config.min_select))
+              ? Number(res.quick_reply_config.min_select)
+              : undefined,
+            max_select: Number.isFinite(Number(res.quick_reply_config.max_select))
+              ? Number(res.quick_reply_config.max_select)
+              : undefined,
+            submit_format: res.quick_reply_config.submit_format === "csv" ? "csv" : "single",
+            criteria: String(res.quick_reply_config.criteria || "").trim() || undefined,
+            source_function: String(res.quick_reply_config.source_function || "").trim() || undefined,
+            source_module: String(res.quick_reply_config.source_module || "").trim() || undefined,
+          }
+          : undefined;
         const productCards = Array.isArray(res.product_cards)
           ? res.product_cards
             .map((item, idx) => ({
@@ -1520,6 +1627,7 @@ export default function LabolatoryPage() {
                 isLoading: false,
                 loadingLogs: persistedLogs,
                 quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
+                quickReplyConfig: quickReplies.length > 0 ? quickReplyConfig : undefined,
                 productCards: productCards.length > 0 ? productCards : undefined,
               };
             })
@@ -1814,18 +1922,55 @@ export default function LabolatoryPage() {
       `점검 불가: ${auditStatus.blocked.length ? auditStatus.blocked.join(", ") : "-"}`,
       "",
     ].join("\n");
-    const transcript = corePrinciple + selectedMessages
-      .map((msg) => {
-        const speaker = msg.role === "user" ? "USER" : "BOT";
-        const body =
-          msg.role === "bot" && msg.content.includes("debug_prefix")
-            ? extractDebugText(msg.content)
-            : msg.content;
-        const logText = msg.role === "bot" ? formatLogBundle(target.messageLogs[msg.id], msg.turnId) : "";
-        const turnLine = msg.role === "bot" && msg.turnId ? `\nTURN_ID: ${msg.turnId}` : "";
-        return `${speaker}:\n${body}${turnLine}${logText ? `\n${logText}` : ""}`;
-      })
-      .join("\n\n");
+    const formatUsedBody = (msg: ChatMessage) => {
+      if (msg.role !== "bot") return msg.content;
+      if (!msg.content.includes("debug_prefix")) return msg.content;
+      const { answerText } = getDebugParts(msg.content);
+      return answerText || extractDebugText(msg.content);
+    };
+    const formatTurnUnused = (botMsg?: ChatMessage) => {
+      if (!botMsg) return "-";
+      const lines: string[] = [];
+      if (botMsg.quickReplyConfig) {
+        const rule = botMsg.quickReplyConfig;
+        lines.push(
+          `QUICK_REPLY_RULE: mode=${rule.selection_mode}, min=${rule.min_select ?? "-"}, max=${rule.max_select ?? "-"}, submit=${rule.submit_format ?? "-"}, criteria=${rule.criteria || "-"}, source=${rule.source_module || "-"}#${rule.source_function || "-"}`
+        );
+      }
+      if (botMsg.content.includes("debug_prefix")) {
+        const { prefixText } = getDebugParts(botMsg.content);
+        if (prefixText) lines.push(`DEBUG_PREFIX:\n${prefixText}`);
+      }
+      const logText = formatLogBundle(target.messageLogs[botMsg.id], botMsg.turnId);
+      if (logText) lines.push(logText);
+      return lines.join("\n").trim() || "-";
+    };
+
+    const turnBlocks: string[] = [];
+    let bufferedUsers: ChatMessage[] = [];
+    selectedMessages.forEach((msg) => {
+      if (msg.role === "user") {
+        bufferedUsers.push(msg);
+        return;
+      }
+      const usedLines = [
+        "[TOKEN_USED]",
+        ...bufferedUsers.map((u) => `USER:\n${formatUsedBody(u)}`),
+        `BOT:\n${formatUsedBody(msg)}`,
+      ].join("\n\n");
+      const unusedLines = ["[TOKEN_UNUSED]", formatTurnUnused(msg)].join("\n");
+      turnBlocks.push(`TURN_ID: ${msg.turnId || "-"}\n\n${usedLines}\n\n${unusedLines}`);
+      bufferedUsers = [];
+    });
+    if (bufferedUsers.length > 0) {
+      const usedLines = [
+        "[TOKEN_USED]",
+        ...bufferedUsers.map((u) => `USER:\n${formatUsedBody(u)}`),
+      ].join("\n\n");
+      turnBlocks.push(`TURN_ID: -\n\n${usedLines}\n\n[TOKEN_UNUSED]\n-`);
+    }
+
+    const transcript = [corePrinciple.trimEnd(), ...turnBlocks].join("\n\n\n");
     if (!transcript.trim()) {
       toast.error("복사할 대화가 없습니다.");
       return;
@@ -2602,322 +2747,344 @@ export default function LabolatoryPage() {
                               const debugParts = hasDebug ? getDebugParts(msg.content) : null;
                               const isSelected = model.selectedMessageIds.includes(msg.id);
                               return (
-                              <div
-                                key={msg.id}
-                                className={cn(
-                                  "flex gap-3",
-                                  msg.role === "user" ? "justify-end" : "justify-start",
-                                  model.chatSelectionEnabled && isSelected && "rounded-xl bg-amber-200 px-1 py-1"
-                                )}
-                              >
-                          
-                                {msg.role === "bot" ? (
-                                  <div
-                                    className={cn(
-                                      "h-8 w-8 rounded-full border flex items-center justify-center",
-                                      isSelected
-                                        ? "border-slate-900 bg-slate-900"
-                                        : "border-slate-200 bg-white"
-                                    )}
-                                  >
-                                    {isSelected ? (
-                                      <Check className="h-4 w-4 text-white" />
-                                    ) : (
-                                      <Bot className="h-4 w-4 text-slate-500" />
-                                    )}
-                                  </div>
-                                ) : null}
-                                <div className="relative max-w-[75%]">
-                                  <div
-                                    onClick={() => {
-                                      if (model.chatSelectionEnabled) {
-                                        toggleMessageSelection(model.id, msg.id);
-                                      }
-                                    }}
-                                    className={cn(
-                                      "relative whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm transition",
-                                      model.chatSelectionEnabled ? "cursor-pointer" : "cursor-default",
-                                      msg.role === "user"
-                                        ? "bg-slate-900 text-white"
-                                        : "bg-slate-100 text-slate-700 border border-slate-200"
-                                    )}
-                                  >
-                                    {hasDebug && debugParts ? (
-                                      debugParts.answerHtml ? (
-                                        <div
-                                          style={{ margin: 0, padding: 0, lineHeight: "inherit", whiteSpace: "normal" }}
-                                          dangerouslySetInnerHTML={{ __html: debugParts.answerHtml }}
-                                        />
+                                <div
+                                  key={msg.id}
+                                  className={cn(
+                                    "flex gap-3",
+                                    msg.role === "user" ? "justify-end" : "justify-start",
+                                    model.chatSelectionEnabled && isSelected && "rounded-xl bg-amber-200 px-1 py-1"
+                                  )}
+                                >
+
+                                  {msg.role === "bot" ? (
+                                    <div
+                                      className={cn(
+                                        "h-8 w-8 rounded-full border flex items-center justify-center",
+                                        isSelected
+                                          ? "border-slate-900 bg-slate-900"
+                                          : "border-slate-200 bg-white"
+                                      )}
+                                    >
+                                      {isSelected ? (
+                                        <Check className="h-4 w-4 text-white" />
                                       ) : (
-                                        debugParts.answerText || ""
-                                      )
-                                    ) : msg.role === "bot" && msg.isLoading ? (
-                                      <div className="space-y-2">
-                                        <div className="flex items-center gap-2 text-slate-700">
-                                          <Loader2 className="h-4 w-4 animate-spin" />
-                                          <span>답변 생성 중...</span>
+                                        <Bot className="h-4 w-4 text-slate-500" />
+                                      )}
+                                    </div>
+                                  ) : null}
+                                  <div className="relative max-w-[75%]">
+                                    <div
+                                      onClick={() => {
+                                        if (model.chatSelectionEnabled) {
+                                          toggleMessageSelection(model.id, msg.id);
+                                        }
+                                      }}
+                                      className={cn(
+                                        "relative whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm transition",
+                                        model.chatSelectionEnabled ? "cursor-pointer" : "cursor-default",
+                                        msg.role === "user"
+                                          ? "bg-slate-900 text-white"
+                                          : "bg-slate-100 text-slate-700 border border-slate-200"
+                                      )}
+                                    >
+                                      {hasDebug && debugParts ? (
+                                        debugParts.answerHtml ? (
+                                          <div
+                                            style={{ margin: 0, padding: 0, lineHeight: "inherit", whiteSpace: "normal" }}
+                                            dangerouslySetInnerHTML={{ __html: debugParts.answerHtml }}
+                                          />
+                                        ) : (
+                                          debugParts.answerText || ""
+                                        )
+                                      ) : msg.role === "bot" && msg.isLoading ? (
+                                        <div className="space-y-2">
+                                          <div className="flex items-center gap-2 text-slate-700">
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                            <span>답변 생성 중...</span>
+                                          </div>
                                         </div>
-                                      </div>
-                                    ) : msg.role === "bot" ? (
-                                      msg.richHtml ? (
-                                        <div
-                                          style={{ margin: 0, padding: 0, lineHeight: "inherit", whiteSpace: "normal" }}
-                                          dangerouslySetInnerHTML={{ __html: msg.richHtml }}
-                                        />
+                                      ) : msg.role === "bot" ? (
+                                        msg.richHtml ? (
+                                          <div
+                                            style={{ margin: 0, padding: 0, lineHeight: "inherit", whiteSpace: "normal" }}
+                                            dangerouslySetInnerHTML={{ __html: msg.richHtml }}
+                                          />
+                                        ) : (
+                                          renderStructuredChoiceContent(msg.content) || renderBotContent(msg.content)
+                                        )
                                       ) : (
-                                      renderStructuredChoiceContent(msg.content) || renderBotContent(msg.content)
-                                      )
-                                    ) : (
-                                      msg.content
-                                    )}
+                                        msg.content
+                                      )}
+                                      {msg.role === "bot" &&
+                                        isAdminUser &&
+                                        model.showAdminLogs &&
+                                        msg.loadingLogs &&
+                                        msg.loadingLogs.length > 0 ? (
+                                        <div className="mt-2 rounded-md border border-slate-200 bg-white/70 px-2 py-1.5">
+                                          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                                            <span>진행 로그</span>
+                                            <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                                              ADMIN
+                                            </span>
+                                          </div>
+                                          <div className="space-y-1 text-[11px] text-slate-600">
+                                            {msg.loadingLogs.map((line, idx) => (
+                                              <div key={`${msg.id}-loading-log-${idx}`}>{line}</div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      ) : null}
+                                    </div>
                                     {msg.role === "bot" &&
-                                      isAdminUser &&
-                                      model.showAdminLogs &&
-                                      msg.loadingLogs &&
-                                      msg.loadingLogs.length > 0 ? (
-                                      <div className="mt-2 rounded-md border border-slate-200 bg-white/70 px-2 py-1.5">
-                                        <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-                                          <span>진행 로그</span>
-                                          <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
-                                            ADMIN
-                                          </span>
-                                        </div>
-                                        <div className="space-y-1 text-[11px] text-slate-600">
-                                          {msg.loadingLogs.map((line, idx) => (
-                                            <div key={`${msg.id}-loading-log-${idx}`}>{line}</div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                  {msg.role === "bot" &&
-                                    msg.quickReplies &&
-                                    msg.quickReplies.length > 0
-                                    ? (() => {
-                                      const isLeadDayPrompt = isLeadDaySelectionPrompt(msg.content, msg.quickReplies || []);
-                                      const cardValues = new Set((msg.productCards || []).map((card) => String(card.value)));
-                                      const allQuickRepliesMappedToCards =
-                                        !isLeadDayPrompt &&
-                                        !!msg.productCards?.length &&
-                                        msg.quickReplies.every((item) => cardValues.has(String(item.value)));
-                                      if (allQuickRepliesMappedToCards) {
-                                        return null;
-                                      }
+                                      msg.quickReplies &&
+                                      msg.quickReplies.length > 0
+                                      ? (() => {
+                                        const quickRule = msg.quickReplyConfig;
+                                        const fallbackLeadDay = isLeadDaySelectionPrompt(msg.content, msg.quickReplies || []);
+                                        const fallbackIntentMulti = isIntentDisambiguationMultiSelectPrompt(
+                                          msg.content,
+                                          msg.quickReplies || []
+                                        );
+                                        const isMultiSelectPrompt =
+                                          quickRule?.selection_mode === "multi" || (!quickRule && (fallbackLeadDay || fallbackIntentMulti));
+                                        const cardValues = new Set((msg.productCards || []).map((card) => String(card.value)));
+                                        const allQuickRepliesMappedToCards =
+                                          !isMultiSelectPrompt &&
+                                          !!msg.productCards?.length &&
+                                          msg.quickReplies.every((item) => cardValues.has(String(item.value)));
+                                        if (allQuickRepliesMappedToCards) {
+                                          return null;
+                                        }
 
-                                      const draftKey = `${model.id}:${msg.id}:quick`;
-                                      const selected = quickReplyDrafts[draftKey] || [];
-                                      const locked = lockedReplySelections[draftKey] || [];
-                                      const effectiveSelection = locked.length > 0 ? locked : selected;
-                                      const isLocked = locked.length > 0;
-                                      const minRequired = isLeadDayPrompt ? parseMinLeadDayRequired(msg.content) : 1;
-                                      const canConfirm = !isLocked && selected.length >= minRequired;
+                                        const draftKey = `${model.id}:${msg.id}:quick`;
+                                        const selected = quickReplyDrafts[draftKey] || [];
+                                        const locked = lockedReplySelections[draftKey] || [];
+                                        const effectiveSelection = locked.length > 0 ? locked : selected;
+                                        const isLocked = locked.length > 0;
+                                        const minRequired =
+                                          Number.isFinite(Number(quickRule?.min_select || 0)) && Number(quickRule?.min_select || 0) > 0
+                                            ? Number(quickRule?.min_select)
+                                            : fallbackLeadDay
+                                              ? parseMinLeadDayRequired(msg.content)
+                                              : 1;
+                                        const canConfirm = !isLocked && selected.length >= minRequired;
 
-                                      return (
-                                        <>
-                                          <div className="mt-[5px]">
-                                            <div
-                                              className="grid gap-2"
-                                              style={{
-                                                gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, msg.quickReplies.length))}, minmax(0, 1fr))`,
-                                              }}
-                                            >
-                                              {msg.quickReplies.map((item, idx) => {
-                                                const num = parseLeadDayValue(item.value);
-                                                const normalized = num ? String(num) : String(item.value);
-                                                const picked = effectiveSelection.includes(normalized);
-                                                return (
-                                                  <button
-                                                    key={`${msg.id}-quick-${idx}-${item.value}`}
-                                                    type="button"
-                                                    onClick={() => {
-                                                      if (isLocked || !isLatestVisibleMessage) return;
-                                                      setQuickReplyDrafts((prev) => {
-                                                        const now = prev[draftKey] || [];
-                                                        const next = isLeadDayPrompt
-                                                          ? now.includes(normalized)
-                                                            ? now.filter((v) => v !== normalized)
-                                                            : [...now, normalized]
-                                                          : now[0] === normalized
-                                                            ? []
-                                                            : [normalized];
-                                                        return { ...prev, [draftKey]: next };
-                                                      });
-                                                    }}
-                                                    disabled={model.sending || isLocked || !isLatestVisibleMessage}
-                                                    className={cn(
-                                                      "w-full rounded-lg border px-3 py-2 text-xs font-semibold",
-                                                      picked
-                                                        ? "border-slate-900 bg-slate-900 text-white"
-                                                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-                                                      "disabled:cursor-not-allowed disabled:opacity-50"
-                                                    )}
+                                        return (
+                                          <>
+                                            <div className="mt-[5px]">
+                                              <div
+                                                className="grid gap-2"
+                                                style={{
+                                                  gridTemplateColumns: `repeat(${Math.min(3, Math.max(1, msg.quickReplies.length))}, minmax(0, 1fr))`,
+                                                }}
                                               >
-                                                {item.label}
-                                              </button>
-                                            );
-                                          })}
-                                            </div>
-                                          </div>
-                                          {isLatestVisibleMessage && !isLocked ? (
-                                          <div className="mt-[5px] flex justify-end">
-                                            <button
-                                              type="button"
-                                              aria-label="선택 확인"
-                                              title="선택 확인"
-                                              onClick={() => {
-                                                const picked = isLeadDayPrompt
-                                                  ? selected
-                                                    .map((v) => Number(v))
-                                                    .filter((v) => Number.isFinite(v))
-                                                    .sort((a, b) => a - b)
-                                                    .map((v) => String(v))
-                                                  : selected.slice(0, 1);
-                                                if (picked.length < minRequired) return;
-                                                setLockedReplySelections((prev) => ({ ...prev, [draftKey]: picked }));
-                                                setQuickReplyDrafts((prev) => {
-                                                  const next = { ...prev };
-                                                  delete next[draftKey];
-                                                  return next;
-                                                });
-                                                void submitMessage(model.id, isLeadDayPrompt ? picked.join(",") : picked[0]);
-                                              }}
-                                              disabled={model.sending || !canConfirm}
-                                              className={cn(
-                                                "inline-flex h-8 w-8 items-center justify-center rounded-lg border",
-                                                canConfirm
-                                                  ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
-                                                  : "border-slate-300 bg-slate-100 text-slate-400",
-                                                "disabled:cursor-not-allowed disabled:opacity-80"
-                                              )}
-                                            >
-                                              <CornerDownRight className="h-4 w-4" />
-                                            </button>
-                                          </div>
-                                          ) : null}
-                                        </>
-                                      );
-                                    })()
-                                    : null}
-                                  {msg.role === "bot" && msg.productCards && msg.productCards.length > 0 ? (
-                                    (() => {
-                                      const draftKey = `${model.id}:${msg.id}:card`;
-                                      const selectedCard = (quickReplyDrafts[draftKey] || [])[0] || "";
-                                      const lockedCard = (lockedReplySelections[draftKey] || [])[0] || "";
-                                      const effectiveSelectedCard = lockedCard || selectedCard;
-                                      const isLocked = Boolean(lockedCard);
-                                      const canConfirm = !isLocked && Boolean(selectedCard);
-                                      return (
-                                        <>
-                                          <div className="mt-[5px]">
-                                            <div
-                                              className="grid gap-2"
-                                              style={{ gridTemplateColumns: `repeat(${Math.min(3, msg.productCards.length)}, minmax(0, 1fr))` }}
-                                            >
-                                              {msg.productCards.map((card, idx) => {
-                                                const picked = effectiveSelectedCard === String(card.value);
-                                                return (
-                                                  <button
-                                                    key={`${msg.id}-card-${card.id}-${idx}`}
-                                                    type="button"
-                                                    onClick={() => {
-                                                      if (isLocked || !isLatestVisibleMessage) return;
-                                                      setQuickReplyDrafts((prev) => {
-                                                        const next = picked ? [] : [String(card.value)];
-                                                        return { ...prev, [draftKey]: next };
-                                                      });
-                                                    }}
-                                                    disabled={model.sending || isLocked || !isLatestVisibleMessage}
-                                                    className={cn(
-                                                      "relative flex w-full flex-col text-left rounded-xl border bg-white p-2 hover:bg-slate-50",
-                                                      picked ? "border-slate-900 ring-2 ring-slate-300" : "border-slate-300",
-                                                      "disabled:cursor-not-allowed disabled:opacity-50"
-                                                    )}
-                                                  >
-                                                    <span className="absolute left-2 top-2 h-5 w-5 rounded-full bg-slate-900 text-white text-[11px] font-semibold flex items-center justify-center">
-                                                      {card.value}
-                                                    </span>
-                                                    {card.imageUrl ? (
-                                                      <img
-                                                        src={card.imageUrl}
-                                                        alt={card.title}
-                                                        className="h-24 w-full rounded-md object-cover bg-slate-100"
-                                                      />
-                                                    ) : (
-                                                      <div className="h-24 w-full rounded-md bg-slate-100 flex items-center justify-center text-[11px] text-slate-500">
-                                                        이미지 없음
-                                                      </div>
-                                                    )}
-                                                    <div
-                                                      className="mt-2 flex h-10 items-start justify-center overflow-hidden text-center text-xs font-semibold leading-5 text-slate-700 whitespace-normal break-keep"
-                                                      style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}
+                                                {msg.quickReplies.map((item, idx) => {
+                                                  const num = parseLeadDayValue(item.value);
+                                                  const normalized = num ? String(num) : String(item.value);
+                                                  const picked = effectiveSelection.includes(normalized);
+                                                  return (
+                                                    <button
+                                                      key={`${msg.id}-quick-${idx}-${item.value}`}
+                                                      type="button"
+                                                      onClick={() => {
+                                                        if (isLocked || !isLatestVisibleMessage) return;
+                                                        setQuickReplyDrafts((prev) => {
+                                                          const now = prev[draftKey] || [];
+                                                          const next = isMultiSelectPrompt
+                                                            ? now.includes(normalized)
+                                                              ? now.filter((v) => v !== normalized)
+                                                              : [...now, normalized]
+                                                            : now[0] === normalized
+                                                              ? []
+                                                              : [normalized];
+                                                          return { ...prev, [draftKey]: next };
+                                                        });
+                                                      }}
+                                                      disabled={model.sending || isLocked || !isLatestVisibleMessage}
+                                                      className={cn(
+                                                        "w-full rounded-lg border px-3 py-2 text-xs font-semibold",
+                                                        picked
+                                                          ? "border-slate-900 bg-slate-900 text-white"
+                                                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+                                                        "disabled:cursor-not-allowed disabled:opacity-50"
+                                                      )}
                                                     >
-                                                      {card.title}
-                                                    </div>
-                                                    {card.subtitle ? (
+                                                      {item.label}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                            {isLatestVisibleMessage && !isLocked ? (
+                                              <div className="mt-[5px] flex justify-end">
+                                                <button
+                                                  type="button"
+                                                  aria-label="선택 확인"
+                                                  title="선택 확인"
+                                                  onClick={() => {
+                                                    const picked = isMultiSelectPrompt
+                                                      ? selected
+                                                        .map((v) => Number(v))
+                                                        .filter((v) => Number.isFinite(v) || String(v).trim() !== "")
+                                                        .map((v) => String(v))
+                                                      : selected.slice(0, 1);
+                                                    if (picked.length < minRequired) return;
+                                                    const maxAllowed =
+                                                      Number.isFinite(Number(quickRule?.max_select || 0)) && Number(quickRule?.max_select || 0) > 0
+                                                        ? Number(quickRule?.max_select)
+                                                        : null;
+                                                    const normalizedPicked =
+                                                      maxAllowed && maxAllowed > 0 ? picked.slice(0, maxAllowed) : picked;
+                                                    setLockedReplySelections((prev) => ({ ...prev, [draftKey]: normalizedPicked }));
+                                                    setQuickReplyDrafts((prev) => {
+                                                      const next = { ...prev };
+                                                      delete next[draftKey];
+                                                      return next;
+                                                    });
+                                                    void submitMessage(
+                                                      model.id,
+                                                      isMultiSelectPrompt || quickRule?.submit_format === "csv"
+                                                        ? normalizedPicked.join(",")
+                                                        : normalizedPicked[0]
+                                                    );
+                                                  }}
+                                                  disabled={model.sending || !canConfirm}
+                                                  className={cn(
+                                                    "inline-flex h-8 w-8 items-center justify-center rounded-lg border",
+                                                    canConfirm
+                                                      ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
+                                                      : "border-slate-300 bg-slate-100 text-slate-400",
+                                                    "disabled:cursor-not-allowed disabled:opacity-80"
+                                                  )}
+                                                >
+                                                  <CornerDownRight className="h-4 w-4" />
+                                                </button>
+                                              </div>
+                                            ) : null}
+                                          </>
+                                        );
+                                      })()
+                                      : null}
+                                    {msg.role === "bot" && msg.productCards && msg.productCards.length > 0 ? (
+                                      (() => {
+                                        const draftKey = `${model.id}:${msg.id}:card`;
+                                        const selectedCard = (quickReplyDrafts[draftKey] || [])[0] || "";
+                                        const lockedCard = (lockedReplySelections[draftKey] || [])[0] || "";
+                                        const effectiveSelectedCard = lockedCard || selectedCard;
+                                        const isLocked = Boolean(lockedCard);
+                                        const canConfirm = !isLocked && Boolean(selectedCard);
+                                        return (
+                                          <>
+                                            <div className="mt-[5px]">
+                                              <div
+                                                className="grid gap-2"
+                                                style={{ gridTemplateColumns: `repeat(${Math.min(3, msg.productCards.length)}, minmax(0, 1fr))` }}
+                                              >
+                                                {msg.productCards.map((card, idx) => {
+                                                  const picked = effectiveSelectedCard === String(card.value);
+                                                  return (
+                                                    <button
+                                                      key={`${msg.id}-card-${card.id}-${idx}`}
+                                                      type="button"
+                                                      onClick={() => {
+                                                        if (isLocked || !isLatestVisibleMessage) return;
+                                                        setQuickReplyDrafts((prev) => {
+                                                          const next = picked ? [] : [String(card.value)];
+                                                          return { ...prev, [draftKey]: next };
+                                                        });
+                                                      }}
+                                                      disabled={model.sending || isLocked || !isLatestVisibleMessage}
+                                                      className={cn(
+                                                        "relative flex w-full flex-col text-left rounded-xl border bg-white p-2 hover:bg-slate-50",
+                                                        picked ? "border-slate-900 ring-2 ring-slate-300" : "border-slate-300",
+                                                        "disabled:cursor-not-allowed disabled:opacity-50"
+                                                      )}
+                                                    >
+                                                      <span className="absolute left-2 top-2 h-5 w-5 rounded-full bg-slate-900 text-white text-[11px] font-semibold flex items-center justify-center">
+                                                        {card.value}
+                                                      </span>
+                                                      {card.imageUrl ? (
+                                                        <img
+                                                          src={card.imageUrl}
+                                                          alt={card.title}
+                                                          className="h-24 w-full rounded-md object-cover bg-slate-100"
+                                                        />
+                                                      ) : (
+                                                        <div className="h-24 w-full rounded-md bg-slate-100 flex items-center justify-center text-[11px] text-slate-500">
+                                                          이미지 없음
+                                                        </div>
+                                                      )}
                                                       <div
-                                                        className="mt-0.5 overflow-hidden text-center text-[11px] leading-4 text-slate-500 whitespace-normal break-keep"
+                                                        className="mt-2 flex h-10 items-start justify-center overflow-hidden text-center text-xs font-semibold leading-5 text-slate-700 whitespace-normal break-keep"
                                                         style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}
                                                       >
-                                                        {card.subtitle}
+                                                        {card.title}
                                                       </div>
-                                                    ) : null}
-                                                  </button>
-                                                );
-                                              })}
+                                                      {card.subtitle ? (
+                                                        <div
+                                                          className="mt-0.5 overflow-hidden text-center text-[11px] leading-4 text-slate-500 whitespace-normal break-keep"
+                                                          style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}
+                                                        >
+                                                          {card.subtitle}
+                                                        </div>
+                                                      ) : null}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
                                             </div>
-                                          </div>
-                                          {isLatestVisibleMessage && !isLocked ? (
-                                          <div className="mt-[5px] flex justify-end">
-                                            <button
-                                              type="button"
-                                              aria-label="선택 확인"
-                                              title="선택 확인"
-                                              onClick={() => {
-                                                if (!selectedCard) return;
-                                                setLockedReplySelections((prev) => ({ ...prev, [draftKey]: [selectedCard] }));
-                                                setQuickReplyDrafts((prev) => {
-                                                  const next = { ...prev };
-                                                  delete next[draftKey];
-                                                  return next;
-                                                });
-                                                void submitMessage(model.id, selectedCard);
-                                              }}
-                                              disabled={model.sending || !canConfirm}
-                                              className={cn(
-                                                "inline-flex h-8 w-8 items-center justify-center rounded-lg border",
-                                                canConfirm
-                                                  ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
-                                                  : "border-slate-300 bg-slate-100 text-slate-400",
-                                                "disabled:cursor-not-allowed disabled:opacity-80"
-                                              )}
-                                            >
-                                              <CornerDownRight className="h-4 w-4" />
-                                            </button>
-                                          </div>
-                                          ) : null}
-                                        </>
-                                      );
-                                    })()
+                                            {isLatestVisibleMessage && !isLocked ? (
+                                              <div className="mt-[5px] flex justify-end">
+                                                <button
+                                                  type="button"
+                                                  aria-label="선택 확인"
+                                                  title="선택 확인"
+                                                  onClick={() => {
+                                                    if (!selectedCard) return;
+                                                    setLockedReplySelections((prev) => ({ ...prev, [draftKey]: [selectedCard] }));
+                                                    setQuickReplyDrafts((prev) => {
+                                                      const next = { ...prev };
+                                                      delete next[draftKey];
+                                                      return next;
+                                                    });
+                                                    void submitMessage(model.id, selectedCard);
+                                                  }}
+                                                  disabled={model.sending || !canConfirm}
+                                                  className={cn(
+                                                    "inline-flex h-8 w-8 items-center justify-center rounded-lg border",
+                                                    canConfirm
+                                                      ? "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
+                                                      : "border-slate-300 bg-slate-100 text-slate-400",
+                                                    "disabled:cursor-not-allowed disabled:opacity-80"
+                                                  )}
+                                                >
+                                                  <CornerDownRight className="h-4 w-4" />
+                                                </button>
+                                              </div>
+                                            ) : null}
+                                          </>
+                                        );
+                                      })()
+                                    ) : null}
+                                  </div>
+                                  {msg.role === "user" ? (
+                                    <div
+                                      className={cn(
+                                        "h-8 w-8 rounded-full border flex items-center justify-center",
+                                        isSelected
+                                          ? "border-slate-900 bg-slate-900"
+                                          : "border-slate-200 bg-white"
+                                      )}
+                                    >
+                                      {isSelected ? (
+                                        <Check className="h-4 w-4 text-white" />
+                                      ) : (
+                                        <User className="h-4 w-4 text-slate-500" />
+                                      )}
+                                    </div>
                                   ) : null}
                                 </div>
-                                {msg.role === "user" ? (
-                                  <div
-                                    className={cn(
-                                      "h-8 w-8 rounded-full border flex items-center justify-center",
-                                      isSelected
-                                        ? "border-slate-900 bg-slate-900"
-                                        : "border-slate-200 bg-white"
-                                    )}
-                                  >
-                                    {isSelected ? (
-                                      <Check className="h-4 w-4 text-white" />
-                                    ) : (
-                                      <User className="h-4 w-4 text-slate-500" />
-                                    )}
-                                  </div>
-                                ) : null}
-                              </div>
-                            );
+                              );
                             });
                           })()}
                         </div>
