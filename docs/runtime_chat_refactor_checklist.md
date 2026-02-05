@@ -1,14 +1,14 @@
 # Runtime Chat 리팩터링 체크리스트
 
-목표: `src/app/api/runtime/chat/core.ts` 단일 대형 로직 의존 구조를
-`route -> runtime/orchestration -> runtime/runtimeOrchestrator + 도메인 모듈` 구조로 전환
+목표: `src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts` 중심의 오케스트레이션 구조로
+`route -> runtime/runtimeOrchestrator + 도메인 모듈` 실행 경로를 고정
 
 ## 1) 엔트리/오케스트레이션 분리
 
-- [x] `src/app/api/runtime/chat/core.ts`를 얇은 엔트리로 축소 (`POST` 재-export)
-- [x] `src/app/api/runtime/chat/runtime/orchestration.ts` 생성
-- [x] `runtime/orchestration.ts`를 위임 전용 허브로 단순화
 - [x] 실행 본체를 `src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts`로 분리
+- [x] `src/app/api/runtime/chat/route.ts`가 `runtime/runtimeOrchestrator`를 직접 참조하도록 전환
+- [x] 중간 엔트리 `src/app/api/runtime/chat/core.ts` 삭제
+- [x] 중간 엔트리 `src/app/api/runtime/chat/runtime/orchestration.ts` 삭제
 
 ## 2) 대원칙/정책 분리
 
@@ -96,7 +96,7 @@
 
 ## 현재 상태 요약
 
-- `src/app/api/runtime/chat/runtime/orchestration.ts`는 12줄 허브로 동작합니다.
+- 엔트리 경로는 `route.ts -> runtime/runtimeOrchestrator.ts`로 단순화되었습니다.
 - `src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts`는 963줄이며, 단계 호출 조합 + 상태 동기화 중심으로 동작합니다.
 - `restock` 의도 대형 블록은 `handlers/restockHandler.ts`로 이동되어 `runtimeOrchestrator.ts`에서 위임 호출합니다.
 
@@ -179,8 +179,8 @@
 - [x] step 간 변경 가능한 필드(예: intent/order_id/token) 명시 갱신 (pre-turn/input/tool/post-tool/finalize 직전 + error fallback intent 반영 완료)
 
 ### 15.4 엔트리 경로 단순화
-- [x] `route.ts -> runtime/orchestration.ts -> runtimeOrchestrator.ts` 경로 단순화 및 존치 근거 문서화 (`core.ts`는 하위 호환 shim으로 유지)
-- [ ] 외부 참조 전환 완료 시 `core.ts`/`orchestration.ts` 단순화 또는 정리 결정
+- [x] `route.ts -> runtime/runtimeOrchestrator.ts` 경로로 단순화
+- [x] `core.ts`/`runtime/orchestration.ts` 정리(삭제) 완료
 
 ### 15.5 검증 기준
 - [x] `npx tsc --noEmit --pretty false` 통과
@@ -197,18 +197,18 @@
 
 ### 14.1 `core.ts` 참조 전환 계획
 - [x] 코드베이스에서 `src/app/api/runtime/chat/core.ts` 참조 지점 식별 (코드/문서/운영스크립트)
-- [x] 저장소 내부 서비스 참조를 최종 엔트리 기준으로 전환 (`route.ts`는 `runtime/orchestration` 직접 참조)
-- [ ] 전환 완료 후 `core.ts` 제거 가능성 재평가
-- [x] `src/app` 코드 기준 직접 참조 확인: 현재 `src/app` 내부 직접 참조 0건 (`route.ts`는 `runtime/orchestration` 직접 참조)
+- [x] 저장소 내부 서비스 참조를 최종 엔트리 기준으로 전환 (`route.ts`는 `runtime/runtimeOrchestrator` 직접 참조)
+- [x] 전환 완료 후 `core.ts` 제거
+- [x] `src/app` 코드 기준 직접 참조 확인: 현재 `src/app` 내부 직접 참조 0건 (`route.ts`는 `runtime/runtimeOrchestrator` 직접 참조)
 - [x] 전체 검색 기준 참조 현황 기록: `src` 코드 직접 참조 0건 + `docs` 참조 다수(명세/기록 문서)
 
 ### 14.2 파일 명명 정리 계획
 - [x] 현재 역할 기준 명명 재검토 (`runtimeEngine.ts` -> `runtimeOrchestrator.ts`)
 - [x] 명명 변경 시 import 경로 일괄 변경 + 타입체크 검증
-- [ ] 라우트 엔트리(`route.ts`)는 유지, 중간 엔트리(`core.ts`/`runtime/orchestration.ts`)의 존치 여부 결정
+- [x] 라우트 엔트리(`route.ts`)는 유지, 중간 엔트리(`core.ts`/`runtime/orchestration.ts`) 제거 결정 및 반영
 
 ### 14.3 삭제/단순화 결정 기준
-- [ ] 외부/내부 참조가 `core.ts`에 남아있지 않음
+- [x] 외부/내부 참조가 `core.ts`에 남아있지 않음
 - [ ] 모니터링/로그/문서 경로 반영 완료
 - [ ] 배포 후 롤백 경로 확보 (1 릴리즈 이상 관찰)
 
@@ -216,7 +216,7 @@
 
 - [x] `runtimeOrchestrator.ts` 2000줄 이하 (현재 963줄)
 - [x] intent별 핵심 분기가 handler/runtime 모듈로 분리
-- [x] `orchestration.ts`는 엔트리/호출 조합만 담당
+- [x] 라우트는 `runtimeOrchestrator.ts` 직접 호출
 - [x] 타입체크(`npx tsc --noEmit --pretty false`) 연속 통과
 
 ## 16) "완벽한 Orchestrator" 실행 체크리스트 (무엇을/어떻게)
@@ -238,9 +238,9 @@
 - [x] **무엇**: 상태 전달 규약화  
   **어떻게**: `RuntimePipelineState` + `runtimeStepContracts` 유지
 - [x] **무엇**: 엔트리 경로 단순화 결정  
-  **어떻게**: `route -> runtime/orchestration -> runtime/runtimeOrchestrator`로 단순화 (`core.ts`는 호환 shim 유지)
+  **어떻게**: `route -> runtime/runtimeOrchestrator`로 단순화
 - [x] **무엇**: `core.ts` 참조 전환(저장소 내부)  
-  **어떻게**: `route.ts` 직접 참조를 `runtime/orchestration`으로 이관하고 `core.ts`는 호환 shim으로 유지
+  **어떻게**: `route.ts` 직접 참조를 `runtime/runtimeOrchestrator`로 이관 후 `core.ts`/`orchestration.ts` 삭제
 - [x] **무엇**: 파일 명명 정합성  
   **어떻게**: `runtimeEngine.ts`를 `runtimeOrchestrator.ts`로 rename하고 import 경로 + 타입체크 검증 완료
 - [ ] **무엇**: 운영 검증 완료  

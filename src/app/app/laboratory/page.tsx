@@ -553,7 +553,6 @@ function inferRuntimeUsageSummary(
   const add = (bucket: keyof typeof buckets, path: string) => buckets[bucket].add(path);
 
   add("runtime", "src/app/api/runtime/chat/route.ts");
-  add("runtime", "src/app/api/runtime/chat/runtime/orchestration.ts");
   add("runtime", "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts");
 
   const botMessages = selectedMessages.filter((msg) => msg.role === "bot");
@@ -573,7 +572,7 @@ function inferRuntimeUsageSummary(
   }
   if (allEventLogs.length > 0) {
     add("services", "src/app/api/runtime/chat/services/auditRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeResponseRuntime.ts");
+    add("runtime", "src/app/api/runtime/chat/presentation/ui-runtimeResponseRuntime.ts");
   }
   if (allMcpLogs.length > 0) {
     add("runtime", "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts");
