@@ -7,7 +7,11 @@
     "build": "next build",
     "start": "next start",
     "ws": "node ws-server.js",
-    "lint": "eslint"
+    "lint": "eslint",
+    "validate:runtime:quick-reply": "node scripts/validate-runtime-quick-reply-config.mjs",
+    "validate:runtime:prompt-templates": "node scripts/validate-runtime-prompt-templates.mjs",
+    "validate:runtime:template-keys": "node scripts/validate-runtime-template-keys.mjs",
+    "validate:runtime:response-schema": "node scripts/validate-runtime-response-schema.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

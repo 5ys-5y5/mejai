@@ -1,3 +1,6 @@
+import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "./quickReplyConfigRuntime";
+import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
+
 type PendingStateParams = {
   context: any;
   prevBotContext: Record<string, unknown>;
@@ -126,8 +129,18 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
         refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
       };
     } else {
-      const prompt = `검색된 주소가 맞는지 확인해 주세요.\n- 지번주소: ${candidateJibun || pendingAddress || "-"}\n- 도로명주소: ${candidateRoad || "-"}\n- 우편번호: ${pendingZipcode || "-"}\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+      const prompt = buildYesNoConfirmationPrompt(
+        `검색된 주소가 맞는지 확인해 주세요.\n- 지번주소: ${candidateJibun || pendingAddress || "-"}\n- 도로명주소: ${candidateRoad || "-"}\n- 우편번호: ${pendingZipcode || "-"}`,
+        { botContext: prevBotContext, entity: prevEntity }
+      );
       const reply = makeReply(prompt);
+      const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+        optionsCount: YES_NO_QUICK_REPLIES.length,
+        criteria: "state:awaiting_zipcode_confirm",
+        sourceFunction: "handlePendingStateStage",
+        sourceModule: "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
+        contextText: reply,
+      });
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -148,7 +161,14 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
         },
       });
       return {
-        response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
+        response: respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
+          quick_replies: YES_NO_QUICK_REPLIES,
+          quick_reply_config: quickReplyConfig,
+        }),
         derivedOrderId: nextDerivedOrderId,
         derivedZipcode: nextDerivedZipcode,
         derivedAddress: nextDerivedAddress,
@@ -179,8 +199,18 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           const roadAddr = String(first?.roadAddr || first?.roadAddrPart1 || "").trim();
           const jibunAddr = String(first?.jibunAddr || "").trim();
           if (candidateZip) {
-            const prompt = `입력하신 주소로 우편번호를 찾았습니다.\n- 지번주소: ${jibunAddr || pendingAddress}\n- 도로명주소: ${roadAddr || "-"}\n- 우편번호: ${candidateZip}\n위 정보가 맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+            const prompt = buildYesNoConfirmationPrompt(
+              `입력하신 주소로 우편번호를 찾았습니다.\n- 지번주소: ${jibunAddr || pendingAddress}\n- 도로명주소: ${roadAddr || "-"}\n- 우편번호: ${candidateZip}\n위 정보가 맞는지 확인해 주세요.`,
+              { botContext: prevBotContext, entity: prevEntity }
+            );
             const reply = makeReply(prompt);
+            const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+              optionsCount: YES_NO_QUICK_REPLIES.length,
+              criteria: "state:awaiting_zipcode_confirm_from_search",
+              sourceFunction: "handlePendingStateStage",
+              sourceModule: "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
+              contextText: reply,
+            });
             await insertTurn({
               session_id: sessionId,
               seq: nextSeq,
@@ -200,7 +230,14 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
               },
             });
             return {
-              response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
+              response: respond({
+                session_id: sessionId,
+                step: "confirm",
+                message: reply,
+                mcp_actions: [],
+                quick_replies: YES_NO_QUICK_REPLIES,
+                quick_reply_config: quickReplyConfig,
+              }),
               derivedOrderId: nextDerivedOrderId,
               derivedZipcode: nextDerivedZipcode,
               derivedAddress: nextDerivedAddress,
@@ -324,8 +361,18 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
       };
     } else {
       const reply = makeReply(
-        `아래 내용으로 변경할까요?\n- 주문번호: ${pendingOrderId || "-"}\n- 현재 배송지: ${beforeAddress || "-"}\n- 변경 배송지: ${pendingAddress || "-"}\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+        buildYesNoConfirmationPrompt(
+          `아래 내용으로 변경할까요?\n- 주문번호: ${pendingOrderId || "-"}\n- 현재 배송지: ${beforeAddress || "-"}\n- 변경 배송지: ${pendingAddress || "-"}`,
+          { botContext: prevBotContext, entity: prevEntity }
+        )
       );
+      const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+        optionsCount: YES_NO_QUICK_REPLIES.length,
+        criteria: "state:awaiting_update_confirm",
+        sourceFunction: "handlePendingStateStage",
+        sourceModule: "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
+        contextText: reply,
+      });
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -349,7 +396,14 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
         },
       });
       return {
-        response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
+        response: respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
+          quick_replies: YES_NO_QUICK_REPLIES,
+          quick_reply_config: quickReplyConfig,
+        }),
         derivedOrderId: nextDerivedOrderId,
         derivedZipcode: nextDerivedZipcode,
         derivedAddress: nextDerivedAddress,
@@ -392,8 +446,18 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
       };
     } else {
       const reply = makeReply(
-        `주문번호 ${pendingOrderId || "-"}에 대해 취소/환불 요청을 접수할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+        buildYesNoConfirmationPrompt(`주문번호 ${pendingOrderId || "-"}에 대해 취소/환불 요청을 접수할까요?`, {
+          botContext: prevBotContext,
+          entity: prevEntity,
+        })
       );
+      const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+        optionsCount: YES_NO_QUICK_REPLIES.length,
+        criteria: "state:awaiting_refund_confirm",
+        sourceFunction: "handlePendingStateStage",
+        sourceModule: "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
+        contextText: reply,
+      });
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -414,7 +478,14 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
         },
       });
       return {
-        response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
+        response: respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
+          quick_replies: YES_NO_QUICK_REPLIES,
+          quick_reply_config: quickReplyConfig,
+        }),
         derivedOrderId: nextDerivedOrderId,
         derivedZipcode: nextDerivedZipcode,
         derivedAddress: nextDerivedAddress,

@@ -116,6 +116,7 @@ export async function handleRuntimeError(input: Record<string, any>) {
 
   return {
     response: respond({
+      session_id: currentSessionId || null,
       step: "final",
       message: fallback,
       mcp_actions: [],

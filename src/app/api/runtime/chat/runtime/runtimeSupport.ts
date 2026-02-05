@@ -32,6 +32,8 @@ export type DebugPayload = {
   policyInputRules?: string[];
   policyToolRules?: string[];
   contextContamination?: string[];
+  runtimeCallChain?: Array<{ module_path: string; function_name: string }>;
+  templateOverrides?: Record<string, string>;
 };
 
 type DebugEntry = { key: string; value: string | number };
@@ -213,6 +215,26 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
           context: {
             contamination: uniq(payload.contextContamination),
             contamination_count: uniq(payload.contextContamination).length,
+          },
+        }
+      : {}),
+    ...(Array.isArray(payload.runtimeCallChain) && payload.runtimeCallChain.length > 0
+      ? {
+          execution: {
+            call_chain: payload.runtimeCallChain
+              .map((item) => ({
+                module_path: String((item as any)?.module_path || "").trim(),
+                function_name: String((item as any)?.function_name || "").trim(),
+              }))
+              .filter((item) => Boolean(item.module_path) && Boolean(item.function_name)),
+          },
+        }
+      : {}),
+    ...(payload.templateOverrides && Object.keys(payload.templateOverrides).length > 0
+      ? {
+          templates: {
+            overrides_applied: payload.templateOverrides,
+            override_count: Object.keys(payload.templateOverrides).length,
           },
         }
       : {}),

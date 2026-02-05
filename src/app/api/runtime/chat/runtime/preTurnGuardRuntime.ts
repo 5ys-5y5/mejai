@@ -1,3 +1,6 @@
+import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "./quickReplyConfigRuntime";
+import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
+
 type PreTurnGuardParams = {
   context: any;
   prevBotContext: Record<string, unknown>;
@@ -124,7 +127,19 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
       };
     } else {
       const masked = pendingPhone ? maskPhone(pendingPhone) : "-";
-      const reply = makeReply(`이전에 제공한 번호(${masked})를 그대로 사용해 조회할까요? 맞으면 '네', 아니면 '아니오'를 입력해 주세요.`);
+      const reply = makeReply(
+        buildYesNoConfirmationPrompt(`이전에 제공한 번호(${masked})를 그대로 사용해 조회할까요?`, {
+          botContext: prevBotContext,
+          entity: prevEntity,
+        })
+      );
+      const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+        optionsCount: YES_NO_QUICK_REPLIES.length,
+        criteria: "state:phone_reuse_pending_confirm",
+        sourceFunction: "handlePreTurnGuards",
+        sourceModule: "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
+        contextText: reply,
+      });
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -140,7 +155,14 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
         },
       });
       return {
-        response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
+        response: respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
+          quick_replies: YES_NO_QUICK_REPLIES,
+          quick_reply_config: quickReplyConfig,
+        }),
         derivedPhone: nextDerivedPhone,
         expectedInput: nextExpectedInput,
       };

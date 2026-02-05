@@ -235,6 +235,44 @@ export function isOrderChangeZipcodeTemplateText(text: string) {
   return /우편번호/.test(v) || /새\s*주소/.test(v);
 }
 
+export async function generateAlternativeRestockConsentQuestion(input: {
+  intent: string;
+  alternativesCount: number;
+  userQuery: string;
+  model?: "chatgpt" | "gemini";
+}) {
+  const count = Math.max(1, Number(input.alternativesCount || 1));
+  const fallback = `요청하신 상품은 현재 재입고 일정 안내 대상에 없습니다.\n재입고 일정이 있는 제품에 대한 정보를 확인하시겠습니까? (가능 항목 ${count}개)`;
+  const prompt = `Generate one concise Korean question for customer support chat.
+Context:
+- user_intent: ${String(input.intent || "").trim() || "unknown"}
+- user_query: ${String(input.userQuery || "").trim() || "-"}
+- available_alternative_count: ${count}
+Rules:
+1) Do not reveal alternative product names.
+2) Clearly say the requested product is not in target.
+3) Ask consent to check alternative products.
+4) Keep to max 2 lines.
+Return plain text only.`;
+  try {
+    const res = await runLlm(input.model || "chatgpt", [
+      { role: "system", content: "You generate deterministic, concise Korean CX prompts. No markdown." },
+      { role: "user", content: prompt },
+    ]);
+    const text = String(res.text || "").replace(/\r/g, "").trim();
+    if (!text) return fallback;
+    const sanitized = text
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .slice(0, 2)
+      .join("\n");
+    return sanitized || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function extractEntitiesWithLlm(text: string, model: "chatgpt" | "gemini") {
   const prompt = `Extract entities from the text. Return JSON only.
 Text: "${text}"

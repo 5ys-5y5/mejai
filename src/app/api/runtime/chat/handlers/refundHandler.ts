@@ -1,3 +1,6 @@
+import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "../runtime/quickReplyConfigRuntime";
+import { buildYesNoConfirmationPrompt } from "../runtime/promptTemplateRuntime";
+
 type RefundToolResult = { name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown };
 
 type HandleRefundRequestInput = {
@@ -71,8 +74,17 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
 
   if (!refundConfirmAcceptedThisTurn && !createTicketSuccess && !createTicketFailure) {
     const reply = makeReply(
-      `주문번호 ${resolvedOrderId}건으로 취소/환불 요청을 접수할까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.`
+      buildYesNoConfirmationPrompt(`주문번호 ${resolvedOrderId}건으로 취소/환불 요청을 접수할까요?`, {
+        entity: policyContextEntity,
+      })
     );
+    const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+      optionsCount: YES_NO_QUICK_REPLIES.length,
+      criteria: "policy:ASK_REFUND_CONFIRM",
+      sourceFunction: "handleRefundRequest",
+      sourceModule: "src/app/api/runtime/chat/handlers/refundHandler.ts",
+      contextText: reply,
+    });
     await insertTurn({
       session_id: sessionId,
       seq: nextSeq,
@@ -95,10 +107,17 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
       sessionId,
       latestTurnId,
       "POLICY_DECISION",
-      { stage: "tool", action: "ASK_REFUND_CONFIRM", order_id: resolvedOrderId },
+      { stage: "tool", action: "ASK_REFUND_CONFIRM", order_id: resolvedOrderId, quick_reply_config: quickReplyConfig },
       { intent_name: resolvedIntent }
     );
-    return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+    return respond({
+      session_id: sessionId,
+      step: "confirm",
+      message: reply,
+      mcp_actions: mcpActions,
+      quick_replies: YES_NO_QUICK_REPLIES,
+      quick_reply_config: quickReplyConfig,
+    });
   }
 
   if (createTicketSuccess) {
@@ -164,4 +183,3 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
 
   return null;
 }
-

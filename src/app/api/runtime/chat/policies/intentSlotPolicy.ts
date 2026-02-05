@@ -159,3 +159,32 @@ export function parseLeadDaysSelection(text: string, available: number[]) {
   const picked = Array.from(new Set((raw.match(/\d{1,2}/g) || []).map((v) => Number(v)).filter(Number.isFinite)));
   return picked.filter((n) => available.includes(n)).sort((a, b) => a - b);
 }
+
+export function extractNumberedOptionIndicesFromText(text: string, max = 99) {
+  const values = Array.from(String(text || "").matchAll(/-\s*(\d{1,2})번\s*\|/g))
+    .map((m) => Number(m[1]))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= max);
+  return Array.from(new Set(values));
+}
+
+export function extractLeadDayOptionsFromText(text: string, max = 31) {
+  const raw = String(text || "");
+  const hasLeadDaySignal = /(선택 가능|알림일|쉼표|D-)/.test(raw);
+  if (!hasLeadDaySignal) return [];
+  const values = Array.from(raw.matchAll(/D-(\d{1,2})/g))
+    .map((m) => Number(m[1]))
+    .filter((n) => Number.isFinite(n) && n >= 1 && n <= max);
+  return Array.from(new Set(values)).sort((a, b) => a - b);
+}
+
+export function toLeadDayQuickReplies(days: number[], max = 7) {
+  const normalized = Array.from(
+    new Set(
+      (Array.isArray(days) ? days : [])
+        .map((n) => Number(n))
+        .filter((n) => Number.isFinite(n) && n > 0)
+        .sort((a, b) => a - b)
+    )
+  ).slice(0, Math.max(1, max));
+  return normalized.map((n) => ({ label: `D-${n}`, value: String(n) }));
+}

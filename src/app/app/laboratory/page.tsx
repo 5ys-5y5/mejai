@@ -65,6 +65,25 @@ type ChatMessage = {
     imageUrl?: string;
     value: string;
   }>;
+  responseSchema?: {
+    message: string | null;
+    ui_hints?: {
+      view?: "text" | "choice" | "cards";
+      choice_mode?: "single" | "multi";
+    };
+    quick_replies?: Array<{ label: string; value: string }>;
+    quick_reply_config?: {
+      selection_mode: "single" | "multi";
+      min_select?: number;
+      max_select?: number;
+      submit_format?: "single" | "csv";
+      criteria?: string;
+      source_function?: string;
+      source_module?: string;
+    } | null;
+    cards?: Array<Record<string, unknown>>;
+  };
+  responseSchemaIssues?: string[];
 };
 
 type AgentItem = {
@@ -1448,6 +1467,22 @@ export default function LabolatoryPage() {
           image_url?: string | null;
           value?: string;
         }>;
+        response_schema?: {
+          message?: string | null;
+          ui_hints?: { view?: "text" | "choice" | "cards"; choice_mode?: "single" | "multi" };
+          quick_replies?: Array<{ label?: string; value?: string }>;
+          quick_reply_config?: {
+            selection_mode?: "single" | "multi";
+            min_select?: number;
+            max_select?: number;
+            submit_format?: "single" | "csv";
+            criteria?: string;
+            source_function?: string;
+            source_module?: string;
+          } | null;
+          cards?: Array<Record<string, unknown>>;
+        };
+        response_schema_issues?: string[];
       }>("/api/laboratory/run", {
         method: "POST",
         headers: {
@@ -1606,6 +1641,58 @@ export default function LabolatoryPage() {
             }))
             .filter((item) => item.title && item.value)
           : [];
+        const responseSchema: ChatMessage["responseSchema"] =
+          res.response_schema && typeof res.response_schema === "object"
+            ? {
+              message:
+                typeof res.response_schema.message === "string" || res.response_schema.message === null
+                  ? res.response_schema.message
+                  : null,
+              ui_hints:
+                res.response_schema.ui_hints && typeof res.response_schema.ui_hints === "object"
+                  ? {
+                    view:
+                      res.response_schema.ui_hints.view === "choice" ||
+                      res.response_schema.ui_hints.view === "cards"
+                        ? res.response_schema.ui_hints.view
+                        : "text",
+                    choice_mode: res.response_schema.ui_hints.choice_mode === "multi" ? "multi" : "single",
+                  }
+                  : undefined,
+              quick_replies: Array.isArray(res.response_schema.quick_replies)
+                ? res.response_schema.quick_replies
+                  .map((item: any) => ({
+                    label: String(item?.label || item?.value || "").trim(),
+                    value: String(item?.value || item?.label || "").trim(),
+                  }))
+                  .filter((item) => item.label && item.value)
+                : undefined,
+              quick_reply_config:
+                res.response_schema.quick_reply_config && typeof res.response_schema.quick_reply_config === "object"
+                  ? {
+                    selection_mode:
+                      res.response_schema.quick_reply_config.selection_mode === "multi" ? "multi" : "single",
+                    min_select: Number.isFinite(Number(res.response_schema.quick_reply_config.min_select))
+                      ? Number(res.response_schema.quick_reply_config.min_select)
+                      : undefined,
+                    max_select: Number.isFinite(Number(res.response_schema.quick_reply_config.max_select))
+                      ? Number(res.response_schema.quick_reply_config.max_select)
+                      : undefined,
+                    submit_format: res.response_schema.quick_reply_config.submit_format === "csv" ? "csv" : "single",
+                    criteria: String(res.response_schema.quick_reply_config.criteria || "").trim() || undefined,
+                    source_function:
+                      String(res.response_schema.quick_reply_config.source_function || "").trim() || undefined,
+                    source_module: String(res.response_schema.quick_reply_config.source_module || "").trim() || undefined,
+                  }
+                  : null,
+              cards: Array.isArray(res.response_schema.cards)
+                ? (res.response_schema.cards as Array<Record<string, unknown>>)
+                : undefined,
+            }
+            : undefined;
+        const responseSchemaIssues = Array.isArray(res.response_schema_issues)
+          ? res.response_schema_issues.map((item: unknown) => String(item || "").trim()).filter(Boolean)
+          : undefined;
         updateModel(modelId, (model) => ({
           ...model,
           sessionId: res.session_id || model.sessionId,
@@ -1629,6 +1716,8 @@ export default function LabolatoryPage() {
                 quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
                 quickReplyConfig: quickReplies.length > 0 ? quickReplyConfig : undefined,
                 productCards: productCards.length > 0 ? productCards : undefined,
+                responseSchema,
+                responseSchemaIssues: responseSchemaIssues && responseSchemaIssues.length > 0 ? responseSchemaIssues : undefined,
               };
             })
             .filter((msg) => !(msg.id === loadingMessageId && msg.role === "bot" && !msg.content)),
@@ -1887,6 +1976,23 @@ export default function LabolatoryPage() {
         }
       }
 
+      const botTurns = selectedMessages.filter((msg) => msg.role === "bot" && !msg.isLoading);
+      if (botTurns.length > 0) {
+        const missingResponseSchema = botTurns.filter((msg) => !msg.responseSchema);
+        const hasSchemaIssues = botTurns.filter((msg) => (msg.responseSchemaIssues || []).length > 0);
+        if (missingResponseSchema.length > 0) {
+          incomplete.set("response_schema.missing", [`response_schema 누락 turn=${missingResponseSchema.length}`]);
+        } else {
+          completed.add("response_schema.present");
+        }
+        if (hasSchemaIssues.length > 0) {
+          const issues = Array.from(new Set(hasSchemaIssues.flatMap((msg) => msg.responseSchemaIssues || [])));
+          incomplete.set("response_schema.invalid", issues.length > 0 ? issues : ["response_schema_issues 존재"]);
+        } else if (missingResponseSchema.length === 0) {
+          completed.add("response_schema.valid");
+        }
+      }
+
       return {
         completed: Array.from(completed),
         incomplete: Array.from(incomplete.entries()).map(([key, reasons]) => ({
@@ -1931,6 +2037,21 @@ export default function LabolatoryPage() {
     const formatTurnUnused = (botMsg?: ChatMessage) => {
       if (!botMsg) return "-";
       const lines: string[] = [];
+      if (botMsg.responseSchema) {
+        const schema = botMsg.responseSchema;
+        const schemaView = schema.ui_hints?.view || "text";
+        const schemaChoiceMode = schema.ui_hints?.choice_mode || "-";
+        const schemaQuickReplyCount = Array.isArray(schema.quick_replies) ? schema.quick_replies.length : 0;
+        const schemaCardCount = Array.isArray(schema.cards) ? schema.cards.length : 0;
+        lines.push(
+          `RESPONSE_SCHEMA: view=${schemaView}, choice_mode=${schemaChoiceMode}, quick_replies=${schemaQuickReplyCount}, cards=${schemaCardCount}`
+        );
+        lines.push("RESPONSE_SCHEMA_DETAIL:");
+        lines.push(indentBlock(stringifyPretty(schema), 2));
+      }
+      if (botMsg.responseSchemaIssues && botMsg.responseSchemaIssues.length > 0) {
+        lines.push(`RESPONSE_SCHEMA_ISSUES: ${botMsg.responseSchemaIssues.join(", ")}`);
+      }
       if (botMsg.quickReplyConfig) {
         const rule = botMsg.quickReplyConfig;
         lines.push(

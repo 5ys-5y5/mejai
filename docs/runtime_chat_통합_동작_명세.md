@@ -7,6 +7,8 @@
 - `src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts`
 - `src/app/api/runtime/chat/runtime/runtimeEngine.ts`
 - `src/app/api/runtime/chat/runtime/runtimeSupport.ts`
+- `src/app/api/runtime/chat/runtime/quickReplyConfigRuntime.ts`
+- `src/app/api/runtime/chat/runtime/promptTemplateRuntime.ts`
 - `src/app/api/runtime/chat/presentation/ui-responseDecorators.ts`
 - `src/app/api/runtime/chat/runtime/sessionRuntime.ts`
 - `src/app/api/runtime/chat/runtime/intentRuntime.ts`
@@ -33,6 +35,7 @@
 - `src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts`
 - `src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts`
 - `src/app/api/runtime/chat/presentation/ui-runtimeResponseRuntime.ts`
+- `src/app/api/runtime/chat/presentation/runtimeResponseSchema.ts`
 - `src/app/api/runtime/chat/handlers/refundHandler.ts`
 - `src/app/api/runtime/chat/handlers/orderChangeHandler.ts`
 - `src/app/api/runtime/chat/handlers/restockHandler.ts`
@@ -58,6 +61,10 @@
 - `chat/runtime/runtimeEngine.ts`는 하위 호환 shim으로 `runtimeOrchestrator.ts`를 재-export 합니다.
 - `chat/runtime/runtimeSupport.ts`는 runtime 공통 보조 유틸(디버그 prefix 구성, 실패 payload, timing stage, 날짜 유틸)을 제공합니다.
 - `chat/presentation/ui-responseDecorators.ts`는 quick reply 자동 파생과 선택형 응답 HTML 렌더링을 담당합니다.
+- `chat/runtime/quickReplyConfigRuntime.ts`는 quick reply 선택 규칙(min/max/mode/submit/source)을 중앙 결정합니다.
+- `chat/runtime/promptTemplateRuntime.ts`는 확인/선택 프롬프트 문구를 중앙 결정하고 `bot_context/entity` override를 지원합니다.
+  - 오케스트레이터 시작 시 `compiledPolicy.templates`를 runtime template override로 자동 매핑합니다.
+  - 재입고 리드데이 선택 프롬프트도 템플릿 키 기반으로 구성됩니다.
 - `chat/runtime/sessionRuntime.ts`는 세션 생성/재사용 및 최근 턴 로딩 공통 처리를 담당합니다.
 - `chat/runtime/intentRuntime.ts`는 expected input/재입고 구독 stage 판별 공통 처리를 담당합니다.
 - `chat/runtime/otpRuntime.ts`는 OTP pending/stage/ref 상태 읽기 공통 처리를 담당합니다.
@@ -68,6 +75,7 @@
 - `chat/runtime/runtimeInputStageRuntime.ts`는 input 정책 단계(intent 보정/충돌 이벤트/slot 추출 이벤트/forced input 응답)를 통합 위임합니다.
 - `chat/runtime/runtimeInitializationRuntime.ts`는 이전 턴/슬롯 seed 계산과 `RuntimePipelineState` 초기화를 담당합니다.
 - `chat/presentation/ui-runtimeResponseRuntime.ts`는 공통 API 응답(타이밍 로그/quick reply/rich html)을 담당합니다.
+- `chat/presentation/runtimeResponseSchema.ts`는 `response_schema` 타입/구성/검증(`validateRuntimeResponseSchema`)을 담당합니다.
 - `chat/runtime/finalizeRuntime.ts`는 final LLM 메시지 구성, general guard, 최종 저장/응답 처리를 담당합니다.
 - `chat/runtime/postToolRuntime.ts`는 tool 실행 후 결정론 분기(주문선택/주문조회 가드/후속 handler 연결)를 담당합니다.
 - `chat/runtime/errorRuntime.ts`는 런타임 예외 fallback 응답/감사 저장 처리를 담당합니다.
@@ -318,6 +326,9 @@ flowchart TD
 - `detectIntentCandidates` 결과가 2개 이상이면 번호 선택형 질문
 - 사용자 선택(예: `1`, `1,2`)으로 `forcedIntentQueue` 확정
 - 후속 intent는 `intent_queue`로 이어서 처리
+- 프롬프트 문구는 `intentDisambiguationRuntime`에서 생성되며, 아래 `bot_context` 키로 override 가능
+  - `intent_disambiguation_prompt_title`
+  - `intent_disambiguation_prompt_example`
 
 ### 11.3.3 슬롯 오염 방지
 
@@ -408,8 +419,12 @@ flowchart TD
 
 ## 11.8 응답/UX 보조 규칙
 
-- quick reply 자동 추론
-  - 네/아니오, N번, D-N, 만족도 1~5 등 문맥 기반 생성
+- quick reply 규칙 결정
+  - 1순위: 각 runtime/handler에서 전달한 `quick_replies`
+  - 2순위: 각 runtime/handler에서 전달한 `quick_reply_config`
+  - 3순위: `ui-responseDecorators.ts` fallback 파생(`deriveQuickRepliesWithTrace`)
+  - 응답에는 `response_schema`가 함께 포함되어 UI 디버깅 시 quick reply 원천을 한 번에 확인 가능
+  - 규칙 추적: `quick_reply_config.source_module/source_function`, 이벤트 `QUICK_REPLY_RULE_DECISION.quick_reply_source`
 - 선택형 목록은 `rich_message_html`로도 제공 가능
 - 대화 종료/다른 문의 후속 선택 단계 지원
 
@@ -417,8 +432,25 @@ flowchart TD
 
 - `buildDebugPrefixJson`으로 구조화 디버그 정보 생성
   - 모델, MCP 후보/스킵/결과, 슬롯 상태, 정책 매칭, 사용자/권한 컨텍스트
+  - `execution.call_chain`: 턴에서 실행된 주요 runtime 단계 체인
 - `F_audit_turn_specs`에 prefix JSON upsert
 - `ENABLE_RUNTIME_TIMING` 옵션 기반 단계별 지연 기록 가능
+- `F_audit_events`에 `QUICK_REPLY_RULE_DECISION` 이벤트 기록
+  - 선택 규칙, 응답별 quick reply 개수, payload 기반/문자열 fallback 여부 추적
+
+## 11.12 하드코딩 방지 운영 체크
+
+- `npm run validate:runtime:quick-reply`
+  - `respond(...)`에서 `quick_replies` 사용 시 `quick_reply_config` 누락을 실패 처리
+  - yes/no 확인 문구가 `message`에 포함될 때 `quick_reply_config` 누락을 실패 처리
+- `npm run validate:runtime:prompt-templates`
+  - 금지된 yes/no 하드코딩 문구가 template resolver 외 파일에서 발견되면 실패 처리
+- `npm run validate:runtime:template-keys`
+  - `promptTemplateRuntime`의 `DEFAULT_TEMPLATES`와 policy alias 매핑(`keysByPriority`) 불일치 시 실패 처리
+- `npm run validate:runtime:response-schema`
+  - responder에서 `response_schema` 빌드/검증 경로가 빠지면 실패 처리
+- `/app/laboratory` 대화 복사 포맷
+  - `[TOKEN_UNUSED]`에 `RESPONSE_SCHEMA` 요약/상세와 `RESPONSE_SCHEMA_ISSUES`를 포함해 회귀 식별성을 높임
 
 ## 11.10 오류/실패 정책
 

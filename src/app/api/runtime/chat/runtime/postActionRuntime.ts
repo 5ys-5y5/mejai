@@ -1,3 +1,5 @@
+import { resolveQuickReplyConfig } from "./quickReplyConfigRuntime";
+
 type PostActionRuntimeParams = {
   context: any;
   prevBotContext: Record<string, unknown>;
@@ -22,6 +24,10 @@ const SATISFACTION_QUICK_REPLIES = [
   { label: "3점", value: "3" },
   { label: "4점", value: "4" },
   { label: "5점", value: "5" },
+];
+const POST_ACTION_CHOICE_QUICK_REPLIES = [
+  { label: "대화 종료", value: "대화 종료" },
+  { label: "다른 문의", value: "다른 문의" },
 ];
 
 export async function handlePostActionStage(params: PostActionRuntimeParams): Promise<{
@@ -48,6 +54,16 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
   if (prevBotContext.post_action_stage === "awaiting_choice") {
     if (isEndConversationText(message)) {
       const reply = makeReply("상담이 도움이 되었나요? 만족도를 선택해 주세요. (1~5점)");
+      const quickReplyConfig = resolveQuickReplyConfig({
+        optionsCount: SATISFACTION_QUICK_REPLIES.length,
+        minSelectHint: 1,
+        maxSelectHint: 1,
+        explicitMode: "single",
+        criteria: "state:awaiting_satisfaction",
+        sourceFunction: "handlePostActionStage",
+        sourceModule: "src/app/api/runtime/chat/runtime/postActionRuntime.ts",
+        contextText: reply,
+      });
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -67,6 +83,7 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
           message: reply,
           mcp_actions: mcpActions,
           quick_replies: SATISFACTION_QUICK_REPLIES,
+          quick_reply_config: quickReplyConfig,
         }),
       };
     }
@@ -87,6 +104,16 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
       return { response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions }) };
     }
     const reply = makeReply("다음 중 선택해 주세요: 대화 종료 / 다른 문의");
+    const quickReplyConfig = resolveQuickReplyConfig({
+      optionsCount: POST_ACTION_CHOICE_QUICK_REPLIES.length,
+      minSelectHint: 1,
+      maxSelectHint: 1,
+      explicitMode: "single",
+      criteria: "state:awaiting_choice",
+      sourceFunction: "handlePostActionStage",
+      sourceModule: "src/app/api/runtime/chat/runtime/postActionRuntime.ts",
+      contextText: reply,
+    });
     await insertTurn({
       session_id: sessionId,
       seq: nextSeq,
@@ -99,13 +126,32 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
         post_action_stage: "awaiting_choice",
       },
     });
-    return { response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions }) };
+    return {
+      response: respond({
+        session_id: sessionId,
+        step: "confirm",
+        message: reply,
+        mcp_actions: mcpActions,
+        quick_replies: POST_ACTION_CHOICE_QUICK_REPLIES,
+        quick_reply_config: quickReplyConfig,
+      }),
+    };
   }
 
   if (prevBotContext.post_action_stage === "awaiting_satisfaction") {
     const score = parseSatisfactionScore(message);
     if (!score) {
       const reply = makeReply("만족도를 1~5 중에서 선택해 주세요. (예: 4)");
+      const quickReplyConfig = resolveQuickReplyConfig({
+        optionsCount: SATISFACTION_QUICK_REPLIES.length,
+        minSelectHint: 1,
+        maxSelectHint: 1,
+        explicitMode: "single",
+        criteria: "state:awaiting_satisfaction_retry",
+        sourceFunction: "handlePostActionStage",
+        sourceModule: "src/app/api/runtime/chat/runtime/postActionRuntime.ts",
+        contextText: reply,
+      });
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -125,6 +171,7 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
           message: reply,
           mcp_actions: mcpActions,
           quick_replies: SATISFACTION_QUICK_REPLIES,
+          quick_reply_config: quickReplyConfig,
         }),
       };
     }

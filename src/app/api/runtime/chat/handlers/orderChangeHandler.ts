@@ -1,3 +1,6 @@
+import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "../runtime/quickReplyConfigRuntime";
+import { buildYesNoConfirmationPrompt } from "../runtime/promptTemplateRuntime";
+
 type OrderChangeToolResult = { name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown };
 
 type HandleOrderChangePostToolsInput = {
@@ -83,8 +86,18 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
           const roadAddr = String(first?.roadAddr || first?.roadAddrPart1 || "").trim();
           const jibunAddr = String(first?.jibunAddr || "").trim();
           if (candidateZip) {
-            const prompt = `입력하신 주소를 확인했습니다.\n- 지번주소: ${jibunAddr || currentAddress}\n- 도로명주소: ${roadAddr || "-"}\n- 우편번호: ${candidateZip}\n위 정보가 맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+            const prompt = buildYesNoConfirmationPrompt(
+              `입력하신 주소를 확인했습니다.\n- 지번주소: ${jibunAddr || currentAddress}\n- 도로명주소: ${roadAddr || "-"}\n- 우편번호: ${candidateZip}\n위 정보가 맞는지 확인해 주세요.`,
+              { entity: policyContextEntity }
+            );
             const reply = makeReply(prompt);
+            const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+              optionsCount: YES_NO_QUICK_REPLIES.length,
+              criteria: "guard:MISSING_ZIPCODE_CONFIRM",
+              sourceFunction: "handleOrderChangePostTools",
+              sourceModule: "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
+              contextText: reply,
+            });
             await insertTurn({
               session_id: sessionId,
               seq: nextSeq,
@@ -113,7 +126,14 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
               { reason: "MISSING_ZIPCODE", tool: "update_order_shipping_address", error: firstUpdateError },
               { intent_name: resolvedIntent }
             );
-            return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+            return respond({
+              session_id: sessionId,
+              step: "confirm",
+              message: reply,
+              mcp_actions: mcpActions,
+              quick_replies: YES_NO_QUICK_REPLIES,
+              quick_reply_config: quickReplyConfig,
+            });
           }
         }
         const prompt = "입력하신 주소를 확인할 수 없습니다. 도로명/지번 포함 주소를 다시 입력해 주세요.";

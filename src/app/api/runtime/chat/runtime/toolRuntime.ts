@@ -1,3 +1,10 @@
+import {
+  YES_NO_QUICK_REPLIES,
+  maybeBuildYesNoQuickReplyRule,
+  resolveQuickReplyConfig,
+} from "./quickReplyConfigRuntime";
+import { buildNumberedChoicePrompt, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
+
 export function createToolAccessEvaluator(denied: Set<string>, allowed: Set<string>) {
   return (name: string) => {
     if (denied.has("*") || denied.has(name)) return false;
@@ -557,7 +564,19 @@ export async function handleToolForcedResponse(input: Record<string, any>): Prom
     },
   });
   await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "tool" }, { intent_name: resolvedIntent });
-  return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
+  const quickReplyConfig = maybeBuildYesNoQuickReplyRule({
+    message: reply,
+    criteria: "policy:tool_forced_response_yes_no_prompt",
+    sourceFunction: "handleForcedToolResponseIfAny",
+    sourceModule: "src/app/api/runtime/chat/runtime/toolRuntime.ts",
+  });
+  return respond({
+    session_id: sessionId,
+    step: "final",
+    message: reply,
+    mcp_actions: [],
+    ...(quickReplyConfig ? { quick_replies: YES_NO_QUICK_REPLIES, quick_reply_config: quickReplyConfig } : {}),
+  });
 }
 
 export function maybeQueueListOrdersSkip(input: {
@@ -821,10 +840,16 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
   }
 
   if (hasChoiceAnswerCandidates(listOrdersChoices.length)) {
-    const prompt = compiledPolicy.templates?.order_choices_prompt || "조회된 주문이 여러 건입니다. 변경하실 주문을 번호로 선택해 주세요.";
+    const templateOverrides = resolveRuntimeTemplateOverridesFromPolicy((compiledPolicy as any)?.templates || {});
     const lines = listOrdersChoices.map((o: any) => (o.label ? o.label : `${o.index}번 주문`));
-    const header = "아래 주문 중 번호를 선택해 주세요.";
-    const replyText = `${prompt}\n${header}\n${lines.join("\n")}`.trim();
+    const replyText = buildNumberedChoicePrompt({
+      titleKey: "order_choice_title",
+      headerKey: "order_choice_header",
+      lines,
+      includeExample: false,
+      botContext: { template_overrides: templateOverrides },
+      entity: policyContext.entity,
+    });
     const reply = makeReply(replyText);
     await insertTurn({
       session_id: sessionId,
@@ -844,8 +869,25 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     const quickReplies = listOrdersChoices
       .slice(0, CHAT_PRINCIPLES.response.quickReplyMax)
       .map((item: any) => ({ label: `${item.index}번`, value: String(item.index) }));
+    const quickReplyConfig = resolveQuickReplyConfig({
+      optionsCount: quickReplies.length,
+      minSelectHint: 1,
+      maxSelectHint: 1,
+      explicitMode: "single",
+      criteria: "policy:ORDER_CHOICES_PRESENTED",
+      sourceFunction: "runToolRuntime",
+      sourceModule: "src/app/api/runtime/chat/runtime/toolRuntime.ts",
+      contextText: replyText,
+    });
     return {
-      response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions, quick_replies: quickReplies }),
+      response: respond({
+        session_id: sessionId,
+        step: "final",
+        message: reply,
+        mcp_actions: mcpActions,
+        quick_replies: quickReplies,
+        quick_reply_config: quickReplyConfig,
+      }),
       resolvedOrderId,
       policyContext,
     };

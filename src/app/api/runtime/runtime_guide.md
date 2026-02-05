@@ -29,10 +29,14 @@
 ## 3) Presentation(UI 표현 계층)
 
 - `chat/presentation/ui-responseDecorators.ts` — **UI Response Decorators**
-  - `deriveQuickReplies`: 메시지에서 quick reply 자동 파생
+  - `deriveQuickRepliesWithTrace`: 메시지 fallback quick reply 파생 + source/criteria 추적
+  - `deriveQuickReplies`: legacy 호환용 quick reply 파생 래퍼
   - `deriveRichMessageHtml`: 선택형 안내 텍스트를 rich HTML(표 형식 포함)로 변환
 - `chat/presentation/ui-runtimeResponseRuntime.ts` — **Runtime Responder**
-  - `createRuntimeResponder`: 응답 JSON 구성, `rich_message_html/quick_replies` 주입, timing 이벤트 기록
+  - `createRuntimeResponder`: 응답 JSON 구성, `rich_message_html/quick_replies/response_schema` 주입, `QUICK_REPLY_RULE_DECISION` 이벤트 기록
+  - 우선순위: `payload.quick_replies` > `payload.quick_reply_config` 기반 파생 > 메시지 텍스트 fallback 파생
+- `chat/presentation/runtimeResponseSchema.ts` — **Response Schema Contract**
+  - `RuntimeResponseSchema`/`RuntimeResponderPayload` 타입 및 `validateRuntimeResponseSchema`
 
 ---
 
@@ -75,7 +79,7 @@
 - `chat/runtime/runtimeStepContracts.ts` — **Step I/O Contracts**
   - 단계 입출력 타입 계약
 - `chat/runtime/runtimeSupport.ts` — **Runtime Utilities**
-  - debug prefix/timing/실패 payload/template id 등 공통 유틸
+  - debug prefix/timing/실패 payload/template id 등 공통 유틸 (`execution.call_chain` 포함)
 - `chat/runtime/runtimeTurnIo.ts` — **Turn IO Utilities**
   - `makeReplyWithDebug`/`insertTurnWithDebug`
 - `chat/runtime/runtimeConversationIoRuntime.ts` — **Conversation IO Factory**
@@ -88,6 +92,12 @@
   - expected input/재입고 stage 판별
 - `chat/runtime/toolRuntime.ts` — **Tool Runtime Helpers**
   - tool 정책 필터/실행 유틸/감사 이벤트 유틸
+- `chat/runtime/quickReplyConfigRuntime.ts` — **Quick Reply Rule Resolver**
+  - `resolveQuickReplyConfig`/`resolveSingleChoiceQuickReplyConfig`/`maybeBuildYesNoQuickReplyRule`
+- `chat/runtime/promptTemplateRuntime.ts` — **Prompt Template Resolver**
+  - `resolveRuntimeTemplate`/`buildYesNoConfirmationPrompt` (bot_context/entity override 지원)
+  - `resolveRuntimeTemplateOverridesFromPolicy`/`mergeRuntimeTemplateOverrides` (compiled policy template 자동 매핑)
+  - `buildRestockLeadDaysPrompt` (리드데이 안내 문구 템플릿화)
 
 ---
 
@@ -148,3 +158,8 @@
 - 의도별 대형 분기가 `handlers/*`에 위임되어 있는지
 - DB/MCP/감사 저장이 `services/*`에만 모여 있는지
 - 정책성 로직이 `policies/*`에 모여 있는지
+- `npm run validate:runtime:quick-reply`가 통과하는지(quick reply 설정 누락/yes-no 확인 누락 방지)
+- `npm run validate:runtime:prompt-templates`가 통과하는지(금지된 yes/no 하드코딩 문구 사용 방지)
+- `npm run validate:runtime:template-keys`가 통과하는지(template 기본키/매핑키 불일치 방지)
+- `npm run validate:runtime:response-schema`가 통과하는지(response schema 주입/검증 경로 누락 방지)
+- Laboratory `대화 복사`에서 `[TOKEN_UNUSED]`에 `RESPONSE_SCHEMA`/`RESPONSE_SCHEMA_ISSUES`가 출력되는지 확인

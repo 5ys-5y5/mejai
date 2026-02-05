@@ -17,6 +17,11 @@ export const CHAT_PRINCIPLES = {
     orderLookupPreviewMax: 3,
     choicePreviewMax: 5,
     quickReplyMax: 9,
+    requireNextActionForNonTerminal: true,
+    requireConsentBeforeAlternativeSuggestion: true,
+    alternativeSuggestionConsentIntents: ["restock_inquiry"] as const,
+    hideAlternativeCandidatesBeforeConsent: true,
+    requireImageCardsForChoiceWhenAvailable: true,
   },
 } as const;
 
@@ -36,3 +41,17 @@ export function hasChoiceAnswerCandidates(count: number) {
   return Number(count) >= CHAT_PRINCIPLES.response.choiceAnswerMinCount;
 }
 
+export function requiresAlternativeSuggestionConsent(intent: string) {
+  if (!CHAT_PRINCIPLES.response.requireConsentBeforeAlternativeSuggestion) return false;
+  return (CHAT_PRINCIPLES.response.alternativeSuggestionConsentIntents as readonly string[]).includes(
+    String(intent || "")
+  );
+}
+
+export function shouldHideAlternativeCandidatesBeforeConsent() {
+  return Boolean(CHAT_PRINCIPLES.response.hideAlternativeCandidatesBeforeConsent);
+}
+
+export function shouldRenderImageCardsForChoiceWhenAvailable() {
+  return Boolean(CHAT_PRINCIPLES.response.requireImageCardsForChoiceWhenAvailable);
+}

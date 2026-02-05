@@ -2,6 +2,17 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+const MAX_DECISION_CALL_CHAIN = 12;
+const MAX_DECISION_FUNCTION_NAME = 96;
+
+function sanitizeDecisionText(value: string) {
+  const raw = String(value || "").trim();
+  const maskedDigits = raw.replace(/\b\d{6,}\b/g, "<redacted>");
+  return maskedDigits.length > MAX_DECISION_FUNCTION_NAME
+    ? `${maskedDigits.slice(0, MAX_DECISION_FUNCTION_NAME)}...`
+    : maskedDigits;
+}
+
 function inferDecisionPhase(eventType: string) {
   const type = String(eventType || "").toUpperCase();
   if (type.startsWith("PRE_")) return "before";
@@ -114,10 +125,10 @@ function captureDecisionTrace(eventType: string) {
       if (frame.modulePath.endsWith("services/auditRuntime.ts")) return false;
       return true;
     })
-    .slice(0, 25)
+    .slice(0, MAX_DECISION_CALL_CHAIN)
     .map((frame) => ({
       module_path: frame.modulePath,
-      function_name: frame.functionName,
+      function_name: sanitizeDecisionText(frame.functionName),
       line: frame.line,
       column: frame.column,
     }));
@@ -127,7 +138,7 @@ function captureDecisionTrace(eventType: string) {
     ? [
         {
           module_path: String((fallback as any).module_path || "unknown"),
-          function_name: String((fallback as any).function_name || "unknown"),
+          function_name: sanitizeDecisionText(String((fallback as any).function_name || "unknown")),
           line: Number((fallback as any).line || 0),
           column: Number((fallback as any).column || 0),
         },
@@ -167,7 +178,7 @@ export async function insertEvent(
     (decision as any).call_chain = [
       {
         module_path: String((fallback as any).module_path || "unknown"),
-        function_name: String((fallback as any).function_name || "unknown"),
+        function_name: sanitizeDecisionText(String((fallback as any).function_name || "unknown")),
         line: Number((fallback as any).line || 0),
         column: Number((fallback as any).column || 0),
       },

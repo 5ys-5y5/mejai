@@ -107,6 +107,7 @@ import { createRuntimeMcpOps } from "./runtimeMcpOpsRuntime";
 import { runInputStageRuntime } from "./runtimeInputStageRuntime";
 import { initializeRuntimeState } from "./runtimeInitializationRuntime";
 import { createRuntimeResponder } from "../presentation/ui-runtimeResponseRuntime";
+import { mergeRuntimeTemplateOverrides, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
 import type {
   DisambiguationStepInput,
   DisambiguationStepOutput,
@@ -144,6 +145,16 @@ export async function POST(req: NextRequest) {
   let auditIntent: string | null = null;
   let auditEntity: Record<string, unknown> = {};
   let pipelineStateForError: RuntimePipelineState | null = null;
+  const runtimeCallChain: Array<{ module_path: string; function_name: string }> = [];
+  const pushRuntimeCall = (modulePath: string, functionName: string) => {
+    const module_path = String(modulePath || "").trim();
+    const function_name = String(functionName || "").trim();
+    if (!module_path || !function_name) return;
+    const last = runtimeCallChain[runtimeCallChain.length - 1];
+    if (last && last.module_path === module_path && last.function_name === function_name) return;
+    runtimeCallChain.push({ module_path, function_name });
+  };
+  pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts", "POST");
   const respond = createRuntimeResponder({
     runtimeTraceId,
     requestStartedAt,
@@ -155,6 +166,7 @@ export async function POST(req: NextRequest) {
     getFirstTurnInSession: () => firstTurnInSession,
   });
   try {
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeBootstrap.ts", "bootstrapRuntime");
     const bootstrap = await bootstrapRuntime({
       req,
       debugEnabled,
@@ -192,16 +204,22 @@ export async function POST(req: NextRequest) {
       nextSeq,
       prevBotContext,
     } = bootstrap.state;
+    const runtimeTemplateOverrides = resolveRuntimeTemplateOverridesFromPolicy((compiledPolicy as any)?.templates || {});
+    const effectivePrevBotContext = mergeRuntimeTemplateOverrides(
+      (prevBotContext || {}) as Record<string, unknown>,
+      runtimeTemplateOverrides
+    );
     runtimeContext = context;
     currentSessionId = sessionId;
     firstTurnInSession = firstInSession;
     auditMessage = message;
     auditConversationMode = conversationMode;
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts", "initializeRuntimeState");
     const initialized = initializeRuntimeState({
       message,
       lastTurn,
       recentTurns,
-      prevBotContext: prevBotContext as Record<string, unknown>,
+      prevBotContext: effectivePrevBotContext as Record<string, unknown>,
       allowedToolByName,
       extractOrderId,
       extractPhone,
@@ -291,6 +309,8 @@ export async function POST(req: NextRequest) {
       policyToolRules: toolRuleIds,
       contextContamination: contaminationSummaries,
       conversationMode,
+      runtimeCallChain,
+      templateOverrides: runtimeTemplateOverrides as Record<string, string>,
     });
     const { makeReply, insertTurn } = createRuntimeConversationIo({
       context,
@@ -314,6 +334,7 @@ export async function POST(req: NextRequest) {
       expectedInput,
       resolvedIntent,
     };
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts", "resolveIntentDisambiguation");
     const disambiguation = await resolveIntentDisambiguation({
       context,
       sessionId,
@@ -321,7 +342,7 @@ export async function POST(req: NextRequest) {
       message: disambiguationInput.message,
       prevIntent,
       prevEntity,
-      prevBotContext,
+      prevBotContext: effectivePrevBotContext,
       expectedInput: disambiguationInput.expectedInput,
       latestTurnId,
       resolvedIntent: disambiguationInput.resolvedIntent,
@@ -353,9 +374,10 @@ export async function POST(req: NextRequest) {
       expectedInput,
       derivedPhone,
     };
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts", "handlePreTurnGuards");
     const preTurnGuards = await handlePreTurnGuards({
       context,
-      prevBotContext,
+      prevBotContext: effectivePrevBotContext,
       resolvedIntent: preTurnGuardInput.resolvedIntent,
       prevEntity,
       prevSelectedOrderId,
@@ -383,6 +405,7 @@ export async function POST(req: NextRequest) {
     expectedInput = preTurnGuardOutput.expectedInput;
     pipelineState.derivedPhone = derivedPhone;
     pipelineState.expectedInput = expectedInput;
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts", "deriveSlotsForTurn");
     const slotDerivation = await deriveSlotsForTurn({
       message,
       expectedInput,
@@ -421,9 +444,10 @@ export async function POST(req: NextRequest) {
     pipelineState.derivedAddress = derivedAddress;
     pipelineState.resolvedIntent = resolvedIntent;
 
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/pendingStateRuntime.ts", "handleAddressChangeRefundPending");
     const pendingState = await handleAddressChangeRefundPending({
       context,
-      prevBotContext,
+      prevBotContext: effectivePrevBotContext,
       resolvedIntent,
       prevEntity,
       prevSelectedOrderId,
@@ -461,9 +485,10 @@ export async function POST(req: NextRequest) {
     pipelineState.derivedAddress = derivedAddress;
     pipelineState.updateConfirmAcceptedThisTurn = updateConfirmAcceptedThisTurn;
     pipelineState.refundConfirmAcceptedThisTurn = refundConfirmAcceptedThisTurn;
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/restockPendingRuntime.ts", "handleRestockPendingStage");
     const restockPending = await handleRestockPendingStage({
       context,
-      prevBotContext,
+      prevBotContext: effectivePrevBotContext,
       resolvedIntent,
       prevEntity,
       prevSelectedOrderId,
@@ -494,9 +519,10 @@ export async function POST(req: NextRequest) {
     pipelineState.resolvedIntent = resolvedIntent;
     pipelineState.restockSubscribeAcceptedThisTurn = restockSubscribeAcceptedThisTurn;
     pipelineState.lockIntentToRestockSubscribe = lockIntentToRestockSubscribe;
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/postActionRuntime.ts", "handlePostActionStage");
     const postActionStage = await handlePostActionStage({
       context,
-      prevBotContext,
+      prevBotContext: effectivePrevBotContext,
       resolvedIntent,
       prevEntity,
       message,
@@ -512,6 +538,7 @@ export async function POST(req: NextRequest) {
       respond,
     });
     if (postActionStage.response) return postActionStage.response as any;
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts", "resolveIntentAndPolicyContext");
     const resolvedContext = await resolveIntentAndPolicyContext({
       context,
       sessionId,
@@ -522,7 +549,7 @@ export async function POST(req: NextRequest) {
       lockIntentToRestockSubscribe,
       prevIntent,
       prevEntity,
-      prevBotContext,
+      prevBotContext: effectivePrevBotContext,
       prevSelectedOrderId,
       prevOrderIdFromTranscript,
       prevPhoneFromTranscript,
@@ -552,6 +579,7 @@ export async function POST(req: NextRequest) {
     let policyContext: PolicyEvalContext = resolvedContext.policyContext;
     auditIntent = resolvedIntent;
     auditEntity = (policyContext.entity || {}) as Record<string, unknown>;
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts", "runInputStageRuntime");
     const inputStage = await runInputStageRuntime({
       compiledPolicy,
       resolvedContext: {
@@ -626,6 +654,7 @@ export async function POST(req: NextRequest) {
     lastMcpStatus = null;
     lastMcpError = null;
     lastMcpCount = null;
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts", "createRuntimeMcpOps");
     const { noteMcp, noteMcpSkip, flushMcpSkipLogs } = createRuntimeMcpOps({
       usedProviders,
       mcpSkipLogs,
@@ -654,6 +683,7 @@ export async function POST(req: NextRequest) {
     auditIntent = resolvedIntent;
     auditEntity = (policyContext.entity || {}) as Record<string, unknown>;
 
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/otpRuntime.ts", "handleOtpLifecycleAndOrderGate");
     const otpGate = await handleOtpLifecycleAndOrderGate({
       lastTurn,
       resolvedIntent,
@@ -676,7 +706,7 @@ export async function POST(req: NextRequest) {
       allowedTools,
       noteMcp,
       mcpActions,
-      prevBotContext,
+      prevBotContext: effectivePrevBotContext,
       derivedPhone,
       prevPhoneFromTranscript,
       customerVerificationToken,
@@ -700,6 +730,7 @@ export async function POST(req: NextRequest) {
     pipelineState.customerVerificationToken = customerVerificationToken;
     pipelineState.mcpCandidateCalls = mcpCandidateCalls;
 
+    pushRuntimeCall("src/app/api/runtime/chat/services/dataAccess.ts", "resolveProductDecision");
     const productDecisionRes = await resolveProductDecision(context, message);
     if (productDecisionRes.decision) {
       const decision = productDecisionRes.decision;
@@ -730,6 +761,7 @@ export async function POST(req: NextRequest) {
       label?: string;
     }> = [];
     let mcpSummary = "";
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts", "runToolStagePipeline");
     const toolStage = await runToolStagePipeline({
       compiledPolicy,
       policyContext,
@@ -812,11 +844,12 @@ export async function POST(req: NextRequest) {
     pipelineState.resolvedOrderId = resolvedOrderId;
     pipelineState.mcpActions = mcpActions;
 
+    pushRuntimeCall("src/app/api/runtime/chat/handlers/restockHandler.ts", "handleRestockIntent");
     const restockHandled = await handleRestockIntent({
       resolvedIntent,
       kb,
       adminKbs,
-      prevBotContext,
+      prevBotContext: effectivePrevBotContext,
       message,
       effectiveMessageForIntent,
       productDecisionRes,
@@ -860,6 +893,7 @@ export async function POST(req: NextRequest) {
     });
     if (restockHandled) return restockHandled;
 
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/finalizeRuntime.ts", "handleGeneralNoPathGuard");
     const guarded = await handleGeneralNoPathGuard({
       resolvedIntent,
       finalCalls,
@@ -911,6 +945,7 @@ export async function POST(req: NextRequest) {
     pipelineState.mcpSkipLogs = mcpSkipLogs;
     pipelineState.mcpSkipQueue = mcpSkipQueue;
 
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/finalizeRuntime.ts", "runFinalResponseFlow");
     return runFinalResponseFlow({
       runLlm,
       agentLlm: agent.llm,

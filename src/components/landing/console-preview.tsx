@@ -31,20 +31,21 @@ export function ConsolePreview({ settings }: { settings: LandingSettings }) {
               {settings.consoleCards.map((item, i) => {
                 const Icon = consoleIcons[i] || Phone;
                 return (
-                <motion.div
-                  key={i}
-                  initial={{ opacity: 0, y: 10 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.1 }}
-                  className="space-y-2"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center mb-4">
-                    <Icon className="w-5 h-5 text-black" />
-                  </div>
-                  <h4 className="font-bold text-lg">{item.title}</h4>
-                  <p className="text-zinc-500 text-sm leading-relaxed">{item.description}</p>
-                </motion.div>
-              )})}
+                  <motion.div
+                    key={i}
+                    initial={{ opacity: 0, y: 10 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.1 }}
+                    className="space-y-2"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center mb-4">
+                      <Icon className="w-5 h-5 text-black" />
+                    </div>
+                    <h4 className="font-bold text-lg">{item.title}</h4>
+                    <p className="text-zinc-500 text-sm leading-relaxed">{item.description}</p>
+                  </motion.div>
+                )
+              })}
             </div>
           </div>
 

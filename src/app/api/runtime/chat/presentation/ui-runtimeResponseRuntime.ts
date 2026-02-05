@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
-import { deriveQuickReplies, deriveQuickReplyConfig, deriveRichMessageHtml } from "./ui-responseDecorators";
+import { deriveQuickRepliesWithTrace, deriveQuickRepliesFromConfig, deriveQuickReplyConfig, deriveRichMessageHtml } from "./ui-responseDecorators";
 import { ENABLE_RUNTIME_TIMING, nowIso, type RuntimeTimingStage } from "../runtime/runtimeSupport";
+import {
+  buildRuntimeResponseSchema,
+  extractRuntimeCards,
+  type RuntimeResponderPayload,
+  validateRuntimeResponseSchema,
+} from "./runtimeResponseSchema";
 
 export function createRuntimeResponder(input: {
   runtimeTraceId: string;
@@ -24,7 +30,7 @@ export function createRuntimeResponder(input: {
   } = input;
   let timingLogged = false;
 
-  return (payload: Record<string, unknown>, init?: ResponseInit) => {
+  return (payload: RuntimeResponderPayload, init?: ResponseInit) => {
     if (ENABLE_RUNTIME_TIMING && !timingLogged) {
       timingLogged = true;
       const responseStatus = init?.status || 200;
@@ -45,42 +51,89 @@ export function createRuntimeResponder(input: {
         stages: timingStages,
       });
       if (runtimeContext && currentSessionId) {
-        void runtimeContext.supabase
-          .from("F_audit_events")
-          .insert({
-            session_id: currentSessionId,
-            turn_id: latestTurnId,
-            event_type: "RUNTIME_TIMING",
-            payload: {
-              trace_id: runtimeTraceId,
-              status: responseStatus,
-              result: hasError ? "error" : "ok",
-              is_first_turn: firstTurnInSession,
-              total_ms: Date.now() - requestStartedAt,
-              stages: timingStages,
-            },
-            created_at: nowIso(),
-            bot_context: { trace_id: runtimeTraceId },
-          })
-          .catch((error: unknown) => {
+        void (async () => {
+          try {
+            await runtimeContext.supabase.from("F_audit_events").insert({
+              session_id: currentSessionId,
+              turn_id: latestTurnId,
+              event_type: "RUNTIME_TIMING",
+              payload: {
+                trace_id: runtimeTraceId,
+                status: responseStatus,
+                result: hasError ? "error" : "ok",
+                is_first_turn: firstTurnInSession,
+                total_ms: Date.now() - requestStartedAt,
+                stages: timingStages,
+              },
+              created_at: nowIso(),
+              bot_context: { trace_id: runtimeTraceId },
+            });
+          } catch (error: unknown) {
             console.warn("[runtime/chat_mk2] failed to insert runtime timing event", {
               trace_id: runtimeTraceId,
               session_id: currentSessionId,
               turn_id: latestTurnId,
               error: error instanceof Error ? error.message : String(error),
             });
-          });
+          }
+        })();
       }
     }
-    const quickReplies =
-      Array.isArray(payload.quick_replies) && payload.quick_replies.length > 0
-        ? payload.quick_replies
-        : deriveQuickReplies(payload.message, quickReplyMax);
     const quickReplyConfig =
       payload.quick_reply_config && typeof payload.quick_reply_config === "object"
         ? payload.quick_reply_config
-        : deriveQuickReplyConfig(payload.message, quickReplies);
+        : null;
+    const configDerivedQuickReplies = deriveQuickRepliesFromConfig(quickReplyConfig);
+    const derivedQuickReplies = deriveQuickRepliesWithTrace(payload.message, quickReplyMax);
+    const quickReplies =
+      Array.isArray(payload.quick_replies) && payload.quick_replies.length > 0
+        ? payload.quick_replies
+        : configDerivedQuickReplies.length > 0
+          ? configDerivedQuickReplies
+          : derivedQuickReplies.quickReplies;
+    const resolvedQuickReplyConfig = quickReplyConfig || deriveQuickReplyConfig(payload.message, quickReplies);
     const richMessageHtml = deriveRichMessageHtml(payload.message);
+    const cards = extractRuntimeCards(payload);
+    const runtimeContext = getRuntimeContext();
+    const currentSessionId = getCurrentSessionId();
+    const currentTurnId = getLatestTurnId();
+    if (resolvedQuickReplyConfig && runtimeContext && currentSessionId) {
+      void (async () => {
+        try {
+          await runtimeContext.supabase.from("F_audit_events").insert({
+            session_id: currentSessionId,
+            turn_id: currentTurnId,
+            event_type: "QUICK_REPLY_RULE_DECISION",
+            payload: {
+              quick_reply_config: resolvedQuickReplyConfig,
+              quick_reply_count: Array.isArray(quickReplies) ? quickReplies.length : 0,
+              quick_reply_source:
+                Array.isArray(payload.quick_replies) && payload.quick_replies.length > 0
+                  ? { criteria: "payload:quick_replies" }
+                  : configDerivedQuickReplies.length > 0
+                    ? { criteria: "payload:quick_reply_config", source_function: "deriveQuickRepliesFromConfig" }
+                    : derivedQuickReplies.derivation,
+            },
+            created_at: nowIso(),
+            bot_context: { trace_id: runtimeTraceId },
+          });
+        } catch (error: unknown) {
+          console.warn("[runtime/chat_mk2] failed to insert quick reply rule event", {
+            trace_id: runtimeTraceId,
+            session_id: currentSessionId,
+            turn_id: currentTurnId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })();
+    }
+    const responseSchema = buildRuntimeResponseSchema({
+      message: payload.message,
+      quickReplies,
+      quickReplyConfig: (resolvedQuickReplyConfig as any) || null,
+      cards,
+    });
+    const schemaValidation = validateRuntimeResponseSchema(responseSchema);
     return NextResponse.json(
       {
         ...payload,
@@ -88,7 +141,9 @@ export function createRuntimeResponder(input: {
         turn_id: getLatestTurnId(),
         ...(richMessageHtml ? { rich_message_html: richMessageHtml } : {}),
         ...(quickReplies.length > 0 ? { quick_replies: quickReplies } : {}),
-        ...(quickReplyConfig ? { quick_reply_config: quickReplyConfig } : {}),
+        ...(resolvedQuickReplyConfig ? { quick_reply_config: resolvedQuickReplyConfig } : {}),
+        response_schema: responseSchema,
+        ...(schemaValidation.ok ? {} : { response_schema_issues: schemaValidation.issues }),
       },
       init
     );

@@ -1,4 +1,6 @@
 import type { ChatMessage } from "@/lib/llm_mk2";
+import { YES_NO_QUICK_REPLIES, maybeBuildYesNoQuickReplyRule } from "./quickReplyConfigRuntime";
+import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
 
 export function buildFinalLlmMessages(input: {
   message: string;
@@ -83,10 +85,31 @@ export async function handleGeneralNoPathGuard(input: Record<string, any>): Prom
     sessionId,
     latestTurnId,
     "FINAL_ANSWER_READY",
-    { answer: reply, model: "deterministic_escalation_guard" },
+    {
+      answer: reply,
+      model: "deterministic_escalation_guard",
+      quick_reply_config: maybeBuildYesNoQuickReplyRule({
+        message: reply,
+        criteria: "guard:general_no_path",
+        sourceFunction: "handleGeneralNoPathGuard",
+        sourceModule: "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+      }),
+    },
     { intent_name: resolvedIntent }
   );
-  return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+  const quickReplyConfig = maybeBuildYesNoQuickReplyRule({
+    message: reply,
+    criteria: "guard:general_no_path",
+    sourceFunction: "handleGeneralNoPathGuard",
+    sourceModule: "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+  });
+  return respond({
+    session_id: sessionId,
+    step: "final",
+    message: reply,
+    mcp_actions: mcpActions,
+    ...(quickReplyConfig ? { quick_replies: YES_NO_QUICK_REPLIES, quick_reply_config: quickReplyConfig } : {}),
+  });
 }
 
 export async function runFinalResponseFlow(input: Record<string, any>) {
@@ -152,8 +175,9 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
       usedTemplateIds.includes("order_change_need_order_id");
     if (resolvedIntent === "order_change" && isNeedOrderIdTemplate && hasReusablePhone && !listOrdersCalled) {
       phoneReusePending = true;
-      finalAnswer = `이미 제공해주신 휴대폰 번호(${maskPhone(normalizedPhone)})로 주문을 조회할까요?
-맞으면 '네', 아니면 '아니오'를 입력해 주세요.`;
+      finalAnswer = buildYesNoConfirmationPrompt(`이미 제공해주신 휴대폰 번호(${maskPhone(normalizedPhone)})로 주문을 조회할까요?`, {
+        entity: policyContext.entity,
+      });
     } else {
       finalAnswer = forcedTemplate;
     }
@@ -210,7 +234,16 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
     sessionId,
     latestTurnId,
     "FINAL_ANSWER_READY",
-    { answer: reply, model: answerRes.model },
+    {
+      answer: reply,
+      model: answerRes.model,
+      quick_reply_config: maybeBuildYesNoQuickReplyRule({
+        message: reply,
+        criteria: "output:final_answer_yes_no_prompt",
+        sourceFunction: "runFinalResponseFlow",
+        sourceModule: "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+      }),
+    },
     { intent_name: resolvedIntent }
   );
   pushRuntimeTimingStage(timingStages, "persist_turn_and_final_event", finalPersistStartedAt, {
@@ -218,10 +251,17 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
     final_answer_length: reply.length,
   });
 
+  const quickReplyConfig = maybeBuildYesNoQuickReplyRule({
+    message: reply,
+    criteria: "output:final_answer_yes_no_prompt",
+    sourceFunction: "runFinalResponseFlow",
+    sourceModule: "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+  });
   return respond({
     session_id: sessionId,
     step: "final",
     message: reply,
     mcp_actions: mcpActions,
+    ...(quickReplyConfig ? { quick_replies: YES_NO_QUICK_REPLIES, quick_reply_config: quickReplyConfig } : {}),
   });
 }

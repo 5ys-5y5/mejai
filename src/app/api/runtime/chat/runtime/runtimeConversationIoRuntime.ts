@@ -34,6 +34,8 @@ type RuntimeStateSnapshot = {
   policyToolRules: string[];
   contextContamination: string[];
   conversationMode: string;
+  runtimeCallChain?: Array<{ module_path: string; function_name: string }>;
+  templateOverrides?: Record<string, string>;
 };
 
 export function createRuntimeConversationIo(input: {
@@ -95,4 +97,3 @@ export function createRuntimeConversationIo(input: {
 
   return { makeReply, insertTurn };
 }
-

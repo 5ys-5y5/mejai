@@ -1,4 +1,12 @@
+import { resolveQuickReplyConfig, YES_NO_QUICK_REPLIES } from "../runtime/quickReplyConfigRuntime";
+import { extractLeadDayOptionsFromText, extractNumberedOptionIndicesFromText } from "../policies/intentSlotPolicy";
+
 export type RuntimeQuickReply = { label: string; value: string };
+export type RuntimeQuickReplyDerivation = {
+  criteria: string;
+  source_function: string;
+  source_module: string;
+};
 export type RuntimeQuickReplyConfig = {
   selection_mode: "single" | "multi";
   min_select?: number;
@@ -18,53 +26,42 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
-export function deriveQuickReplies(message: unknown, quickReplyMax: number): RuntimeQuickReply[] {
+export function deriveQuickRepliesWithTrace(
+  message: unknown,
+  quickReplyMax: number
+): { quickReplies: RuntimeQuickReply[]; derivation: RuntimeQuickReplyDerivation | null } {
   const text = typeof message === "string" ? message : "";
-  if (!text) return [];
-  if (/지금\s+\S+\s+재입고 알림 신청을 진행할까요\?/u.test(text)) {
-    return [
-      { label: "재입고 알림 신청", value: "네" },
-      { label: "대화 종료", value: "대화 종료" },
-    ];
-  }
-  if (text.includes("다음 선택: 대화 종료 / 다른 문의")) {
-    return [
-      { label: "대화 종료", value: "대화 종료" },
-      { label: "다른 문의", value: "다른 문의" },
-    ];
-  }
-  if (text.includes("이번 상담은 만족하셨나요?") || text.includes("상담이 도움이 되었나요?")) {
-    return [
-      { label: "1점", value: "1" },
-      { label: "2점", value: "2" },
-      { label: "3점", value: "3" },
-      { label: "4점", value: "4" },
-      { label: "5점", value: "5" },
-    ];
-  }
-  if (text.includes("맞으면 '네', 아니면 '아니오'")) {
-    return [
-      { label: "네", value: "네" },
-      { label: "아니오", value: "아니오" },
-    ];
-  }
-  const numberMatches = Array.from(text.matchAll(/-\s*(\d{1,2})번\s*\|/g))
-    .map((m) => Number(m[1]))
-    .filter((n) => Number.isFinite(n) && n > 0);
+  if (!text) return { quickReplies: [], derivation: null };
+  // Keep fallback intentionally minimal. Runtime/handlers should emit explicit quick_replies/config.
+  const numberMatches = extractNumberedOptionIndicesFromText(text, quickReplyMax);
   if (numberMatches.length > 0) {
-    const uniq = Array.from(new Set(numberMatches)).slice(0, quickReplyMax);
-    return uniq.map((n) => ({ label: `${n}번`, value: String(n) }));
+    const uniq = numberMatches.slice(0, quickReplyMax);
+    return {
+      quickReplies: uniq.map((n) => ({ label: `${n}번`, value: String(n) })),
+      derivation: {
+        criteria: "decorator:numbered_options_text",
+        source_function: "deriveQuickRepliesWithTrace",
+        source_module: "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
+      },
+    };
   }
-  const dayMatches = /(선택 가능|알림일|쉼표)/.test(text)
-    ? Array.from(text.matchAll(/D-(\d{1,2})/g))
-        .map((m) => Number(m[1]))
-        .filter((n) => Number.isFinite(n) && n > 0)
-    : [];
+  const dayMatches = extractLeadDayOptionsFromText(text, 31);
   if (dayMatches.length > 0) {
     const uniqDays = Array.from(new Set(dayMatches)).sort((a, b) => a - b);
-    return uniqDays.slice(0, 7).map((n) => ({ label: `D-${n}`, value: String(n) }));
+    return {
+      quickReplies: uniqDays.slice(0, 7).map((n) => ({ label: `D-${n}`, value: String(n) })),
+      derivation: {
+        criteria: "decorator:lead_day_options_text",
+        source_function: "deriveQuickRepliesWithTrace",
+        source_module: "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
+      },
+    };
   }
-  return [];
+  return { quickReplies: [], derivation: null };
+}
+
+export function deriveQuickReplies(message: unknown, quickReplyMax: number): RuntimeQuickReply[] {
+  return deriveQuickRepliesWithTrace(message, quickReplyMax).quickReplies;
 }
 
 export function deriveQuickReplyConfig(
@@ -73,33 +70,31 @@ export function deriveQuickReplyConfig(
 ): RuntimeQuickReplyConfig | null {
   if (!Array.isArray(quickReplies) || quickReplies.length === 0) return null;
   const text = typeof message === "string" ? message : "";
-  if (/복수 선택 가능/u.test(text) && /의도 확인/u.test(text)) {
-    return {
-      selection_mode: "multi",
-      min_select: 1,
-      max_select: quickReplies.length,
-      submit_format: "csv",
-      criteria: "decorator:intent_disambiguation_text",
-    };
+  const minMatch = text.match(/최소\s*(\d+)/);
+  const minSelect = minMatch ? Math.max(1, Number(minMatch[1])) : null;
+  const criteria =
+    /복수 선택 가능/u.test(text) || /쉼표/u.test(text) || /\b\d+\s*,\s*\d+/.test(text)
+      ? "decorator:multi_signal_text"
+      : "decorator:default_single";
+  return resolveQuickReplyConfig({
+    optionsCount: quickReplies.length,
+    minSelectHint: minSelect,
+    maxSelectHint: quickReplies.length,
+    explicitMode: null,
+    criteria,
+    sourceFunction: "deriveQuickReplyConfig",
+    sourceModule: "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
+    contextText: text,
+  });
+}
+
+export function deriveQuickRepliesFromConfig(config: unknown): RuntimeQuickReply[] {
+  if (!config || typeof config !== "object") return [];
+  const criteria = String((config as any).criteria || "").toLowerCase();
+  if (criteria.includes("yes_no") || criteria.includes("yes/no")) {
+    return [...YES_NO_QUICK_REPLIES];
   }
-  if (/예약 알림일/u.test(text) || text.includes("쉼표(,)")) {
-    const minMatch = text.match(/최소\s*(\d+)/);
-    const minSelect = minMatch ? Math.max(1, Number(minMatch[1])) : 1;
-    return {
-      selection_mode: "multi",
-      min_select: minSelect,
-      max_select: quickReplies.length,
-      submit_format: "csv",
-      criteria: "decorator:lead_days_text",
-    };
-  }
-  return {
-    selection_mode: "single",
-    min_select: 1,
-    max_select: 1,
-    submit_format: "single",
-    criteria: "decorator:default_single",
-  };
+  return [];
 }
 
 export function deriveRichMessageHtml(message: unknown) {

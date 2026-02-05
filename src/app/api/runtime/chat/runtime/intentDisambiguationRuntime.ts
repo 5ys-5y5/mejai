@@ -1,3 +1,6 @@
+import { resolveQuickReplyConfig, type RuntimeQuickReplyConfig } from "./quickReplyConfigRuntime";
+import { resolveRuntimeTemplate } from "./promptTemplateRuntime";
+
 type DisambiguationParams = {
   context: any;
   sessionId: string;
@@ -36,54 +39,68 @@ type DisambiguationResult = {
   response: unknown | null;
 };
 
-type QuickReplyConfig = {
-  selection_mode: "single" | "multi";
-  min_select: number;
-  max_select: number;
-  submit_format: "single" | "csv";
-  criteria: string;
-  source_function: string;
-  source_module: string;
-};
+function buildIntentDisambiguationPrompt(input: {
+  options: string[];
+  intentLabel: (intent: string) => string;
+  prevBotContext: Record<string, unknown>;
+}) {
+  const defaultTitle = "요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)";
+  const defaultExample = "예: 1,2";
+  const title = resolveRuntimeTemplate({
+    key: "intent_disambiguation_title",
+    botContext: {
+      ...(input.prevBotContext || {}),
+      template_intent_disambiguation_title: String((input.prevBotContext as any).intent_disambiguation_prompt_title || ""),
+    },
+  }) || defaultTitle;
+  const example = resolveRuntimeTemplate({
+    key: "intent_disambiguation_example",
+    botContext: {
+      ...(input.prevBotContext || {}),
+      template_intent_disambiguation_example: String((input.prevBotContext as any).intent_disambiguation_prompt_example || ""),
+    },
+  }) || defaultExample;
+  const lines = input.options.map((intent, idx) => `- ${idx + 1}번 | ${input.intentLabel(intent)}`);
+  return `${title}\n${lines.join("\n")}\n${example}`;
+}
 
-function clampSelectionRange(value: number, min: number, max: number) {
-  if (!Number.isFinite(value)) return min;
-  return Math.max(min, Math.min(max, Math.floor(value)));
+function buildIndexedQuickReplies(options: string[], intentLabel: (intent: string) => string) {
+  return options.map((intent, idx) => ({
+    label: `${idx + 1}번 | ${intentLabel(intent)}`,
+    value: String(idx + 1),
+  }));
 }
 
 function resolveIntentDisambiguationQuickReplyConfig(input: {
   options: string[];
   prevBotContext: Record<string, unknown>;
   sourceText: string;
-}): QuickReplyConfig {
-  const optionsCount = Math.max(1, input.options.length);
+}): RuntimeQuickReplyConfig {
   const configuredMinRaw = Number((input.prevBotContext as any).intent_disambiguation_min_select ?? 0);
   const configuredMaxRaw = Number((input.prevBotContext as any).intent_disambiguation_max_select ?? 0);
+  const explicitMode = (input.prevBotContext as any).intent_disambiguation_mode;
   const explicitMulti = Boolean((input.prevBotContext as any).intent_disambiguation_multi === true);
   const connectorSignal = /(,|\/|그리고|및|and)/i.test(String(input.sourceText || ""));
-  const selectionMode: "single" | "multi" =
-    explicitMulti || optionsCount > 1 || connectorSignal ? "multi" : "single";
-  const maxSelect =
-    configuredMaxRaw > 0 ? clampSelectionRange(configuredMaxRaw, 1, optionsCount) : selectionMode === "multi" ? optionsCount : 1;
-  const minSelect =
-    configuredMinRaw > 0
-      ? clampSelectionRange(configuredMinRaw, 1, maxSelect)
-      : selectionMode === "multi"
-        ? 1
-        : 1;
-  return {
-    selection_mode: selectionMode,
-    min_select: minSelect,
-    max_select: maxSelect,
-    submit_format: selectionMode === "multi" ? "csv" : "single",
-    source_function: "resolveIntentDisambiguationQuickReplyConfig",
-    source_module: "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-    criteria: configuredMinRaw > 0 || configuredMaxRaw > 0 || explicitMulti
-      ? "bot_context:intent_disambiguation_rules"
-      : connectorSignal
-        ? "source_text:intent_connector_signal"
-        : "policy:ASK_INTENT_DISAMBIGUATION",
-  };
+  return resolveQuickReplyConfig({
+    optionsCount: input.options.length,
+    minSelectHint: configuredMinRaw,
+    maxSelectHint: configuredMaxRaw,
+    explicitMode:
+      explicitMode === "single" || explicitMode === "multi"
+        ? explicitMode
+        : explicitMulti
+          ? "multi"
+          : null,
+    criteria:
+      configuredMinRaw > 0 || configuredMaxRaw > 0 || explicitMode === "single" || explicitMode === "multi" || explicitMulti
+        ? "bot_context:intent_disambiguation_rules"
+        : connectorSignal
+          ? "source_text:intent_connector_signal"
+          : "policy:ASK_INTENT_DISAMBIGUATION",
+    sourceFunction: "resolveIntentDisambiguationQuickReplyConfig",
+    sourceModule: "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
+    contextText: input.sourceText,
+  });
 }
 
 export async function resolveIntentDisambiguation(params: DisambiguationParams): Promise<DisambiguationResult> {
@@ -124,15 +141,19 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
       : [];
     const picked = parseIndexedChoices(message, options.length);
     if (picked.length === 0) {
-      const lines = options.map((intent, idx) => `- ${idx + 1}번 | ${intentLabel(intent)}`);
       const reply = makeReply(
-        `요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)\n${lines.join("\n")}\n예: 1,2`
+        buildIntentDisambiguationPrompt({
+          options,
+          intentLabel,
+          prevBotContext,
+        })
       );
       const quickReplyConfig = resolveIntentDisambiguationQuickReplyConfig({
         options,
         prevBotContext,
         sourceText: intentDisambiguationSourceText || message,
       });
+      const quickReplies = buildIndexedQuickReplies(options, intentLabel);
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -158,6 +179,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
           step: "confirm",
           message: reply,
           mcp_actions: [],
+          quick_replies: quickReplies,
           quick_reply_config: quickReplyConfig,
         }),
       };
@@ -183,15 +205,19 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
     }
     const candidates = detectIntentCandidates(message).filter((intent) => intent !== "general");
     if (forcedIntentQueue.length === 0 && hasChoiceAnswerCandidates(candidates.length)) {
-      const lines = candidates.map((intent, idx) => `- ${idx + 1}번 | ${intentLabel(intent)}`);
       const reply = makeReply(
-        `요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)\n${lines.join("\n")}\n예: 1,2`
+        buildIntentDisambiguationPrompt({
+          options: candidates,
+          intentLabel,
+          prevBotContext,
+        })
       );
       const quickReplyConfig = resolveIntentDisambiguationQuickReplyConfig({
         options: candidates,
         prevBotContext,
         sourceText: message,
       });
+      const quickReplies = buildIndexedQuickReplies(candidates, intentLabel);
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -233,6 +259,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
           step: "confirm",
           message: reply,
           mcp_actions: [],
+          quick_replies: quickReplies,
           quick_reply_config: quickReplyConfig,
         }),
       };
