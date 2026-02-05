@@ -539,96 +539,6 @@ function formatIssueBundle(bundle?: MessageLogBundle, turnId?: string | null) {
   return lines.join("\n");
 }
 
-function inferRuntimeUsageSummary(
-  selectedMessages: ChatMessage[],
-  messageLogs: Record<string, MessageLogBundle>
-) {
-  const buckets = {
-    runtime: new Set<string>(),
-    handlers: new Set<string>(),
-    services: new Set<string>(),
-    policies: new Set<string>(),
-    shared: new Set<string>(),
-  };
-  const add = (bucket: keyof typeof buckets, path: string) => buckets[bucket].add(path);
-
-  add("runtime", "src/app/api/runtime/chat/route.ts");
-  add("runtime", "src/app/api/runtime/chat/runtime/orchestration.ts");
-  add("runtime", "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts");
-
-  const botMessages = selectedMessages.filter((msg) => msg.role === "bot");
-  const bundles = botMessages
-    .map((msg) => messageLogs[msg.id])
-    .filter((bundle): bundle is MessageLogBundle => Boolean(bundle));
-  const allMcpLogs = bundles.flatMap((bundle) => bundle.mcp_logs || []);
-  const allEventLogs = bundles.flatMap((bundle) => bundle.event_logs || []);
-  const allDebugLogs = bundles.flatMap((bundle) => bundle.debug_logs || []);
-  const eventTypes = new Set(allEventLogs.map((log) => String(log.event_type || "").toUpperCase()).filter(Boolean));
-  const toolNames = new Set(allMcpLogs.map((log) => String(log.tool_name || "").trim()).filter(Boolean));
-
-  if (allDebugLogs.length > 0) {
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeConversationIoRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeSupport.ts");
-  }
-  if (allEventLogs.length > 0) {
-    add("services", "src/app/api/runtime/chat/services/auditRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeResponseRuntime.ts");
-  }
-  if (allMcpLogs.length > 0) {
-    add("runtime", "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/toolRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts");
-    add("services", "src/app/api/runtime/chat/services/mcpRuntime.ts");
-  }
-
-  if (eventTypes.has("SLOT_EXTRACTED") || eventTypes.has("POLICY_STATIC_CONFLICT")) {
-    add("runtime", "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts");
-    add("runtime", "src/app/api/runtime/chat/runtime/policyInputRuntime.ts");
-  }
-  if (eventTypes.has("PRE_MCP_DECISION") || eventTypes.has("MCP_CALL_SKIPPED")) {
-    add("runtime", "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts");
-  }
-  if (eventTypes.has("FINAL_ANSWER_READY")) {
-    add("runtime", "src/app/api/runtime/chat/runtime/finalizeRuntime.ts");
-  }
-  if (eventTypes.has("CONTEXT_CONTAMINATION_DETECTED")) {
-    add("runtime", "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts");
-  }
-
-  const hasRestockSignal =
-    Array.from(toolNames).some((name) => ["resolve_product", "read_product", "subscribe_restock"].includes(name)) ||
-    botMessages.some((msg) => /재입고|유사한 상품|입고 예정/.test(msg.content));
-  if (hasRestockSignal) {
-    add("handlers", "src/app/api/runtime/chat/handlers/restockHandler.ts");
-    add("policies", "src/app/api/runtime/chat/policies/restockResponsePolicy.ts");
-  }
-  if (toolNames.has("update_order_shipping_address")) {
-    add("handlers", "src/app/api/runtime/chat/handlers/orderChangeHandler.ts");
-  }
-  if (toolNames.has("create_ticket")) {
-    add("handlers", "src/app/api/runtime/chat/handlers/refundHandler.ts");
-  }
-
-  add("runtime", "src/app/api/runtime/chat/runtime/runtimeBootstrap.ts");
-  add("runtime", "src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts");
-  add("runtime", "src/app/api/runtime/chat/runtime/runtimeStepContracts.ts");
-  add("runtime", "src/app/api/runtime/chat/runtime/runtimePipelineState.ts");
-  add("policies", "src/app/api/runtime/chat/policies/principles.ts");
-  add("policies", "src/app/api/runtime/chat/policies/intentSlotPolicy.ts");
-  add("shared", "src/app/api/runtime/chat/shared/slotUtils.ts");
-  add("shared", "src/app/api/runtime/chat/shared/types.ts");
-  add("services", "src/app/api/runtime/chat/services/dataAccess.ts");
-
-  return {
-    runtime: Array.from(buckets.runtime),
-    handlers: Array.from(buckets.handlers),
-    services: Array.from(buckets.services),
-    policies: Array.from(buckets.policies),
-    shared: Array.from(buckets.shared),
-  };
-}
-
 function hasIssue(bundle?: MessageLogBundle, turnId?: string | null) {
   if (!bundle) return false;
   const debugLogs = turnId
@@ -1670,7 +1580,6 @@ export default function LabolatoryPage() {
     const selectedIds = new Set(target.selectedMessageIds || []);
     const selectedMessages =
       selectedIds.size > 0 ? visibleMessages.filter((msg) => selectedIds.has(msg.id)) : visibleMessages;
-    const runtimeUsage = inferRuntimeUsageSummary(selectedMessages, target.messageLogs || {});
     const auditStatus = (() => {
       const bundles = Object.values(target.messageLogs || {});
       const allMcpLogs = bundles.flatMap((bundle) => bundle.mcp_logs || []);
@@ -1800,12 +1709,6 @@ export default function LabolatoryPage() {
       `기대 목록(MCP): ${auditStatus.expected.mcp_tools.length ? auditStatus.expected.mcp_tools.join(", ") : "-"}`,
       `기대 목록(Event): ${auditStatus.expected.event_types.length ? auditStatus.expected.event_types.join(", ") : "-"}`,
       `기대 목록(Debug): ${auditStatus.expected.debug_functions.length ? auditStatus.expected.debug_functions.join(", ") : "-"}`,
-      "",
-      `사용 모듈(Runtime): ${runtimeUsage.runtime.length ? runtimeUsage.runtime.join(", ") : "-"}`,
-      `사용 모듈(Handlers): ${runtimeUsage.handlers.length ? runtimeUsage.handlers.join(", ") : "-"}`,
-      `사용 모듈(Services): ${runtimeUsage.services.length ? runtimeUsage.services.join(", ") : "-"}`,
-      `사용 모듈(Policies): ${runtimeUsage.policies.length ? runtimeUsage.policies.join(", ") : "-"}`,
-      `사용 모듈(Shared): ${runtimeUsage.shared.length ? runtimeUsage.shared.join(", ") : "-"}`,
       "",
       `점검 완료 항목: ${auditStatus.completed.length ? auditStatus.completed.join(", ") : "-"}`,
       `점검 미완료: ${auditStatus.incomplete.length
@@ -2645,10 +2548,7 @@ export default function LabolatoryPage() {
                                   >
                                     {hasDebug && debugParts ? (
                                       debugParts.answerHtml ? (
-                                        <div
-                                          style={{ margin: 0, padding: 0, lineHeight: "inherit", whiteSpace: "normal" }}
-                                          dangerouslySetInnerHTML={{ __html: debugParts.answerHtml }}
-                                        />
+                                        <span dangerouslySetInnerHTML={{ __html: debugParts.answerHtml }} />
                                       ) : (
                                         debugParts.answerText || ""
                                       )
@@ -2661,10 +2561,7 @@ export default function LabolatoryPage() {
                                       </div>
                                     ) : msg.role === "bot" ? (
                                       msg.richHtml ? (
-                                        <div
-                                          style={{ margin: 0, padding: 0, lineHeight: "inherit", whiteSpace: "normal" }}
-                                          dangerouslySetInnerHTML={{ __html: msg.richHtml }}
-                                        />
+                                        <span dangerouslySetInnerHTML={{ __html: msg.richHtml }} />
                                       ) : (
                                       renderStructuredChoiceContent(msg.content) || renderBotContent(msg.content)
                                       )
