@@ -209,11 +209,13 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
 
   return (
     <section className="hero-section relative min-h-screen overflow-hidden bg-white text-black border-b border-zinc-200 flex items-center !py-0">
-      <div className="hero-bg absolute">
+      <div className="hero-bg absolute inset-0 pointer-events-none">
         <MatrixRainBackground />
       </div>
 
-      <div className="relative z-10 container mx-auto grid w-full max-w-6xl gap-10 px-6 lg:grid-cols-[1fr_1fr] lg:items-center">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[500px] bg-gradient-to-t from-white to-transparent" />
+
+      <div className="relative container mx-auto grid w-full max-w-6xl gap-10 px-6 lg:grid-cols-[1fr_1fr] lg:items-center">
         <div className="hero-left-pane rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
           <div className="space-y-1">
             <div className="hero-muted text-[11px] font-semibold text-zinc-600">사용자 KB입력란</div>
@@ -281,61 +283,62 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
               const rowSpacing = index === 0 ? "" : isGrouped ? "mt-1" : "mt-3";
               const showAvatar = !isGrouped;
               return (
-              <div
-                key={msg.id}
-                className={cn(
-                  "flex",
-                  rowGap,
-                  rowSpacing,
-                  msg.role === "user" ? "justify-end" : "justify-start"
-                )}
-              >
-                {msg.role === "bot" && showAvatar ? (
-                  <div className="hero-avatar h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
-                    <Bot className="h-4 w-4 text-slate-500" />
+                <div
+                  key={msg.id}
+                  className={cn(
+                    "flex",
+                    rowGap,
+                    rowSpacing,
+                    msg.role === "user" ? "justify-end" : "justify-start"
+                  )}
+                >
+                  {msg.role === "bot" && showAvatar ? (
+                    <div className="hero-avatar h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
+                      <Bot className="h-4 w-4 text-slate-500" />
+                    </div>
+                  ) : msg.role === "bot" ? (
+                    <div
+                      className="hero-avatar h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white opacity-0"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                  <div className="relative max-w-[75%]">
+                    <div
+                      className={cn(
+                        "hero-bubble relative whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm transition",
+                        msg.role === "user"
+                          ? "hero-bubble-user bg-slate-900 text-white"
+                          : "hero-bubble-bot bg-slate-100 text-slate-700 border border-slate-200"
+                      )}
+                    >
+                      {msg.richHtml ? (
+                        <span dangerouslySetInnerHTML={{ __html: msg.richHtml }} />
+                      ) : (
+                        msg.content
+                      )}
+                      {msg.isLoading ? (
+                        <span className="hero-muted ml-2 inline-flex items-center text-xs text-slate-500">
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                ) : msg.role === "bot" ? (
-                  <div
-                    className="hero-avatar h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white opacity-0"
-                    aria-hidden="true"
-                  />
-                ) : null}
-                <div className="relative max-w-[75%]">
-                  <div
-                    className={cn(
-                      "hero-bubble relative whitespace-pre-wrap break-words rounded-2xl px-4 py-2 text-sm transition",
-                      msg.role === "user"
-                        ? "hero-bubble-user bg-slate-900 text-white"
-                        : "hero-bubble-bot bg-slate-100 text-slate-700 border border-slate-200"
-                    )}
-                  >
-                    {msg.richHtml ? (
-                      <span dangerouslySetInnerHTML={{ __html: msg.richHtml }} />
-                    ) : (
-                      msg.content
-                    )}
-                    {msg.isLoading ? (
-                      <span className="hero-muted ml-2 inline-flex items-center text-xs text-slate-500">
-                        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                      </span>
-                    ) : null}
-                  </div>
+                  {msg.role === "user" && showAvatar ? (
+                    <div className="hero-avatar h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
+                      <User className="h-4 w-4 text-slate-500" />
+                    </div>
+                  ) : msg.role === "user" ? (
+                    <div
+                      className="hero-avatar h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white opacity-0"
+                      aria-hidden="true"
+                    />
+                  ) : null}
                 </div>
-                {msg.role === "user" && showAvatar ? (
-                  <div className="hero-avatar h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
-                    <User className="h-4 w-4 text-slate-500" />
-                  </div>
-                ) : msg.role === "user" ? (
-                  <div
-                    className="hero-avatar h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white opacity-0"
-                    aria-hidden="true"
-                  />
-                ) : null}
-              </div>
-            );
+              );
             })}
           </div>
-          <form onSubmit={handleSubmit} className="hero-input-row relative z-20 flex gap-2 bg-white">
+          <div className="pointer-events-none h-4 bg-gradient-to-t from-white to-transparent" />
+          <form onSubmit={handleSubmit} className="hero-input-row relative flex gap-2 bg-white">
             <Input
               value={input}
               onChange={(event) => setInput(event.target.value)}

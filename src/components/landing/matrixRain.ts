@@ -54,14 +54,23 @@ class Char extends Entity {
 
   charList: string[];
   color: Color;
+  headColor: Color;
   head: boolean;
   alpha: number;
   val: string = '';
 
-  constructor(x: number, y: number, ctx: CanvasRenderingContext2D, charList: string[], color: Color) {
+  constructor(
+    x: number,
+    y: number,
+    ctx: CanvasRenderingContext2D,
+    charList: string[],
+    color: Color,
+    headColor: Color
+  ) {
     super(x, y, ctx);
     this.charList = charList;
     this.color = color;
+    this.headColor = headColor;
     this.head = true;
     this.alpha = 1;
     this.randomizeCharVal();
@@ -76,22 +85,22 @@ class Char extends Entity {
       this.randomizeCharVal();
     }
     this.alpha *= 0.95;
-    return this.alpha >= 0.01;
+    return this.alpha >= 0.1;
   }
 
   draw() {
     // Customization: Changed font weight to 100 (Thinnest)
-    this.ctx.font = `100 ${Char.size}px "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+    this.ctx.font = `100 ${Char.size}px "Apple SD Gothic Neo"`;
+    this.ctx.textAlign = "center";
 
     if (!this.head) {
       this.ctx.fillStyle = colorToText(this.color.red, this.color.green, this.color.blue, this.alpha);
     } else {
-      // Head is pure black
-      this.ctx.fillStyle = colorToText(0, 0, 0, 1);
+      this.ctx.fillStyle = colorToText(this.headColor.red, this.headColor.green, this.headColor.blue, 1);
       this.head = false;
     }
 
-    this.ctx.fillText(this.val, this.pos.x, this.pos.y);
+    this.ctx.fillText(this.val, this.pos.x + Char.width / 2, this.pos.y);
   }
 }
 
@@ -99,19 +108,28 @@ class Strand extends Entity {
   canvas: HTMLCanvasElement;
   charList: string[];
   color: Color;
+  headColor: Color;
   chars: Char[];
 
-  constructor(x: number, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, charList: string[], color: Color) {
+  constructor(
+    x: number,
+    canvas: HTMLCanvasElement,
+    ctx: CanvasRenderingContext2D,
+    charList: string[],
+    color: Color,
+    headColor: Color
+  ) {
     super(x, Char.height, ctx);
     this.canvas = canvas;
     this.charList = charList;
     this.color = color;
+    this.headColor = headColor;
     this.chars = [];
   }
 
   update(): boolean {
     if (this.chars.length < 1 || this.chars[this.chars.length - 1].pos.y < this.canvas.height * 2) {
-      this.chars.push(new Char(this.pos.x, this.pos.y, this.ctx, this.charList, this.color));
+      this.chars.push(new Char(this.pos.x, this.pos.y, this.ctx, this.charList, this.color, this.headColor));
       this.pos.y += Char.height;
       return true;
     } else {
@@ -128,6 +146,7 @@ export class MatrixRain {
   canvas: HTMLCanvasElement;
   charList: string[];
   color: Color;
+  headColor: Color;
   randomColors: boolean;
   flowRate: number;
   fadeRate: number;
@@ -144,6 +163,9 @@ export class MatrixRain {
     red: number,
     green: number,
     blue: number,
+    headRed: number,
+    headGreen: number,
+    headBlue: number,
     randomColors: boolean,
     flowRate: number,
     fps: number,
@@ -152,6 +174,7 @@ export class MatrixRain {
     this.canvas = element;
     this.charList = charList;
     this.color = { red, green, blue };
+    this.headColor = { red: headRed, green: headGreen, blue: headBlue };
     this.randomColors = randomColors;
     this.flowRate = flowRate;
     this.fadeRate = fadeRate;
@@ -202,16 +225,18 @@ export class MatrixRain {
       }
 
       if (available) {
+        const tailColor = (this.randomColors) ? {
+          red: random(0, 255),
+          green: random(0, 255),
+          blue: random(0, 255)
+        } : this.color;
         this.strands.push(new Strand(
           column * Char.width,
           this.canvas,
           this.ctx,
           this.charList,
-          (this.randomColors) ? {
-            red: random(0, 255),
-            green: random(0, 255),
-            blue: random(0, 255)
-          } : this.color
+          tailColor,
+          this.headColor
         ));
       }
     }
