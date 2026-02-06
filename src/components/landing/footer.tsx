@@ -14,7 +14,7 @@ export function Footer({ settings }: { settings: LandingSettings }) {
         marginBottom: settings.footerMarginBottom,
       }}
     >
-      <div className="container mx-auto px-6">
+      <div className="container mx-auto w-full max-w-6xl px-6">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-12 mb-20">
           <div className="col-span-2">
             <Link href="/" className="text-2xl font-bold tracking-tighter mb-6 block">

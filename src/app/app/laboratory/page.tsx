@@ -2948,14 +2948,14 @@ export default function LabolatoryPage() {
                                       ) : (
                                         msg.content
                                       )}
-                                      {msg.role === "bot" &&
-                                        isAdminUser &&
-                                        model.showAdminLogs &&
-                                        msg.loadingLogs &&
-                                        msg.loadingLogs.length > 0 ? (
-                                        <div className="mt-2 rounded-md border border-slate-200 bg-white/70 px-2 py-1.5">
-                                          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-                                            <span>진행 로그</span>
+                                    {msg.role === "bot" &&
+                                      isAdminUser &&
+                                      model.showAdminLogs &&
+                                      msg.loadingLogs &&
+                                      msg.loadingLogs.length > 0 ? (
+                                      <div className="mt-2 rounded-md border border-slate-200 bg-white/70 px-2 py-1.5">
+                                        <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                                          <span>진행 로그</span>
                                             <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
                                               ADMIN
                                             </span>
@@ -3199,93 +3199,93 @@ export default function LabolatoryPage() {
                                         );
                                       })()
                                     ) : null}
-                                  </div>
-                                  {msg.role === "user" && showAvatar ? (
-                                    <div
-                                      className={cn(
-                                        "h-8 w-8 rounded-full border flex items-center justify-center",
-                                        isSelected
-                                          ? "border-slate-900 bg-slate-900"
-                                          : "border-slate-200 bg-white"
-                                      )}
-                                    >
-                                      {isSelected ? (
-                                        <Check className="h-4 w-4 text-white" />
-                                      ) : (
-                                        <User className="h-4 w-4 text-slate-500" />
-                                      )}
-                                    </div>
-                                  ) : msg.role === "user" ? (
-                                    <div
-                                      className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white opacity-0"
-                                      aria-hidden="true"
-                                    />
-                                  ) : null}
-                                </div>
-                              );
-                            });
-                          })()}
-                        </div>
-                        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-gradient-to-t from-white to-transparent" />
-                      </div>
-                      {model.layoutExpanded ? (
-                        <div className="pointer-events-none absolute left-1/2 bottom-0 z-20 -translate-x-1/2 translate-y-1/2">
-                          <button
-                            type="button"
-                            onClick={() => collapseModelLayout(model.id)}
-                            className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-400 bg-white text-slate-600 hover:bg-slate-50"
-                            aria-label="채팅 높이 줄이기"
-                          >
-                            <Minus className="h-5 w-5" />
-                          </button>
-                        </div>
-                      ) : (matchedPaneHeight < EXPANDED_PANEL_HEIGHT) ? (
-                        <div className="pointer-events-none absolute left-1/2 bottom-0 z-20 -translate-x-1/2 translate-y-1/2">
-                          <button
-                            type="button"
-                            onClick={() => expandModelLayout(model.id)}
-                            className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-400 bg-white text-slate-600 hover:bg-slate-50"
-                            aria-label="채팅 높이 늘리기"
-                          >
-                            <Plus className="h-5 w-5" />
-                          </button>
-                        </div>
-                      ) : null}
-                      <form onSubmit={(e) => handleSend(e, model.id)} className="relative z-20 flex gap-2 bg-white">
-                        <Input
-                          value={model.input}
-                          onChange={(e) =>
-                            updateModel(model.id, (m) => ({
-                              ...m,
-                              input: e.target.value,
-                            }))
-                          }
-                          placeholder={
-                            model.setupMode === "existing" && model.conversationMode === "history"
-                              ? "히스토리 모드에서는 전송할 수 없습니다."
-                              : model.setupMode === "existing" && model.conversationMode === "edit"
-                                ? "수정할 내용을 입력하세요 (새 세션으로 복제 후 이어집니다)"
-                                : "신규 대화 질문을 입력하세요"
-                          }
-                          className="flex-1"
-                        />
-                        <Button
-                          type="submit"
-                          disabled={
-                            (model.setupMode === "existing" && model.conversationMode === "history") ||
-                            !model.input.trim() ||
-                            model.sending ||
-                            (model.setupMode === "existing" && !model.config.kbId) ||
-                            (model.setupMode === "existing" &&
-                              (!model.selectedAgentId ||
-                                (model.conversationMode !== "new" && !model.selectedSessionId)))
-                          }
-                        >
-                          <Send className="mr-2 h-4 w-4" />
-                          {model.sending ? "전송 중" : "전송"}
-                        </Button>
-                      </form>
+                  </div>
+                  {msg.role === "user" && showAvatar ? (
+                    <div
+                      className={cn(
+                        "h-8 w-8 rounded-full border flex items-center justify-center",
+                        isSelected
+                          ? "border-slate-900 bg-slate-900"
+                          : "border-slate-200 bg-white"
+                      )}
+                    >
+                      {isSelected ? (
+                        <Check className="h-4 w-4 text-white" />
+                      ) : (
+                        <User className="h-4 w-4 text-slate-500" />
+                      )}
                     </div>
+                  ) : msg.role === "user" ? (
+                    <div
+                      className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white opacity-0"
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </div>
+              );
+            });
+          })()}
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-gradient-to-t from-white to-transparent" />
+      </div>
+      {model.layoutExpanded ? (
+        <div className="pointer-events-none absolute left-1/2 bottom-0 z-20 -translate-x-1/2 translate-y-1/2">
+          <button
+            type="button"
+            onClick={() => collapseModelLayout(model.id)}
+            className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-400 bg-white text-slate-600 hover:bg-slate-50"
+            aria-label="채팅 높이 줄이기"
+          >
+            <Minus className="h-5 w-5" />
+          </button>
+        </div>
+      ) : (matchedPaneHeight < EXPANDED_PANEL_HEIGHT) ? (
+        <div className="pointer-events-none absolute left-1/2 bottom-0 z-20 -translate-x-1/2 translate-y-1/2">
+          <button
+            type="button"
+            onClick={() => expandModelLayout(model.id)}
+            className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-400 bg-white text-slate-600 hover:bg-slate-50"
+            aria-label="채팅 높이 늘리기"
+          >
+            <Plus className="h-5 w-5" />
+          </button>
+        </div>
+      ) : null}
+      <form onSubmit={(e) => handleSend(e, model.id)} className="relative z-20 flex gap-2 bg-white">
+        <Input
+          value={model.input}
+          onChange={(e) =>
+            updateModel(model.id, (m) => ({
+              ...m,
+              input: e.target.value,
+            }))
+          }
+          placeholder={
+            model.setupMode === "existing" && model.conversationMode === "history"
+              ? "히스토리 모드에서는 전송할 수 없습니다."
+              : model.setupMode === "existing" && model.conversationMode === "edit"
+                ? "수정할 내용을 입력하세요 (새 세션으로 복제 후 이어집니다)"
+                : "신규 대화 질문을 입력하세요"
+          }
+          className="flex-1"
+        />
+        <Button
+          type="submit"
+          disabled={
+            (model.setupMode === "existing" && model.conversationMode === "history") ||
+            !model.input.trim() ||
+            model.sending ||
+            (model.setupMode === "existing" && !model.config.kbId) ||
+            (model.setupMode === "existing" &&
+              (!model.selectedAgentId ||
+                (model.conversationMode !== "new" && !model.selectedSessionId)))
+          }
+        >
+          <Send className="mr-2 h-4 w-4" />
+          {model.sending ? "전송 중" : "전송"}
+        </Button>
+      </form>
+      </div>
                   </div>
                 </Card>
               );

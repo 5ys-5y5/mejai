@@ -36,6 +36,7 @@ export async function handleGeneralNoPathGuard(input: Record<string, any>): Prom
     resolvedIntent,
     finalCalls,
     allowed,
+    kbKind,
     makeReply,
     insertTurn,
     sessionId,
@@ -51,6 +52,10 @@ export async function handleGeneralNoPathGuard(input: Record<string, any>): Prom
     latestTurnId,
     respond,
   } = input;
+
+  if (kbKind === "inline") {
+    return null;
+  }
 
   if (!(resolvedIntent === "general" && finalCalls.length === 0 && allowed.size === 0)) {
     return null;

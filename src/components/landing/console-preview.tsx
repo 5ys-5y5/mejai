@@ -9,7 +9,7 @@ const consoleIcons = [Phone, BarChart2, Book, ShieldCheck];
 export function ConsolePreview({ settings }: { settings: LandingSettings }) {
   return (
     <section className="py-32 bg-zinc-50 overflow-hidden">
-      <div className="container mx-auto px-6">
+      <div className="container mx-auto w-full max-w-6xl px-6">
         <div className="flex flex-col lg:flex-row items-center gap-20">
           <div className="lg:w-1/2">
             <motion.h2

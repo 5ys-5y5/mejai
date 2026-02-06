@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Bot, Loader2, Send, Sparkles, User } from "lucide-react";
+import { Bot, Loader2, Send, Settings2, User } from "lucide-react";
 import type { LandingSettings } from "@/lib/landingSettings";
 import { MatrixRainBackground } from "@/components/landing/matrix-rain-background";
 import { Button } from "@/components/ui/Button";
@@ -71,6 +71,7 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
   const [selectedLlm, setSelectedLlm] = useState<"chatgpt" | "gemini">("chatgpt");
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -115,6 +116,22 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
   }, []);
 
   useEffect(() => {
+    let active = true;
+    apiFetch<{ is_admin?: boolean }>("/api/user-profile")
+      .then((res) => {
+        if (!active) return;
+        setIsAdminUser(Boolean(res?.is_admin));
+      })
+      .catch(() => {
+        if (!active) return;
+        setIsAdminUser(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (selectedMcpToolIds.length > 0 || actionOptions.length === 0) return;
     const nextSelected = actionOptions
       .filter((option) => selectedProviderKeys.includes(option.group || ""))
@@ -139,10 +156,8 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
     setInput("");
     setSending(true);
     const loadingId = makeId();
-    const composedMessage = userKb.trim()
-      ? `사용자 KB:\n${userKb.trim()}\n\n질문:\n${text}`
-      : text;
     const selectedProviders = selectedProviderKeys;
+    const inlineKb = userKb.trim();
 
     setMessages((prev) => [
       ...prev,
@@ -165,10 +180,11 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
           route: NEW_MODEL_CONFIG.route,
           llm: selectedLlm,
           kb_id: undefined,
+          inline_kb: inlineKb || undefined,
           admin_kb_ids: NEW_MODEL_CONFIG.adminKbIds,
           mcp_tool_ids: selectedMcpToolIds,
           mcp_provider_keys: selectedProviders,
-          message: composedMessage,
+          message: text,
           session_id: sessionId || undefined,
         }),
       });
@@ -272,6 +288,18 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
         </div>
 
         <div className="hero-chat relative h-full border border-slate-200 bg-white/90 p-4 flex flex-col overflow-visible rounded-xl backdrop-blur">
+          {isAdminUser ? (
+            <div className="absolute right-6 top-6 z-20">
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                aria-label="로그 설정"
+                title="로그 설정"
+              >
+                <Settings2 className="h-4 w-4" />
+              </button>
+            </div>
+          ) : null}
           <div
             ref={scrollRef}
             className="hero-thread relative z-0 max-h-[420px] flex-1 overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-t-xl rounded-b-none pt-2"
@@ -337,8 +365,8 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
               );
             })}
           </div>
-          <div className="pointer-events-none h-4 bg-gradient-to-t from-white to-transparent" />
-          <form onSubmit={handleSubmit} className="hero-input-row relative flex gap-2 bg-white">
+          <div className="pointer-events-none absolute inset-x-0 bottom-[3.25rem] z-10 h-4 bg-gradient-to-t from-white to-transparent" />
+          <form onSubmit={handleSubmit} className="hero-input-row relative flex gap-2 bg-white z-20">
             <Input
               value={input}
               onChange={(event) => setInput(event.target.value)}

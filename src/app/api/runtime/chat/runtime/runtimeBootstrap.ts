@@ -20,6 +20,7 @@ type Body = {
   session_id?: string;
   llm?: "chatgpt" | "gemini";
   kb_id?: string;
+  inline_kb?: string;
   admin_kb_ids?: string[];
   mcp_tool_ids?: string[];
   mcp_provider_keys?: string[];
@@ -91,6 +92,8 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const conversationMode = String(body?.mode || "").trim().toLowerCase() === "natural" ? "natural" : "mk2";
   const overrideLlm = body?.llm;
   const overrideKbId = body?.kb_id;
+  const inlineKbText = typeof body?.inline_kb === "string" ? body.inline_kb.trim() : "";
+  const hasInlineKb = inlineKbText.length > 0;
   const overrideAdminKbIds = Array.isArray(body?.admin_kb_ids)
     ? body?.admin_kb_ids.map((id) => String(id)).filter(Boolean)
     : null;
@@ -135,7 +138,21 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
 
   const kbLookupStartedAt = Date.now();
   let kb: KbRow;
-  if (agent.kb_id) {
+  if (hasInlineKb) {
+    pushRuntimeTimingStage(timingStages, "load_primary_kb", kbLookupStartedAt, { inline: true });
+    kb = {
+      id: "__INLINE_KB__",
+      title: "사용자 KB",
+      content: inlineKbText,
+      is_active: true,
+      version: "inline",
+      is_admin: false,
+      apply_groups: null,
+      apply_groups_mode: null,
+      content_json: null,
+      kb_kind: "inline",
+    };
+  } else if (agent.kb_id) {
     const kbRes = await fetchKb(context, agent.kb_id);
     pushRuntimeTimingStage(timingStages, "load_primary_kb", kbLookupStartedAt);
     if (!kbRes.data) {
@@ -154,6 +171,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       apply_groups: null,
       apply_groups_mode: null,
       content_json: null,
+      kb_kind: "none",
     };
   }
 

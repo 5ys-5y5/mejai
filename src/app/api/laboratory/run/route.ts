@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
         agent_id: body.agent_id || undefined,
         llm: body.llm,
         kb_id: body.kb_id || undefined,
+        inline_kb: body.inline_kb || undefined,
         admin_kb_ids: Array.isArray(body.admin_kb_ids) ? body.admin_kb_ids : [],
         mcp_tool_ids: mergedMcpSelectors,
         mcp_provider_keys: requestProviderKeys,

@@ -1,0 +1,8 @@
+<canvas id="c" style="width:100vw;height:100vh;"></canvas>
+<img id="bg" src="your-background.jpg" crossorigin="anonymous" style="display:none;" />
+<script type="module">
+    import { startLiquidGlass } from "./liquid-glass-webgl2.js";
+    const canvas = document.getElementById("c");
+    const img = document.getElementById("bg");
+    img.onload = () => startLiquidGlass(canvas, img);
+</script>

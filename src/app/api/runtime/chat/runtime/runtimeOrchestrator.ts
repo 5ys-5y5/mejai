@@ -898,6 +898,7 @@ export async function POST(req: NextRequest) {
       resolvedIntent,
       finalCalls,
       allowed,
+      kbKind: (kb as KbRow).kb_kind || null,
       makeReply,
       insertTurn,
       sessionId,

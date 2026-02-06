@@ -6,7 +6,7 @@ const trustIcons = [Shield, Lock, EyeOff, Search];
 export function Trust({ settings }: { settings: LandingSettings }) {
   return (
     <section className="py-24">
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto w-full max-w-6xl px-6">
         <div className="text-center max-w-3xl mx-auto mb-16">
           <h2 className="font-bold mb-4" style={{ fontSize: settings.trustTitleSize }}>
             {settings.trustTitle}

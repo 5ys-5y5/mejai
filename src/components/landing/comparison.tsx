@@ -6,7 +6,7 @@ import type { LandingSettings } from "@/lib/landingSettings";
 export function Comparison({ settings }: { settings: LandingSettings }) {
   return (
     <section className="py-32 bg-black text-white overflow-hidden">
-      <div className="container mx-auto px-6">
+      <div className="container mx-auto w-full max-w-6xl px-6">
         <div className="max-w-4xl mb-24">
           <motion.h2
             initial={{ opacity: 0, y: 20 }}
