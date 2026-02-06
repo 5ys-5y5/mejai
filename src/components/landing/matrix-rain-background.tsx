@@ -3,121 +3,68 @@
 import { useEffect, useRef } from "react";
 import { MatrixRain } from "@/components/landing/matrixRain";
 
+// --- Configuration ---
 const CHAR_LIST = [
-  "0",
-  "1",
-  "2",
-  "3",
-  "4",
-  "5",
-  "6",
-  "7",
-  "8",
-  "9",
-  "A",
-  "B",
-  "C",
-  "D",
-  "E",
-  "F",
-  "G",
-  "H",
-  "I",
-  "J",
-  "K",
-  "L",
-  "M",
-  "N",
-  "O",
-  "P",
-  "Q",
-  "R",
-  "S",
-  "T",
-  "U",
-  "V",
-  "W",
-  "X",
-  "Y",
-  "Z",
-  "+",
-  "-",
-  "*",
-  "=",
-  "<",
-  ">",
-  ":",
-  ".",
+  "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+  "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
+  "+", "-", "*", "=", "<", ">", ":", "."
+  // "ﾊ", "ﾐ", "ﾋ", "ｰ", "ｳ", "ｼ", "ﾅ", "ﾓ", "ﾆ", "ｻ", "ﾜ", "ﾂ", "ｵ", "ﾘ", "ｱ", "ﾎ", "ﾃ", "ﾏ", "ｹ", "ﾒ", "ｴ", "ｶ", "ｷ", "ﾑ", "ﾕ", "ﾗ", "ｾ", "ﾈ", "ｽ", "ﾀ", "ﾇ", "ﾍ"
 ];
 
+// 밀도 (한 번에 생성되는 줄기의 수) - 숫자가 클수록 화면에 글자가 꽉 찹니다.
+// Density: Higher number = more rain drops appearing at once.
 const FLOW_RATE = 1;
+
+// 속도 (초당 프레임 수) - 숫자가 클수록 빠릅니다.
+// Speed: Frames per second.
 const FPS = 15;
-
-const LIGHT_PALETTE = {
-  head: { red: 0, green: 0, blue: 0 },
-  tail: { red: 0, green: 0, blue: 0 },
-};
-
-const DARK_PALETTE = {
-  head: { red: 245, green: 245, blue: 245 },
-  tail: { red: 210, green: 210, blue: 210 },
-};
-
-function getPalette(isDark: boolean) {
-  return isDark ? DARK_PALETTE : LIGHT_PALETTE;
-}
 
 export function MatrixRainBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const instanceRef = useRef<MatrixRain | null>(null);
+  const matrixInstanceRef = useRef<MatrixRain | null>(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
 
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const palette = getPalette(media.matches);
-
-    instanceRef.current = new MatrixRain(
+    // Initialize MatrixRain with custom "White Edition" parameters
+    const matrixRain = new MatrixRain(
       canvasRef.current,
       window.innerWidth,
       window.innerHeight,
       CHAR_LIST,
-      palette.tail.red,
-      palette.tail.green,
-      palette.tail.blue,
-      palette.head.red,
-      palette.head.green,
-      palette.head.blue,
-      false,
+      0,   // Red: 0 (Black text target)
+      0,   // Green: 0
+      0,   // Blue: 0
+      false, // Random Colors: false
       FLOW_RATE,
-      FPS,
+      FPS
     );
 
-    const onResize = () => {
-      instanceRef.current?.setCanvasDimensions(window.innerWidth, window.innerHeight);
-    };
+    matrixInstanceRef.current = matrixRain;
 
-    const onMediaChange = (event: MediaQueryListEvent) => {
-      const nextPalette = getPalette(event.matches);
-      instanceRef.current?.setColors(nextPalette.head, nextPalette.tail);
-    };
-
-    window.addEventListener("resize", onResize);
-    if (media.addEventListener) {
-      media.addEventListener("change", onMediaChange);
-    } else {
-      media.addListener(onMediaChange);
-    }
-    return () => {
-      window.removeEventListener("resize", onResize);
-      if (media.removeEventListener) {
-        media.removeEventListener("change", onMediaChange);
-      } else {
-        media.removeListener(onMediaChange);
+    const handleResize = () => {
+      if (matrixInstanceRef.current) {
+        matrixInstanceRef.current.setCanvasDimensions(window.innerWidth, window.innerHeight);
       }
-      instanceRef.current?.destroy();
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      if (matrixInstanceRef.current) {
+        matrixInstanceRef.current.destroy();
+      }
     };
   }, []);
 
-  return <canvas ref={canvasRef} className="block h-full w-full bg-transparent" />;
+  return (
+    <div className="relative w-full h-screen bg-white overflow-hidden">
+      <canvas
+        ref={canvasRef}
+        id="canvas"
+        className="block w-full h-full"
+      />
+    </div>
+  );
 }

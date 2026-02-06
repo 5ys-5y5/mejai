@@ -2856,13 +2856,18 @@ export default function LabolatoryPage() {
                             chatScrollRefs.current[model.id] = el;
                           }}
                           className={cn(
-                            "relative z-0 h-full space-y-4 overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-t-xl rounded-b-none",
+                            "relative z-0 h-full overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-t-xl rounded-b-none",
                             isAdminUser ? "pt-10" : "pt-2"
                           )}
                         >
                           {(() => {
                             const latestVisibleMessageId = visibleMessages[visibleMessages.length - 1]?.id || "";
-                            return visibleMessages.map((msg) => {
+                            return visibleMessages.map((msg, index) => {
+                              const prev = visibleMessages[index - 1];
+                              const isGrouped = prev?.role === msg.role;
+                              const rowGap = "gap-3";
+                              const rowSpacing = index === 0 ? "" : isGrouped ? "mt-1" : "mt-3";
+                              const showAvatar = !isGrouped;
                               const isLatestVisibleMessage = msg.id === latestVisibleMessageId;
                               const hasDebug = msg.role === "bot" && msg.content.includes("debug_prefix");
                               const debugParts = hasDebug ? getDebugParts(msg.content) : null;
@@ -2871,13 +2876,15 @@ export default function LabolatoryPage() {
                                 <div
                                   key={msg.id}
                                   className={cn(
-                                    "flex gap-3",
+                                    "flex",
+                                    rowGap,
+                                    rowSpacing,
                                     msg.role === "user" ? "justify-end" : "justify-start",
                                     model.chatSelectionEnabled && isSelected && "rounded-xl bg-amber-200 px-1 py-1"
                                   )}
                                 >
 
-                                  {msg.role === "bot" ? (
+                                  {msg.role === "bot" && showAvatar ? (
                                     <div
                                       className={cn(
                                         "h-8 w-8 rounded-full border flex items-center justify-center",
@@ -2892,6 +2899,11 @@ export default function LabolatoryPage() {
                                         <Bot className="h-4 w-4 text-slate-500" />
                                       )}
                                     </div>
+                                  ) : msg.role === "bot" ? (
+                                    <div
+                                      className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white opacity-0"
+                                      aria-hidden="true"
+                                    />
                                   ) : null}
                                   <div className="relative max-w-[75%]">
                                     <div
@@ -3188,7 +3200,7 @@ export default function LabolatoryPage() {
                                       })()
                                     ) : null}
                                   </div>
-                                  {msg.role === "user" ? (
+                                  {msg.role === "user" && showAvatar ? (
                                     <div
                                       className={cn(
                                         "h-8 w-8 rounded-full border flex items-center justify-center",
@@ -3203,6 +3215,11 @@ export default function LabolatoryPage() {
                                         <User className="h-4 w-4 text-slate-500" />
                                       )}
                                     </div>
+                                  ) : msg.role === "user" ? (
+                                    <div
+                                      className="h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white opacity-0"
+                                      aria-hidden="true"
+                                    />
                                   ) : null}
                                 </div>
                               );

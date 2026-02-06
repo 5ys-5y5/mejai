@@ -54,7 +54,12 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
     {
       id: makeId(),
       role: "bot",
-      content: "기록한대로 응대하는 AI 상담사를 압도적으로 저렴하게 사용해보세요",
+      content: "기록한대로 응대하는 AI 상담사를",
+    },
+    {
+      id: makeId(),
+      role: "bot",
+      content: "압도적으로 저렴하게 사용해보세요",
     },
   ]);
   const [input, setInput] = useState("");
@@ -108,6 +113,16 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (selectedMcpToolIds.length > 0 || actionOptions.length === 0) return;
+    const nextSelected = actionOptions
+      .filter((option) => selectedProviderKeys.includes(option.group || ""))
+      .map((option) => option.id);
+    if (nextSelected.length > 0) {
+      setSelectedMcpToolIds(nextSelected);
+    }
+  }, [actionOptions, selectedMcpToolIds.length, selectedProviderKeys]);
 
   const llmOptions: SelectOption[] = [
     { id: "chatgpt", label: "ChatGPT" },
@@ -194,19 +209,21 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
 
   return (
     <section className="hero-section relative min-h-screen overflow-hidden bg-white text-black border-b border-zinc-200 flex items-center !py-0">
-      <div className="hero-bg absolute inset-0 pointer-events-none">
+      <div className="hero-bg absolute">
         <MatrixRainBackground />
       </div>
 
       <div className="relative z-10 container mx-auto grid w-full max-w-6xl gap-10 px-6 lg:grid-cols-[1fr_1fr] lg:items-center">
-        <div className="hero-left-pane rounded-xl border border-zinc-200 bg-white/90 p-4">
-          <div className="hero-muted text-[11px] font-semibold text-zinc-600">사용자 KB입력란</div>
-          <textarea
-            value={userKb}
-            onChange={(event) => setUserKb(event.target.value)}
-            placeholder="예) 고객 정책, 자주 묻는 질문, 톤 가이드 등을 입력하세요."
-            className="hero-input mt-2 h-36 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-400"
-          />
+        <div className="hero-left-pane rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
+          <div className="space-y-1">
+            <div className="hero-muted text-[11px] font-semibold text-zinc-600">사용자 KB입력란</div>
+            <textarea
+              value={userKb}
+              onChange={(event) => setUserKb(event.target.value)}
+              placeholder="예) 고객 정책, 자주 묻는 질문, 톤 가이드 등을 입력하세요."
+              className="hero-input h-36 w-full resize-none rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none transition focus:border-zinc-400"
+            />
+          </div>
           <div className="space-y-3">
             <div>
               <div className="mb-1 text-[11px] font-semibold text-slate-600">LLM 선택</div>
@@ -219,8 +236,6 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
                 />
               </div>
             </div>
-          </div>
-          <div className="space-y-3">
             <div>
               <div className="mb-1 text-[11px] font-semibold text-slate-600">MCP 프로바이더 선택</div>
               <div className="flex items-center gap-2">
@@ -257,20 +272,33 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
         <div className="hero-chat relative h-full border border-slate-200 bg-white/90 p-4 flex flex-col overflow-visible rounded-xl backdrop-blur">
           <div
             ref={scrollRef}
-            className="hero-thread relative z-0 max-h-[420px] flex-1 space-y-4 overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-t-xl rounded-b-none pt-2"
+            className="hero-thread relative z-0 max-h-[420px] flex-1 overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-t-xl rounded-b-none pt-2"
           >
-            {messages.map((msg) => (
+            {messages.map((msg, index) => {
+              const prev = messages[index - 1];
+              const isGrouped = prev?.role === msg.role;
+              const rowGap = "gap-3";
+              const rowSpacing = index === 0 ? "" : isGrouped ? "mt-1" : "mt-3";
+              const showAvatar = !isGrouped;
+              return (
               <div
                 key={msg.id}
                 className={cn(
-                  "flex gap-3",
+                  "flex",
+                  rowGap,
+                  rowSpacing,
                   msg.role === "user" ? "justify-end" : "justify-start"
                 )}
               >
-                {msg.role === "bot" ? (
+                {msg.role === "bot" && showAvatar ? (
                   <div className="hero-avatar h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
                     <Bot className="h-4 w-4 text-slate-500" />
                   </div>
+                ) : msg.role === "bot" ? (
+                  <div
+                    className="hero-avatar h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white opacity-0"
+                    aria-hidden="true"
+                  />
                 ) : null}
                 <div className="relative max-w-[75%]">
                   <div
@@ -293,13 +321,19 @@ export function Hero({ settings: _settings }: { settings: LandingSettings }) {
                     ) : null}
                   </div>
                 </div>
-                {msg.role === "user" ? (
+                {msg.role === "user" && showAvatar ? (
                   <div className="hero-avatar h-8 w-8 rounded-full border border-slate-200 bg-white flex items-center justify-center">
                     <User className="h-4 w-4 text-slate-500" />
                   </div>
+                ) : msg.role === "user" ? (
+                  <div
+                    className="hero-avatar h-8 w-8 shrink-0 rounded-full border border-slate-200 bg-white opacity-0"
+                    aria-hidden="true"
+                  />
                 ) : null}
               </div>
-            ))}
+            );
+            })}
           </div>
           <form onSubmit={handleSubmit} className="hero-input-row relative z-20 flex gap-2 bg-white">
             <Input

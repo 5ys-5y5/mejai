@@ -182,41 +182,57 @@ export default function WebInputPage() {
       </header>
 
       <main className="flex-1 overflow-y-auto p-4 space-y-4">
-        <div className="max-w-2xl mx-auto space-y-4 pb-20">
-          {messages.map((msg) => (
-            <div
-              key={msg.id}
-              className={cn(
-                "flex gap-3 max-w-[85%]",
-                msg.role === "user" ? "ml-auto flex-row-reverse" : ""
-              )}
-            >
+        <div className="max-w-2xl mx-auto pb-20">
+          {messages.map((msg, index) => {
+            const prev = messages[index - 1];
+            const isGrouped = prev?.role === msg.role;
+            const rowGap = "gap-3";
+            const rowSpacing = index === 0 ? "" : isGrouped ? "mt-1" : "mt-3";
+            const showAvatar = !isGrouped;
+            return (
               <div
+                key={msg.id}
                 className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1",
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground"
+                  "flex max-w-[85%]",
+                  rowGap,
+                  rowSpacing,
+                  msg.role === "user" ? "ml-auto flex-row-reverse" : ""
                 )}
               >
-                {msg.role === "user" ? (
-                  <User className="w-4 h-4" />
+                {showAvatar ? (
+                  <div
+                    className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1",
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {msg.role === "user" ? (
+                      <User className="w-4 h-4" />
+                    ) : (
+                      <Bot className="w-4 h-4" />
+                    )}
+                  </div>
                 ) : (
-                  <Bot className="w-4 h-4" />
+                  <div
+                    className="w-8 h-8 shrink-0 mt-1 rounded-full opacity-0"
+                    aria-hidden="true"
+                  />
                 )}
+                <div
+                  className={cn(
+                    "p-3 rounded-2xl text-sm",
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground rounded-tr-none"
+                      : "bg-background rounded-tl-none border"
+                  )}
+                >
+                  {msg.content}
+                </div>
               </div>
-              <div
-                className={cn(
-                  "p-3 rounded-2xl text-sm",
-                  msg.role === "user"
-                    ? "bg-primary text-primary-foreground rounded-tr-none"
-                    : "bg-background rounded-tl-none border"
-                )}
-              >
-                {msg.content}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </main>
 

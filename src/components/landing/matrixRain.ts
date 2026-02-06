@@ -38,9 +38,12 @@ abstract class Entity {
   abstract draw(): void;
 
   show(): boolean {
-    if (!this.update()) return false;
-    this.draw();
-    return true;
+    if (this.update()) {
+      this.draw();
+      return true;
+    } else {
+      return false;
+    }
   }
 }
 
@@ -51,23 +54,14 @@ class Char extends Entity {
 
   charList: string[];
   color: Color;
-  headColor: Color;
   head: boolean;
   alpha: number;
-  val = "";
+  val: string = '';
 
-  constructor(
-    x: number,
-    y: number,
-    ctx: CanvasRenderingContext2D,
-    charList: string[],
-    color: Color,
-    headColor: Color
-  ) {
+  constructor(x: number, y: number, ctx: CanvasRenderingContext2D, charList: string[], color: Color) {
     super(x, y, ctx);
     this.charList = charList;
     this.color = color;
-    this.headColor = headColor;
     this.head = true;
     this.alpha = 1;
     this.randomizeCharVal();
@@ -78,19 +72,25 @@ class Char extends Entity {
   }
 
   update(): boolean {
-    if (random(0, 100) < 5) this.randomizeCharVal();
+    if (random(0, 100) < 5) {
+      this.randomizeCharVal();
+    }
     this.alpha *= 0.95;
     return this.alpha >= 0.01;
   }
 
   draw() {
-    this.ctx.font = `light ${Char.size}px "Apple SD Gothic Neo"`;
+    // Customization: Changed font weight to 100 (Thinnest)
+    this.ctx.font = `100 ${Char.size}px "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+
     if (!this.head) {
       this.ctx.fillStyle = colorToText(this.color.red, this.color.green, this.color.blue, this.alpha);
     } else {
-      this.ctx.fillStyle = colorToText(this.headColor.red, this.headColor.green, this.headColor.blue, 1);
+      // Head is pure black
+      this.ctx.fillStyle = colorToText(0, 0, 0, 1);
       this.head = false;
     }
+
     this.ctx.fillText(this.val, this.pos.x, this.pos.y);
   }
 }
@@ -99,32 +99,24 @@ class Strand extends Entity {
   canvas: HTMLCanvasElement;
   charList: string[];
   color: Color;
-  headColor: Color;
   chars: Char[];
 
-  constructor(
-    x: number,
-    canvas: HTMLCanvasElement,
-    ctx: CanvasRenderingContext2D,
-    charList: string[],
-    color: Color,
-    headColor: Color
-  ) {
+  constructor(x: number, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D, charList: string[], color: Color) {
     super(x, Char.height, ctx);
     this.canvas = canvas;
     this.charList = charList;
     this.color = color;
-    this.headColor = headColor;
     this.chars = [];
   }
 
   update(): boolean {
     if (this.chars.length < 1 || this.chars[this.chars.length - 1].pos.y < this.canvas.height * 2) {
-      this.chars.push(new Char(this.pos.x, this.pos.y, this.ctx, this.charList, this.color, this.headColor));
+      this.chars.push(new Char(this.pos.x, this.pos.y, this.ctx, this.charList, this.color));
       this.pos.y += Char.height;
       return true;
+    } else {
+      return false;
     }
-    return false;
   }
 
   draw() {
@@ -136,11 +128,11 @@ export class MatrixRain {
   canvas: HTMLCanvasElement;
   charList: string[];
   color: Color;
-  headColor: Color;
   randomColors: boolean;
   flowRate: number;
+  fadeRate: number;
   ctx: CanvasRenderingContext2D;
-  columns = 0;
+  columns: number = 0;
   strands: Strand[] = [];
   intervalId: number | null = null;
 
@@ -149,22 +141,20 @@ export class MatrixRain {
     width: number,
     height: number,
     charList: string[],
-    tailRed: number,
-    tailGreen: number,
-    tailBlue: number,
-    headRed: number,
-    headGreen: number,
-    headBlue: number,
+    red: number,
+    green: number,
+    blue: number,
     randomColors: boolean,
     flowRate: number,
     fps: number,
+    fadeRate: number = 0.4
   ) {
     this.canvas = element;
     this.charList = charList;
-    this.color = { red: tailRed, green: tailGreen, blue: tailBlue };
-    this.headColor = { red: headRed, green: headGreen, blue: headBlue };
+    this.color = { red, green, blue };
     this.randomColors = randomColors;
     this.flowRate = flowRate;
+    this.fadeRate = fadeRate;
 
     const context = this.canvas.getContext("2d");
     if (!context) throw new Error("Could not get 2d context");
@@ -190,15 +180,21 @@ export class MatrixRain {
   }
 
   run() {
-    this.ctx.save();
-    this.ctx.globalCompositeOperation = "destination-out";
-    this.ctx.fillStyle = colorToText(0, 0, 0, 0.08);
+    // Customization: Use 'destination-out' to fade existing content to transparency.
+    // This allows the CSS background of the canvas element to show through.
+    this.ctx.globalCompositeOperation = 'destination-out';
+    this.ctx.fillStyle = `rgba(0, 0, 0, ${this.fadeRate})`;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    this.ctx.restore();
+
+    // Reset to default for drawing text
+    this.ctx.globalCompositeOperation = 'source-over';
+
+    let column: number;
+    let available: boolean;
 
     for (let i = 0; i < this.flowRate; i++) {
-      const column = random(0, this.columns);
-      let available = true;
+      column = random(0, this.columns);
+      available = true;
       for (let j = 0; j < this.strands.length; j++) {
         if (this.strands[j].pos.x === column * Char.width && this.strands[j].pos.y <= this.canvas.height) {
           available = false;
@@ -206,38 +202,25 @@ export class MatrixRain {
       }
 
       if (available) {
-        const tailColor = this.randomColors
-          ? { red: random(0, 255), green: random(0, 255), blue: random(0, 255) }
-          : this.color;
-        this.strands.push(
-          new Strand(
-            column * Char.width,
-            this.canvas,
-            this.ctx,
-            this.charList,
-            tailColor,
-            this.headColor
-          ),
-        );
+        this.strands.push(new Strand(
+          column * Char.width,
+          this.canvas,
+          this.ctx,
+          this.charList,
+          (this.randomColors) ? {
+            red: random(0, 255),
+            green: random(0, 255),
+            blue: random(0, 255)
+          } : this.color
+        ));
       }
     }
     Entity.showAll(this.strands);
   }
 
-  setColors(headColor: Color, tailColor: Color) {
-    this.headColor = headColor;
-    this.color = tailColor;
-    for (const strand of this.strands) {
-      strand.color = tailColor;
-      strand.headColor = headColor;
-      for (const ch of strand.chars) {
-        ch.color = tailColor;
-        ch.headColor = headColor;
-      }
-    }
-  }
-
   destroy() {
-    if (this.intervalId) clearInterval(this.intervalId);
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+    }
   }
 }

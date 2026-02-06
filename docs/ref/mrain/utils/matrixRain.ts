@@ -48,10 +48,10 @@ abstract class Entity {
 }
 
 class Char extends Entity {
-  static size = 10; // Reduced from 20 (1/4 size)
-  static width = 10; // Reduced from 14 (1/4 size)
-  static height = 10; // Reduced from 24 (1/4 size)
-  
+  static size = 10;
+  static width = 10;
+  static height = 10;
+
   charList: string[];
   color: Color;
   head: boolean;
@@ -80,21 +80,17 @@ class Char extends Entity {
   }
 
   draw() {
-    // Customization: Use Apple SD Gothic Neo
-    this.ctx.font = `bold ${Char.size}px "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
-    
+    // Customization: Changed font weight to 100 (Thinnest)
+    this.ctx.font = `100 ${Char.size}px "Apple SD Gothic Neo", "Malgun Gothic", sans-serif`;
+
     if (!this.head) {
-        // Customization: Use the passed color (Black) with alpha for trails
-        this.ctx.fillStyle = colorToText(this.color.red, this.color.green, this.color.blue, this.alpha);
+      this.ctx.fillStyle = colorToText(this.color.red, this.color.green, this.color.blue, this.alpha);
     } else {
-        // Customization: Head is also Black (or slightly different if preferred, but keeping consistent with "Black text")
-        // To make the head pop on white background, we might want it pure black while trails fade.
-        // Or if we want a distinct head color, we could use a dark gray.
-        // Per prompt "Black text", we use pure black (0,0,0) for the head.
-        this.ctx.fillStyle = colorToText(0, 0, 0, 1);
-        this.head = false;
+      // Head is pure black
+      this.ctx.fillStyle = colorToText(0, 0, 0, 1);
+      this.head = false;
     }
-    
+
     this.ctx.fillText(this.val, this.pos.x, this.pos.y);
   }
 }
@@ -134,6 +130,7 @@ export class MatrixRain {
   color: Color;
   randomColors: boolean;
   flowRate: number;
+  fadeRate: number;
   ctx: CanvasRenderingContext2D;
   columns: number = 0;
   strands: Strand[] = [];
@@ -145,24 +142,25 @@ export class MatrixRain {
     height: number,
     charList: string[],
     red: number,
-    green: number,    blue: number,
+    green: number,
+    blue: number,
     randomColors: boolean,
     flowRate: number,
-    fps: number
+    fps: number,
+    fadeRate: number // New parameter for controlling trail length/fade
   ) {
     this.canvas = element;
     this.charList = charList;
     this.color = { red, green, blue };
     this.randomColors = randomColors;
     this.flowRate = flowRate;
-    
+    this.fadeRate = fadeRate;
+
     const context = this.canvas.getContext("2d");
     if (!context) throw new Error("Could not get 2d context");
     this.ctx = context;
 
     this.setCanvasDimensions(width, height);
-    
-    // Initial setup of transform
     this.updateContextTransform();
 
     this.intervalId = window.setInterval(() => {
@@ -171,47 +169,45 @@ export class MatrixRain {
   }
 
   updateContextTransform() {
-      // Customization: Ensure 1:1 scale without mirroring (Fixed: Text was flipped)
-      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   setCanvasDimensions(width: number, height: number) {
     this.canvas.width = width;
     this.canvas.height = height;
     this.columns = Math.ceil(this.canvas.width / Char.width);
-    
-    // We need to re-apply transform because resizing clears the context state
     this.updateContextTransform();
   }
 
   run() {
-    // Customization: Clear with White background instead of Black
-    // Using a slight alpha here creates the trail effect (old frames fade out)
-    // For white background, we need to paint "white" with some transparency over the old frame
-    // to make the black text fade into white.
-    this.ctx.fillStyle = colorToText(255, 255, 255, 0.4); 
+    // Customization: Use 'destination-out' to fade existing content to transparency.
+    // This allows the CSS background of the canvas element to show through.
+    this.ctx.globalCompositeOperation = 'destination-out';
+    this.ctx.fillStyle = `rgba(0, 0, 0, ${this.fadeRate})`;
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    // Reset to default for drawing text
+    this.ctx.globalCompositeOperation = 'source-over';
 
     let column: number;
     let available: boolean;
-    
+
     for (let i = 0; i < this.flowRate; i++) {
       column = random(0, this.columns);
       available = true;
       for (let j = 0; j < this.strands.length; j++) {
-        // Simple collision detection to prevent strands overlapping too much at the top
         if (this.strands[j].pos.x === column * Char.width && this.strands[j].pos.y <= this.canvas.height) {
           available = false;
         }
       }
-      
+
       if (available) {
         this.strands.push(new Strand(
           column * Char.width,
           this.canvas,
           this.ctx,
           this.charList,
-          (this.randomColors) ? { 
+          (this.randomColors) ? {
             red: random(0, 255),
             green: random(0, 255),
             blue: random(0, 255)
@@ -224,7 +220,7 @@ export class MatrixRain {
 
   destroy() {
     if (this.intervalId) {
-        clearInterval(this.intervalId);
+      clearInterval(this.intervalId);
     }
   }
 }
