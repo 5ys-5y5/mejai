@@ -288,8 +288,11 @@ export function LaboratoryModelCard({
             <div className="space-y-3">
               <LaboratoryExistingSetup
                 showModelSelector={pageFeatures.setup.modelSelector}
+                modelSelectorAdminOnly={pageFeatures.visibility.setup.modelSelector === "admin"}
                 showModeExisting={pageFeatures.setup.modeExisting}
+                modeExistingAdminOnly={pageFeatures.visibility.setup.modeExisting === "admin"}
                 showModeNew={pageFeatures.setup.modeNew}
+                modeNewAdminOnly={pageFeatures.visibility.setup.modeNew === "admin"}
                 setupMode={model.setupMode}
                 onSelectExisting={() =>
                   onUpdateModel(model.id, (m) => ({
@@ -339,6 +342,7 @@ export function LaboratoryModelCard({
                 <div className="space-y-3">
                   <ConversationSetupFields
                     showInlineUserKbInput={pageFeatures.setup.inlineUserKbInput}
+                    inlineKbAdminOnly={pageFeatures.visibility.setup.inlineUserKbInput === "admin"}
                     inlineKbValue={model.config.inlineKb}
                     onInlineKbChange={(value) =>
                       onUpdateModel(model.id, (m) => ({
@@ -347,6 +351,7 @@ export function LaboratoryModelCard({
                       }))
                     }
                     showLlmSelector={pageFeatures.setup.llmSelector}
+                    llmAdminOnly={pageFeatures.visibility.setup.llmSelector === "admin"}
                     llmValue={model.config.llm}
                     onLlmChange={(value) => {
                       onUpdateModel(model.id, (m) => ({
@@ -368,6 +373,7 @@ export function LaboratoryModelCard({
                     middleContent={
                       <LaboratoryNewModelControls
                         showKbSelector={pageFeatures.setup.kbSelector}
+                        kbAdminOnly={pageFeatures.visibility.setup.kbSelector === "admin"}
                         kbValue={model.config.kbId}
                         kbOptions={kbOptions}
                         onKbChange={(value) => {
@@ -386,6 +392,7 @@ export function LaboratoryModelCard({
                         }
                         kbInfoText={kbItems.find((kb) => kb.id === model.config.kbId)?.content || "내용 없음"}
                         showAdminKbSelector={isAdminUser && pageFeatures.setup.adminKbSelector}
+                        adminKbAdminOnly={pageFeatures.visibility.setup.adminKbSelector === "admin"}
                         adminKbValues={model.config.adminKbIds}
                         adminKbOptions={adminKbOptions}
                         onAdminKbChange={(values) => {
@@ -416,6 +423,7 @@ export function LaboratoryModelCard({
                               .join("\n\n")
                         }
                         showRouteSelector={pageFeatures.setup.routeSelector}
+                        routeAdminOnly={pageFeatures.visibility.setup.routeSelector === "admin"}
                         routeValue={model.config.route}
                         routeOptions={routeOptions}
                         onRouteChange={(value) => {
@@ -436,6 +444,7 @@ export function LaboratoryModelCard({
                       />
                     }
                     showMcpProviderSelector={pageFeatures.mcp.providerSelector}
+                    mcpProviderAdminOnly={pageFeatures.visibility.mcp.providerSelector === "admin"}
                     providerValues={model.config.mcpProviderKeys}
                     onProviderChange={(values) => {
                       const allowedToolIds = new Set(
@@ -489,6 +498,7 @@ export function LaboratoryModelCard({
                       ].join("\n")
                     }
                     showMcpActionSelector={pageFeatures.mcp.actionSelector}
+                    mcpActionAdminOnly={pageFeatures.visibility.mcp.actionSelector === "admin"}
                     actionValues={model.config.mcpToolIds}
                     onActionChange={(values) => {
                       onUpdateModel(model.id, (m) => ({

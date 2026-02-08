@@ -1,3 +1,5 @@
+import { resolvePhoneWithReuse } from "./memoryReuseRuntime";
+
 export function readOtpState(lastTurn: any) {
   const pending = Boolean(lastTurn?.bot_context?.otp_pending);
   return {
@@ -22,7 +24,6 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
     policyContext,
     prevPhoneFromTranscript,
     lastTurn,
-    extractPhone,
     hasAllowedToolName,
     mcpCandidateCalls,
     noteMcpSkip,
@@ -52,10 +53,12 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
     !otpPending
   ) {
     const otpDestination =
-      derivedPhone ||
-      (typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null) ||
-      prevPhoneFromTranscript ||
-      String(lastTurn?.bot_context?.otp_destination || "");
+      resolvePhoneWithReuse({
+        derivedPhone,
+        prevEntityPhone: typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null,
+        prevPhoneFromTranscript,
+        recentEntityPhone: String(lastTurn?.bot_context?.otp_destination || ""),
+      }) || "";
     if (!otpDestination) {
       const prompt = "개인정보 보호를 위해 먼저 본인확인이 필요합니다. 휴대폰 번호를 알려주세요.";
       const reply = makeReply(prompt);
@@ -407,10 +410,12 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
 
   if (resolvedOrderId && !customerVerificationToken && !otpVerifiedThisTurn && !otpPending) {
     const otpDestination =
-      derivedPhone ||
-      (typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null) ||
-      prevPhoneFromTranscript ||
-      String(lastTurn?.bot_context?.otp_destination || "");
+      resolvePhoneWithReuse({
+        derivedPhone,
+        prevEntityPhone: typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null,
+        prevPhoneFromTranscript,
+        recentEntityPhone: String(lastTurn?.bot_context?.otp_destination || ""),
+      }) || "";
     if (!otpDestination) {
       const prompt = "주문 조회/변경을 위해 본인인증이 필요합니다. 휴대폰 번호를 알려주세요.";
       const reply = makeReply(prompt);

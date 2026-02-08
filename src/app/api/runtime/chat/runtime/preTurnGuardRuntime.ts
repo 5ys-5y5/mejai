@@ -1,5 +1,6 @@
 import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "./quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
+import { readPendingPhoneReuse } from "./memoryReuseRuntime";
 
 type PreTurnGuardParams = {
   context: any;
@@ -99,8 +100,9 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
     };
   }
 
-  if (prevBotContext.phone_reuse_pending) {
-    const pendingPhone = normalizePhoneDigits(String(prevBotContext.pending_phone || ""));
+  const phoneReuseState = readPendingPhoneReuse(prevBotContext);
+  if (phoneReuseState.pending) {
+    const pendingPhone = normalizePhoneDigits(phoneReuseState.pendingPhone || "");
     if (isYesText(message) && pendingPhone) {
       nextDerivedPhone = pendingPhone;
       nextExpectedInput = "phone";

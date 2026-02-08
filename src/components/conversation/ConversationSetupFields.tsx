@@ -12,6 +12,7 @@ type Props = {
   inlineKbPlaceholder?: string;
   inlineKbTextareaClassName?: string;
   inlineKbLabelClassName?: string;
+  inlineKbAdminOnly?: boolean;
 
   showLlmSelector: boolean;
   llmValue: string;
@@ -21,6 +22,7 @@ type Props = {
   onToggleLlmInfo?: () => void;
   llmInfoOpen?: boolean;
   llmInfoText?: string;
+  llmAdminOnly?: boolean;
 
   middleContent?: ReactNode;
 
@@ -33,6 +35,7 @@ type Props = {
   onToggleMcpInfo?: () => void;
   mcpInfoOpen?: boolean;
   mcpInfoText?: string;
+  mcpProviderAdminOnly?: boolean;
 
   showMcpActionSelector: boolean;
   actionValues: string[];
@@ -40,7 +43,16 @@ type Props = {
   actionOptions: SelectOption[];
   actionPlaceholder?: string;
   actionSearchable?: boolean;
+  mcpActionAdminOnly?: boolean;
 };
+
+function AdminBadge() {
+  return (
+    <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+      ADMIN
+    </span>
+  );
+}
 
 export function ConversationSetupFields({
   showInlineUserKbInput,
@@ -50,6 +62,7 @@ export function ConversationSetupFields({
   inlineKbPlaceholder = "예) 고객 정책, FAQ, 톤 가이드",
   inlineKbTextareaClassName = "h-24 w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700",
   inlineKbLabelClassName = "mb-1 text-[11px] font-semibold text-slate-600",
+  inlineKbAdminOnly = false,
   showLlmSelector,
   llmValue,
   onLlmChange,
@@ -58,6 +71,7 @@ export function ConversationSetupFields({
   onToggleLlmInfo,
   llmInfoOpen = false,
   llmInfoText = "",
+  llmAdminOnly = false,
   middleContent,
   showMcpProviderSelector,
   providerValues,
@@ -68,18 +82,23 @@ export function ConversationSetupFields({
   onToggleMcpInfo,
   mcpInfoOpen = false,
   mcpInfoText = "",
+  mcpProviderAdminOnly = false,
   showMcpActionSelector,
   actionValues,
   onActionChange,
   actionOptions,
   actionPlaceholder = "선택",
   actionSearchable = false,
+  mcpActionAdminOnly = false,
 }: Props) {
   return (
     <div className="space-y-3">
       {showInlineUserKbInput ? (
         <div>
-          <div className={inlineKbLabelClassName}>{inlineKbLabel}</div>
+          <div className={`${inlineKbLabelClassName} flex items-center gap-1`}>
+            <span>{inlineKbLabel}</span>
+            {inlineKbAdminOnly ? <AdminBadge /> : null}
+          </div>
           <textarea
             value={inlineKbValue}
             onChange={(event) => onInlineKbChange(event.target.value)}
@@ -91,7 +110,10 @@ export function ConversationSetupFields({
 
       {showLlmSelector ? (
         <div>
-          <div className="mb-1 text-[11px] font-semibold text-slate-600">LLM 선택</div>
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+            <span>LLM 선택</span>
+            {llmAdminOnly ? <AdminBadge /> : null}
+          </div>
           <div className="flex items-center gap-2">
             <SelectPopover value={llmValue} onChange={onLlmChange} options={llmOptions} className="flex-1 min-w-0" />
             {showLlmInfoButton ? (
@@ -119,7 +141,10 @@ export function ConversationSetupFields({
 
       {showMcpProviderSelector ? (
         <div>
-          <div className="mb-1 text-[11px] font-semibold text-slate-600">MCP 프로바이더 선택</div>
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+            <span>MCP 프로바이더 선택</span>
+            {mcpProviderAdminOnly ? <AdminBadge /> : null}
+          </div>
           <div className="flex items-center gap-2">
             <MultiSelectPopover
               values={providerValues}
@@ -146,7 +171,10 @@ export function ConversationSetupFields({
 
       {showMcpActionSelector ? (
         <div>
-          <div className="mb-1 text-[11px] font-semibold text-slate-600">MCP 액션 선택</div>
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+            <span>MCP 액션 선택</span>
+            {mcpActionAdminOnly ? <AdminBadge /> : null}
+          </div>
           <div className="flex items-center gap-2">
             <MultiSelectPopover
               values={actionValues}
@@ -171,4 +199,3 @@ export function ConversationSetupFields({
     </div>
   );
 }
-

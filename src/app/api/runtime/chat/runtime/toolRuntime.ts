@@ -959,5 +959,57 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions }), resolvedOrderId, policyContext };
   }
 
+  const listOrdersTokenRefreshFailure = toolResults.find((tool: any) => {
+    if (tool.name !== "list_orders" || tool.ok) return false;
+    const errorText = String(tool.error || "").toUpperCase();
+    return (
+      errorText.includes("TOKEN_REFRESH_FAILED") ||
+      errorText.includes("INVALID_GRANT") ||
+      errorText.includes("INVALID_REFRESH_TOKEN")
+    );
+  });
+  if (listOrdersTokenRefreshFailure) {
+    const maskedPhone = typeof policyContext.entity?.phone === "string" ? maskPhone(policyContext.entity.phone) : "-";
+    const reply = makeReply(
+      `입력하신 번호(${maskedPhone})로 주문 조회를 시도했지만 Cafe24 인증 갱신에 실패해 조회를 완료하지 못했습니다.
+관리자에게 Cafe24 앱 재연동(토큰 재발급)을 요청해 주세요. 재연동 전에는 주문번호를 직접 알려주시면 이어서 처리할 수 있습니다.`
+    );
+    await insertTurn({
+      session_id: sessionId,
+      seq: nextSeq,
+      transcript_text: message,
+      answer_text: reply,
+      final_answer: reply,
+      bot_context: {
+        intent_name: resolvedIntent,
+        entity: policyContext.entity,
+        selected_order_id: resolvedOrderId,
+        customer_verification_token: customerVerificationToken,
+        mcp_actions: mcpActions,
+      },
+    });
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "EXECUTION_GUARD_TRIGGERED",
+      {
+        reason: "MCP_TOKEN_REFRESH_FAILED",
+        tool: "list_orders",
+        error: String(listOrdersTokenRefreshFailure.error || "TOKEN_REFRESH_FAILED"),
+      },
+      { intent_name: resolvedIntent }
+    );
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "FINAL_ANSWER_READY",
+      { answer: reply, model: "deterministic_token_refresh_guard" },
+      { intent_name: resolvedIntent }
+    );
+    return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions }), resolvedOrderId, policyContext };
+  }
+
   return { response: null, resolvedOrderId, policyContext };
 }

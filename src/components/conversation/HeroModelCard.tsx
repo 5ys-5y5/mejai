@@ -125,21 +125,25 @@ export function HeroModelCard({
         <div className="hero-left-pane p-4">
           <ConversationSetupFields
             showInlineUserKbInput={pageFeatures.setup.inlineUserKbInput}
+            inlineKbAdminOnly={pageFeatures.visibility.setup.inlineUserKbInput === "admin"}
             inlineKbValue={userKb}
             onInlineKbChange={onChangeUserKb}
             inlineKbLabelClassName="mb-1 text-[11px] font-semibold text-slate-600"
             inlineKbPlaceholder="예) 고객 정책, 자주 묻는 질문, 톤 가이드 등을 입력하세요."
             inlineKbTextareaClassName="hero-input h-36 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-300"
             showLlmSelector={pageFeatures.setup.llmSelector}
+            llmAdminOnly={pageFeatures.visibility.setup.llmSelector === "admin"}
             llmValue={selectedLlm}
             onLlmChange={(value) => onSelectLlm(value as "chatgpt" | "gemini")}
             llmOptions={llmOptions}
             showMcpProviderSelector={pageFeatures.mcp.providerSelector}
+            mcpProviderAdminOnly={pageFeatures.visibility.mcp.providerSelector === "admin"}
             providerValues={selectedProviderKeys}
             onProviderChange={onChangeProviderKeys}
             providerOptions={providerOptions}
             providerPlaceholder="선택"
             showMcpActionSelector={pageFeatures.mcp.actionSelector}
+            mcpActionAdminOnly={pageFeatures.visibility.mcp.actionSelector === "admin"}
             actionValues={selectedMcpToolIds}
             onActionChange={onChangeMcpToolIds}
             actionOptions={actionOptions}

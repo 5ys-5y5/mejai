@@ -19,6 +19,19 @@ type IdGate = {
   denylist?: string[];
 };
 
+export type FeatureVisibilityMode = "user" | "admin";
+
+type VisibilityFields<T extends Record<string, unknown>> = {
+  [K in keyof T as T[K] extends boolean ? K : never]: FeatureVisibilityMode;
+};
+
+type ConversationFeatureVisibility = {
+  mcp: VisibilityFields<ConversationPageFeatures["mcp"]>;
+  adminPanel: VisibilityFields<ConversationPageFeatures["adminPanel"]>;
+  interaction: VisibilityFields<ConversationPageFeatures["interaction"]>;
+  setup: VisibilityFields<ConversationPageFeatures["setup"]>;
+};
+
 export type ConversationPageFeatures = {
   mcp: {
     /** MCP provider 선택 UI 노출 여부 */
@@ -76,12 +89,17 @@ export type ConversationPageFeatures = {
     /** 기본 LLM */
     defaultLlm: "chatgpt" | "gemini";
   };
+  /** on/off 기능의 user/admin 가시성 제어 */
+  visibility: ConversationFeatureVisibility;
 };
 
 export type ConversationPageFeaturesOverride = Partial<ConversationPageFeatures>;
 
 export type ConversationFeaturesProviderShape = {
   pages?: Partial<Record<ConversationPageKey, ConversationPageFeaturesOverride>>;
+  settings_ui?: {
+    chat_card_base_width?: number;
+  };
 };
 
 function inAllowlist(id: string, allowlist?: string[]) {
@@ -146,6 +164,38 @@ export function mergeConversationPageFeatures(
       defaultSetupMode: override.setup?.defaultSetupMode ?? base.setup.defaultSetupMode,
       defaultLlm: override.setup?.defaultLlm ?? base.setup.defaultLlm,
     },
+    visibility: {
+      mcp: {
+        providerSelector: override.visibility?.mcp?.providerSelector ?? base.visibility.mcp.providerSelector,
+        actionSelector: override.visibility?.mcp?.actionSelector ?? base.visibility.mcp.actionSelector,
+      },
+      adminPanel: {
+        enabled: override.visibility?.adminPanel?.enabled ?? base.visibility.adminPanel.enabled,
+        selectionToggle: override.visibility?.adminPanel?.selectionToggle ?? base.visibility.adminPanel.selectionToggle,
+        logsToggle: override.visibility?.adminPanel?.logsToggle ?? base.visibility.adminPanel.logsToggle,
+        messageSelection: override.visibility?.adminPanel?.messageSelection ?? base.visibility.adminPanel.messageSelection,
+        messageMeta: override.visibility?.adminPanel?.messageMeta ?? base.visibility.adminPanel.messageMeta,
+        copyConversation:
+          override.visibility?.adminPanel?.copyConversation ?? base.visibility.adminPanel.copyConversation,
+        copyIssue: override.visibility?.adminPanel?.copyIssue ?? base.visibility.adminPanel.copyIssue,
+      },
+      interaction: {
+        quickReplies: override.visibility?.interaction?.quickReplies ?? base.visibility.interaction.quickReplies,
+        productCards: override.visibility?.interaction?.productCards ?? base.visibility.interaction.productCards,
+        inputSubmit: override.visibility?.interaction?.inputSubmit ?? base.visibility.interaction.inputSubmit,
+      },
+      setup: {
+        modelSelector: override.visibility?.setup?.modelSelector ?? base.visibility.setup.modelSelector,
+        llmSelector: override.visibility?.setup?.llmSelector ?? base.visibility.setup.llmSelector,
+        kbSelector: override.visibility?.setup?.kbSelector ?? base.visibility.setup.kbSelector,
+        adminKbSelector: override.visibility?.setup?.adminKbSelector ?? base.visibility.setup.adminKbSelector,
+        modeExisting: override.visibility?.setup?.modeExisting ?? base.visibility.setup.modeExisting,
+        modeNew: override.visibility?.setup?.modeNew ?? base.visibility.setup.modeNew,
+        routeSelector: override.visibility?.setup?.routeSelector ?? base.visibility.setup.routeSelector,
+        inlineUserKbInput:
+          override.visibility?.setup?.inlineUserKbInput ?? base.visibility.setup.inlineUserKbInput,
+      },
+    },
   };
 }
 
@@ -172,6 +222,85 @@ export function isProviderEnabled(providerKey: string, features: ConversationPag
 
 export function isToolEnabled(toolId: string, features: ConversationPageFeatures) {
   return isEnabledByGate(toolId, features.mcp.tools);
+}
+
+function withVisibilityFlag(enabled: boolean, visibility: FeatureVisibilityMode, isAdminUser: boolean) {
+  if (!enabled) return false;
+  if (visibility === "admin" && !isAdminUser) return false;
+  return true;
+}
+
+export function applyConversationFeatureVisibility(
+  features: ConversationPageFeatures,
+  isAdminUser: boolean
+): ConversationPageFeatures {
+  return {
+    ...features,
+    mcp: {
+      ...features.mcp,
+      providerSelector: withVisibilityFlag(
+        features.mcp.providerSelector,
+        features.visibility.mcp.providerSelector,
+        isAdminUser
+      ),
+      actionSelector: withVisibilityFlag(features.mcp.actionSelector, features.visibility.mcp.actionSelector, isAdminUser),
+    },
+    adminPanel: {
+      ...features.adminPanel,
+      enabled: withVisibilityFlag(features.adminPanel.enabled, features.visibility.adminPanel.enabled, isAdminUser),
+      selectionToggle: withVisibilityFlag(
+        features.adminPanel.selectionToggle,
+        features.visibility.adminPanel.selectionToggle,
+        isAdminUser
+      ),
+      logsToggle: withVisibilityFlag(features.adminPanel.logsToggle, features.visibility.adminPanel.logsToggle, isAdminUser),
+      messageSelection: withVisibilityFlag(
+        features.adminPanel.messageSelection,
+        features.visibility.adminPanel.messageSelection,
+        isAdminUser
+      ),
+      messageMeta: withVisibilityFlag(features.adminPanel.messageMeta, features.visibility.adminPanel.messageMeta, isAdminUser),
+      copyConversation: withVisibilityFlag(
+        features.adminPanel.copyConversation,
+        features.visibility.adminPanel.copyConversation,
+        isAdminUser
+      ),
+      copyIssue: withVisibilityFlag(features.adminPanel.copyIssue, features.visibility.adminPanel.copyIssue, isAdminUser),
+    },
+    interaction: {
+      ...features.interaction,
+      quickReplies: withVisibilityFlag(
+        features.interaction.quickReplies,
+        features.visibility.interaction.quickReplies,
+        isAdminUser
+      ),
+      productCards: withVisibilityFlag(
+        features.interaction.productCards,
+        features.visibility.interaction.productCards,
+        isAdminUser
+      ),
+      inputSubmit: withVisibilityFlag(features.interaction.inputSubmit, features.visibility.interaction.inputSubmit, isAdminUser),
+    },
+    setup: {
+      ...features.setup,
+      modelSelector: withVisibilityFlag(features.setup.modelSelector, features.visibility.setup.modelSelector, isAdminUser),
+      llmSelector: withVisibilityFlag(features.setup.llmSelector, features.visibility.setup.llmSelector, isAdminUser),
+      kbSelector: withVisibilityFlag(features.setup.kbSelector, features.visibility.setup.kbSelector, isAdminUser),
+      adminKbSelector: withVisibilityFlag(
+        features.setup.adminKbSelector,
+        features.visibility.setup.adminKbSelector,
+        isAdminUser
+      ),
+      modeExisting: withVisibilityFlag(features.setup.modeExisting, features.visibility.setup.modeExisting, isAdminUser),
+      modeNew: withVisibilityFlag(features.setup.modeNew, features.visibility.setup.modeNew, isAdminUser),
+      routeSelector: withVisibilityFlag(features.setup.routeSelector, features.visibility.setup.routeSelector, isAdminUser),
+      inlineUserKbInput: withVisibilityFlag(
+        features.setup.inlineUserKbInput,
+        features.visibility.setup.inlineUserKbInput,
+        isAdminUser
+      ),
+    },
+  };
 }
 
 /**
@@ -222,6 +351,36 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
+    visibility: {
+      mcp: {
+        providerSelector: "user",
+        actionSelector: "user",
+      },
+      adminPanel: {
+        enabled: "user",
+        selectionToggle: "user",
+        logsToggle: "user",
+        messageSelection: "user",
+        messageMeta: "user",
+        copyConversation: "user",
+        copyIssue: "user",
+      },
+      interaction: {
+        quickReplies: "user",
+        productCards: "user",
+        inputSubmit: "user",
+      },
+      setup: {
+        modelSelector: "user",
+        llmSelector: "user",
+        kbSelector: "user",
+        adminKbSelector: "admin",
+        modeExisting: "user",
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
+      },
+    },
   },
   "/app/laboratory": {
     mcp: {
@@ -256,6 +415,36 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
       inlineUserKbInput: false,
       defaultSetupMode: "existing",
       defaultLlm: "chatgpt",
+    },
+    visibility: {
+      mcp: {
+        providerSelector: "user",
+        actionSelector: "user",
+      },
+      adminPanel: {
+        enabled: "admin",
+        selectionToggle: "admin",
+        logsToggle: "admin",
+        messageSelection: "admin",
+        messageMeta: "admin",
+        copyConversation: "admin",
+        copyIssue: "admin",
+      },
+      interaction: {
+        quickReplies: "user",
+        productCards: "user",
+        inputSubmit: "user",
+      },
+      setup: {
+        modelSelector: "user",
+        llmSelector: "user",
+        kbSelector: "user",
+        adminKbSelector: "admin",
+        modeExisting: "user",
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
+      },
     },
   },
 };

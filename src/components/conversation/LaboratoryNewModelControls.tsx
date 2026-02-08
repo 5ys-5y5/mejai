@@ -5,6 +5,7 @@ import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/componen
 
 type Props = {
   showKbSelector: boolean;
+  kbAdminOnly?: boolean;
   kbValue: string;
   kbOptions: SelectOption[];
   onKbChange: (value: string) => void;
@@ -13,6 +14,7 @@ type Props = {
   kbInfoText: string;
 
   showAdminKbSelector: boolean;
+  adminKbAdminOnly?: boolean;
   adminKbValues: string[];
   adminKbOptions: SelectOption[];
   onAdminKbChange: (values: string[]) => void;
@@ -21,6 +23,7 @@ type Props = {
   adminKbInfoText: string;
 
   showRouteSelector: boolean;
+  routeAdminOnly?: boolean;
   routeValue: string;
   routeOptions: SelectOption[];
   onRouteChange: (value: string) => void;
@@ -31,6 +34,7 @@ type Props = {
 
 export function LaboratoryNewModelControls({
   showKbSelector,
+  kbAdminOnly = false,
   kbValue,
   kbOptions,
   onKbChange,
@@ -38,6 +42,7 @@ export function LaboratoryNewModelControls({
   onToggleKbInfo,
   kbInfoText,
   showAdminKbSelector,
+  adminKbAdminOnly = true,
   adminKbValues,
   adminKbOptions,
   onAdminKbChange,
@@ -45,6 +50,7 @@ export function LaboratoryNewModelControls({
   onToggleAdminKbInfo,
   adminKbInfoText,
   showRouteSelector,
+  routeAdminOnly = false,
   routeValue,
   routeOptions,
   onRouteChange,
@@ -56,7 +62,14 @@ export function LaboratoryNewModelControls({
     <>
       {showKbSelector ? (
         <div>
-          <div className="mb-1 text-[11px] font-semibold text-slate-600">KB 선택</div>
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+            <span>KB 선택</span>
+            {kbAdminOnly ? (
+              <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                ADMIN
+              </span>
+            ) : null}
+          </div>
           <div className="flex items-center gap-2">
             <SelectPopover
               value={kbValue}
@@ -88,9 +101,11 @@ export function LaboratoryNewModelControls({
         <div>
           <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
             <span>관리자 KB 선택</span>
-            <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
-              ADMIN
-            </span>
+            {adminKbAdminOnly ? (
+              <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                ADMIN
+              </span>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
             <MultiSelectPopover
@@ -123,7 +138,14 @@ export function LaboratoryNewModelControls({
 
       {showRouteSelector ? (
         <div>
-          <div className="mb-1 text-[11px] font-semibold text-slate-600">Runtime 선택</div>
+          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+            <span>Runtime 선택</span>
+            {routeAdminOnly ? (
+              <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                ADMIN
+              </span>
+            ) : null}
+          </div>
           <div className="flex items-center gap-2">
             <SelectPopover value={routeValue} onChange={onRouteChange} options={routeOptions} className="flex-1 min-w-0" />
             <button
@@ -147,4 +169,3 @@ export function LaboratoryNewModelControls({
     </>
   );
 }
-

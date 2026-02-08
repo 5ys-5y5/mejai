@@ -28,7 +28,8 @@ const NEW_MODEL_CONFIG = {
 };
 
 export function useHeroPageController() {
-  const { features: pageFeatures } = useConversationPageFeatures("/");
+  const [isAdminUser, setIsAdminUser] = useState(false);
+  const { features: pageFeatures } = useConversationPageFeatures("/", isAdminUser);
   const [input, setInput] = useState("");
   const [userKb, setUserKb] = useState("");
   const [providerOptions, setProviderOptions] = useState<SelectOption[]>([]);
@@ -36,7 +37,6 @@ export function useHeroPageController() {
   const [selectedProviderKeys, setSelectedProviderKeys] = useState<string[]>(["solapi", "juso"]);
   const [selectedMcpToolIds, setSelectedMcpToolIds] = useState<string[]>([]);
   const [selectedLlmOverride, setSelectedLlmOverride] = useState<"chatgpt" | "gemini" | null>(null);
-  const [isAdminUser, setIsAdminUser] = useState(false);
   const [adminLogControlsOpen, setAdminLogControlsOpen] = useState(false);
   const [chatSelectionEnabled, setChatSelectionEnabled] = useState(false);
   const [showAdminLogs, setShowAdminLogs] = useState(false);

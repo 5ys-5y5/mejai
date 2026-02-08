@@ -1,6 +1,7 @@
 import type { ChatMessage } from "@/lib/llm_mk2";
 import { YES_NO_QUICK_REPLIES, maybeBuildYesNoQuickReplyRule } from "./quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
+import { canOfferPhoneReusePrompt } from "./memoryReuseRuntime";
 
 export function buildFinalLlmMessages(input: {
   message: string;
@@ -174,11 +175,17 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
     const forcedTemplate = normalizeOrderChangeAddressPrompt(resolvedIntent, outputGate.actions.forcedResponse);
     const rawPhone = typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : "";
     const normalizedPhone = normalizePhoneDigits(rawPhone);
-    const hasReusablePhone = normalizedPhone.length >= 10;
     const isNeedOrderIdTemplate =
       forcedTemplate === (compiledPolicy.templates?.order_change_need_order_id || "") ||
       usedTemplateIds.includes("order_change_need_order_id");
-    if (resolvedIntent === "order_change" && isNeedOrderIdTemplate && hasReusablePhone && !listOrdersCalled) {
+    if (
+      canOfferPhoneReusePrompt({
+        resolvedIntent,
+        isNeedOrderIdTemplate,
+        normalizedPhone,
+        listOrdersCalled,
+      })
+    ) {
       phoneReusePending = true;
       finalAnswer = buildYesNoConfirmationPrompt(`이미 제공해주신 휴대폰 번호(${maskPhone(normalizedPhone)})로 주문을 조회할까요?`, {
         entity: policyContext.entity,

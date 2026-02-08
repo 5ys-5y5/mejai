@@ -7,6 +7,7 @@ import {
   PAGE_CONVERSATION_FEATURES,
   mergeConversationPageFeatures,
   type ConversationFeaturesProviderShape,
+  type FeatureVisibilityMode,
   type ConversationPageFeatures,
   type ConversationPageKey,
 } from "@/lib/conversation/pageFeaturePolicy";
@@ -15,6 +16,14 @@ const PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory"];
 
 type Props = {
   authToken: string;
+};
+
+type GovernanceConfig = {
+  enabled: boolean;
+  visibility_mode: "user" | "admin";
+  source: "principles_default" | "event_override";
+  updated_at: string | null;
+  updated_by: string | null;
 };
 
 type SettingFileItem = {
@@ -39,10 +48,12 @@ function toCsv(values?: string[]) {
 type ToggleFieldProps = {
   label: string;
   checked: boolean;
+  visibility: FeatureVisibilityMode;
   onChange: (checked: boolean) => void;
+  onChangeVisibility: (mode: FeatureVisibilityMode) => void;
 };
 
-function ToggleField({ label, checked, onChange }: ToggleFieldProps) {
+function ToggleField({ label, checked, visibility, onChange, onChangeVisibility }: ToggleFieldProps) {
   return (
     <label
       className={
@@ -52,17 +63,30 @@ function ToggleField({ label, checked, onChange }: ToggleFieldProps) {
       }
     >
       <span className={checked ? "font-semibold text-emerald-900" : "font-semibold text-rose-900"}>{label}</span>
-      <button
-        type="button"
-        onClick={() => onChange(!checked)}
-        className={
-          checked
-            ? "rounded-md border border-emerald-900 bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
-            : "rounded-md border border-rose-700 bg-rose-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
-        }
-      >
-        {checked ? "ON" : "OFF"}
-      </button>
+      <span className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => onChange(!checked)}
+          className={
+            checked
+              ? "rounded-md border border-emerald-900 bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+              : "rounded-md border border-rose-700 bg-rose-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+          }
+        >
+          {checked ? "ON" : "OFF"}
+        </button>
+        <button
+          type="button"
+          onClick={() => onChangeVisibility(visibility === "user" ? "admin" : "user")}
+          className={
+            visibility === "admin"
+              ? "rounded-md border border-amber-700 bg-amber-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+              : "rounded-md border border-slate-700 bg-slate-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+          }
+        >
+          {visibility === "admin" ? "ADMIN" : "USER"}
+        </button>
+      </span>
     </label>
   );
 }
@@ -229,6 +253,10 @@ export function ChatSettingsPanel({ authToken }: Props) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [governanceConfig, setGovernanceConfig] = useState<GovernanceConfig | null>(null);
+  const [cardBaseWidth, setCardBaseWidth] = useState(240);
+  const [cardBaseWidthDraft, setCardBaseWidthDraft] = useState("240");
+  const [isLgViewport, setIsLgViewport] = useState(false);
   const [draftByPage, setDraftByPage] = useState<Record<ConversationPageKey, ConversationPageFeatures>>({
     "/": PAGE_CONVERSATION_FEATURES["/"],
     "/app/laboratory": PAGE_CONVERSATION_FEATURES["/app/laboratory"],
@@ -273,6 +301,24 @@ export function ChatSettingsPanel({ authToken }: Props) {
         return;
       }
       applyProviderToDraft(payload.provider || null);
+      const loadedCardWidth = Number(payload.provider?.settings_ui?.chat_card_base_width);
+      const nextCardWidth = Number.isFinite(loadedCardWidth)
+        ? Math.max(180, Math.min(480, Math.round(loadedCardWidth)))
+        : 240;
+      setCardBaseWidth(nextCardWidth);
+      setCardBaseWidthDraft(String(nextCardWidth));
+      try {
+        const governanceRes = await fetch("/api/runtime/governance/config", {
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+          cache: "no-store",
+        });
+        if (governanceRes.ok) {
+          const governancePayload = (await governanceRes.json()) as { config?: GovernanceConfig };
+          if (governancePayload.config) setGovernanceConfig(governancePayload.config);
+        }
+      } catch {
+        // governance config is optional for this panel
+      }
     } catch {
       setError("대화 설정을 불러오지 못했습니다.");
     } finally {
@@ -280,12 +326,39 @@ export function ChatSettingsPanel({ authToken }: Props) {
     }
   }, [applyProviderToDraft, authToken]);
 
+  const saveGovernanceConfig = useCallback(
+    async (next: { enabled: boolean; visibility_mode: "user" | "admin" }) => {
+      const res = await fetch("/api/runtime/governance/config", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(next),
+      });
+      const payload = (await res.json()) as { config?: GovernanceConfig; error?: string };
+      if (!res.ok || payload.error || !payload.config) {
+        throw new Error(payload.error || "self update 설정 저장에 실패했습니다.");
+      }
+      setGovernanceConfig(payload.config);
+      setSavedAt(new Date().toLocaleString("ko-KR"));
+    },
+    [headers]
+  );
+
   useEffect(() => {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsLgViewport(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
   const handleResetToDefaults = () => {
     applyProviderToDraft(null);
+    setCardBaseWidthDraft("240");
     setError(null);
   };
 
@@ -297,13 +370,22 @@ export function ChatSettingsPanel({ authToken }: Props) {
         "/": draftByPage["/"],
         "/app/laboratory": draftByPage["/app/laboratory"],
       };
+      const parsedDraft = Number(cardBaseWidthDraft);
+      const nextCardWidth = Number.isFinite(parsedDraft)
+        ? Math.max(180, Math.min(480, Math.round(parsedDraft)))
+        : cardBaseWidth;
 
       const res = await fetch("/api/auth-settings/providers", {
         method: "POST",
         headers,
         body: JSON.stringify({
           provider: "chat_policy",
-          values: { pages },
+          values: {
+            pages,
+            settings_ui: {
+              chat_card_base_width: nextCardWidth,
+            },
+          },
           commit: true,
         }),
       });
@@ -311,6 +393,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
       if (!res.ok || payload.error || !payload.ok) {
         throw new Error(payload.error || "대화 설정 저장에 실패했습니다.");
       }
+      setCardBaseWidth(nextCardWidth);
       setSavedAt(new Date().toLocaleString("ko-KR"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "대화 설정 저장에 실패했습니다.");
@@ -329,7 +412,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
         {loading ? <div className="mt-2 text-xs text-slate-500">불러오는 중...</div> : null}
         {error ? <div className="mt-2 text-xs text-rose-600">{error}</div> : null}
         {savedAt ? <div className="mt-2 text-xs text-slate-500">저장됨: {savedAt}</div> : null}
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button type="button" variant="outline" onClick={() => void load()} disabled={loading || saving}>
             새로고침
           </Button>
@@ -339,6 +422,19 @@ export function ChatSettingsPanel({ authToken }: Props) {
           <Button type="button" onClick={handleSave} disabled={loading || saving}>
             {saving ? "저장 중..." : "저장"}
           </Button>
+          <input
+            type="text"
+            inputMode="numeric"
+            value={cardBaseWidthDraft}
+            onChange={(e) => {
+              const next = e.target.value;
+              if (/^\d*$/.test(next)) {
+                setCardBaseWidthDraft(next);
+              }
+            }}
+            placeholder="숫자 (카드 폭)"
+            className="h-9 w-28 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
+          />
         </div>
       </Card>
 
@@ -347,22 +443,67 @@ export function ChatSettingsPanel({ authToken }: Props) {
           {PAGE_KEYS.map((page) => {
             const draft = draftByPage[page];
             return (
-              <Card key={page} className="w-[240px] shrink-0 p-4 lg:w-[260px]">
+              <Card
+                key={page}
+                className="shrink-0 p-4"
+                style={{ width: `${isLgViewport ? cardBaseWidth + 20 : cardBaseWidth}px` }}
+              >
                 <div className="text-sm font-semibold text-slate-900">{page}</div>
                 <div className="mt-1 text-xs text-slate-500">해당 페이지에서 실제 적용될 대화 기능 설정</div>
 
                 <div className="mt-4 space-y-4">
                   <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs font-semibold text-slate-900">Runtime Self Update</div>
+                    <div className="text-[11px] text-slate-500">
+                      기준: <code>src/app/api/runtime/chat/policies/principles.ts</code>
+                    </div>
+                    <ToggleField
+                      label="Self Update 활성화"
+                      checked={Boolean(governanceConfig?.enabled)}
+                      visibility={governanceConfig?.visibility_mode || "admin"}
+                      onChange={(v) =>
+                        void saveGovernanceConfig({
+                          enabled: v,
+                          visibility_mode: governanceConfig?.visibility_mode || "admin",
+                        })
+                      }
+                      onChangeVisibility={(mode) =>
+                        void saveGovernanceConfig({
+                          enabled: governanceConfig?.enabled ?? true,
+                          visibility_mode: mode,
+                        })
+                      }
+                    />
+                    <div className="text-[11px] text-slate-500">
+                      상태: {governanceConfig?.enabled ? "활성" : "비활성"} / visible: {governanceConfig?.visibility_mode || "-"}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs font-semibold text-slate-900">MCP</div>
                     <ToggleField
                       label="Provider 선택"
                       checked={draft.mcp.providerSelector}
+                      visibility={draft.visibility.mcp.providerSelector}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, providerSelector: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, mcp: { ...prev.visibility.mcp, providerSelector: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="Action 선택"
                       checked={draft.mcp.actionSelector}
+                      visibility={draft.visibility.mcp.actionSelector}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, actionSelector: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, mcp: { ...prev.visibility.mcp, actionSelector: mode } },
+                        }))
+                      }
                     />
                     <GateField
                       label="Provider Allowlist"
@@ -415,43 +556,101 @@ export function ChatSettingsPanel({ authToken }: Props) {
                     <ToggleField
                       label="패널 활성화"
                       checked={draft.adminPanel.enabled}
+                      visibility={draft.visibility.adminPanel.enabled}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, enabled: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, enabled: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="선택 토글"
                       checked={draft.adminPanel.selectionToggle}
+                      visibility={draft.visibility.adminPanel.selectionToggle}
                       onChange={(v) =>
                         updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, selectionToggle: v } }))
+                      }
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: {
+                            ...prev.visibility,
+                            adminPanel: { ...prev.visibility.adminPanel, selectionToggle: mode },
+                          },
+                        }))
                       }
                     />
                     <ToggleField
                       label="로그 토글"
                       checked={draft.adminPanel.logsToggle}
+                      visibility={draft.visibility.adminPanel.logsToggle}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, logsToggle: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, logsToggle: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="메시지 선택"
                       checked={draft.adminPanel.messageSelection}
+                      visibility={draft.visibility.adminPanel.messageSelection}
                       onChange={(v) =>
                         updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, messageSelection: v } }))
+                      }
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: {
+                            ...prev.visibility,
+                            adminPanel: { ...prev.visibility.adminPanel, messageSelection: mode },
+                          },
+                        }))
                       }
                     />
                     <ToggleField
                       label="메시지 메타"
                       checked={draft.adminPanel.messageMeta}
+                      visibility={draft.visibility.adminPanel.messageMeta}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, messageMeta: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, messageMeta: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="대화 복사"
                       checked={draft.adminPanel.copyConversation}
+                      visibility={draft.visibility.adminPanel.copyConversation}
                       onChange={(v) =>
                         updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, copyConversation: v } }))
+                      }
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: {
+                            ...prev.visibility,
+                            adminPanel: { ...prev.visibility.adminPanel, copyConversation: mode },
+                          },
+                        }))
                       }
                     />
                     <ToggleField
                       label="문제 로그 복사"
                       checked={draft.adminPanel.copyIssue}
+                      visibility={draft.visibility.adminPanel.copyIssue}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, copyIssue: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, copyIssue: mode } },
+                        }))
+                      }
                     />
                   </div>
                   <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -459,17 +658,47 @@ export function ChatSettingsPanel({ authToken }: Props) {
                     <ToggleField
                       label="Quick Replies"
                       checked={draft.interaction.quickReplies}
+                      visibility={draft.visibility.interaction.quickReplies}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, quickReplies: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: {
+                            ...prev.visibility,
+                            interaction: { ...prev.visibility.interaction, quickReplies: mode },
+                          },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="Product Cards"
                       checked={draft.interaction.productCards}
+                      visibility={draft.visibility.interaction.productCards}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, productCards: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: {
+                            ...prev.visibility,
+                            interaction: { ...prev.visibility.interaction, productCards: mode },
+                          },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="입력/전송"
                       checked={draft.interaction.inputSubmit}
+                      visibility={draft.visibility.interaction.inputSubmit}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, inputSubmit: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: {
+                            ...prev.visibility,
+                            interaction: { ...prev.visibility.interaction, inputSubmit: mode },
+                          },
+                        }))
+                      }
                     />
                   </div>
 
@@ -478,42 +707,101 @@ export function ChatSettingsPanel({ authToken }: Props) {
                     <ToggleField
                       label="모델 선택"
                       checked={draft.setup.modelSelector}
+                      visibility={draft.visibility.setup.modelSelector}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modelSelector: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modelSelector: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="LLM 선택"
                       checked={draft.setup.llmSelector}
+                      visibility={draft.visibility.setup.llmSelector}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, llmSelector: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, llmSelector: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="KB 선택(저장)"
                       checked={draft.setup.kbSelector}
+                      visibility={draft.visibility.setup.kbSelector}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, kbSelector: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, kbSelector: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="Admin KB 선택"
                       checked={draft.setup.adminKbSelector}
+                      visibility={draft.visibility.setup.adminKbSelector}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, adminKbSelector: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, adminKbSelector: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="Existing 모드"
                       checked={draft.setup.modeExisting}
+                      visibility={draft.visibility.setup.modeExisting}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeExisting: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeExisting: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="New 모드"
                       checked={draft.setup.modeNew}
+                      visibility={draft.visibility.setup.modeNew}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeNew: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeNew: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="Route 선택"
                       checked={draft.setup.routeSelector}
+                      visibility={draft.visibility.setup.routeSelector}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, routeSelector: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, routeSelector: mode } },
+                        }))
+                      }
                     />
                     <ToggleField
                       label="KB 입력(임시)"
                       checked={draft.setup.inlineUserKbInput}
+                      visibility={draft.visibility.setup.inlineUserKbInput}
                       onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, inlineUserKbInput: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: {
+                            ...prev.visibility,
+                            setup: { ...prev.visibility.setup, inlineUserKbInput: mode },
+                          },
+                        }))
+                      }
                     />
                     <label className="block">
                       <div className="mb-1 text-[11px] font-semibold text-slate-600">기본 모드</div>

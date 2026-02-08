@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
 import {
+  applyConversationFeatureVisibility,
   PAGE_CONVERSATION_FEATURES,
   resolveConversationPageFeatures,
   type ConversationFeaturesProviderShape,
@@ -10,7 +11,7 @@ import {
   type ConversationPageKey,
 } from "@/lib/conversation/pageFeaturePolicy";
 
-export function useConversationPageFeatures(page: ConversationPageKey) {
+export function useConversationPageFeatures(page: ConversationPageKey, isAdminUser = false) {
   const [providerValue, setProviderValue] = useState<ConversationFeaturesProviderShape | null>(null);
 
   useEffect(() => {
@@ -44,10 +45,10 @@ export function useConversationPageFeatures(page: ConversationPageKey) {
     };
   }, []);
 
-  const features: ConversationPageFeatures = useMemo(
-    () => resolveConversationPageFeatures(page, providerValue),
-    [page, providerValue]
-  );
+  const features: ConversationPageFeatures = useMemo(() => {
+    const resolved = resolveConversationPageFeatures(page, providerValue);
+    return applyConversationFeatureVisibility(resolved, isAdminUser);
+  }, [isAdminUser, page, providerValue]);
 
   return {
     defaults: PAGE_CONVERSATION_FEATURES[page],

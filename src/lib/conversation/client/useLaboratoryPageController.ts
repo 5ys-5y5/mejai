@@ -31,7 +31,8 @@ import { formatKstDateTime } from "@/lib/kst";
 import { toast } from "sonner";
 
 export function useLaboratoryPageController() {
-  const { features: pageFeatures } = useConversationPageFeatures("/app/laboratory");
+  const [isAdminUser, setIsAdminUser] = useState(false);
+  const { features: pageFeatures } = useConversationPageFeatures("/app/laboratory", isAdminUser);
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +40,6 @@ export function useLaboratoryPageController() {
   const [mcpProviders, setMcpProviders] = useState<McpProvider[]>([]);
   const [tools, setTools] = useState<MpcTool[]>([]);
   const [agents, setAgents] = useState<AgentItem[]>([]);
-  const [isAdminUser, setIsAdminUser] = useState(false);
   const [wsStatus, setWsStatus] = useState("연결 대기");
   const wsRef = useRef<WebSocket | null>(null);
 

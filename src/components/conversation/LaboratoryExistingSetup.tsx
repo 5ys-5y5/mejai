@@ -8,8 +8,11 @@ type SetupMode = "existing" | "new";
 
 type Props = {
   showModelSelector: boolean;
+  modelSelectorAdminOnly?: boolean;
   showModeExisting: boolean;
+  modeExistingAdminOnly?: boolean;
   showModeNew: boolean;
+  modeNewAdminOnly?: boolean;
   setupMode: SetupMode;
   onSelectExisting: () => void;
   onSelectNew: () => void;
@@ -34,8 +37,11 @@ type Props = {
 
 export function LaboratoryExistingSetup({
   showModelSelector,
+  modelSelectorAdminOnly = false,
   showModeExisting,
+  modeExistingAdminOnly = false,
   showModeNew,
+  modeNewAdminOnly = false,
   setupMode,
   onSelectExisting,
   onSelectNew,
@@ -58,6 +64,13 @@ export function LaboratoryExistingSetup({
     <>
       {showModelSelector ? (
         <div className="border-b border-slate-200 bg-white pb-3">
+          {modelSelectorAdminOnly ? (
+            <div className="mb-2">
+              <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                ADMIN
+              </span>
+            </div>
+          ) : null}
           <div className={cn("grid gap-2 w-full", showModeExisting && showModeNew ? "grid-cols-2" : "grid-cols-1")}>
             {showModeExisting ? (
               <button
@@ -71,6 +84,11 @@ export function LaboratoryExistingSetup({
                 )}
               >
                 기존 모델
+                {modeExistingAdminOnly ? (
+                  <span className="ml-2 rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                    ADMIN
+                  </span>
+                ) : null}
               </button>
             ) : null}
             {showModeNew ? (
@@ -85,6 +103,11 @@ export function LaboratoryExistingSetup({
                 )}
               >
                 신규 모델
+                {modeNewAdminOnly ? (
+                  <span className="ml-2 rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                    ADMIN
+                  </span>
+                ) : null}
               </button>
             ) : null}
           </div>

@@ -1,4 +1,5 @@
 import type { PolicyEvalContext } from "@/lib/policyEngine";
+import { resolveAddressWithReuse, resolvePhoneWithReuse } from "./memoryReuseRuntime";
 
 type ContextResolutionParams = {
   context: any;
@@ -306,22 +307,26 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     seededIntent = "order_change";
   }
   const nextResolvedIntent = seededIntent;
+  const resolvedPhone = resolvePhoneWithReuse({
+    derivedPhone,
+    prevEntityPhone: typeof prevEntity.phone === "string" ? prevEntity.phone : null,
+    prevPhoneFromTranscript,
+    recentEntityPhone: recentEntity?.phone || null,
+  });
+  const resolvedAddress = resolveAddressWithReuse({
+    derivedAddress,
+    prevEntityAddress: typeof prevEntity.address === "string" ? prevEntity.address : null,
+    prevAddressFromTranscript,
+    recentEntityAddress: recentEntity?.address || null,
+  });
   const policyContext: PolicyEvalContext = {
     input: { text: message },
     intent: { name: nextResolvedIntent },
     entity: {
       channel: derivedChannel ?? (typeof prevEntity.channel === "string" ? prevEntity.channel : null),
       order_id: resolvedOrderId,
-      phone:
-        derivedPhone ??
-        (typeof prevEntity.phone === "string" ? prevEntity.phone : null) ??
-        prevPhoneFromTranscript ??
-        (recentEntity?.phone || null),
-      address:
-        derivedAddress ??
-        (typeof prevEntity.address === "string" ? prevEntity.address : null) ??
-        prevAddressFromTranscript ??
-        (recentEntity?.address || null),
+      phone: resolvedPhone,
+      address: resolvedAddress,
       zipcode: resolvedZipcode,
     },
     user: { confirmed: explicitUserConfirmed },

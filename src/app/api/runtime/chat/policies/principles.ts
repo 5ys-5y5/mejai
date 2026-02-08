@@ -26,6 +26,22 @@ export const CHAT_PRINCIPLES = {
     restockPreferKbWhenNoMallNameMatch: true,
     restockNewProductLabel: "신상품",
   },
+  // High-priority memory reuse contract.
+  // Promise: do not ask again for information already provided by the user when it can be safely reused.
+  memory: {
+    enforceNoRepeatQuestions: true,
+    reusePriority: "highest",
+    selfUpdateEnabledByDefault: true,
+    selfUpdateVisibilityDefault: "admin" as const,
+    // Deterministic source precedence for slot carry-over.
+    entityReuseOrder: ["derived", "prevEntity", "prevTranscript", "recentEntity"] as const,
+    // Navigator-only metadata: runtime owners that execute this principle.
+    ownerModules: {
+      phoneReusePrompt: "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+      phoneReuseNextTurn: "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
+      entityCarryOver: "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
+    } as const,
+  },
 } as const;
 
 export function requiresOtpForIntent(intent: string) {
@@ -65,4 +81,20 @@ export function shouldPreferRestockKbWhenNoMallNameMatch() {
 
 export function getRestockNewProductLabel() {
   return String(CHAT_PRINCIPLES.response.restockNewProductLabel || "신상품");
+}
+
+export function shouldEnforceNoRepeatQuestions() {
+  return Boolean(CHAT_PRINCIPLES.memory.enforceNoRepeatQuestions);
+}
+
+export function getEntityReuseOrder() {
+  return CHAT_PRINCIPLES.memory.entityReuseOrder as readonly string[];
+}
+
+export function isSelfUpdateEnabledByDefault() {
+  return Boolean(CHAT_PRINCIPLES.memory.selfUpdateEnabledByDefault);
+}
+
+export function getSelfUpdateVisibilityDefault() {
+  return CHAT_PRINCIPLES.memory.selfUpdateVisibilityDefault as "user" | "admin";
 }
