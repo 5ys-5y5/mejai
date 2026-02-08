@@ -2,23 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 
-type QueueRow = {
+type NotificationRow = {
   id: string;
-  subscription_id: string;
   org_id: string | null;
   mall_id: string | null;
   session_id: string | null;
   phone: string;
   channel: string;
-  product_id: string;
-  topic_type: string | null;
-  topic_key: string | null;
-  topic_label: string | null;
-  intent_name: string | null;
+  category: string | null;
+  product_id: string | null;
+  product_name: string | null;
   restock_at: string | null;
   lead_day: number;
   scheduled_for: string;
   message_text: string | null;
+  template_key: string | null;
+  template_vars: Record<string, unknown> | null;
+  intent_name: string | null;
   attempts: number;
 };
 
@@ -81,6 +81,18 @@ async function sendSms(to: string, text: string, from: string, scheduledAt?: str
   }
 }
 
+function renderMessage(row: NotificationRow) {
+  if (row.message_text) return row.message_text;
+  if (row.template_key === "restock_lead_day") {
+    const productName = row.product_name || row.product_id || "상품";
+    const scheduleLine = row.restock_at ? `예정일: ${row.restock_at}` : "예정일: 확인된 일정 정보 없음";
+    const leadLine = row.lead_day > 0 ? `알림: D-${row.lead_day}` : "";
+    return [`[재입고 알림] ${productName}`, scheduleLine, leadLine].filter(Boolean).join("\n");
+  }
+  const fallbackTitle = row.product_name || row.product_id || row.category || "알림";
+  return `[알림] ${fallbackTitle}`;
+}
+
 export async function GET(req: NextRequest) {
   const expected = readCronSecret();
   if (!expected) {
@@ -105,8 +117,10 @@ export async function GET(req: NextRequest) {
   const nowIso = new Date().toISOString();
 
   const { data, error } = await supabase
-    .from("G_com_restock_message_queue")
-    .select("id,subscription_id,org_id,mall_id,session_id,phone,channel,product_id,topic_type,topic_key,topic_label,intent_name,restock_at,lead_day,scheduled_for,message_text,attempts")
+    .from("E_ops_notification_messages")
+    .select(
+      "id,org_id,mall_id,session_id,phone,channel,category,product_id,product_name,intent_name,restock_at,lead_day,scheduled_for,message_text,template_key,template_vars,attempts"
+    )
     .eq("status", "pending")
     .order("scheduled_for", { ascending: true })
     .limit(batch);
@@ -115,7 +129,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const rows = (data || []) as QueueRow[];
+  const rows = (data || []) as NotificationRow[];
   const bypass = isEnvTrue("SOLAPI_BYPASS");
   const from = String(process.env.SOLAPI_FROM || "").trim();
   const summary = {
@@ -128,16 +142,12 @@ export async function GET(req: NextRequest) {
   };
 
   for (const row of rows) {
-    const topicLabel = row.topic_label || row.topic_key || row.product_id;
-    const baseText = row.message_text || `[알림] ${topicLabel}`;
-    const text = row.restock_at
-      ? `${baseText}\n예정일: ${row.restock_at}`
-      : baseText;
+    const text = renderMessage(row);
 
     if (row.channel !== "sms") {
       summary.skipped += 1;
       await supabase
-        .from("G_com_restock_message_queue")
+        .from("E_ops_notification_messages")
         .update({ status: "canceled", last_error: "UNSUPPORTED_CHANNEL", updated_at: nowIso })
         .eq("id", row.id);
       continue;
@@ -147,7 +157,7 @@ export async function GET(req: NextRequest) {
       summary.failed += 1;
       summary.errors.push({ queue_id: row.id, reason: "PHONE_MISSING" });
       await supabase
-        .from("G_com_restock_message_queue")
+        .from("E_ops_notification_messages")
         .update({ status: "failed", attempts: row.attempts + 1, last_error: "PHONE_MISSING", updated_at: nowIso })
         .eq("id", row.id);
       continue;
@@ -162,7 +172,10 @@ export async function GET(req: NextRequest) {
     } else if (!from) {
       sendError = "SOLAPI_FROM_MISSING";
     } else {
-      const scheduledAt = Date.parse(row.scheduled_for) > Date.now() ? new Date(row.scheduled_for).toISOString() : null;
+      const scheduledAt =
+        row.scheduled_for && Date.parse(row.scheduled_for) > Date.now()
+          ? new Date(row.scheduled_for).toISOString()
+          : null;
       const sent = await sendSms(row.phone, text, from, scheduledAt);
       if (!sent.ok) {
         sendError = sent.error;
@@ -176,32 +189,31 @@ export async function GET(req: NextRequest) {
 
     if (sendOk) {
       summary.sent += 1;
+      const isScheduled = Boolean(row.scheduled_for && Date.parse(row.scheduled_for) > Date.now());
       await supabase
-        .from("G_com_restock_message_queue")
+        .from("E_ops_notification_messages")
         .update({
-          status: "sent",
+          status: isScheduled ? "scheduled" : "sent",
           attempts: row.attempts + 1,
-          sent_at: nowIso,
+          sent_at: isScheduled ? null : nowIso,
           last_error: null,
+          solapi_registered: !bypass,
+          solapi_register_error: bypass ? "SOLAPI_BYPASS" : null,
           solapi_message_id: solapiMessageId,
           updated_at: nowIso,
         })
         .eq("id", row.id);
-      await supabase
-        .from("G_com_restock_subscriptions")
-        .update({ last_notified_at: nowIso, last_triggered_at: nowIso, updated_at: nowIso })
-        .eq("id", row.subscription_id);
       await supabase.from("F_audit_events").insert({
         session_id: row.session_id,
         turn_id: null,
-        event_type: "RESTOCK_SMS_SENT",
+        event_type: isScheduled ? "RESTOCK_SMS_SCHEDULED" : "RESTOCK_SMS_SENT",
         payload: {
-          queue_id: row.id,
-          subscription_id: row.subscription_id,
+          message_id: row.id,
           product_id: row.product_id,
           lead_day: row.lead_day,
           bypass,
           solapi_message_id: solapiMessageId,
+          scheduled_for: row.scheduled_for,
         },
         created_at: nowIso,
         bot_context: { intent_name: row.intent_name || "restock_subscribe" },
@@ -214,24 +226,26 @@ export async function GET(req: NextRequest) {
       summary.errors.push({ queue_id: row.id, reason: sendError || "SEND_FAILED" });
     }
     await supabase
-      .from("G_com_restock_message_queue")
+      .from("E_ops_notification_messages")
       .update({
         status: "failed",
         attempts: row.attempts + 1,
         last_error: sendError || "SEND_FAILED",
+        solapi_registered: false,
+        solapi_register_error: sendError || "SEND_FAILED",
         updated_at: nowIso,
       })
       .eq("id", row.id);
     await supabase.from("F_audit_events").insert({
       session_id: row.session_id,
       turn_id: null,
-      event_type: "RESTOCK_SMS_FAILED",
+      event_type: row.scheduled_for && Date.parse(row.scheduled_for) > Date.now() ? "RESTOCK_SMS_SCHEDULE_FAILED" : "RESTOCK_SMS_FAILED",
       payload: {
-        queue_id: row.id,
-        subscription_id: row.subscription_id,
+        message_id: row.id,
         product_id: row.product_id,
         lead_day: row.lead_day,
         error: sendError || "SEND_FAILED",
+        scheduled_for: row.scheduled_for,
       },
       created_at: nowIso,
       bot_context: { intent_name: row.intent_name || "restock_subscribe" },

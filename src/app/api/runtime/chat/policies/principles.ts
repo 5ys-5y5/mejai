@@ -22,6 +22,9 @@ export const CHAT_PRINCIPLES = {
     alternativeSuggestionConsentIntents: ["restock_inquiry"] as const,
     hideAlternativeCandidatesBeforeConsent: true,
     requireImageCardsForChoiceWhenAvailable: true,
+    // Restock KB takes priority when mall product name does not match KB product name.
+    restockPreferKbWhenNoMallNameMatch: true,
+    restockNewProductLabel: "신상품",
   },
 } as const;
 
@@ -54,4 +57,12 @@ export function shouldHideAlternativeCandidatesBeforeConsent() {
 
 export function shouldRenderImageCardsForChoiceWhenAvailable() {
   return Boolean(CHAT_PRINCIPLES.response.requireImageCardsForChoiceWhenAvailable);
+}
+
+export function shouldPreferRestockKbWhenNoMallNameMatch() {
+  return Boolean(CHAT_PRINCIPLES.response.restockPreferKbWhenNoMallNameMatch);
+}
+
+export function getRestockNewProductLabel() {
+  return String(CHAT_PRINCIPLES.response.restockNewProductLabel || "신상품");
 }

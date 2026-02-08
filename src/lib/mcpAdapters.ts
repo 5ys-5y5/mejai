@@ -179,6 +179,17 @@ async function solapiSendMessage(params: { to: string; text: string; from: strin
   }
 }
 
+function extractSolapiMessageId(payload: Record<string, unknown>) {
+  const direct = payload.messageId || payload.message_id;
+  if (direct) return String(direct);
+  const list = (payload as any).messageList;
+  if (Array.isArray(list) && list.length > 0) {
+    const msgId = list[0]?.messageId || list[0]?.message_id;
+    if (msgId) return String(msgId);
+  }
+  return null;
+}
+
 async function bootstrapCafe24FromEnv(ctx: AdapterContext, row: AuthSettingsRow) {
   const mallId = readEnv("CAFE24_MALL_ID");
   const accessToken = readEnv("CAFE24_ACCESS_TOKEN");
@@ -1708,160 +1719,185 @@ const adapters: Record<string, ToolAdapter> = {
     return { status: "success", data: result.data };
   },
   subscribe_restock: async (params, ctx) => {
-    if (!ctx) {
-      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
-    }
-    const productId = String(params.product_id || "").trim();
-    const channel = String(params.channel || "").trim();
-    const mallId = String(params.mall_id || "").trim();
-    const sessionId = String(params.session_id || "").trim();
-    const topicTypeRaw = String(params.topic_type || "").trim().toLowerCase();
-    const topicType = topicTypeRaw || "restock";
-    const topicKey = String(params.topic_key || productId || "").trim();
-    const scheduleModeRaw = String(params.schedule_mode || "").trim().toLowerCase();
-    const scheduleMode =
-      scheduleModeRaw && ["restock_lead_days", "scheduled_at", "custom_plan"].includes(scheduleModeRaw)
-        ? scheduleModeRaw
-        : "restock_lead_days";
-    if (!channel) {
-      return { status: "error", error: { code: "INVALID_INPUT", message: "channel is required" } };
-    }
-    if (!mallId) {
-      return { status: "error", error: { code: "INVALID_INPUT", message: "mall_id is required" } };
-    }
-    if (!sessionId) {
-      return { status: "error", error: { code: "INVALID_INPUT", message: "session_id is required" } };
-    }
-    if (scheduleMode === "restock_lead_days" && !productId) {
-      return { status: "error", error: { code: "INVALID_INPUT", message: "product_id is required" } };
-    }
-    if (!topicKey) {
-      return { status: "error", error: { code: "INVALID_INPUT", message: "topic_key is required" } };
-    }
-    const leadDays = Array.isArray(params.lead_days)
-      ? Array.from(
-          new Set(
-            (params.lead_days as unknown[])
-              .map((value) => Number(value))
-              .filter((value) => Number.isFinite(value) && value > 0)
-          )
-        ).sort((a, b) => a - b)
-      : [];
-    const restockAtRaw = String(params.restock_at || "").trim();
-    const restockAt = /^\d{4}-\d{2}-\d{2}$/.test(restockAtRaw) ? restockAtRaw : null;
-    const scheduleAtRaw = String(params.schedule_at || "").trim();
-    const scheduleAt =
-      scheduleAtRaw && !Number.isNaN(Date.parse(scheduleAtRaw)) ? new Date(scheduleAtRaw).toISOString() : null;
-    const schedulePlan =
-      Array.isArray(params.schedule_plan) || (params.schedule_plan && typeof params.schedule_plan === "object")
-        ? params.schedule_plan
+      if (!ctx) {
+        return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+      }
+      const channel = String(params.channel || "").trim();
+      const mallId = String(params.mall_id || "").trim();
+      const sessionId = String(params.session_id || "").trim();
+      const productId = String(params.product_id || "").trim();
+      const topicTypeRaw = String(params.topic_type || "").trim().toLowerCase();
+      const topicType = topicTypeRaw || "restock";
+      const topicKey = String(params.topic_key || productId || params.product_name || "").trim();
+      if (!channel) {
+        return { status: "error", error: { code: "INVALID_INPUT", message: "channel is required" } };
+      }
+      if (!mallId) {
+        return { status: "error", error: { code: "INVALID_INPUT", message: "mall_id is required" } };
+      }
+      if (!sessionId) {
+        return { status: "error", error: { code: "INVALID_INPUT", message: "session_id is required" } };
+      }
+      if (!topicKey) {
+        return { status: "error", error: { code: "INVALID_INPUT", message: "topic_key is required" } };
+      }
+      const restockAtRaw = String(params.restock_at || "").trim();
+      const restockAt = /^\d{4}-\d{2}-\d{2}$/.test(restockAtRaw) ? restockAtRaw : null;
+      const scheduleTz = String(params.schedule_tz || "Asia/Seoul");
+      const scheduleHourLocal = Number(params.schedule_hour_local || 17);
+      const leadDays = Array.isArray(params.lead_days)
+        ? Array.from(
+            new Set(
+              (params.lead_days as unknown[])
+                .map((value) => Number(value))
+                .filter((value) => Number.isFinite(value) && value > 0)
+            )
+          ).sort((a, b) => a - b)
         : [];
-    const payload = {
-      org_id: ctx.orgId,
-      mall_id: mallId,
-      session_id: sessionId,
-      product_id: productId || topicKey,
-      topic_type: topicType,
-      topic_key: topicKey,
-      topic_label: params.topic_label ? String(params.topic_label) : null,
-      intent_name: params.intent_name ? String(params.intent_name) : null,
-      channel,
-      phone: params.phone ? String(params.phone) : null,
-      customer_id: params.customer_id ? String(params.customer_id) : null,
-      trigger_type: params.trigger_type ? String(params.trigger_type) : "status_change",
-      trigger_value: params.trigger_value ?? null,
-      actions: Array.isArray(params.actions) ? params.actions : ["notify_only"],
-      restock_at: restockAt,
-      lead_days: leadDays,
-      schedule_tz: String(params.schedule_tz || "Asia/Seoul"),
-      schedule_hour_local: Number(params.schedule_hour_local || 17),
-      schedule_mode: scheduleMode,
-      schedule_at: scheduleAt,
-      schedule_plan: schedulePlan,
-      message_template: params.message_template ? String(params.message_template) : null,
-      metadata: params.metadata && typeof params.metadata === "object" ? params.metadata : {},
-      status: "active",
-      created_at: new Date().toISOString(),
-    };
-    const { data, error } = await ctx.supabase
-      .from("G_com_restock_subscriptions")
-      .upsert(payload, {
-        onConflict: "org_id,mall_id,topic_type,topic_key,channel,phone,session_id",
-      })
-      .select("id")
-      .single();
-    if (error && /Could not find the '(.+)' column/i.test(error.message || "")) {
-      const legacyPayload = {
+      const leadDaysToSchedule = leadDays.length > 0 ? leadDays : [0];
+      const productName = params.product_name ? String(params.product_name) : null;
+      const category = String(params.category || topicType || "restock").trim() || "restock";
+
+      const computeScheduledFor = (dateText: string | null, leadDay: number) => {
+        if (!dateText) return null;
+        const match = dateText.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return null;
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+        const offsetMinutes = scheduleTz === "Asia/Seoul" ? 9 * 60 : 0;
+        const baseUtcMs = Date.UTC(year, month - 1, day, scheduleHourLocal, 0, 0) - offsetMinutes * 60 * 1000;
+        const scheduledMs = baseUtcMs - Math.max(0, leadDay) * 24 * 60 * 60 * 1000;
+        return new Date(scheduledMs).toISOString();
+      };
+
+      const buildMessageText = (leadDay: number) => {
+        const name = productName || topicKey || "상품";
+        const scheduleLine = restockAt ? `예정일: ${restockAt}` : "예정일: 확인된 일정 정보 없음";
+        const leadLine = leadDay > 0 ? `알림: D-${leadDay}` : "";
+        return [`[재입고 알림] ${name}`, scheduleLine, leadLine].filter(Boolean).join("\n");
+      };
+
+      const nowIso = new Date().toISOString();
+      const rows = leadDaysToSchedule.map((leadDay) => ({
         org_id: ctx.orgId,
         mall_id: mallId,
         session_id: sessionId,
-        product_id: productId || topicKey,
         channel,
         phone: params.phone ? String(params.phone) : null,
-        customer_id: params.customer_id ? String(params.customer_id) : null,
-        trigger_type: params.trigger_type ? String(params.trigger_type) : "status_change",
-        trigger_value: params.trigger_value ?? null,
-        actions: Array.isArray(params.actions) ? params.actions : ["notify_only"],
+        category,
+        topic_type: topicType,
+        topic_key: topicKey,
+        topic_label: params.topic_label ? String(params.topic_label) : null,
+        product_id: productId || null,
+        product_name: productName,
         restock_at: restockAt,
-        lead_days: leadDays,
-        schedule_tz: String(params.schedule_tz || "Asia/Seoul"),
-        schedule_hour_local: Number(params.schedule_hour_local || 17),
-        status: "active",
-        created_at: new Date().toISOString(),
-      };
-      const legacyRes = await ctx.supabase
-        .from("G_com_restock_subscriptions")
-        .upsert(legacyPayload, {
-          onConflict: "org_id,mall_id,product_id,channel,phone,session_id",
-        })
-        .select("id")
-        .single();
-      if (!legacyRes.error) {
-        const subscriptionId = String(legacyRes.data?.id || "").trim();
-        if (subscriptionId) {
-          const reservation = await registerSolapiReservationsForSubscription(
-            ctx,
-            subscriptionId,
-            `[알림] ${topicKey}`
-          );
-          return {
-            status: "success",
-            data: {
-              subscription_id: subscriptionId,
-              reservation_scheduled_count: reservation.scheduledCount || 0,
-              reservation_ok: reservation.ok,
-              reservation_error: reservation.ok ? null : reservation.error,
-              ...legacyPayload,
-            },
-          };
-        }
-        return { status: "success", data: { subscription_id: legacyRes.data?.id ?? null, ...legacyPayload } };
+        lead_day: leadDay,
+        scheduled_for: computeScheduledFor(restockAt, leadDay),
+        template_key: "restock_lead_day",
+        template_vars: {
+          product_name: productName,
+          restock_at: restockAt,
+          lead_day: leadDay,
+          channel,
+        },
+        message_text: buildMessageText(leadDay),
+        status: "pending",
+        attempts: 0,
+        last_error: null,
+        sent_at: null,
+        solapi_message_id: null,
+        schedule_tz: scheduleTz,
+        schedule_hour_local: Number.isFinite(scheduleHourLocal) ? scheduleHourLocal : 17,
+        intent_name: params.intent_name ? String(params.intent_name) : null,
+        metadata: params.metadata && typeof params.metadata === "object" ? params.metadata : {},
+        created_at: nowIso,
+        updated_at: nowIso,
+      }));
+
+      const { data, error } = await ctx.supabase.from("E_ops_notification_messages").insert(rows).select("id");
+      if (error) {
+        return { status: "error", error: { code: "DB_ERROR", message: error.message } };
       }
-      return { status: "error", error: { code: "DB_ERROR", message: legacyRes.error.message } };
-    }
-    if (error) {
-      return { status: "error", error: { code: "DB_ERROR", message: error.message } };
-    }
-    const subscriptionId = String(data?.id || "").trim();
-    if (subscriptionId) {
-      const reservation = await registerSolapiReservationsForSubscription(
-        ctx,
-        subscriptionId,
-        `[알림] ${payload.topic_label || topicKey || productId}`
-      );
+      const ids = Array.isArray(data) ? data.map((row) => String((row as any)?.id || "").trim()).filter(Boolean) : [];
+
+      const bypass = isEnvTrue("SOLAPI_BYPASS");
+      const from = readEnv("SOLAPI_FROM");
+      for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i];
+        const id = ids[i];
+        if (!id || !row.phone || row.channel !== "sms") continue;
+        const scheduledAt =
+          row.scheduled_for && Date.parse(String(row.scheduled_for)) > Date.now()
+            ? new Date(String(row.scheduled_for)).toISOString()
+            : null;
+        let sendOk = false;
+        let sendError: string | null = null;
+        let solapiMessageId: string | null = null;
+        if (bypass) {
+          sendOk = true;
+          sendError = "SOLAPI_BYPASS";
+        } else if (!from) {
+          sendError = "SOLAPI_FROM_MISSING";
+        } else if (scheduledAt) {
+          const sent = await solapiScheduleMessage({
+            to: String(row.phone),
+            from,
+            text: String(row.message_text || ""),
+            scheduledAt,
+          });
+          if (!sent.ok) {
+            sendError = sent.error;
+          } else {
+            sendOk = true;
+            solapiMessageId = extractSolapiMessageId((sent.data || {}) as Record<string, unknown>);
+          }
+        } else {
+          const sent = await solapiSendMessage({ to: String(row.phone), from, text: String(row.message_text || "") });
+          if (!sent.ok) {
+            sendError = sent.error;
+          } else {
+            sendOk = true;
+            solapiMessageId = extractSolapiMessageId((sent.data || {}) as Record<string, unknown>);
+          }
+        }
+        if (sendOk) {
+          await ctx.supabase
+            .from("E_ops_notification_messages")
+            .update({
+              status: scheduledAt ? "scheduled" : "sent",
+              attempts: 1,
+              sent_at: scheduledAt ? null : nowIso,
+              last_error: bypass ? sendError : null,
+              solapi_registered: !bypass,
+              solapi_register_error: bypass ? sendError : null,
+              solapi_message_id: solapiMessageId,
+              updated_at: nowIso,
+            })
+            .eq("id", id);
+        } else if (sendError) {
+          await ctx.supabase
+            .from("E_ops_notification_messages")
+            .update({
+              status: "failed",
+              attempts: 1,
+              last_error: sendError,
+              solapi_registered: false,
+              solapi_register_error: sendError,
+              updated_at: nowIso,
+            })
+            .eq("id", id);
+        }
+      }
       return {
         status: "success",
         data: {
-          subscription_id: subscriptionId,
-          reservation_scheduled_count: reservation.scheduledCount || 0,
-          reservation_ok: reservation.ok,
-          reservation_error: reservation.ok ? null : reservation.error,
-          ...payload,
+          notification_ids: ids,
+          scheduled_count: rows.length,
         },
       };
-    }
-    return { status: "success", data: { subscription_id: data?.id ?? null, ...payload } };
-  },
+    },
   subscribe_notification: async (params, ctx) => {
     return adapters.subscribe_restock(
       {
@@ -1913,29 +1949,28 @@ const adapters: Record<string, ToolAdapter> = {
     const code = tempCode ? tempCode : String(Math.floor(100000 + Math.random() * 900000));
     const testMode = bypassSms || Boolean(tempCode);
     const otpRef = crypto.randomUUID();
-    if (!bypassSms) {
-      const from = readEnv("SOLAPI_FROM");
-      if (!from) {
-        const processKeys = Object.keys(process.env || {}).filter((key) => key.startsWith("SOLAPI_"));
-        const fallbackKeys = Object.keys(loadEnvFromFiles() || {}).filter((key) => key.startsWith("SOLAPI_"));
-        const envKeys = Array.from(new Set([...processKeys, ...fallbackKeys])).sort();
-        return {
-          status: "error",
-          error: {
-            code: "CONFIG_ERROR",
-            message: "SOLAPI_FROM is required",
-            detail: {
-              cwd: process.cwd(),
-              solapi_from_len: (process.env.SOLAPI_FROM || "").length,
-              solapi_env_keys: envKeys,
-            },
-          },
-        };
-      }
-      const text = String(params.text || `인증번호는 ${code} 입니다.`);
+    const from = readEnv("SOLAPI_FROM");
+    const text = String(params.text || `인증번호는 ${code} 입니다.`);
+    let sendOk = false;
+    let sendError: string | null = null;
+    let solapiMessageId: string | null = null;
+    if (bypassSms) {
+      sendOk = true;
+      sendError = "SOLAPI_BYPASS";
+    } else if (!from) {
+      const processKeys = Object.keys(process.env || {}).filter((key) => key.startsWith("SOLAPI_"));
+      const fallbackKeys = Object.keys(loadEnvFromFiles() || {}).filter((key) => key.startsWith("SOLAPI_"));
+      const envKeys = Array.from(new Set([...processKeys, ...fallbackKeys])).sort();
+      sendError = "SOLAPI_FROM_MISSING";
+      // continue to record OTP/notification even when from is missing
+      void envKeys;
+    } else {
       const sendResult = await solapiSendMessage({ to: destination, from, text });
       if (!sendResult.ok) {
-        return { status: "error", error: { code: "SOLAPI_ERROR", message: sendResult.error } };
+        sendError = sendResult.error;
+      } else {
+        sendOk = true;
+        solapiMessageId = extractSolapiMessageId((sendResult.data || {}) as Record<string, unknown>);
       }
     }
     const codeHash = crypto.createHash("sha256").update(code + otpRef).digest("hex");
@@ -1952,6 +1987,67 @@ const adapters: Record<string, ToolAdapter> = {
     });
     if (error) {
       return { status: "error", error: { code: "DB_ERROR", message: error.message } };
+    }
+    const otpNowIso = new Date().toISOString();
+    const { data: notifData, error: notifError } = await ctx.supabase
+      .from("E_ops_notification_messages")
+      .insert({
+        org_id: ctx.orgId,
+        mall_id: null,
+        session_id: String(params.session_id || "") || null,
+        channel: "sms",
+        phone: destination,
+        category: "auth_otp",
+        topic_type: "auth",
+        topic_key: otpRef,
+        topic_label: null,
+        product_id: null,
+        product_name: null,
+        restock_at: null,
+        lead_day: 0,
+        scheduled_for: null,
+        template_key: "auth_otp",
+        template_vars: {
+          destination,
+          channel: "sms",
+          otp_ref: otpRef,
+        },
+        message_text: text,
+        status: sendOk ? "sent" : "failed",
+        attempts: 1,
+        last_error: sendOk ? (bypassSms ? "SOLAPI_BYPASS" : null) : sendError,
+        sent_at: sendOk ? otpNowIso : null,
+        solapi_message_id: solapiMessageId,
+        solapi_registered: sendOk && !bypassSms,
+        solapi_register_error: sendOk ? (bypassSms ? "SOLAPI_BYPASS" : null) : sendError,
+        schedule_tz: "Asia/Seoul",
+        schedule_hour_local: 17,
+        intent_name: "auth_otp",
+        metadata: {
+          flow: "auth_otp",
+          source: "otp_runtime",
+        },
+        created_at: otpNowIso,
+        updated_at: otpNowIso,
+        source_turn_id: params.source_turn_id || null,
+      })
+      .select("id")
+      .maybeSingle();
+    if (notifError) {
+      return { status: "error", error: { code: "DB_ERROR", message: notifError.message } };
+    }
+    if (!sendOk) {
+      return {
+        status: "error",
+        error: {
+          code: "SOLAPI_ERROR",
+          message: sendError || "SOLAPI_SEND_FAILED",
+          detail: {
+            otp_ref: otpRef,
+            notification_id: notifData ? String((notifData as any).id || "") : null,
+          },
+        } as any,
+      };
     }
     return {
       status: "success",

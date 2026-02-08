@@ -1,0 +1,330 @@
+"use client";
+
+import { useCallback } from "react";
+import { toast } from "sonner";
+import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
+import { loadLaboratoryLogs, sendLaboratoryMessage, type LaboratoryRunConfig } from "@/lib/conversation/client/laboratoryTransport";
+import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
+import type { TranscriptMessage, LogBundle } from "@/lib/debugTranscript";
+
+type ConversationMode = "history" | "edit" | "new";
+type SetupMode = "existing" | "new";
+
+type BaseMessage = TranscriptMessage & {
+  richHtml?: string;
+  isLoading?: boolean;
+  loadingLogs?: string[];
+  quickReplies?: Array<{ label: string; value: string }>;
+  productCards?: Array<{
+    id: string;
+    title: string;
+    subtitle?: string;
+    description?: string;
+    imageUrl?: string;
+    value: string;
+  }>;
+};
+
+type BaseLogBundle = LogBundle & {
+  logsError: string | null;
+  logsLoading: boolean;
+};
+
+type BaseModel<TMessage extends BaseMessage> = {
+  id: string;
+  config: LaboratoryRunConfig;
+  sessionId: string | null;
+  messages: TMessage[];
+  selectedMessageIds: string[];
+  messageLogs: Record<string, BaseLogBundle>;
+  lastLogAt: string | null;
+  input: string;
+  sending: boolean;
+  selectedAgentId: string;
+  selectedSessionId: string | null;
+  conversationMode: ConversationMode;
+  editSessionId: string | null;
+  setupMode: SetupMode;
+  historyMessages: TMessage[];
+};
+
+function makeId() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function visibleMessages<TMessage extends BaseMessage, TModel extends BaseModel<TMessage>>(target: TModel) {
+  return target.conversationMode === "history"
+    ? target.historyMessages
+    : target.conversationMode === "edit"
+      ? [...target.historyMessages, ...target.messages]
+      : target.messages;
+}
+
+export function useLaboratoryConversationActions<TMessage extends BaseMessage, TModel extends BaseModel<TMessage>>(params: {
+  models: TModel[];
+  updateModel: (id: string, updater: (model: TModel) => TModel) => void;
+  ensureEditableSession: (target: TModel) => Promise<string | null>;
+  isAdminUser: boolean;
+}) {
+  const { models, updateModel, ensureEditableSession, isAdminUser } = params;
+
+  const loadLogs = useCallback(
+    async (id: string, messageId: string, sessionIdOverride?: string | null) => {
+      const target = models.find((model) => model.id === id);
+      const sessionId = sessionIdOverride ?? target?.sessionId;
+      if (!sessionId) return;
+      updateModel(id, (model) => ({
+        ...model,
+        messageLogs: {
+          ...model.messageLogs,
+          [messageId]: {
+            mcp_logs: model.messageLogs[messageId]?.mcp_logs || [],
+            event_logs: model.messageLogs[messageId]?.event_logs || [],
+            debug_logs: model.messageLogs[messageId]?.debug_logs || [],
+            logsError: null,
+            logsLoading: true,
+          },
+        },
+      }));
+      try {
+        const loaded = await loadLaboratoryLogs(sessionId, target?.lastLogAt, 30);
+        updateModel(id, (model) => ({
+          ...model,
+          messageLogs: {
+            ...model.messageLogs,
+            [messageId]: {
+              mcp_logs: loaded.mcpLogs,
+              event_logs: loaded.eventLogs,
+              debug_logs: loaded.debugLogs,
+              logsError: null,
+              logsLoading: false,
+            },
+          },
+          lastLogAt: loaded.newestIso || model.lastLogAt,
+        }));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "로그를 불러오지 못했습니다.";
+        updateModel(id, (model) => ({
+          ...model,
+          messageLogs: {
+            ...model.messageLogs,
+            [messageId]: {
+              mcp_logs: [],
+              event_logs: [],
+              debug_logs: [],
+              logsError: message,
+              logsLoading: false,
+            },
+          },
+        }));
+      }
+    },
+    [models, updateModel]
+  );
+
+  const submitMessage = useCallback(
+    async (modelId: string, text: string) => {
+      const target = models.find((model) => model.id === modelId);
+      if (!target) return;
+      if (!text) return;
+      if (target.setupMode === "existing" && !target.selectedAgentId) {
+        toast.error("에이전트를 선택하세요.");
+        return;
+      }
+      if (target.setupMode === "existing" && target.conversationMode !== "new" && !target.selectedSessionId) {
+        toast.error("세션을 선택하세요.");
+        return;
+      }
+      if (target.conversationMode === "history") return;
+      if (target.setupMode === "existing" && !target.config.kbId) {
+        toast.error("KB를 선택하세요.");
+        return;
+      }
+      updateModel(modelId, (model) => ({
+        ...model,
+        input: "",
+        sending: true,
+      }));
+
+      const userMessage = { id: makeId(), role: "user" as const, content: text } as unknown as TMessage;
+      const loadingMessageId = makeId();
+      const loadingStartedAt = Date.now();
+      const appendLoadingLog = (line: string) => {
+        if (!isAdminUser) return;
+        const safe = String(line || "").trim();
+        if (!safe) return;
+        updateModel(modelId, (model) => ({
+          ...model,
+          messages: model.messages.map((msg) => {
+            if (msg.id !== loadingMessageId || msg.role !== "bot" || !msg.isLoading) return msg;
+            const nextLogs = [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} ${safe}`].slice(-12);
+            return { ...msg, loadingLogs: nextLogs };
+          }),
+        }));
+      };
+      updateModel(modelId, (model) => ({
+        ...model,
+        messages: [
+          ...model.messages,
+          userMessage,
+          {
+            id: loadingMessageId,
+            role: "bot",
+            content: "답변 생성 중...",
+            isLoading: true,
+            loadingLogs: isAdminUser ? ["요청 준비 중..."] : undefined,
+          } as unknown as TMessage,
+        ],
+      }));
+      appendLoadingLog("요청 페이로드 구성 완료");
+
+      const loadingTicker = isAdminUser
+        ? window.setInterval(() => {
+            const elapsedSec = Math.max(1, Math.floor((Date.now() - loadingStartedAt) / 1000));
+            appendLoadingLog(`응답 대기 중... ${elapsedSec}s`);
+          }, 2500)
+        : null;
+
+      try {
+        const activeSessionId = target.conversationMode === "new" ? target.sessionId : await ensureEditableSession(target);
+        appendLoadingLog(activeSessionId ? `기존 세션 사용: ${activeSessionId}` : "신규 세션으로 요청");
+
+        const result = await sendLaboratoryMessage(target.config, activeSessionId, text, target.selectedAgentId, {
+          onProgress: appendLoadingLog,
+        }).then(
+          (value) => ({ status: "fulfilled" as const, value }),
+          (reason) => ({ status: "rejected" as const, reason })
+        );
+
+        if (result.status === "fulfilled") {
+          const res = result.value;
+          const botMessageId = res.message ? loadingMessageId : null;
+          const transcriptFields = mapRuntimeResponseToTranscriptFields(res);
+          const quickReplies = transcriptFields.quickReplies;
+          const quickReplyConfig = transcriptFields.quickReplyConfig;
+          const productCards = transcriptFields.productCards;
+          const responseSchema = transcriptFields.responseSchema;
+          const responseSchemaIssues = transcriptFields.responseSchemaIssues;
+          const renderPlan = transcriptFields.renderPlan;
+          updateModel(modelId, (model) => ({
+            ...model,
+            sessionId: res.session_id || model.sessionId,
+            messages: model.messages
+              .map((msg): TMessage => {
+                if (msg.id !== loadingMessageId || msg.role !== "bot") return msg;
+                if (!res.message) {
+                  return { ...msg, role: "bot", isLoading: false, content: "" };
+                }
+                const persistedLogs = isAdminUser
+                  ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} 답변 생성 완료`].slice(-20)
+                  : undefined;
+                return {
+                  id: loadingMessageId,
+                  role: "bot",
+                  content: res.message || "",
+                  richHtml: typeof res.rich_message_html === "string" ? res.rich_message_html : undefined,
+                  turnId: transcriptFields.turnId,
+                  isLoading: false,
+                  loadingLogs: persistedLogs,
+                  quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
+                  quickReplyConfig: quickReplies.length > 0 ? quickReplyConfig : undefined,
+                  productCards: productCards.length > 0 ? productCards : undefined,
+                  responseSchema,
+                  responseSchemaIssues:
+                    responseSchemaIssues && responseSchemaIssues.length > 0 ? responseSchemaIssues : undefined,
+                  renderPlan,
+                } as unknown as TMessage;
+              })
+              .filter((msg) => !(msg.id === loadingMessageId && msg.role === "bot" && !msg.content)),
+            sending: false,
+          }));
+          if (botMessageId) {
+            await loadLogs(modelId, botMessageId, res.session_id || target.sessionId);
+          }
+        } else {
+          updateModel(modelId, (model) => ({
+            ...model,
+            messages: model.messages.map((msg) =>
+              msg.id === loadingMessageId && msg.role === "bot"
+                ? {
+                    ...msg,
+                    isLoading: false,
+                    content: "응답 실패",
+                    loadingLogs: isAdminUser
+                      ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} 응답 실패`].slice(-20)
+                      : undefined,
+                  }
+                : msg
+            ),
+            sending: false,
+          }));
+          toast.error("응답에 실패했습니다.");
+        }
+      } catch (err) {
+        updateModel(modelId, (model) => ({
+          ...model,
+          messages: model.messages.map((msg) =>
+            msg.id === loadingMessageId && msg.role === "bot"
+              ? {
+                  ...msg,
+                  isLoading: false,
+                  content: err instanceof Error ? `응답 실패: ${err.message}` : "응답 실패",
+                  loadingLogs: isAdminUser
+                    ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} 예외 발생`].slice(-20)
+                    : undefined,
+                }
+              : msg
+          ),
+          sending: false,
+        }));
+        toast.error("응답에 실패했습니다.");
+      } finally {
+        if (loadingTicker) {
+          window.clearInterval(loadingTicker);
+        }
+      }
+    },
+    [ensureEditableSession, isAdminUser, loadLogs, models, updateModel]
+  );
+
+  const copyConversation = useCallback(
+    async (id: string, enabledOverride?: boolean) => {
+      const target = models.find((model) => model.id === id);
+      if (!target) return;
+      await executeTranscriptCopy({
+        page: "/app/laboratory",
+        kind: "conversation",
+        messages: visibleMessages(target),
+        selectedMessageIds: target.selectedMessageIds || [],
+        messageLogs: target.messageLogs || {},
+        enabledOverride,
+        blockedMessage: "이 페이지에서는 대화 복사를 지원하지 않습니다.",
+      });
+    },
+    [models]
+  );
+
+  const copyIssue = useCallback(
+    async (id: string, enabledOverride?: boolean) => {
+      const target = models.find((model) => model.id === id);
+      if (!target) return;
+      await executeTranscriptCopy({
+        page: "/app/laboratory",
+        kind: "issue",
+        messages: visibleMessages(target),
+        selectedMessageIds: target.selectedMessageIds || [],
+        messageLogs: target.messageLogs || {},
+        enabledOverride,
+        blockedMessage: "이 페이지에서는 문제 로그 복사를 지원하지 않습니다.",
+      });
+    },
+    [models]
+  );
+
+  return {
+    submitMessage,
+    copyConversation,
+    copyIssue,
+    loadLogs,
+  };
+}

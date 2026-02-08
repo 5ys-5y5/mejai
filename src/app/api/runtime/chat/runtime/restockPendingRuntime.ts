@@ -80,6 +80,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     const pendingCandidates = Array.isArray((prevBotContext as any).restock_candidates)
       ? ((prevBotContext as any).restock_candidates as Array<Record<string, unknown>>)
       : [];
+    const disableProductCards = Boolean((prevBotContext as any).restock_kb_only || (prevBotContext as any).restock_new_product);
     const lines = pendingCandidates.map(
       (candidate, idx) => `- ${idx + 1}번 | ${String(candidate.product_name || "-")} | ${String(candidate.raw_date || "-")}`
     );
@@ -102,16 +103,18 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         sourceModule: "src/app/api/runtime/chat/runtime/restockPendingRuntime.ts",
         contextText: reply,
       });
-      const productCards = pendingCandidates
-        .filter((candidate) => Boolean((candidate as any).thumbnail_url))
-        .map((candidate, idx) => ({
-          id: `restock-${idx + 1}`,
-          title: String((candidate as any).product_name || "-"),
-          subtitle: `${String((candidate as any).raw_date || "-")} 입고 예정`,
-          description: "",
-          image_url: String((candidate as any).thumbnail_url || ""),
-          value: String(idx + 1),
-        }));
+      const productCards = disableProductCards
+        ? []
+        : pendingCandidates
+            .filter((candidate) => Boolean((candidate as any).thumbnail_url))
+            .map((candidate, idx) => ({
+              id: `restock-${idx + 1}`,
+              title: String((candidate as any).product_name || "-"),
+              subtitle: `${String((candidate as any).raw_date || "-")} 입고 예정`,
+              description: "",
+              image_url: String((candidate as any).thumbnail_url || ""),
+              value: String(idx + 1),
+            }));
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,

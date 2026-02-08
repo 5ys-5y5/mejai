@@ -163,3 +163,6 @@
 - `npm run validate:runtime:template-keys`가 통과하는지(template 기본키/매핑키 불일치 방지)
 - `npm run validate:runtime:response-schema`가 통과하는지(response schema 주입/검증 경로 누락 방지)
 - Laboratory `대화 복사`에서 `[TOKEN_UNUSED]`에 `RESPONSE_SCHEMA`/`RESPONSE_SCHEMA_ISSUES`가 출력되는지 확인
+- 대화 복사/문제 로그 복사 정책은 `src/lib/transcriptCopyPolicy.ts`에서 페이지별로 관리 (`/`, `/app/laboratory`)
+  - 페이지/버튼별 허용(`enabled`)과 사유(`disabledReason`)를 설정
+  - 페이지별 디버그 출력 항목(`debugOptions`: 대원칙/스키마/렌더플랜/로그 등) 제어

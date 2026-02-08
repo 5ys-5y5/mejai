@@ -187,11 +187,12 @@ export async function POST(req: NextRequest) {
       allowedToolNames,
       allowedToolIdByName,
       allowedToolVersionByName,
-      allowedToolByName,
-      allowedTools,
-      providerAvailable,
-      providerConfig,
-      authSettings,
+        allowedToolByName,
+        allowedTools,
+        providerAvailable,
+        providerConfig,
+        runtimeFlags,
+        authSettings,
       userPlan,
       userIsAdmin,
       userRole,
@@ -890,6 +891,7 @@ export async function POST(req: NextRequest) {
       allowedTools,
       providerConfig,
       extractRestockChannel,
+      allowRestockLite: Boolean(runtimeFlags?.restock_lite),
     });
     if (restockHandled) return restockHandled;
 

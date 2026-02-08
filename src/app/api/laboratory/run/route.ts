@@ -61,6 +61,7 @@ export async function POST(req: NextRequest) {
         mcp_tool_ids: mergedMcpSelectors,
         mcp_provider_keys: requestProviderKeys,
         mode: body.mode,
+        runtime_flags: body.runtime_flags || undefined,
       }),
     });
     const runtimeFetchMs = Date.now() - fetchStartedAt;

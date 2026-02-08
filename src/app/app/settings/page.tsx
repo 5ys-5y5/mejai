@@ -11,8 +11,9 @@ import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/componen
 import { ExternalLink, Eye, EyeOff, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { PerformanceSettingsPanel } from "@/components/settings/PerformanceSettingsPanel";
+import { ChatSettingsPanel } from "@/components/settings/ChatSettingsPanel";
 
-type TabKey = "profile" | "workspaces" | "team" | "audit" | "env" | "performance";
+type TabKey = "profile" | "workspaces" | "team" | "audit" | "env" | "performance" | "chat";
 type ProviderKey = "cafe24" | "shopify";
 
 type Cafe24ProviderDraft = {
@@ -157,6 +158,7 @@ export default function SettingsPage() {
     ];
     if (isAdmin) {
       base.push({ key: "env", label: "환경 변수" });
+      base.push({ key: "chat", label: "대화 설정" });
       base.push({ key: "performance", label: "성능" });
     }
     return base;
@@ -951,6 +953,8 @@ export default function SettingsPage() {
                 </Card>
               ))}
             </div>
+          ) : tab === "chat" && isAdmin ? (
+            <ChatSettingsPanel authToken={authToken} />
           ) : tab === "performance" && isAdmin ? (
             <PerformanceSettingsPanel />
           ) : tab === "env" && isAdmin ? (

@@ -7,6 +7,7 @@ import {
   type RuntimeResponderPayload,
   validateRuntimeResponseSchema,
 } from "./runtimeResponseSchema";
+import { buildRenderPlan } from "../policies/renderPolicy";
 
 export function createRuntimeResponder(input: {
   runtimeTraceId: string;
@@ -94,6 +95,24 @@ export function createRuntimeResponder(input: {
     const resolvedQuickReplyConfig = quickReplyConfig || deriveQuickReplyConfig(payload.message, quickReplies);
     const richMessageHtml = deriveRichMessageHtml(payload.message);
     const cards = extractRuntimeCards(payload);
+    const quickReplySource =
+      Array.isArray(payload.quick_replies) && payload.quick_replies.length > 0
+        ? { type: "explicit" as const, criteria: "payload:quick_replies" }
+        : configDerivedQuickReplies.length > 0
+          ? {
+            type: "config" as const,
+            criteria: "payload:quick_reply_config",
+            source_function: "deriveQuickRepliesFromConfig",
+            source_module: "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
+          }
+          : derivedQuickReplies.quickReplies.length > 0
+            ? {
+              type: "fallback" as const,
+              criteria: derivedQuickReplies.derivation?.criteria,
+              source_function: derivedQuickReplies.derivation?.source_function,
+              source_module: derivedQuickReplies.derivation?.source_module,
+            }
+            : { type: "none" as const };
     const runtimeContext = getRuntimeContext();
     const currentSessionId = getCurrentSessionId();
     const currentTurnId = getLatestTurnId();
@@ -134,6 +153,13 @@ export function createRuntimeResponder(input: {
       cards,
     });
     const schemaValidation = validateRuntimeResponseSchema(responseSchema);
+    const renderPlan = buildRenderPlan({
+      message: typeof payload.message === "string" ? payload.message : null,
+      quickReplies,
+      quickReplyConfig: (resolvedQuickReplyConfig as any) || null,
+      cards,
+      quickReplySource,
+    });
     return NextResponse.json(
       {
         ...payload,
@@ -143,6 +169,7 @@ export function createRuntimeResponder(input: {
         ...(quickReplies.length > 0 ? { quick_replies: quickReplies } : {}),
         ...(resolvedQuickReplyConfig ? { quick_reply_config: resolvedQuickReplyConfig } : {}),
         response_schema: responseSchema,
+        render_plan: renderPlan,
         ...(schemaValidation.ok ? {} : { response_schema_issues: schemaValidation.issues }),
       },
       init

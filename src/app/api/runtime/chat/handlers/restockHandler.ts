@@ -2,6 +2,7 @@
 import { YES_NO_QUICK_REPLIES, resolveQuickReplyConfig } from "../runtime/quickReplyConfigRuntime";
 import { toLeadDayQuickReplies } from "../policies/intentSlotPolicy";
 import { generateAlternativeRestockConsentQuestion } from "../policies/restockResponsePolicy";
+import { saveRestockSubscriptionLite } from "../services/restockSubscriptionRuntime";
 import {
   buildNumberedChoicePrompt,
   buildRestockLeadDaysPrompt,
@@ -55,7 +56,15 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     allowedTools,
     providerConfig,
     extractRestockChannel,
+    allowRestockLite,
   } = input;
+
+  const normalizeNameKey = (value: string) => normalizeKoreanMatchText(value).replace(/\s+/g, "");
+  const isNameMatch = (left: string, right: string) => {
+    const a = normalizeNameKey(left || "");
+    const b = normalizeNameKey(right || "");
+    return Boolean(a && b && a === b);
+  };
 
   // Handle pending restock product choice even if current turn intent is misclassified (e.g. "1" -> general).
   const prevRestockCandidatesForAnyIntent = Array.isArray((prevBotContext as any).restock_candidates)
@@ -230,6 +239,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     const restockChannel = extractRestockChannel(message) || pendingChannel || "sms";
     const rankedFromMessage = rankRestockEntries(restockQueryText, restockKbEntries);
     const queryCoreNoSpace = normalizeKoreanQueryToken(stripRestockNoise(restockQueryText)).replace(/\s+/g, "");
+    const kbMatchFromQuery = rankedFromMessage.length > 0 ? rankedFromMessage[0].entry : null;
     const broadCandidates =
       queryCoreNoSpace.length > 0
         ? restockKbEntries
@@ -362,7 +372,11 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             mcpActions.push("read_product");
             if (!readCandidate.ok) continue;
             const shape = readProductShape(readCandidate.data || {});
-            candidate.thumbnail_url = shape.thumbnailUrl || null;
+            if (isNameMatch(candidate.product_name, shape.productName)) {
+              candidate.thumbnail_url = shape.thumbnailUrl || null;
+            } else {
+              candidate.thumbnail_url = null;
+            }
           }
         }
         const productCards = Boolean(CHAT_PRINCIPLES?.response?.requireImageCardsForChoiceWhenAvailable)
@@ -592,7 +606,11 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           mcpActions.push("read_product");
           if (!readCandidate.ok) continue;
           const shape = readProductShape(readCandidate.data || {});
-          candidate.thumbnail_url = shape.thumbnailUrl || null;
+          if (isNameMatch(candidate.product_name, shape.productName)) {
+            candidate.thumbnail_url = shape.thumbnailUrl || null;
+          } else {
+            candidate.thumbnail_url = null;
+          }
         }
       }
       const lines = candidateRows.map((candidate) => {
@@ -607,14 +625,16 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           entity: policyContext.entity,
         })
       );
-      const productCards = candidateRows.map((candidate) => ({
-        id: `restock-${candidate.index}`,
-        title: candidate.product_name,
-        subtitle: `${candidate.raw_date} 입고 예정`,
-        description: `${toRestockDueText(candidate.month, candidate.day).dday}`,
-        image_url: candidate.thumbnail_url || null,
-        value: String(candidate.index),
-      }));
+      const productCards = candidateRows
+        .filter((candidate) => Boolean(candidate.thumbnail_url))
+        .map((candidate) => ({
+          id: `restock-${candidate.index}`,
+          title: candidate.product_name,
+          subtitle: `${candidate.raw_date} 입고 예정`,
+          description: `${toRestockDueText(candidate.month, candidate.day).dday}`,
+          image_url: candidate.thumbnail_url || null,
+          value: String(candidate.index),
+        }));
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -740,7 +760,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       }
     }
 
-    if (!restockProductId) {
+    if (!restockProductId && !pendingProductName) {
       const ranked = rankRestockEntries(restockQueryText, restockKbEntries);
       if (hasUniqueAnswerCandidate(ranked.length)) {
         const item = ranked[0].entry;
@@ -860,7 +880,11 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             mcpActions.push("read_product");
             if (!readCandidate.ok) continue;
             const shape = readProductShape(readCandidate.data || {});
-            candidate.thumbnail_url = shape.thumbnailUrl || null;
+            if (isNameMatch(candidate.product_name, shape.productName)) {
+              candidate.thumbnail_url = shape.thumbnailUrl || null;
+            } else {
+              candidate.thumbnail_url = null;
+            }
           }
         }
         const lines = candidateRows.map((candidate) => {
@@ -875,14 +899,16 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             entity: policyContext.entity,
           })
         );
-        const productCards = candidateRows.map((candidate) => ({
-          id: `restock-${candidate.index}`,
-          title: candidate.product_name,
-          subtitle: `${candidate.raw_date} 입고 예정`,
-          description: `${toRestockDueText(candidate.month, candidate.day).dday}`,
-          image_url: candidate.thumbnail_url || null,
-          value: String(candidate.index),
-        }));
+        const productCards = candidateRows
+          .filter((candidate) => Boolean(candidate.thumbnail_url))
+          .map((candidate) => ({
+            id: `restock-${candidate.index}`,
+            title: candidate.product_name,
+            subtitle: `${candidate.raw_date} 입고 예정`,
+            description: `${toRestockDueText(candidate.month, candidate.day).dday}`,
+            image_url: candidate.thumbnail_url || null,
+            value: String(candidate.index),
+          }));
         await insertTurn({
           session_id: sessionId,
           seq: nextSeq,
@@ -944,7 +970,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     }
 
     let readProductData: Record<string, unknown> | null = null;
-    if (canUseTool("read_product") && hasAllowedToolName("read_product")) {
+    if (restockProductId && canUseTool("read_product") && hasAllowedToolName("read_product")) {
       const readRes = await callMcpTool(
         context,
         "read_product",
@@ -965,8 +991,80 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     }
 
     const productView = readProductShape(readProductData || {});
-    const scheduleEntry =
-      findBestRestockEntryByProductName(productView.productName || String(restockProductId), restockKbEntries);
+    const kbPreferEnabled = Boolean(CHAT_PRINCIPLES?.response?.restockPreferKbWhenNoMallNameMatch);
+    const kbName = String(kbMatchFromQuery?.product_name || "").trim();
+    const mallName = String(productView.productName || "").trim();
+    const hasNameMatch = kbName && mallName && normalizeNameKey(kbName) === normalizeNameKey(mallName);
+    const shouldPreferKbSchedule = kbPreferEnabled && kbMatchFromQuery && !hasNameMatch;
+    if (shouldPreferKbSchedule) {
+      const due = toRestockDueText(kbMatchFromQuery.month, kbMatchFromQuery.day);
+      const newLabel = String(CHAT_PRINCIPLES?.response?.restockNewProductLabel || "신상품").trim();
+      const displayName = newLabel ? `${newLabel} ${kbMatchFromQuery.product_name}` : kbMatchFromQuery.product_name;
+      const reply = makeReply(buildRestockFinalAnswerWithChoices(displayName, due));
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: policyContext.entity,
+          customer_verification_token: customerVerificationToken || null,
+          restock_pending: true,
+          restock_stage: "awaiting_subscribe_suggestion",
+          pending_product_id: null,
+          pending_product_name: kbMatchFromQuery.product_name,
+          pending_channel: "sms",
+          mcp_actions: mcpActions,
+          restock_kb_only: true,
+          restock_new_product: true,
+        },
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_DECISION",
+        { stage: "tool", action: "RESTOCK_SCHEDULE_ANSWERED_BY_KB", product_name: kbMatchFromQuery.product_name, new_product: true },
+        { intent_name: resolvedIntent }
+      );
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "FINAL_ANSWER_READY",
+        { answer: reply, model: "deterministic_restock_kb" },
+        { intent_name: resolvedIntent }
+      );
+      const quickReplyConfig = resolveQuickReplyConfig({
+        optionsCount: 2,
+        minSelectHint: 1,
+        maxSelectHint: 1,
+        explicitMode: "single",
+        criteria: "restock:kb_schedule_followup_choice",
+        sourceFunction: "handleRestockIntent",
+        sourceModule: "src/app/api/runtime/chat/handlers/restockHandler.ts",
+        contextText: reply,
+      });
+      return respond({
+        session_id: sessionId,
+        step: "final",
+        message: reply,
+        mcp_actions: mcpActions,
+        quick_replies: [
+          { label: "재입고 알림 신청", value: "네" },
+          { label: "대화 종료", value: "대화 종료" },
+        ],
+        quick_reply_config: quickReplyConfig,
+        product_cards: [],
+      });
+    }
+    const scheduleEntry = findBestRestockEntryByProductName(
+      productView.productName || pendingProductName || String(restockProductId),
+      restockKbEntries
+    );
+    const restockDisplayName = String(productView.productName || pendingProductName || restockProductId || "").trim();
     const scheduleLine = scheduleEntry
       ? (() => {
         const due = toRestockDueText(scheduleEntry.month, scheduleEntry.day);
@@ -991,7 +1089,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       if (!restockSubscribeAcceptedThisTurn) {
         const reply = makeReply(
           buildYesNoConfirmationPrompt(
-            `상품 ${productView.productName || restockProductId} 정보입니다.\n${scheduleLine}\n${stockLine}\n${policyLine}\n원하시면 ${restockChannel} 채널로 재입고 알림을 신청할까요?`,
+            `상품 ${restockDisplayName || "-"} 정보입니다.\n${scheduleLine}\n${stockLine}\n${policyLine}\n원하시면 ${restockChannel} 채널로 재입고 알림을 신청할까요?`,
             { botContext: prevBotContext, entity: policyContext.entity }
           )
         );
@@ -1001,16 +1099,17 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           transcript_text: message,
           answer_text: reply,
           final_answer: reply,
-          bot_context: {
-            intent_name: resolvedIntent,
-            entity: policyContext.entity,
-            restock_pending: true,
-            restock_stage: "awaiting_subscribe_confirm",
-            pending_product_id: restockProductId,
-            pending_channel: restockChannel,
-            customer_verification_token: customerVerificationToken || null,
-            mcp_actions: mcpActions,
-          },
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              restock_pending: true,
+              restock_stage: "awaiting_subscribe_confirm",
+              pending_product_id: restockProductId,
+              pending_product_name: restockDisplayName || pendingProductName || null,
+              pending_channel: restockChannel,
+              customer_verification_token: customerVerificationToken || null,
+              mcp_actions: mcpActions,
+            },
         });
         await insertEvent(
           context,
@@ -1066,7 +1165,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             restock_pending: true,
             restock_stage: "awaiting_subscribe_lead_days",
             pending_product_id: restockProductId || null,
-            pending_product_name: productView.productName || null,
+            pending_product_name: restockDisplayName || pendingProductName || null,
             pending_channel: restockChannel,
             available_lead_days: availableLeadDays,
             min_lead_days: minLeadDays,
@@ -1120,7 +1219,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             restock_pending: true,
             restock_stage: "awaiting_subscribe_phone",
             pending_product_id: restockProductId || null,
-            pending_product_name: productView.productName || null,
+            pending_product_name: restockDisplayName || pendingProductName || null,
             pending_channel: restockChannel,
             pending_lead_days: pendingLeadDaysFromContext,
             customer_verification_token: customerVerificationToken || null,
@@ -1146,7 +1245,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
       }
 
-      if (canUseTool("subscribe_restock") && hasAllowedToolName("subscribe_restock")) {
+      if (restockProductId && canUseTool("subscribe_restock") && hasAllowedToolName("subscribe_restock")) {
         const subscribeRes = await callMcpTool(
           context,
           "subscribe_restock",
@@ -1173,7 +1272,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         mcpActions.push("subscribe_restock");
         if (subscribeRes.ok) {
           const reply = makeReply(
-            `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${productView.productName || restockProductId} / 채널 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}\n다음 선택: 대화 종료 / 다른 문의`
+            `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${restockDisplayName || restockProductId} / 채널 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}\n다음 선택: 대화 종료 / 다른 문의`
           );
           await insertTurn({
             session_id: sessionId,
@@ -1245,58 +1344,158 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         );
         return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
       }
-    }
 
-    const inquiryReply = makeReply(
-      buildYesNoConfirmationPrompt(
-        `요약: ${productView.productName || restockProductId} 재고/입고 상태를 확인했습니다.\n상세: ${scheduleLine}\n${stockLine}\n${policyLine}\n지금 ${restockChannel} 재입고 알림 신청을 진행할까요?`,
-        { botContext: prevBotContext, entity: policyContext.entity }
-      )
-    );
-    await insertTurn({
-      session_id: sessionId,
-      seq: nextSeq,
-      transcript_text: message,
-      answer_text: inquiryReply,
-      final_answer: inquiryReply,
-      bot_context: {
-        intent_name: resolvedIntent,
-        entity: policyContext.entity,
-        customer_verification_token: customerVerificationToken || null,
-        restock_pending: true,
-        restock_stage: "awaiting_subscribe_suggestion",
-        pending_product_id: restockProductId || null,
-        pending_product_name: productView.productName || null,
-        pending_channel: restockChannel || "sms",
-        mcp_actions: mcpActions,
-      },
-    });
-    await insertEvent(
-      context,
-      sessionId,
-      latestTurnId,
-      "FINAL_ANSWER_READY",
-      { answer: inquiryReply, model: "deterministic_restock" },
-      { intent_name: resolvedIntent }
-    );
-    return respond({
-      session_id: sessionId,
-      step: "final",
-      message: inquiryReply,
-      mcp_actions: mcpActions,
-      product_cards: productView.thumbnailUrl
-        ? [
-          {
-            id: `restock-${restockProductId}`,
-            title: productView.productName || restockProductId,
-            subtitle: "상품 확인",
-            description: stockLine.replace(/^현재 상태:\s*/, ""),
-            image_url: productView.thumbnailUrl,
-            value: "1",
+      if ((allowRestockLite || !restockProductId) && restockDisplayName) {
+        const liteRes = await saveRestockSubscriptionLite(context, {
+          orgId: context.orgId,
+          sessionId,
+          channel: restockChannel,
+          phone: subscribePhone || null,
+          productId: restockProductId || null,
+          productName: restockDisplayName,
+          restockAt: scheduleDue?.targetText || null,
+          leadDays: pendingLeadDaysFromContext,
+          intentName: resolvedIntent,
+          mallId: providerConfig.mall_id || null,
+          topicKey: restockProductId || restockDisplayName,
+          topicLabel: restockDisplayName,
+          metadata: {
+            source: "lite",
+            flow: "restock_subscribe",
           },
-        ]
-        : [],
-    });
+        });
+        if (liteRes.ok) {
+          const reply = makeReply(
+            `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${restockDisplayName} / 채널 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}\n다음 선택: 대화 종료 / 다른 문의`
+          );
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              customer_verification_token: customerVerificationToken || null,
+              post_action_stage: "awaiting_choice",
+              mcp_actions: mcpActions,
+              restock_lite_notification_ids: liteRes.data.notification_ids || [],
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "POLICY_DECISION",
+            {
+              stage: "tool",
+              action: "RESTOCK_SUBSCRIBE_LITE",
+              notification_ids: liteRes.data.notification_ids || [],
+              scheduled_count: liteRes.data.scheduled_count ?? null,
+            },
+            { intent_name: resolvedIntent }
+          );
+          const quickReplyConfig = resolveQuickReplyConfig({
+            optionsCount: 2,
+            minSelectHint: 1,
+            maxSelectHint: 1,
+            explicitMode: "single",
+            criteria: "restock:post_subscribe_next_step",
+            sourceFunction: "handleRestockIntent",
+            sourceModule: "src/app/api/runtime/chat/handlers/restockHandler.ts",
+            contextText: reply,
+          });
+          return respond({
+            session_id: sessionId,
+            step: "final",
+            message: reply,
+            mcp_actions: mcpActions,
+            quick_replies: [
+              { label: "대화 종료", value: "대화 종료" },
+              { label: "다른 문의", value: "다른 문의" },
+            ],
+            quick_reply_config: quickReplyConfig,
+          });
+        }
+        const reply = makeReply(
+          "재입고 알림 신청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요. 문제가 반복되면 관리자에게 문의해 주세요."
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            customer_verification_token: customerVerificationToken || null,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          { answer: reply, model: "deterministic_restock_subscribe_error" },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+      }
+
+      const inquiryReply = makeReply(
+        buildYesNoConfirmationPrompt(
+          `요약: ${restockDisplayName || restockProductId} 재고/입고 상태를 확인했습니다.\n상세: ${scheduleLine}\n${stockLine}\n${policyLine}\n지금 ${restockChannel} 재입고 알림 신청을 진행할까요?`,
+          { botContext: prevBotContext, entity: policyContext.entity }
+        )
+      );
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: inquiryReply,
+        final_answer: inquiryReply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: policyContext.entity,
+          customer_verification_token: customerVerificationToken || null,
+          restock_pending: true,
+          restock_stage: "awaiting_subscribe_suggestion",
+          pending_product_id: restockProductId || null,
+          pending_product_name: restockDisplayName || pendingProductName || null,
+          pending_channel: restockChannel || "sms",
+          mcp_actions: mcpActions,
+        },
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "FINAL_ANSWER_READY",
+        { answer: inquiryReply, model: "deterministic_restock" },
+        { intent_name: resolvedIntent }
+      );
+      return respond({
+        session_id: sessionId,
+        step: "final",
+        message: inquiryReply,
+        mcp_actions: mcpActions,
+        product_cards: productView.thumbnailUrl
+          ? [
+              {
+                id: `restock-${restockProductId}`,
+                title: restockDisplayName || restockProductId,
+                subtitle: "상품 확인",
+                description: stockLine.replace(/^현재 상태:\s*/, ""),
+                image_url: productView.thumbnailUrl,
+                value: "1",
+              },
+            ]
+          : [],
+      });
+    }
   }
 
   return null;

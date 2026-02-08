@@ -25,6 +25,9 @@ type Body = {
   mcp_tool_ids?: string[];
   mcp_provider_keys?: string[];
   mode?: string;
+  runtime_flags?: {
+    restock_lite?: boolean;
+  };
 };
 
 type BootstrapParams = {
@@ -55,6 +58,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         allowedTools: { keys: Set<string>; byName: Map<string, string[]> };
         providerAvailable: string[];
         providerConfig: { mall_id: string | null; shop_no: string | null; board_no: string | null };
+        runtimeFlags: { restock_lite: boolean };
         authSettings: any;
         userPlan: string | null;
         userIsAdmin: boolean | null;
@@ -90,6 +94,9 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const agentId = String(body?.agent_id || "").trim();
   const message = String(body?.message || "").trim();
   const conversationMode = String(body?.mode || "").trim().toLowerCase() === "natural" ? "natural" : "mk2";
+  const runtimeFlags = {
+    restock_lite: Boolean(body?.runtime_flags?.restock_lite),
+  };
   const overrideLlm = body?.llm;
   const overrideKbId = body?.kb_id;
   const inlineKbText = typeof body?.inline_kb === "string" ? body.inline_kb.trim() : "";
@@ -372,6 +379,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       allowedTools,
       providerAvailable,
       providerConfig,
+      runtimeFlags,
       authSettings,
       userPlan,
       userIsAdmin,
