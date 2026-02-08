@@ -234,16 +234,13 @@ export function ChatSettingsPanel({ authToken }: Props) {
     "/app/laboratory": PAGE_CONVERSATION_FEATURES["/app/laboratory"],
   });
 
-  const headers = useMemo(
-    () =>
-      authToken
-        ? {
-          Authorization: `Bearer ${authToken}`,
-          "Content-Type": "application/json",
-        }
-        : { "Content-Type": "application/json" },
-    [authToken]
-  );
+  const headers = useMemo<Record<string, string>>(() => {
+    const next: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (authToken) next.Authorization = `Bearer ${authToken}`;
+    return next;
+  }, [authToken]);
 
   const applyProviderToDraft = useCallback((providerValue?: ConversationFeaturesProviderShape | null) => {
     const next: Record<ConversationPageKey, ConversationPageFeatures> = {

@@ -10,6 +10,7 @@ import { LaboratoryNewModelControls } from "@/components/conversation/Laboratory
 import { LaboratoryConversationPane } from "@/components/conversation/LaboratoryConversationPane";
 import { type SelectOption } from "@/components/SelectPopover";
 import { isToolEnabled, type ConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
+import type { ModelState } from "@/lib/conversation/client/laboratoryPageState";
 
 type ConversationMode = "history" | "edit" | "new";
 type SetupMode = "existing" | "new";
@@ -162,7 +163,7 @@ type Props = {
   onCopySessionId: (sessionId: string | null) => void;
   onOpenSessionInNewTab: (sessionId: string | null) => void;
   onDeleteSession: (id: string) => void;
-  onUpdateModel: (id: string, updater: (m: ModelStateLike) => ModelStateLike) => void;
+  onUpdateModel: (id: string, updater: (m: ModelState) => ModelState) => void;
   onResetModel: (id: string) => void;
   onSelectAgentGroup: (id: string, groupId: string) => void;
   onSelectAgentVersion: (id: string, agentId: string) => Promise<void> | void;

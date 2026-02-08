@@ -98,7 +98,6 @@ export function mapRuntimeResponseToTranscriptFields(res: RuntimeRunResponseLike
                 }))
                 .filter((item) => item.label && item.value)
             : [],
-          quick_reply_config: null,
           cards: Array.isArray(res.response_schema.cards) ? (res.response_schema.cards as Array<Record<string, unknown>>) : [],
         }
       : undefined;
