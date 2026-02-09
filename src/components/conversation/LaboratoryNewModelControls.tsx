@@ -2,9 +2,11 @@
 
 import { Info } from "lucide-react";
 import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
+import type { ReactNode } from "react";
 
 type Props = {
   showKbSelector: boolean;
+  kbLabel?: string;
   kbAdminOnly?: boolean;
   kbValue: string;
   kbOptions: SelectOption[];
@@ -14,6 +16,7 @@ type Props = {
   kbInfoText: string;
 
   showAdminKbSelector: boolean;
+  adminKbLabel?: string;
   adminKbAdminOnly?: boolean;
   adminKbValues: string[];
   adminKbOptions: SelectOption[];
@@ -23,6 +26,7 @@ type Props = {
   adminKbInfoText: string;
 
   showRouteSelector: boolean;
+  routeLabel?: string;
   routeAdminOnly?: boolean;
   routeValue: string;
   routeOptions: SelectOption[];
@@ -30,10 +34,12 @@ type Props = {
   routeInfoOpen: boolean;
   onToggleRouteInfo: () => void;
   routeInfoText: string;
+  setupFieldOrder?: Array<"kbSelector" | "adminKbSelector" | "routeSelector">;
 };
 
 export function LaboratoryNewModelControls({
   showKbSelector,
+  kbLabel = "KB 선택",
   kbAdminOnly = false,
   kbValue,
   kbOptions,
@@ -42,6 +48,7 @@ export function LaboratoryNewModelControls({
   onToggleKbInfo,
   kbInfoText,
   showAdminKbSelector,
+  adminKbLabel = "관리자 KB 선택",
   adminKbAdminOnly = true,
   adminKbValues,
   adminKbOptions,
@@ -50,6 +57,7 @@ export function LaboratoryNewModelControls({
   onToggleAdminKbInfo,
   adminKbInfoText,
   showRouteSelector,
+  routeLabel = "Runtime 선택",
   routeAdminOnly = false,
   routeValue,
   routeOptions,
@@ -57,13 +65,13 @@ export function LaboratoryNewModelControls({
   routeInfoOpen,
   onToggleRouteInfo,
   routeInfoText,
+  setupFieldOrder = ["kbSelector", "adminKbSelector", "routeSelector"],
 }: Props) {
-  return (
-    <>
-      {showKbSelector ? (
+  const sections: Record<"kbSelector" | "adminKbSelector" | "routeSelector", ReactNode> = {
+    kbSelector: showKbSelector ? (
         <div>
           <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-            <span>KB 선택</span>
+            <span>{kbLabel}</span>
             {kbAdminOnly ? (
               <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
                 ADMIN
@@ -95,12 +103,11 @@ export function LaboratoryNewModelControls({
             />
           ) : null}
         </div>
-      ) : null}
-
-      {showAdminKbSelector ? (
+      ) : null,
+    adminKbSelector: showAdminKbSelector ? (
         <div>
           <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-            <span>관리자 KB 선택</span>
+            <span>{adminKbLabel}</span>
             {adminKbAdminOnly ? (
               <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
                 ADMIN
@@ -134,12 +141,11 @@ export function LaboratoryNewModelControls({
             />
           ) : null}
         </div>
-      ) : null}
-
-      {showRouteSelector ? (
+      ) : null,
+    routeSelector: showRouteSelector ? (
         <div>
           <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-            <span>Runtime 선택</span>
+            <span>{routeLabel}</span>
             {routeAdminOnly ? (
               <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
                 ADMIN
@@ -165,7 +171,8 @@ export function LaboratoryNewModelControls({
             />
           ) : null}
         </div>
-      ) : null}
-    </>
-  );
+      ) : null,
+  };
+
+  return <>{setupFieldOrder.map((key) => sections[key]).filter(Boolean)}</>;
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
 
@@ -11,6 +12,7 @@ type Props = {
   modelSelectorAdminOnly?: boolean;
   showModeExisting: boolean;
   modeExistingAdminOnly?: boolean;
+  showSessionIdSearch?: boolean;
   showModeNew: boolean;
   modeNewAdminOnly?: boolean;
   setupMode: SetupMode;
@@ -32,6 +34,7 @@ type Props = {
   onSelectAgentGroup: (value: string) => void;
   onSelectAgentVersion: (value: string) => void;
   onSelectSession: (value: string) => void;
+  onSearchSessionById: (value: string) => void;
   onChangeConversationMode: (mode: ConversationMode) => void;
 };
 
@@ -40,6 +43,7 @@ export function LaboratoryExistingSetup({
   modelSelectorAdminOnly = false,
   showModeExisting,
   modeExistingAdminOnly = false,
+  showSessionIdSearch = true,
   showModeNew,
   modeNewAdminOnly = false,
   setupMode,
@@ -58,8 +62,11 @@ export function LaboratoryExistingSetup({
   onSelectAgentGroup,
   onSelectAgentVersion,
   onSelectSession,
+  onSearchSessionById,
   onChangeConversationMode,
 }: Props) {
+  const [sessionSearchId, setSessionSearchId] = useState("");
+
   return (
     <>
       {showModelSelector ? (
@@ -148,6 +155,35 @@ export function LaboratoryExistingSetup({
                 searchable
                 className="flex-1 min-w-0"
               />
+              {showSessionIdSearch ? (
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={sessionSearchId}
+                    onChange={(e) => setSessionSearchId(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      onSearchSessionById(sessionSearchId);
+                    }}
+                    placeholder="세션 ID로 조회 (예: 9eecff5d-...)"
+                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => onSearchSessionById(sessionSearchId)}
+                    disabled={sessionsLoading}
+                    className={cn(
+                      "h-9 shrink-0 rounded-md border px-3 text-xs font-semibold",
+                      sessionsLoading
+                        ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    )}
+                  >
+                    조회
+                  </button>
+                </div>
+              ) : null}
               {sessionsLoading ? <div className="mt-1 text-[11px] text-slate-500">세션 불러오는 중...</div> : null}
               {sessionsError ? <div className="mt-1 text-[11px] text-rose-600">{sessionsError}</div> : null}
             </div>

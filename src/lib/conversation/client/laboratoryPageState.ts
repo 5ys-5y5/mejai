@@ -2,7 +2,8 @@ export type KbItem = {
   id: string;
   title: string;
   content?: string | null;
-  is_admin?: boolean | null;
+  is_admin?: boolean | string | null;
+  is_sample?: boolean | null;
   apply_groups?: Array<{ path: string; values: string[] }> | null;
   apply_groups_mode?: "all" | "any" | null;
   applies_to_user?: boolean | null;
@@ -187,6 +188,7 @@ export type ModelConfig = {
   mcpToolIds: string[];
   route: string;
   inlineKb: string;
+  inlineKbSampleSelectionOrder: string[];
 };
 
 export type ModelState = {
@@ -241,6 +243,7 @@ export function createDefaultModel(): ModelState {
       mcpToolIds: [],
       route: "shipping",
       inlineKb: "",
+      inlineKbSampleSelectionOrder: [],
     },
     sessionId: null,
     messages: [],
@@ -334,4 +337,3 @@ export function buildHistoryMessages(turns: TurnRow[]) {
   });
   return acc;
 }
-

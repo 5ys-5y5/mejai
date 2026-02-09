@@ -1,6 +1,19 @@
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 
 export type ConversationPageKey = "/" | "/app/laboratory";
+export type SetupFieldKey =
+  | "inlineUserKbInput"
+  | "llmSelector"
+  | "kbSelector"
+  | "adminKbSelector"
+  | "routeSelector"
+  | "mcpProviderSelector"
+  | "mcpActionSelector";
+
+export type ConversationSetupUi = {
+  order: SetupFieldKey[];
+  labels: Record<SetupFieldKey, string>;
+};
 
 /**
  * 중앙 대화 기능 정책 파일
@@ -80,6 +93,8 @@ export type ConversationPageFeatures = {
     adminKbSelector: boolean;
     /** existing 모드 버튼/동작 허용 */
     modeExisting: boolean;
+    /** existing 모드에서 세션 ID 직접 검색 UI 노출 */
+    sessionIdSearch: boolean;
     /** new 모드 버튼/동작 허용 */
     modeNew: boolean;
     /** runtime(route) 선택 UI 노출 */
@@ -101,9 +116,69 @@ export type ConversationFeaturesProviderShape = {
   pages?: Partial<Record<ConversationPageKey, ConversationPageFeaturesOverride>>;
   debug_copy?: Partial<Record<ConversationPageKey, Partial<DebugTranscriptOptions>>>;
   settings_ui?: {
-    chat_card_base_width?: number;
+    setup_fields?: Partial<
+      Record<
+        ConversationPageKey,
+        {
+          order?: SetupFieldKey[];
+          labels?: Partial<Record<SetupFieldKey, string>>;
+        }
+      >
+    >;
   };
 };
+
+const DEFAULT_SETUP_UI: ConversationSetupUi = {
+  order: [
+    "inlineUserKbInput",
+    "llmSelector",
+    "kbSelector",
+    "adminKbSelector",
+    "routeSelector",
+    "mcpProviderSelector",
+    "mcpActionSelector",
+  ],
+  labels: {
+    inlineUserKbInput: "사용자 KB입력란",
+    llmSelector: "LLM 선택",
+    kbSelector: "KB 선택",
+    adminKbSelector: "관리자 KB 선택",
+    routeSelector: "Runtime 선택",
+    mcpProviderSelector: "MCP 프로바이더 선택",
+    mcpActionSelector: "MCP 액션 선택",
+  },
+};
+
+function normalizeSetupOrder(order?: SetupFieldKey[]) {
+  const seen = new Set<SetupFieldKey>();
+  const normalized: SetupFieldKey[] = [];
+  (order || []).forEach((key) => {
+    if (seen.has(key)) return;
+    if (!DEFAULT_SETUP_UI.order.includes(key)) return;
+    seen.add(key);
+    normalized.push(key);
+  });
+  DEFAULT_SETUP_UI.order.forEach((key) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    normalized.push(key);
+  });
+  return normalized;
+}
+
+export function resolveConversationSetupUi(
+  page: ConversationPageKey,
+  providerValue?: ConversationFeaturesProviderShape | null
+): ConversationSetupUi {
+  const override = providerValue?.settings_ui?.setup_fields?.[page];
+  return {
+    order: normalizeSetupOrder(override?.order),
+    labels: {
+      ...DEFAULT_SETUP_UI.labels,
+      ...(override?.labels || {}),
+    },
+  };
+}
 
 function inAllowlist(id: string, allowlist?: string[]) {
   if (!allowlist || allowlist.length === 0) return true;
@@ -161,6 +236,7 @@ export function mergeConversationPageFeatures(
       kbSelector: override.setup?.kbSelector ?? base.setup.kbSelector,
       adminKbSelector: override.setup?.adminKbSelector ?? base.setup.adminKbSelector,
       modeExisting: override.setup?.modeExisting ?? base.setup.modeExisting,
+      sessionIdSearch: override.setup?.sessionIdSearch ?? base.setup.sessionIdSearch,
       modeNew: override.setup?.modeNew ?? base.setup.modeNew,
       routeSelector: override.setup?.routeSelector ?? base.setup.routeSelector,
       inlineUserKbInput: override.setup?.inlineUserKbInput ?? base.setup.inlineUserKbInput,
@@ -193,6 +269,7 @@ export function mergeConversationPageFeatures(
         kbSelector: override.visibility?.setup?.kbSelector ?? base.visibility.setup.kbSelector,
         adminKbSelector: override.visibility?.setup?.adminKbSelector ?? base.visibility.setup.adminKbSelector,
         modeExisting: override.visibility?.setup?.modeExisting ?? base.visibility.setup.modeExisting,
+        sessionIdSearch: override.visibility?.setup?.sessionIdSearch ?? base.visibility.setup.sessionIdSearch,
         modeNew: override.visibility?.setup?.modeNew ?? base.visibility.setup.modeNew,
         routeSelector: override.visibility?.setup?.routeSelector ?? base.visibility.setup.routeSelector,
         inlineUserKbInput:
@@ -295,6 +372,11 @@ export function applyConversationFeatureVisibility(
         isAdminUser
       ),
       modeExisting: withVisibilityFlag(features.setup.modeExisting, features.visibility.setup.modeExisting, isAdminUser),
+      sessionIdSearch: withVisibilityFlag(
+        features.setup.sessionIdSearch,
+        features.visibility.setup.sessionIdSearch,
+        isAdminUser
+      ),
       modeNew: withVisibilityFlag(features.setup.modeNew, features.visibility.setup.modeNew, isAdminUser),
       routeSelector: withVisibilityFlag(features.setup.routeSelector, features.visibility.setup.routeSelector, isAdminUser),
       inlineUserKbInput: withVisibilityFlag(
@@ -348,6 +430,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
       kbSelector: false,
       adminKbSelector: false,
       modeExisting: false,
+      sessionIdSearch: false,
       modeNew: true,
       routeSelector: false,
       inlineUserKbInput: true,
@@ -379,6 +462,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
         kbSelector: "user",
         adminKbSelector: "admin",
         modeExisting: "user",
+        sessionIdSearch: "user",
         modeNew: "user",
         routeSelector: "user",
         inlineUserKbInput: "user",
@@ -413,6 +497,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
       kbSelector: true,
       adminKbSelector: true,
       modeExisting: true,
+      sessionIdSearch: true,
       modeNew: true,
       routeSelector: true,
       inlineUserKbInput: false,
@@ -444,6 +529,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
         kbSelector: "user",
         adminKbSelector: "admin",
         modeExisting: "user",
+        sessionIdSearch: "user",
         modeNew: "user",
         routeSelector: "user",
         inlineUserKbInput: "user",

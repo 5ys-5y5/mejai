@@ -10,8 +10,9 @@ import { ConversationReplySelectors } from "@/components/conversation/Conversati
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { renderBotContent, renderStructuredChoiceContent } from "@/lib/conversation/messageRenderUtils";
-import type { ConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
+import type { ConversationPageFeatures, ConversationSetupUi } from "@/lib/conversation/pageFeaturePolicy";
 import type { SelectOption } from "@/components/SelectPopover";
+import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
 
 type HeroMessage = {
   id: string;
@@ -41,12 +42,17 @@ type HeroMessage = {
 
 type Props = {
   pageFeatures: ConversationPageFeatures;
+  setupUi: ConversationSetupUi;
   isAdminUser: boolean;
   selectedLlm: "chatgpt" | "gemini";
   llmOptions: SelectOption[];
   onSelectLlm: (value: "chatgpt" | "gemini") => void;
   userKb: string;
   onChangeUserKb: (value: string) => void;
+  inlineKbSamples: InlineKbSampleItem[];
+  inlineKbSampleSelectionOrder: string[];
+  inlineKbSampleConflict: boolean;
+  onApplyInlineKbSamples: (sampleIds: string[]) => void;
   providerOptions: SelectOption[];
   selectedProviderKeys: string[];
   onChangeProviderKeys: (values: string[]) => void;
@@ -80,12 +86,17 @@ type Props = {
 
 export function HeroModelCard({
   pageFeatures,
+  setupUi,
   isAdminUser,
   selectedLlm,
   llmOptions,
   onSelectLlm,
   userKb,
   onChangeUserKb,
+  inlineKbSamples,
+  inlineKbSampleSelectionOrder,
+  inlineKbSampleConflict,
+  onApplyInlineKbSamples,
   providerOptions,
   selectedProviderKeys,
   onChangeProviderKeys,
@@ -131,24 +142,33 @@ export function HeroModelCard({
             inlineKbLabelClassName="mb-1 text-[11px] font-semibold text-slate-600"
             inlineKbPlaceholder="예) 고객 정책, 자주 묻는 질문, 톤 가이드 등을 입력하세요."
             inlineKbTextareaClassName="hero-input h-36 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-300"
+            inlineKbLabel={setupUi.labels.inlineUserKbInput}
+            inlineKbSamples={inlineKbSamples}
+            inlineKbSampleSelectionOrder={inlineKbSampleSelectionOrder}
+            onInlineKbSampleApply={onApplyInlineKbSamples}
+            inlineKbSampleConflict={inlineKbSampleConflict}
             showLlmSelector={pageFeatures.setup.llmSelector}
+            llmLabel={setupUi.labels.llmSelector}
             llmAdminOnly={pageFeatures.visibility.setup.llmSelector === "admin"}
             llmValue={selectedLlm}
             onLlmChange={(value) => onSelectLlm(value as "chatgpt" | "gemini")}
             llmOptions={llmOptions}
             showMcpProviderSelector={pageFeatures.mcp.providerSelector}
+            mcpProviderLabel={setupUi.labels.mcpProviderSelector}
             mcpProviderAdminOnly={pageFeatures.visibility.mcp.providerSelector === "admin"}
             providerValues={selectedProviderKeys}
             onProviderChange={onChangeProviderKeys}
             providerOptions={providerOptions}
             providerPlaceholder="선택"
             showMcpActionSelector={pageFeatures.mcp.actionSelector}
+            mcpActionLabel={setupUi.labels.mcpActionSelector}
             mcpActionAdminOnly={pageFeatures.visibility.mcp.actionSelector === "admin"}
             actionValues={selectedMcpToolIds}
             onActionChange={onChangeMcpToolIds}
             actionOptions={actionOptions}
             actionPlaceholder="선택"
             actionSearchable
+            setupFieldOrder={setupUi.order}
           />
         </div>
       }

@@ -4,10 +4,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useSearchParams } from "next/navigation";
 import { type SelectOption } from "@/components/SelectPopover";
 import { apiFetch } from "@/lib/apiClient";
-import { isProviderEnabled, isToolEnabled } from "@/lib/conversation/pageFeaturePolicy";
+import { isProviderEnabled, isToolEnabled, resolveConversationSetupUi } from "@/lib/conversation/pageFeaturePolicy";
 import { useLaboratoryConversationActions } from "@/lib/conversation/client/useLaboratoryConversationActions";
 import { useConversationPageFeatures } from "@/lib/conversation/client/useConversationPageFeatures";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
+import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
+import { isAdminKbValue } from "@/lib/kbType";
 import {
   buildHistoryMessages,
   compareAgentVersions,
@@ -34,6 +36,7 @@ import { toast } from "sonner";
 export function useLaboratoryPageController() {
   const [isAdminUser, setIsAdminUser] = useState(false);
   const { features: pageFeatures, providerValue } = useConversationPageFeatures("/app/laboratory", isAdminUser);
+  const setupUi = useMemo(() => resolveConversationSetupUi("/app/laboratory", providerValue), [providerValue]);
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +44,7 @@ export function useLaboratoryPageController() {
   const [mcpProviders, setMcpProviders] = useState<McpProvider[]>([]);
   const [tools, setTools] = useState<MpcTool[]>([]);
   const [agents, setAgents] = useState<AgentItem[]>([]);
+  const [inlineKbSamples, setInlineKbSamples] = useState<InlineKbSampleItem[]>([]);
   const [wsStatus, setWsStatus] = useState("연결 대기");
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -107,7 +111,7 @@ export function useLaboratoryPageController() {
     setModels((prev) =>
       prev.map((model) => ({
         ...model,
-        config: { ...model.config, inlineKb: "" },
+        config: { ...model.config, inlineKb: "", inlineKbSampleSelectionOrder: [] },
       }))
     );
   }, [pageFeatures.setup.inlineUserKbInput]);
@@ -118,10 +122,11 @@ export function useLaboratoryPageController() {
       setLoading(true);
       setError(null);
       try {
-        const [kbRes, agentRes, profileRes] = await Promise.all([
+        const [kbRes, agentRes, profileRes, sampleRes] = await Promise.all([
           apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
           apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200").catch(() => ({ items: [] })),
           apiFetch<{ is_admin?: boolean }>("/api/user-profile").catch(() => ({ is_admin: false })),
+          apiFetch<{ items?: InlineKbSampleItem[] }>("/api/kb/samples").catch(() => ({ items: [] })),
         ]);
         const mcpRes = await apiFetch<{ providers?: McpProvider[] }>("/api/mcp").catch(() => ({
           providers: [],
@@ -129,6 +134,7 @@ export function useLaboratoryPageController() {
         if (!mounted) return;
         setKbItems(kbRes.items || []);
         setAgents(agentRes.items || []);
+        setInlineKbSamples((sampleRes.items || []).filter((item) => item.content?.trim().length > 0));
         setIsAdminUser(Boolean(profileRes?.is_admin));
         const providers = (mcpRes.providers || []).filter((provider) => isProviderEnabled(provider.key, pageFeatures));
         setMcpProviders(providers);
@@ -139,6 +145,7 @@ export function useLaboratoryPageController() {
       } catch {
         if (!mounted) return;
         setError("실험실 데이터를 불러오지 못했습니다.");
+        setInlineKbSamples([]);
       } finally {
         if (mounted) setLoading(false);
       }
@@ -188,7 +195,7 @@ export function useLaboratoryPageController() {
 
   useEffect(() => {
     if (!kbItems.length) return;
-    const userKbs = kbItems.filter((kb) => !kb.is_admin);
+    const userKbs = kbItems.filter((kb) => !isAdminKbValue(kb.is_admin));
     const firstUserKb = userKbs[0]?.id;
     setModels((prev) =>
       prev.map((model) => ({
@@ -301,7 +308,7 @@ export function useLaboratoryPageController() {
   }, [models, viewportTick]);
 
   const kbOptions = useMemo<SelectOption[]>(() => {
-    return kbItems.filter((kb) => !kb.is_admin).map((kb) => ({
+    return kbItems.filter((kb) => !isAdminKbValue(kb.is_admin)).map((kb) => ({
       id: kb.id,
       label: kb.title,
       description: makeSnippet(kb.content),
@@ -309,15 +316,21 @@ export function useLaboratoryPageController() {
   }, [kbItems]);
 
   const adminKbOptions = useMemo<SelectOption[]>(() => {
-    return kbItems.filter((kb) => kb.is_admin).map((kb) => ({
+    return kbItems.filter((kb) => isAdminKbValue(kb.is_admin)).map((kb) => ({
       id: kb.id,
       label: kb.title,
       description: `${kb.applies_to_user ? "적용됨" : "미적용"} · ${makeSnippet(kb.content)}`,
     }));
   }, [kbItems]);
-  const adminKbIdSet = useMemo(() => new Set(kbItems.filter((kb) => kb.is_admin).map((kb) => kb.id)), [kbItems]);
+  const adminKbIdSet = useMemo(
+    () => new Set(kbItems.filter((kb) => isAdminKbValue(kb.is_admin)).map((kb) => kb.id)),
+    [kbItems]
+  );
   const latestAdminKbId = useMemo(
-    () => kbItems.find((kb) => kb.is_admin && kb.applies_to_user !== false)?.id || kbItems.find((kb) => kb.is_admin)?.id || "",
+    () =>
+      kbItems.find((kb) => isAdminKbValue(kb.is_admin) && kb.applies_to_user !== false)?.id ||
+      kbItems.find((kb) => isAdminKbValue(kb.is_admin))?.id ||
+      "",
     [kbItems]
   );
 
@@ -616,6 +629,7 @@ export function useLaboratoryPageController() {
     updateModel(modelId, (model) => ({
       ...model,
       selectedSessionId: sessionId || null,
+      sessionsError: null,
       historyMessages: [],
       editSessionId: null,
       sessionId: null,
@@ -635,6 +649,61 @@ export function useLaboratoryPageController() {
       updateModel(modelId, (model) => ({
         ...model,
         sessionsError: "대화 기록을 불러오지 못했습니다.",
+      }));
+    }
+  };
+
+  const handleSearchSessionById = async (modelId: string, rawSessionId: string) => {
+    const sessionId = rawSessionId.trim();
+    if (!sessionId) {
+      updateModel(modelId, (model) => ({
+        ...model,
+        sessionsError: "세션 ID를 입력해 주세요.",
+      }));
+      return;
+    }
+
+    const target = models.find((model) => model.id === modelId);
+    if (!target?.selectedAgentId) {
+      updateModel(modelId, (model) => ({
+        ...model,
+        sessionsError: "먼저 에이전트 버전을 선택해 주세요.",
+      }));
+      return;
+    }
+
+    updateModel(modelId, (model) => ({
+      ...model,
+      sessionsLoading: true,
+      sessionsError: null,
+    }));
+
+    try {
+      const session = await apiFetch<SessionItem>(`/api/sessions/${encodeURIComponent(sessionId)}`);
+      if (session.agent_id && session.agent_id !== target.selectedAgentId) {
+        updateModel(modelId, (model) => ({
+          ...model,
+          sessionsLoading: false,
+          sessionsError: "선택한 에이전트 버전의 세션이 아닙니다.",
+        }));
+        return;
+      }
+
+      updateModel(modelId, (model) => ({
+        ...model,
+        sessionsLoading: false,
+        sessionsError: null,
+        sessions: model.sessions.some((item) => item.id === session.id) ? model.sessions : [session, ...model.sessions],
+      }));
+
+      await handleSelectSession(modelId, session.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "";
+      const isNotFound = message.includes("NOT_FOUND") || message.includes("404");
+      updateModel(modelId, (model) => ({
+        ...model,
+        sessionsLoading: false,
+        sessionsError: isNotFound ? "해당 세션 ID를 찾을 수 없습니다." : "세션 조회에 실패했습니다.",
       }));
     }
   };
@@ -791,11 +860,13 @@ export function useLaboratoryPageController() {
     loading,
     error,
     kbItems,
+    inlineKbSamples,
     wsStatus,
     wsStatusDot,
     models,
     leftPaneHeights,
     pageFeatures,
+    setupUi,
     isAdminUser,
     latestAdminKbId,
     tools,
@@ -824,6 +895,7 @@ export function useLaboratoryPageController() {
     handleSelectAgentGroup,
     handleSelectAgentVersion,
     handleSelectSession,
+    handleSearchSessionById,
     handleChangeConversationMode,
     handleCopyTranscript,
     handleCopyIssueTranscript,

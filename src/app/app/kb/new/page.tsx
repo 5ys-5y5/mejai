@@ -271,6 +271,7 @@ export default function NewKbPage() {
   const [selectedRecos, setSelectedRecos] = useState<Record<string, boolean>>({});
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [kbType, setKbType] = useState<"normal" | "admin">("normal");
+  const [createAsSample, setCreateAsSample] = useState(false);
   const [groupOptions, setGroupOptions] = useState<GroupOption[]>([]);
   const [groupSelections, setGroupSelections] = useState<Record<string, Record<string, boolean>>>({});
   const [groupMatchMode, setGroupMatchMode] = useState<"all" | "any">("all");
@@ -285,6 +286,10 @@ export default function NewKbPage() {
   const [customRulePredicate, setCustomRulePredicate] = useState("");
   const [customRuleAction, setCustomRuleAction] = useState("");
   const [customRules, setCustomRules] = useState<Array<{ id: string; rule: Record<string, unknown>; needsCode: boolean }>>([]);
+
+  useEffect(() => {
+    if (kbType === "admin") setCreateAsSample(false);
+  }, [kbType]);
 
   useEffect(() => {
     let mounted = true;
@@ -628,6 +633,7 @@ export default function NewKbPage() {
         category?: string | null;
         is_active: boolean;
         is_admin?: boolean;
+        is_sample?: boolean;
         apply_groups?: Array<{ path: string; values: string[] }>;
         apply_groups_mode?: "all" | "any";
         content_json?: unknown;
@@ -650,6 +656,9 @@ export default function NewKbPage() {
         payload.content_json = parsed;
         payload.content = policyJson.trim();
       } else {
+        if (isAdminUser && createAsSample) {
+          payload.is_sample = true;
+        }
         payload.content = combinedContent.trim();
       }
 
@@ -688,6 +697,17 @@ export default function NewKbPage() {
               >
                 {kbType === "admin" ? "ADMIN 모드" : "일반 모드"}
               </button>
+            ) : null}
+            {isAdminUser && kbType === "normal" ? (
+              <label className="inline-flex items-center gap-2 rounded-3xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={createAsSample}
+                  onChange={(e) => setCreateAsSample(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
+                />
+                sample
+              </label>
             ) : null}
             <RagStorageBadge usedBytes={usedBytes} limitBytes={limitBytes} />
           </div>

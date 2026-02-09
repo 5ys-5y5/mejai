@@ -24,6 +24,12 @@
     - `approve?: boolean` (default `true`)
     - `apply?: boolean` (default `false`)
     - `reviewer_note?: string`
+- `POST /api/runtime/governance/proposals/complete`
+  - 외부(LLB/로컬 CLI) 수동 적용이 끝난 proposal을 "적용 완료"로 상태만 기록.
+  - Body:
+    - `proposal_id: string`
+    - `reason?: string`
+    - `reviewer_note?: string`
 
 ## Access
 - Admin user (IAM `is_admin=true`) or cron secret.

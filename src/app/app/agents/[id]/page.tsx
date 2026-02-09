@@ -10,6 +10,7 @@ import { MultiSelectPopover, SelectPopover } from "@/components/SelectPopover";
 import { formatKstDateTime } from "@/lib/kst";
 import { Bot, PencilLine, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { isAdminKbValue } from "@/lib/kbType";
 
 type AgentItem = {
   id: string;
@@ -32,7 +33,8 @@ type KbItem = {
   version: string | null;
   is_active: boolean | null;
   created_at?: string | null;
-  is_admin?: boolean | null;
+  is_admin?: boolean | string | null;
+  is_sample?: boolean | null;
   org_id?: string | null;
 };
 
@@ -295,12 +297,12 @@ export default function AgentDetailPage() {
 
   const scopedKbItems = useMemo(() => {
     if (!userOrgId) return [];
-    return kbItems.filter((item) => !item.is_admin && item.org_id === userOrgId);
+    return kbItems.filter((item) => !isAdminKbValue(item.is_admin) && item.org_id === userOrgId);
   }, [kbItems, userOrgId]);
 
   const adminKbItems = useMemo(() => {
     if (!isAdmin || !userOrgId) return [];
-    return kbItems.filter((item) => item.is_admin && item.org_id === userOrgId);
+    return kbItems.filter((item) => isAdminKbValue(item.is_admin) && item.org_id === userOrgId);
   }, [kbItems, isAdmin, userOrgId]);
 
   const activeKbByParent = useMemo(() => getActiveKbByParent(scopedKbItems), [scopedKbItems]);

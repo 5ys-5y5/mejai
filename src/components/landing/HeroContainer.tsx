@@ -18,12 +18,17 @@ export function HeroContainer({ settings }: { settings: LandingSettings }) {
       <div className="relative container mx-auto w-full max-w-6xl px-6">
         <HeroModelCard
           pageFeatures={ctrl.pageFeatures}
+          setupUi={ctrl.setupUi}
           isAdminUser={ctrl.isAdminUser}
           selectedLlm={ctrl.selectedLlm}
           llmOptions={ctrl.llmOptions}
           onSelectLlm={ctrl.setSelectedLlm}
           userKb={ctrl.userKb}
           onChangeUserKb={ctrl.setUserKb}
+          inlineKbSamples={ctrl.inlineKbSamples}
+          inlineKbSampleSelectionOrder={ctrl.inlineKbSampleSelectionOrder}
+          inlineKbSampleConflict={ctrl.inlineKbSampleConflict}
+          onApplyInlineKbSamples={ctrl.applyInlineKbSamples}
           providerOptions={ctrl.providerOptions}
           selectedProviderKeys={ctrl.selectedProviderKeys}
           onChangeProviderKeys={ctrl.setSelectedProviderKeys}
@@ -63,4 +68,3 @@ export function HeroContainer({ settings }: { settings: LandingSettings }) {
     </section>
   );
 }
-

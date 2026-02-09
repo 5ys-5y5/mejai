@@ -102,7 +102,7 @@ function actionButtonClass(action: ProposalAction) {
 }
 
 function actionLabel(action: ProposalAction) {
-  if (action === "apply") return "적용";
+  if (action === "apply") return "적용 처리";
   if (action === "reject") return "거절";
   if (action === "hold") return "보류";
   return "제안";
@@ -114,6 +114,7 @@ function allowedActions(status: ProposalStatus): ProposalAction[] {
   if (status === "approved") return ["apply", "hold", "reject"];
   if (status === "on_hold") return ["apply", "reject", "repropose"];
   if (status === "failed") return ["apply", "hold", "repropose"];
+  if (status === "applied") return ["repropose"];
   return [];
 }
 
@@ -191,18 +192,17 @@ export function ProposalSettingsPanel({ authToken }: Props) {
   const runAction = useCallback(
     async (proposalId: string, action: ProposalAction) => {
       if (action === "apply") {
-        const res = await fetch("/api/runtime/governance/proposals/approve", {
+        const res = await fetch("/api/runtime/governance/proposals/complete", {
           method: "POST",
           headers,
           body: JSON.stringify({
             proposal_id: proposalId,
-            approve: true,
-            apply: true,
-            reviewer_note: "executed_from_settings_proposal_tab",
+            reason: "MANUAL_APPLY_CONFIRMED",
+            reviewer_note: "manual_apply_confirmed_from_settings_proposal_tab",
           }),
         });
         const body = await parseJsonBody<{ ok?: boolean; error?: string }>(res);
-        if (!res.ok || !body?.ok) throw new Error(body?.error || "제안 적용에 실패했습니다.");
+        if (!res.ok || !body?.ok) throw new Error(body?.error || "적용 처리에 실패했습니다.");
         return;
       }
       if (action === "reject") {
@@ -238,6 +238,59 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       if (!res.ok || !body?.ok) throw new Error(body?.error || "제안 상태 변경에 실패했습니다.");
     },
     [headers]
+  );
+
+  const buildProposalClipboardText = useCallback((proposal: ProposalItem) => {
+    const lines: string[] = [
+      "[Runtime Proposal]",
+      `proposal_id: ${proposal.proposal_id}`,
+      `status: ${proposal.status} (${proposal.status_label})`,
+      `org_id: ${proposal.org_id || "-"}`,
+      `session_id: ${proposal.session_id || "-"}`,
+      `turn_id: ${proposal.turn_id || "-"}`,
+      `principle_key: ${proposal.principle_key || "-"}`,
+      `runtime_scope: ${proposal.runtime_scope || "-"}`,
+      `violation_id: ${proposal.violation_id || "-"}`,
+      `created_at: ${proposal.created_at || "-"}`,
+      "",
+      "[Why Failed]",
+      proposal.why_failed || "-",
+      "",
+      "[How To Improve]",
+      proposal.how_to_improve || "-",
+      "",
+      `[Rationale] ${proposal.rationale || "-"}`,
+      `[Target Files] ${proposal.target_files.join(", ") || "-"}`,
+      `[Change Plan] ${proposal.change_plan.join(" | ") || "-"}`,
+      "",
+      `[Violation Summary] ${proposal.violation?.summary || "-"}`,
+      `[Violation Severity] ${proposal.violation?.severity || "-"}`,
+      `[Violation Evidence] ${JSON.stringify(proposal.violation?.evidence || {}, null, 2)}`,
+      "",
+      "[Conversation Snippet]",
+      ...proposal.conversation.map(
+        (turn) =>
+          `- turn_id=${turn.id}, seq=${turn.seq ?? "-"}, created_at=${turn.created_at || "-"}\n  USER: ${
+            turn.user || "-"
+          }\n  BOT: ${turn.bot || "-"}`
+      ),
+    ];
+    return lines.join("\n");
+  }, []);
+
+  const copyProposalForCli = useCallback(
+    async (proposal: ProposalItem) => {
+      setError(null);
+      setStatusNote("");
+      const text = buildProposalClipboardText(proposal);
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatusNote(`제안 복사 완료: ${proposal.proposal_id}`);
+      } catch {
+        setError("제안 복사에 실패했습니다.");
+      }
+    },
+    [buildProposalClipboardText]
   );
 
   const handleSingleAction = useCallback(
@@ -412,7 +465,7 @@ export function ProposalSettingsPanel({ authToken }: Props) {
             onChange={(e) => setBulkAction(e.target.value as ProposalAction)}
             className="h-8 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700"
           >
-            <option value="apply">적용</option>
+            <option value="apply">적용 처리</option>
             <option value="reject">거절</option>
             <option value="hold">보류</option>
             <option value="repropose">제안</option>
@@ -636,6 +689,14 @@ export function ProposalSettingsPanel({ authToken }: Props) {
             </details>
 
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                onClick={() => void copyProposalForCli(proposal)}
+                disabled={busyProposalId === proposal.proposal_id || busyBulk}
+              >
+                제안 복사
+              </button>
               {actions.length === 0 ? <span className="text-xs text-slate-400">변경 가능한 상태 액션이 없습니다.</span> : null}
               {actions.map((action) => (
                 <button

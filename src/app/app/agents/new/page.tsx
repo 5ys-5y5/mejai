@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/apiClient";
 import { toast } from "sonner";
 import { formatKstDateTime } from "@/lib/kst";
+import { isAdminKbValue } from "@/lib/kbType";
 
 type MpcTool = {
   id: string;
@@ -22,7 +23,8 @@ type KbItem = {
   version: string | null;
   is_active: boolean | null;
   created_at?: string | null;
-  is_admin?: boolean | null;
+  is_admin?: boolean | string | null;
+  is_sample?: boolean | null;
 };
 
 type KbParentGroup = {
@@ -104,7 +106,7 @@ export default function NewAgentPage() {
 
   const visibleKbItems = useMemo(() => {
     if (isAdminUser) return kbItems;
-    return kbItems.filter((item) => !item.is_admin);
+    return kbItems.filter((item) => !isAdminKbValue(item.is_admin));
   }, [kbItems, isAdminUser]);
 
   const kbParents = useMemo(() => {
@@ -117,7 +119,7 @@ export default function NewAgentPage() {
     return Array.from(byParent.entries()).map(([parentId, versions]) => {
       const sorted = [...versions].sort(compareVersions);
       const title = sorted[0]?.title || "제목 없음";
-      const isAdmin = sorted.some((item) => item.is_admin);
+      const isAdmin = sorted.some((item) => isAdminKbValue(item.is_admin));
       return { parentId, title, versions: sorted, isAdmin } satisfies KbParentGroup;
     });
   }, [visibleKbItems]);
@@ -426,7 +428,7 @@ export default function NewAgentPage() {
                         <div>
                           <div className="flex items-center gap-2">
                             <div className="text-sm font-semibold text-slate-900">{version.version || "버전 없음"}</div>
-                            {version.is_admin ? (
+                            {isAdminKbValue(version.is_admin) ? (
                               <span className="inline-flex h-5 items-center rounded-full bg-amber-100 px-2 text-[10px] font-semibold text-amber-700">
                                 ADMIN
                               </span>

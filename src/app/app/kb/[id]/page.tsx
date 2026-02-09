@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { formatKstDateTime } from "@/lib/kst";
 import { PencilLine, Trash2 } from "lucide-react";
 import DiffViewer, { type DiffLine } from "@/components/DiffViewer";
+import { isAdminKbValue } from "@/lib/kbType";
 
 type KbItem = {
   id: string;
@@ -20,7 +21,8 @@ type KbItem = {
   category: string | null;
   version: string | null;
   is_active: boolean | null;
-  is_admin?: boolean | null;
+  is_admin?: boolean | string | null;
+  is_sample?: boolean | null;
   apply_groups?: Array<{ path: string; values: string[] }> | null;
   apply_groups_mode?: "all" | "any" | null;
   created_at?: string | null;
@@ -258,7 +260,7 @@ export default function EditKbPage() {
         setTitle(res.title || "");
         setCategory(res.category || "");
         setCurrentVersion(res.version || "");
-        setIsAdminKb(Boolean(res.is_admin));
+        setIsAdminKb(isAdminKbValue(res.is_admin));
         setApplyGroups(Array.isArray(res.apply_groups) ? res.apply_groups : []);
         setApplyGroupsMode(res.apply_groups_mode === "any" ? "any" : "all");
         setBaseTitle(res.title || "");

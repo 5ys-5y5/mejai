@@ -10,6 +10,7 @@ import { formatKstDate } from "@/lib/kst";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/apiClient";
 import { toast } from "sonner";
+import { isAdminKbValue, isSampleKbRow } from "@/lib/kbType";
 
 type KbItem = {
   id: string;
@@ -18,7 +19,8 @@ type KbItem = {
   version: string | null;
   category: string | null;
   is_active: boolean | null;
-  is_admin?: boolean | null;
+  is_admin?: boolean | string | null;
+  is_sample?: boolean | null;
   created_at: string | null;
   content?: string | null;
 };
@@ -285,7 +287,8 @@ export default function KbPage() {
                 <li key={d.id} className="contents">
                   <div className="flex min-h-[44px] items-center gap-2 px-4 py-3 text-left text-sm font-medium text-slate-900">
                     <span>{d.title}</span>
-                    {d.is_admin ? <Badge variant="slate">ADMIN</Badge> : null}
+                    {isAdminKbValue(d.is_admin) ? <Badge variant="slate">ADMIN</Badge> : null}
+                    {isSampleKbRow(d) ? <Badge variant="green">SAMPLE</Badge> : null}
                   </div>
                   <div className="flex min-h-[44px] items-center px-4 py-3 text-left text-xs text-slate-600">
                     {d.is_active ? "배포됨" : "비활성"}

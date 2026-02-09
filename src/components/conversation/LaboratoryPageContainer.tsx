@@ -57,6 +57,7 @@ export function LaboratoryPageContainer() {
                   leftPaneHeight={ctrl.leftPaneHeights[model.id] || 0}
                   expandedPanelHeight={ctrl.EXPANDED_PANEL_HEIGHT}
                   pageFeatures={ctrl.pageFeatures}
+                  setupUi={ctrl.setupUi}
                   isAdminUser={ctrl.isAdminUser}
                   latestAdminKbId={ctrl.latestAdminKbId}
                   tools={ctrl.tools}
@@ -72,6 +73,7 @@ export function LaboratoryPageContainer() {
                   providerOptions={ctrl.providerOptions}
                   routeOptions={ctrl.routeOptions}
                   kbItems={ctrl.kbItems}
+                  inlineKbSamples={ctrl.inlineKbSamples}
                   quickReplyDrafts={ctrl.quickReplyDrafts}
                   lockedReplySelections={ctrl.lockedReplySelections}
                   setQuickReplyDrafts={ctrl.setQuickReplyDrafts}
@@ -85,6 +87,7 @@ export function LaboratoryPageContainer() {
                   onSelectAgentGroup={ctrl.handleSelectAgentGroup}
                   onSelectAgentVersion={ctrl.handleSelectAgentVersion}
                   onSelectSession={ctrl.handleSelectSession}
+                  onSearchSessionById={ctrl.handleSearchSessionById}
                   onChangeConversationMode={ctrl.handleChangeConversationMode}
                   onCopyConversation={ctrl.handleCopyTranscript}
                   onCopyIssue={ctrl.handleCopyIssueTranscript}
@@ -110,4 +113,3 @@ export function LaboratoryPageContainer() {
     </div>
   );
 }
-

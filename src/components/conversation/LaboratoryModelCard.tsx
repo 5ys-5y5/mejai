@@ -9,8 +9,10 @@ import { LaboratoryExistingSetup } from "@/components/conversation/LaboratoryExi
 import { LaboratoryNewModelControls } from "@/components/conversation/LaboratoryNewModelControls";
 import { LaboratoryConversationPane } from "@/components/conversation/LaboratoryConversationPane";
 import { type SelectOption } from "@/components/SelectPopover";
-import { isToolEnabled, type ConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
+import { isToolEnabled, type ConversationPageFeatures, type ConversationSetupUi } from "@/lib/conversation/pageFeaturePolicy";
 import type { ModelState } from "@/lib/conversation/client/laboratoryPageState";
+import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
+import { appendInlineKbSample, hasConflictingInlineKbSamples } from "@/lib/conversation/inlineKbSamples";
 
 type ConversationMode = "history" | "edit" | "new";
 type SetupMode = "existing" | "new";
@@ -72,7 +74,8 @@ type KbItem = {
   id: string;
   title: string;
   content?: string | null;
-  is_admin?: boolean | null;
+  is_admin?: boolean | string | null;
+  is_sample?: boolean | null;
   applies_to_user?: boolean | null;
 };
 
@@ -89,6 +92,7 @@ type ModelStateLike = {
     llm: string;
     kbId: string;
     inlineKb: string;
+    inlineKbSampleSelectionOrder: string[];
     adminKbIds: string[];
     mcpProviderKeys: string[];
     mcpToolIds: string[];
@@ -136,6 +140,7 @@ type Props = {
   leftPaneHeight: number;
   expandedPanelHeight: number;
   pageFeatures: ConversationPageFeatures;
+  setupUi: ConversationSetupUi;
   isAdminUser: boolean;
   latestAdminKbId: string;
 
@@ -153,6 +158,7 @@ type Props = {
   providerOptions: SelectOption[];
   routeOptions: SelectOption[];
   kbItems: KbItem[];
+  inlineKbSamples: InlineKbSampleItem[];
 
   quickReplyDrafts: Record<string, string[]>;
   lockedReplySelections: Record<string, string[]>;
@@ -168,6 +174,7 @@ type Props = {
   onSelectAgentGroup: (id: string, groupId: string) => void;
   onSelectAgentVersion: (id: string, agentId: string) => Promise<void> | void;
   onSelectSession: (id: string, sessionId: string) => Promise<void> | void;
+  onSearchSessionById: (id: string, sessionId: string) => Promise<void> | void;
   onChangeConversationMode: (id: string, mode: ConversationMode) => void;
   onCopyConversation: (id: string) => Promise<void> | void;
   onCopyIssue: (id: string) => Promise<void> | void;
@@ -189,6 +196,7 @@ export function LaboratoryModelCard({
   leftPaneHeight,
   expandedPanelHeight,
   pageFeatures,
+  setupUi,
   isAdminUser,
   latestAdminKbId,
   tools,
@@ -204,6 +212,7 @@ export function LaboratoryModelCard({
   providerOptions,
   routeOptions,
   kbItems,
+  inlineKbSamples,
   quickReplyDrafts,
   lockedReplySelections,
   setQuickReplyDrafts,
@@ -217,6 +226,7 @@ export function LaboratoryModelCard({
   onSelectAgentGroup,
   onSelectAgentVersion,
   onSelectSession,
+  onSearchSessionById,
   onChangeConversationMode,
   onCopyConversation,
   onCopyIssue,
@@ -256,6 +266,13 @@ export function LaboratoryModelCard({
         : model.messages;
 
   const matchedPaneHeight = model.layoutExpanded ? expandedPanelHeight : leftPaneHeight;
+  const inlineKbSampleConflict =
+    model.config.inlineKbSampleSelectionOrder.length >= 2 &&
+    hasConflictingInlineKbSamples(
+      model.config.inlineKbSampleSelectionOrder
+        .map((id) => inlineKbSamples.find((sample) => sample.id === id)?.content || "")
+        .filter((value) => value.trim().length > 0)
+    );
   const activeSessionId =
     model.conversationMode === "history"
       ? model.selectedSessionId
@@ -291,6 +308,7 @@ export function LaboratoryModelCard({
                 modelSelectorAdminOnly={pageFeatures.visibility.setup.modelSelector === "admin"}
                 showModeExisting={pageFeatures.setup.modeExisting}
                 modeExistingAdminOnly={pageFeatures.visibility.setup.modeExisting === "admin"}
+                showSessionIdSearch={pageFeatures.setup.sessionIdSearch}
                 showModeNew={pageFeatures.setup.modeNew}
                 modeNewAdminOnly={pageFeatures.visibility.setup.modeNew === "admin"}
                 setupMode={model.setupMode}
@@ -336,6 +354,9 @@ export function LaboratoryModelCard({
                 onSelectSession={(value) => {
                   void onSelectSession(model.id, value);
                 }}
+                onSearchSessionById={(value) => {
+                  void onSearchSessionById(model.id, value);
+                }}
                 onChangeConversationMode={(mode) => onChangeConversationMode(model.id, mode)}
               />
               {model.setupMode === "new" ? (
@@ -344,13 +365,38 @@ export function LaboratoryModelCard({
                     showInlineUserKbInput={pageFeatures.setup.inlineUserKbInput}
                     inlineKbAdminOnly={pageFeatures.visibility.setup.inlineUserKbInput === "admin"}
                     inlineKbValue={model.config.inlineKb}
+                    inlineKbLabel={setupUi.labels.inlineUserKbInput}
                     onInlineKbChange={(value) =>
                       onUpdateModel(model.id, (m) => ({
                         ...m,
                         config: { ...m.config, inlineKb: value },
                       }))
                     }
+                    inlineKbSamples={inlineKbSamples}
+                    inlineKbSampleSelectionOrder={model.config.inlineKbSampleSelectionOrder}
+                    onInlineKbSampleApply={(sampleIds) =>
+                      onUpdateModel(model.id, (m) => {
+                        const validIds = sampleIds.filter((id) => inlineKbSamples.some((item) => item.id === id));
+                        if (validIds.length === 0) return m;
+                        let nextInlineKb = m.config.inlineKb;
+                        validIds.forEach((id) => {
+                          const sample = inlineKbSamples.find((item) => item.id === id);
+                          if (!sample) return;
+                          nextInlineKb = appendInlineKbSample(nextInlineKb, sample.content);
+                        });
+                        return {
+                          ...m,
+                          config: {
+                            ...m.config,
+                            inlineKb: nextInlineKb,
+                            inlineKbSampleSelectionOrder: [...m.config.inlineKbSampleSelectionOrder, ...validIds],
+                          },
+                        };
+                      })
+                    }
+                    inlineKbSampleConflict={inlineKbSampleConflict}
                     showLlmSelector={pageFeatures.setup.llmSelector}
+                    llmLabel={setupUi.labels.llmSelector}
                     llmAdminOnly={pageFeatures.visibility.setup.llmSelector === "admin"}
                     llmValue={model.config.llm}
                     onLlmChange={(value) => {
@@ -373,6 +419,7 @@ export function LaboratoryModelCard({
                     middleContent={
                       <LaboratoryNewModelControls
                         showKbSelector={pageFeatures.setup.kbSelector}
+                        kbLabel={setupUi.labels.kbSelector}
                         kbAdminOnly={pageFeatures.visibility.setup.kbSelector === "admin"}
                         kbValue={model.config.kbId}
                         kbOptions={kbOptions}
@@ -392,6 +439,7 @@ export function LaboratoryModelCard({
                         }
                         kbInfoText={kbItems.find((kb) => kb.id === model.config.kbId)?.content || "내용 없음"}
                         showAdminKbSelector={isAdminUser && pageFeatures.setup.adminKbSelector}
+                        adminKbLabel={setupUi.labels.adminKbSelector}
                         adminKbAdminOnly={pageFeatures.visibility.setup.adminKbSelector === "admin"}
                         adminKbValues={model.config.adminKbIds}
                         adminKbOptions={adminKbOptions}
@@ -423,6 +471,7 @@ export function LaboratoryModelCard({
                               .join("\n\n")
                         }
                         showRouteSelector={pageFeatures.setup.routeSelector}
+                        routeLabel={setupUi.labels.routeSelector}
                         routeAdminOnly={pageFeatures.visibility.setup.routeSelector === "admin"}
                         routeValue={model.config.route}
                         routeOptions={routeOptions}
@@ -441,9 +490,14 @@ export function LaboratoryModelCard({
                           }))
                         }
                         routeInfoText={describeRoute(model.config.route)}
+                        setupFieldOrder={setupUi.order.filter(
+                          (key): key is "kbSelector" | "adminKbSelector" | "routeSelector" =>
+                            key === "kbSelector" || key === "adminKbSelector" || key === "routeSelector"
+                        )}
                       />
                     }
                     showMcpProviderSelector={pageFeatures.mcp.providerSelector}
+                    mcpProviderLabel={setupUi.labels.mcpProviderSelector}
                     mcpProviderAdminOnly={pageFeatures.visibility.mcp.providerSelector === "admin"}
                     providerValues={model.config.mcpProviderKeys}
                     onProviderChange={(values) => {
@@ -498,6 +552,7 @@ export function LaboratoryModelCard({
                       ].join("\n")
                     }
                     showMcpActionSelector={pageFeatures.mcp.actionSelector}
+                    mcpActionLabel={setupUi.labels.mcpActionSelector}
                     mcpActionAdminOnly={pageFeatures.visibility.mcp.actionSelector === "admin"}
                     actionValues={model.config.mcpToolIds}
                     onActionChange={(values) => {
@@ -509,6 +564,7 @@ export function LaboratoryModelCard({
                     }}
                     actionOptions={filteredToolOptions}
                     actionPlaceholder="MCP 액션 선택"
+                    setupFieldOrder={setupUi.order}
                   />
                 </div>
               ) : null}

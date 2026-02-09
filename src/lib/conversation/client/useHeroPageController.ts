@@ -1,12 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { type SelectOption } from "@/components/SelectPopover";
 import { apiFetch } from "@/lib/apiClient";
-import { isProviderEnabled, isToolEnabled } from "@/lib/conversation/pageFeaturePolicy";
+import { isProviderEnabled, isToolEnabled, resolveConversationSetupUi } from "@/lib/conversation/pageFeaturePolicy";
 import { useConversationController } from "@/lib/conversation/client/useConversationController";
 import { useConversationPageFeatures } from "@/lib/conversation/client/useConversationPageFeatures";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
+import {
+  appendInlineKbSample,
+  hasConflictingInlineKbSamples,
+  type InlineKbSampleItem,
+} from "@/lib/conversation/inlineKbSamples";
 
 type McpAction = {
   id: string;
@@ -31,6 +36,7 @@ const NEW_MODEL_CONFIG = {
 export function useHeroPageController() {
   const [isAdminUser, setIsAdminUser] = useState(false);
   const { features: pageFeatures, providerValue } = useConversationPageFeatures("/", isAdminUser);
+  const setupUi = useMemo(() => resolveConversationSetupUi("/", providerValue), [providerValue]);
   const [input, setInput] = useState("");
   const [userKb, setUserKb] = useState("");
   const [providerOptions, setProviderOptions] = useState<SelectOption[]>([]);
@@ -43,6 +49,8 @@ export function useHeroPageController() {
   const [showAdminLogs, setShowAdminLogs] = useState(false);
   const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
   const [lockedReplySelections, setLockedReplySelections] = useState<Record<string, string[]>>({});
+  const [inlineKbSamples, setInlineKbSamples] = useState<InlineKbSampleItem[]>([]);
+  const [inlineKbSampleSelectionOrder, setInlineKbSampleSelectionOrder] = useState<string[]>([]);
   const selectedLlm = selectedLlmOverride ?? pageFeatures.setup.defaultLlm;
   const effectiveProviderKeys = selectedProviderKeys.filter((key) => providerOptions.some((option) => option.id === key));
   const effectiveMcpToolIds = selectedMcpToolIds.filter((id) => actionOptions.some((option) => option.id === id));
@@ -122,6 +130,22 @@ export function useHeroPageController() {
 
   useEffect(() => {
     let active = true;
+    apiFetch<{ items?: InlineKbSampleItem[] }>("/api/kb/samples")
+      .then((res) => {
+        if (!active) return;
+        setInlineKbSamples((res.items || []).filter((item) => item.content?.trim().length > 0));
+      })
+      .catch(() => {
+        if (!active) return;
+        setInlineKbSamples([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     apiFetch<{ is_admin?: boolean }>("/api/user-profile")
       .then((res) => {
         if (!active) return;
@@ -146,6 +170,19 @@ export function useHeroPageController() {
   });
 
   const placeholder = "신규 대화 질문을 입력하세요";
+  const sampleContentById = useMemo(() => {
+    const map = new Map<string, string>();
+    inlineKbSamples.forEach((sample) => map.set(sample.id, sample.content));
+    return map;
+  }, [inlineKbSamples]);
+  const inlineKbSampleConflict = useMemo(() => {
+    if (inlineKbSampleSelectionOrder.length < 2) return false;
+    const contents = inlineKbSampleSelectionOrder
+      .map((id) => sampleContentById.get(id) || "")
+      .filter((content) => content.trim().length > 0);
+    if (contents.length < 2) return false;
+    return hasConflictingInlineKbSamples(contents);
+  }, [inlineKbSampleSelectionOrder, sampleContentById]);
 
   const handleCopyTranscript = async () => {
     await convo.copyConversation(
@@ -176,10 +213,28 @@ export function useHeroPageController() {
     pageFeatures,
     isAdminUser,
     selectedLlm,
+    setupUi,
     llmOptions,
     setSelectedLlm: (value: "chatgpt" | "gemini") => setSelectedLlmOverride(value),
     userKb,
     setUserKb,
+    inlineKbSamples,
+    inlineKbSampleSelectionOrder,
+    inlineKbSampleConflict,
+    applyInlineKbSamples: (sampleIds: string[]) => {
+      const validIds = sampleIds.filter((id) => inlineKbSamples.some((item) => item.id === id));
+      if (validIds.length === 0) return;
+      setUserKb((prev) => {
+        let next = prev;
+        validIds.forEach((id) => {
+          const sample = inlineKbSamples.find((item) => item.id === id);
+          if (!sample) return;
+          next = appendInlineKbSample(next, sample.content);
+        });
+        return next;
+      });
+      setInlineKbSampleSelectionOrder((prev) => [...prev, ...validIds]);
+    },
     providerOptions,
     selectedProviderKeys,
     setSelectedProviderKeys,

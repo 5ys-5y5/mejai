@@ -1,16 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
+import { CircleHelp } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import {
   PAGE_CONVERSATION_FEATURES,
   mergeConversationPageFeatures,
+  resolveConversationSetupUi,
   type ConversationFeaturesProviderShape,
   type FeatureVisibilityMode,
   type ConversationPageFeatures,
   type ConversationPageKey,
+  type ConversationSetupUi,
+  type SetupFieldKey,
 } from "@/lib/conversation/pageFeaturePolicy";
 import {
   DEFAULT_CONVERSATION_DEBUG_OPTIONS,
@@ -21,6 +25,14 @@ const PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory"];
 const DEFAULT_DEBUG_COPY_BY_PAGE: Record<ConversationPageKey, DebugTranscriptOptions> = {
   "/": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
   "/app/laboratory": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
+};
+const DEFAULT_SETUP_UI_BY_PAGE: Record<ConversationPageKey, ConversationSetupUi> = {
+  "/": resolveConversationSetupUi("/", null),
+  "/app/laboratory": resolveConversationSetupUi("/app/laboratory", null),
+};
+const SETTINGS_CARD_WIDTH_BY_PAGE: Record<ConversationPageKey, number> = {
+  "/": 360,
+  "/app/laboratory": 380,
 };
 
 type Props = {
@@ -49,6 +61,26 @@ type DebugFieldExamplesPayload = {
   sample_paths?: Record<string, unknown>;
   error?: string;
 };
+
+const SETUP_FIELD_OPTIONS: Array<{ key: SetupFieldKey; defaultLabel: string }> = [
+  { key: "inlineUserKbInput", defaultLabel: "사용자 KB입력란" },
+  { key: "llmSelector", defaultLabel: "LLM 선택" },
+  { key: "kbSelector", defaultLabel: "KB 선택" },
+  { key: "adminKbSelector", defaultLabel: "관리자 KB 선택" },
+  { key: "routeSelector", defaultLabel: "Runtime 선택" },
+  { key: "mcpProviderSelector", defaultLabel: "MCP 프로바이더 선택" },
+  { key: "mcpActionSelector", defaultLabel: "MCP 액션 선택" },
+];
+const SETUP_UI_CONFIGURABLE_KEYS: SetupFieldKey[] = [
+  "inlineUserKbInput",
+  "llmSelector",
+  "kbSelector",
+  "adminKbSelector",
+  "routeSelector",
+];
+function isSetupUiConfigurableKey(key: SetupFieldKey): key is (typeof SETUP_UI_CONFIGURABLE_KEYS)[number] {
+  return SETUP_UI_CONFIGURABLE_KEYS.includes(key);
+}
 
 function parseCsv(value: string) {
   return value
@@ -81,19 +113,54 @@ type ToggleFieldProps = {
   visibility: FeatureVisibilityMode;
   onChange: (checked: boolean) => void;
   onChangeVisibility: (mode: FeatureVisibilityMode) => void;
+  expandable?: boolean;
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
 };
 
-function ToggleField({ label, checked, visibility, onChange, onChangeVisibility }: ToggleFieldProps) {
+function ToggleField({
+  label,
+  checked,
+  visibility,
+  onChange,
+  onChangeVisibility,
+  expandable = false,
+  expanded = false,
+  onToggleExpanded,
+}: ToggleFieldProps) {
   return (
-    <label
+    <div
       className={
         checked
           ? "flex items-center justify-between gap-3 rounded-lg border border-emerald-500 bg-emerald-100 px-3 py-2 text-xs ring-1 ring-emerald-200"
           : "flex items-center justify-between gap-3 rounded-lg border border-rose-400 bg-rose-100 px-3 py-2 text-xs ring-1 ring-rose-200"
       }
     >
-      <span className={checked ? "font-semibold text-emerald-900" : "font-semibold text-rose-900"}>{label}</span>
+      <button
+        type="button"
+        onClick={() => {
+          if (expandable && onToggleExpanded) onToggleExpanded();
+        }}
+        disabled={!expandable}
+        className={
+          checked
+            ? "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-emerald-900"
+            : "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-rose-900"
+        }
+      >
+        <span>{label}</span>
+      </button>
       <span className="flex items-center gap-1">
+        {expandable ? (
+          <button
+            type="button"
+            onClick={() => onToggleExpanded?.()}
+            className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700"
+            aria-label={`${label} 하위 토글`}
+          >
+            {expanded ? "▼" : "▶"}
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => onChange(!checked)}
@@ -117,7 +184,95 @@ function ToggleField({ label, checked, visibility, onChange, onChangeVisibility 
           {visibility === "admin" ? "ADMIN" : "USER"}
         </button>
       </span>
-    </label>
+    </div>
+  );
+}
+
+type GroupToggleFieldProps = {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  expandable?: boolean;
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
+};
+
+function GroupToggleField({
+  label,
+  checked,
+  onChange,
+  expandable = false,
+  expanded = false,
+  onToggleExpanded,
+}: GroupToggleFieldProps) {
+  return (
+    <div
+      className={
+        checked
+          ? "flex items-center justify-between gap-3 rounded-lg border border-emerald-500 bg-emerald-100 px-3 py-2 text-xs ring-1 ring-emerald-200"
+          : "flex items-center justify-between gap-3 rounded-lg border border-rose-400 bg-rose-100 px-3 py-2 text-xs ring-1 ring-rose-200"
+      }
+    >
+      <button
+        type="button"
+        onClick={() => {
+          if (expandable && onToggleExpanded) onToggleExpanded();
+        }}
+        disabled={!expandable}
+        className={
+          checked
+            ? "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-emerald-900"
+            : "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-rose-900"
+        }
+      >
+        <span>{label}</span>
+      </button>
+      <span className="flex items-center gap-1">
+        {expandable ? (
+          <button
+            type="button"
+            onClick={() => onToggleExpanded?.()}
+            className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700"
+            aria-label={`${label} 하위 토글`}
+          >
+            {expanded ? "▼" : "▶"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => onChange(!checked)}
+          className={
+            checked
+              ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white"
+              : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 px-2 py-1 text-[11px] font-bold text-white"
+          }
+        >
+          {checked ? "ON" : "OFF"}
+        </button>
+      </span>
+    </div>
+  );
+}
+
+type HelpDisclosureProps = {
+  label?: string;
+  children: React.ReactNode;
+};
+
+function HelpDisclosure({ label = "설명/예시 보기", children }: HelpDisclosureProps) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="inline-flex items-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700"
+      >
+        <span>{label}</span>
+        <CircleHelp className="ml-[10px] h-3.5 w-3.5" />
+      </button>
+      {open ? <div className="mt-2 text-[11px] leading-5 text-slate-600">{children}</div> : null}
+    </div>
   );
 }
 
@@ -274,7 +429,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/conversation/HeroModelCard.tsx",
       "src/components/conversation/LaboratoryModelCard.tsx",
     ],
-    notes: "페이지별 설정 영역 구성요소(모델/LLM/저장KB/임시KB/AdminKB/모드/Route) 노출과 기본값을 제어합니다.",
+    notes: "페이지별 설정 영역 구성요소(모델/LLM/저장KB/임시KB/AdminKB/모드/Route) 노출과 기본값을 제어하며, 임시KB 샘플 선택 UI에도 공통 반영됩니다.",
     usedByPages: ["/", "/app/laboratory"],
   },
   {
@@ -297,18 +452,52 @@ export function ChatSettingsPanel({ authToken }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [governanceConfig, setGovernanceConfig] = useState<GovernanceConfig | null>(null);
-  const [cardBaseWidth, setCardBaseWidth] = useState(240);
-  const [cardBaseWidthDraft, setCardBaseWidthDraft] = useState("240");
-  const [isLgViewport, setIsLgViewport] = useState(false);
   const [draftByPage, setDraftByPage] = useState<Record<ConversationPageKey, ConversationPageFeatures>>({
     "/": PAGE_CONVERSATION_FEATURES["/"],
     "/app/laboratory": PAGE_CONVERSATION_FEATURES["/app/laboratory"],
   });
   const [debugCopyDraftByPage, setDebugCopyDraftByPage] =
     useState<Record<ConversationPageKey, DebugTranscriptOptions>>(DEFAULT_DEBUG_COPY_BY_PAGE);
+  const [setupUiByPage, setSetupUiByPage] =
+    useState<Record<ConversationPageKey, ConversationSetupUi>>(DEFAULT_SETUP_UI_BY_PAGE);
+  const [setupExistingDetailsOpenByPage, setSetupExistingDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
+    "/": false,
+    "/app/laboratory": true,
+  });
+  const [setupNewDetailsOpenByPage, setSetupNewDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
+    "/": true,
+    "/app/laboratory": true,
+  });
+  const [mcpProviderDetailsOpenByPage, setMcpProviderDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
+    "/": true,
+    "/app/laboratory": true,
+  });
+  const [mcpActionDetailsOpenByPage, setMcpActionDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
+    "/": true,
+    "/app/laboratory": true,
+  });
+  const [debugHeaderDetailsOpenByPage, setDebugHeaderDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
+    "/": true,
+    "/app/laboratory": true,
+  });
+  const [debugTurnDetailsOpenByPage, setDebugTurnDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
+    "/": true,
+    "/app/laboratory": true,
+  });
+  const [debugLogsDetailsOpenByPage, setDebugLogsDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
+    "/": true,
+    "/app/laboratory": true,
+  });
+  const [debugEventDetailsOpenByPage, setDebugEventDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
+    "/": true,
+    "/app/laboratory": true,
+  });
   const [debugFieldExamples, setDebugFieldExamples] = useState<Record<string, unknown>>({});
   const [debugFieldEventTypes, setDebugFieldEventTypes] = useState<string[]>([]);
   const [debugFieldMcpTools, setDebugFieldMcpTools] = useState<string[]>([]);
+  const [draggingSetupFieldByPage, setDraggingSetupFieldByPage] = useState<
+    Partial<Record<ConversationPageKey, SetupFieldKey | null>>
+  >({});
 
   const headers = useMemo<Record<string, string>>(() => {
     const next: Record<string, string> = {
@@ -363,24 +552,115 @@ export function ChatSettingsPanel({ authToken }: Props) {
       "/": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
       "/app/laboratory": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
     };
+    const nextSetupUi: Record<ConversationPageKey, ConversationSetupUi> = {
+      "/": resolveConversationSetupUi("/", providerValue),
+      "/app/laboratory": resolveConversationSetupUi("/app/laboratory", providerValue),
+    };
     for (const page of PAGE_KEYS) {
       next[page] = mergeConversationPageFeatures(PAGE_CONVERSATION_FEATURES[page], providerValue?.pages?.[page]);
       nextDebug[page] = resolvePageConversationDebugOptions(page, providerValue);
     }
-    setDraftByPage(next);
-    setDebugCopyDraftByPage(nextDebug);
+    const unifiedDraft = next["/"];
+    const unifiedDebug = nextDebug["/"];
+    const unifiedSetup = nextSetupUi["/"];
+    setDraftByPage({
+      "/": unifiedDraft,
+      "/app/laboratory": {
+        ...unifiedDraft,
+        setup: {
+          ...unifiedDraft.setup,
+          modelSelector: true,
+        },
+      },
+    });
+    setDebugCopyDraftByPage({
+      "/": unifiedDebug,
+      "/app/laboratory": { ...unifiedDebug },
+    });
+    setSetupUiByPage({
+      "/": unifiedSetup,
+      "/app/laboratory": {
+        order: [...unifiedSetup.order],
+        labels: { ...unifiedSetup.labels },
+      },
+    });
   }, []);
 
   const updatePage = useCallback(
-    (page: ConversationPageKey, updater: (prev: ConversationPageFeatures) => ConversationPageFeatures) => {
-      setDraftByPage((prev) => ({ ...prev, [page]: updater(prev[page]) }));
+    (_page: ConversationPageKey, updater: (prev: ConversationPageFeatures) => ConversationPageFeatures) => {
+      setDraftByPage((prev) => {
+        const next: Record<ConversationPageKey, ConversationPageFeatures> = { ...prev };
+        for (const page of PAGE_KEYS) {
+          next[page] = updater(prev[page]);
+        }
+        return next;
+      });
     },
     []
   );
 
   const updateDebugCopyOptions = useCallback(
-    (page: ConversationPageKey, updater: (prev: DebugTranscriptOptions) => DebugTranscriptOptions) => {
-      setDebugCopyDraftByPage((prev) => ({ ...prev, [page]: updater(prev[page]) }));
+    (_page: ConversationPageKey, updater: (prev: DebugTranscriptOptions) => DebugTranscriptOptions) => {
+      setDebugCopyDraftByPage((prev) => {
+        const next: Record<ConversationPageKey, DebugTranscriptOptions> = { ...prev };
+        for (const page of PAGE_KEYS) {
+          next[page] = updater(prev[page]);
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  const moveSetupField = useCallback(
+    (_page: ConversationPageKey, from: SetupFieldKey, to: SetupFieldKey) => {
+      if (from === to) return;
+      setSetupUiByPage((prev) => {
+        const baseOrder = [...prev["/"].order];
+        const fromIdx = baseOrder.indexOf(from);
+        const toIdx = baseOrder.indexOf(to);
+        if (fromIdx < 0 || toIdx < 0) return prev;
+        const [moved] = baseOrder.splice(fromIdx, 1);
+        baseOrder.splice(toIdx, 0, moved);
+        const labels = { ...prev["/"].labels };
+        return {
+          "/": { order: baseOrder, labels },
+          "/app/laboratory": { order: [...baseOrder], labels: { ...labels } },
+        };
+      });
+    },
+    []
+  );
+
+  const handleSetupDragStart = useCallback(
+    (page: ConversationPageKey, key: SetupFieldKey) => (e: DragEvent<HTMLDivElement>) => {
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", key);
+      setDraggingSetupFieldByPage((prev) => ({ ...prev, [page]: key }));
+    },
+    []
+  );
+
+  const handleSetupDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const handleSetupDrop = useCallback(
+    (page: ConversationPageKey, targetKey: SetupFieldKey) => (e: DragEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      const fromData = e.dataTransfer.getData("text/plain") as SetupFieldKey | "";
+      const dragged = (fromData || draggingSetupFieldByPage[page] || null) as SetupFieldKey | null;
+      setDraggingSetupFieldByPage((prev) => ({ ...prev, [page]: null }));
+      if (!dragged) return;
+      moveSetupField(page, dragged, targetKey);
+    },
+    [draggingSetupFieldByPage, moveSetupField]
+  );
+
+  const handleSetupDragEnd = useCallback(
+    (page: ConversationPageKey) => () => {
+      setDraggingSetupFieldByPage((prev) => ({ ...prev, [page]: null }));
     },
     []
   );
@@ -412,12 +692,6 @@ export function ChatSettingsPanel({ authToken }: Props) {
         return;
       }
       applyProviderToDraft(payload?.provider || null);
-      const loadedCardWidth = Number(payload?.provider?.settings_ui?.chat_card_base_width);
-      const nextCardWidth = Number.isFinite(loadedCardWidth)
-        ? Math.max(180, Math.min(600, Math.round(loadedCardWidth)))
-        : 240;
-      setCardBaseWidth(nextCardWidth);
-      setCardBaseWidthDraft(String(nextCardWidth));
       try {
         await loadGovernanceConfig();
       } catch {
@@ -476,19 +750,18 @@ export function ChatSettingsPanel({ authToken }: Props) {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const sync = () => setIsLgViewport(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
   const handleResetToDefaults = () => {
     applyProviderToDraft(null);
     setDebugCopyDraftByPage(DEFAULT_DEBUG_COPY_BY_PAGE);
-    setCardBaseWidthDraft("240");
+    setSetupUiByPage(DEFAULT_SETUP_UI_BY_PAGE);
+    setSetupExistingDetailsOpenByPage({ "/": false, "/app/laboratory": true });
+    setSetupNewDetailsOpenByPage({ "/": true, "/app/laboratory": true });
+    setMcpProviderDetailsOpenByPage({ "/": true, "/app/laboratory": true });
+    setMcpActionDetailsOpenByPage({ "/": true, "/app/laboratory": true });
+    setDebugHeaderDetailsOpenByPage({ "/": true, "/app/laboratory": true });
+    setDebugTurnDetailsOpenByPage({ "/": true, "/app/laboratory": true });
+    setDebugLogsDetailsOpenByPage({ "/": true, "/app/laboratory": true });
+    setDebugEventDetailsOpenByPage({ "/": true, "/app/laboratory": true });
     setError(null);
   };
 
@@ -498,16 +771,22 @@ export function ChatSettingsPanel({ authToken }: Props) {
     try {
       const pages: Partial<Record<ConversationPageKey, ConversationPageFeatures>> = {
         "/": draftByPage["/"],
-        "/app/laboratory": draftByPage["/app/laboratory"],
+        "/app/laboratory": {
+          ...draftByPage["/app/laboratory"],
+          setup: {
+            ...draftByPage["/app/laboratory"].setup,
+            modelSelector: true,
+          },
+        },
       };
       const debug_copy: Partial<Record<ConversationPageKey, Partial<DebugTranscriptOptions>>> = {
         "/": debugCopyDraftByPage["/"],
         "/app/laboratory": debugCopyDraftByPage["/app/laboratory"],
       };
-      const parsedDraft = Number(cardBaseWidthDraft);
-      const nextCardWidth = Number.isFinite(parsedDraft)
-        ? Math.max(180, Math.min(600, Math.round(parsedDraft)))
-        : cardBaseWidth;
+      const setup_fields = {
+        "/": setupUiByPage["/"],
+        "/app/laboratory": setupUiByPage["/app/laboratory"],
+      };
 
       const res = await fetch("/api/auth-settings/providers", {
         method: "POST",
@@ -518,7 +797,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
             pages,
             debug_copy,
             settings_ui: {
-              chat_card_base_width: nextCardWidth,
+              setup_fields,
             },
           },
           commit: true,
@@ -528,7 +807,6 @@ export function ChatSettingsPanel({ authToken }: Props) {
       if (!res.ok || payload?.error || !payload?.ok) {
         throw new Error(payload?.error || "대화 설정 저장에 실패했습니다.");
       }
-      setCardBaseWidth(nextCardWidth);
       setSavedAt(new Date().toLocaleString("ko-KR"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "대화 설정 저장에 실패했습니다.");
@@ -557,26 +835,73 @@ export function ChatSettingsPanel({ authToken }: Props) {
           <Button type="button" onClick={handleSave} disabled={loading || saving}>
             {saving ? "저장 중..." : "저장"}
           </Button>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={cardBaseWidthDraft}
-            onChange={(e) => {
-              const next = e.target.value;
-              if (/^\d*$/.test(next)) {
-                setCardBaseWidthDraft(next);
-              }
-            }}
-            placeholder="숫자 (카드 폭)"
-            className="h-9 w-28 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
-          />
         </div>
       </Card>
 
       <div className="overflow-x-auto pb-3">
         <div className="flex min-w-full gap-4">
+          <Card className="shrink-0 p-4" style={{ width: "320px" }}>
+            <div className="text-sm font-semibold text-slate-900">공통 동기화</div>
+            <div className="mt-1 text-xs text-slate-500">모든 페이지 카드의 토글/설정이 동일하게 유지됩니다.</div>
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+              상태: <span className="font-semibold text-emerald-700">ON</span>
+            </div>
+            <div className="mt-3 rounded-lg border border-slate-200 bg-white p-2">
+              <div className="mb-2 text-[11px] font-semibold text-slate-700">공통 Setup 코드 순서/정의명</div>
+              <div className="mb-2 grid grid-cols-[90px_minmax(0,1fr)] gap-2 text-[11px] font-semibold text-slate-600">
+                <div>순서/코드명</div>
+                <div>정의명</div>
+              </div>
+              <div className="space-y-1.5">
+                {setupUiByPage["/"].order.filter(isSetupUiConfigurableKey).map((key, idx) => (
+                  <div
+                    key={`sync-${key}-${idx}`}
+                    draggable
+                    onDragStart={handleSetupDragStart("/", key)}
+                    onDragOver={handleSetupDragOver}
+                    onDrop={handleSetupDrop("/", key)}
+                    onDragEnd={handleSetupDragEnd("/")}
+                    className={
+                      draggingSetupFieldByPage["/"] === key
+                        ? "grid cursor-grab grid-cols-[90px_minmax(0,1fr)] items-center gap-2 opacity-70"
+                        : "grid cursor-grab grid-cols-[90px_minmax(0,1fr)] items-center gap-2"
+                    }
+                  >
+                    <div className="inline-flex h-8 items-center justify-between rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700">
+                      <span className="font-semibold text-slate-900">{idx + 1}</span>
+                      <span className="ml-2 min-w-0 flex-1 truncate text-right font-mono text-[11px] text-slate-700">{key}</span>
+                    </div>
+                    <input
+                      type="text"
+                      value={setupUiByPage["/"].labels[key] || key}
+                      onChange={(e) =>
+                        setSetupUiByPage((prev) => ({
+                          "/": {
+                            order: [...prev["/"].order],
+                            labels: { ...prev["/"].labels, [key]: e.target.value },
+                          },
+                          "/app/laboratory": {
+                            order: [...prev["/"].order],
+                            labels: { ...prev["/"].labels, [key]: e.target.value },
+                          },
+                        }))
+                      }
+                      className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Card>
           {PAGE_KEYS.map((page) => {
             const draft = draftByPage[page];
+            const setupUiDraft = setupUiByPage[page];
+            const effectiveModelSelector = true;
+            const setupDetailsOpen = true;
+            const showSetupExistingDetails = Boolean(draft.setup.modeExisting && setupExistingDetailsOpenByPage[page]);
+            const showSetupNewDetails = Boolean(draft.setup.modeNew && setupNewDetailsOpenByPage[page]);
+            const showMcpProviderDetails = Boolean(draft.mcp.providerSelector && mcpProviderDetailsOpenByPage[page]);
+            const showMcpActionDetails = Boolean(draft.mcp.actionSelector && mcpActionDetailsOpenByPage[page]);
             const debugCopyDraft = debugCopyDraftByPage[page];
             const debugHeader = debugCopyDraft.sections?.header;
             const debugTurn = debugCopyDraft.sections?.turn;
@@ -584,11 +909,15 @@ export function ChatSettingsPanel({ authToken }: Props) {
             const debugLogMcp = debugLogs?.mcp;
             const debugLogEvent = debugLogs?.event;
             const debugLogDebug = debugLogs?.debug;
+            const showDebugHeaderDetails = Boolean((debugHeader?.enabled ?? true) && debugHeaderDetailsOpenByPage[page]);
+            const showDebugTurnDetails = Boolean((debugTurn?.enabled ?? true) && debugTurnDetailsOpenByPage[page]);
+            const showDebugLogsDetails = Boolean((debugLogs?.enabled ?? true) && debugLogsDetailsOpenByPage[page]);
+            const showDebugEventDetails = Boolean((debugLogEvent?.enabled ?? true) && debugEventDetailsOpenByPage[page]);
             return (
               <Card
                 key={page}
                 className="shrink-0 p-4"
-                style={{ width: `${isLgViewport ? cardBaseWidth + 20 : cardBaseWidth}px` }}
+                style={{ width: `${SETTINGS_CARD_WIDTH_BY_PAGE[page]}px` }}
               >
                 <div className="text-sm font-semibold text-slate-900">{page}</div>
                 <div className="mt-1 text-xs text-slate-500">해당 페이지에서 실제 적용될 대화 기능 설정</div>
@@ -599,7 +928,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
                     <div className="text-[11px] text-slate-500">
                       기준: <code>src/app/api/runtime/chat/policies/principles.ts</code>
                     </div>
-                    <div className="rounded-lg border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-700">
+                    <HelpDisclosure label="기능 설명/예시 보기">
                       <div>
                         기능 설명:
                         <ul className="list-disc space-y-1 pl-4">
@@ -607,14 +936,14 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           <li>위배 항목을 감지하고, 패치 제안(proposal)을 생성하는 거버넌스 기능</li>
                         </ul>
                       </div>
-                      <div className="mt-5">
+                      <div className="mt-3">
                         참고:
                         <ul className="list-disc space-y-1 pl-4">
                           <li>위배 감지는 대화 중 실시간 자동 실행이 아니라, <code>POST /api/runtime/governance/review</code> 호출</li>
                           <li>(또는 <code>/runtime/principles</code>의 &quot;문제 감지 실행&quot; 버튼) 시 실행</li>
                         </ul>
                       </div>
-                      <div className="mt-5">
+                      <div className="mt-3">
                         실험 방법
                         <ol className="list-decimal space-y-1 pl-4">
                           <li>이 카드에서 Self Update를 ON으로 설정하고 저장.</li>
@@ -623,7 +952,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           <li><code>GET /api/runtime/governance/proposals</code> 또는 동일 페이지 목록에서 생성된 proposal과 상태를 확인</li>
                         </ol>
                       </div>
-                    </div>
+                    </HelpDisclosure>
                     <ToggleField
                       label="Self Update 활성화"
                       checked={Boolean(governanceConfig?.enabled)}
@@ -660,7 +989,41 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           visibility: { ...prev.visibility, mcp: { ...prev.visibility.mcp, providerSelector: mode } },
                         }))
                       }
+                      expandable
+                      expanded={showMcpProviderDetails}
+                      onToggleExpanded={() =>
+                        setMcpProviderDetailsOpenByPage((prev) => ({
+                          ...prev,
+                          [page]: !prev[page],
+                        }))
+                      }
                     />
+                    {draft.mcp.providerSelector && showMcpProviderDetails ? (
+                      <div className="space-y-2 border-l-2 border-slate-200 pl-3">
+                        <GateField
+                          label="Provider Allowlist"
+                          value={toCsv(draft.mcp.providers.allowlist)}
+                          onChange={(v) =>
+                            updatePage(page, (prev) => ({
+                              ...prev,
+                              mcp: { ...prev.mcp, providers: { ...prev.mcp.providers, allowlist: parseCsv(v) } },
+                            }))
+                          }
+                          placeholder="예: solapi, juso"
+                        />
+                        <GateField
+                          label="Provider Denylist"
+                          value={toCsv(draft.mcp.providers.denylist)}
+                          onChange={(v) =>
+                            updatePage(page, (prev) => ({
+                              ...prev,
+                              mcp: { ...prev.mcp, providers: { ...prev.mcp.providers, denylist: parseCsv(v) } },
+                            }))
+                          }
+                          placeholder="예: cafe24"
+                        />
+                      </div>
+                    ) : null}
                     <ToggleField
                       label="Action 선택"
                       checked={draft.mcp.actionSelector}
@@ -672,51 +1035,41 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           visibility: { ...prev.visibility, mcp: { ...prev.visibility.mcp, actionSelector: mode } },
                         }))
                       }
-                    />
-                    <GateField
-                      label="Provider Allowlist"
-                      value={toCsv(draft.mcp.providers.allowlist)}
-                      onChange={(v) =>
-                        updatePage(page, (prev) => ({
+                      expandable
+                      expanded={showMcpActionDetails}
+                      onToggleExpanded={() =>
+                        setMcpActionDetailsOpenByPage((prev) => ({
                           ...prev,
-                          mcp: { ...prev.mcp, providers: { ...prev.mcp.providers, allowlist: parseCsv(v) } },
+                          [page]: !prev[page],
                         }))
                       }
-                      placeholder="예: solapi, juso"
                     />
-                    <GateField
-                      label="Provider Denylist"
-                      value={toCsv(draft.mcp.providers.denylist)}
-                      onChange={(v) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          mcp: { ...prev.mcp, providers: { ...prev.mcp.providers, denylist: parseCsv(v) } },
-                        }))
-                      }
-                      placeholder="예: cafe24"
-                    />
-                    <GateField
-                      label="Tool Allowlist"
-                      value={toCsv(draft.mcp.tools.allowlist)}
-                      onChange={(v) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          mcp: { ...prev.mcp, tools: { ...prev.mcp.tools, allowlist: parseCsv(v) } },
-                        }))
-                      }
-                      placeholder="예: restock_lite, send_otp"
-                    />
-                    <GateField
-                      label="Tool Denylist"
-                      value={toCsv(draft.mcp.tools.denylist)}
-                      onChange={(v) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          mcp: { ...prev.mcp, tools: { ...prev.mcp.tools, denylist: parseCsv(v) } },
-                        }))
-                      }
-                      placeholder="예: cafe24:list_orders"
-                    />
+                    {draft.mcp.actionSelector && showMcpActionDetails ? (
+                      <div className="space-y-2 border-l-2 border-slate-200 pl-3">
+                        <GateField
+                          label="Tool Allowlist"
+                          value={toCsv(draft.mcp.tools.allowlist)}
+                          onChange={(v) =>
+                            updatePage(page, (prev) => ({
+                              ...prev,
+                              mcp: { ...prev.mcp, tools: { ...prev.mcp.tools, allowlist: parseCsv(v) } },
+                            }))
+                          }
+                          placeholder="예: restock_lite, send_otp"
+                        />
+                        <GateField
+                          label="Tool Denylist"
+                          value={toCsv(draft.mcp.tools.denylist)}
+                          onChange={(v) =>
+                            updatePage(page, (prev) => ({
+                              ...prev,
+                              mcp: { ...prev.mcp, tools: { ...prev.mcp.tools, denylist: parseCsv(v) } },
+                            }))
+                          }
+                          placeholder="예: cafe24:list_orders"
+                        />
+                      </div>
+                    ) : null}
                   </div>
 
                   <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -824,30 +1177,35 @@ export function ChatSettingsPanel({ authToken }: Props) {
 
                   <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs font-semibold text-slate-900">Debug Transcript (대화 복사)</div>
-                    <div className="text-[11px] leading-5 text-slate-500">
-                      상위 그룹 OFF 시 하위는 모두 OFF 처리됩니다. 예시값은 최근 로그 테이블에서 읽은 값입니다.
-                    </div>
+                    <HelpDisclosure label="동작 설명/예시 보기">
+                      <div>상위 그룹 OFF 시 하위는 모두 OFF 처리됩니다.</div>
+                      <div className="mt-1">예시값은 최근 로그 테이블에서 읽은 값입니다.</div>
+                    </HelpDisclosure>
 
                     <div className="rounded-lg border border-slate-200 bg-white p-2">
-                      <div className="mb-2 text-[11px] font-semibold text-slate-700">Header 그룹</div>
-                      <label className="flex items-center justify-between gap-3 text-xs">
-                        <span>Header ON/OFF</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                header: { ...prev.sections?.header, enabled: !(debugHeader?.enabled ?? true) },
-                              },
-                            }))
-                          }
-                          className={(debugHeader?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white"}
-                        >
-                          {(debugHeader?.enabled ?? true) ? "ON" : "OFF"}
-                        </button>
-                      </label>
+                      <GroupToggleField
+                        label="Header 그룹"
+                        checked={debugHeader?.enabled ?? true}
+                        onChange={(checked) =>
+                          updateDebugCopyOptions(page, (prev) => ({
+                            ...prev,
+                            sections: {
+                              ...prev.sections,
+                              header: { ...prev.sections?.header, enabled: checked },
+                            },
+                          }))
+                        }
+                        expandable
+                        expanded={showDebugHeaderDetails}
+                        onToggleExpanded={() =>
+                          setDebugHeaderDetailsOpenByPage((prev) => ({
+                            ...prev,
+                            [page]: !prev[page],
+                          }))
+                        }
+                      />
+                      {(debugHeader?.enabled ?? true) && showDebugHeaderDetails ? (
+                        <div className="mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
                       <label className="mt-2 flex items-center justify-between gap-3 text-xs">
                         <span>대원칙</span>
                         <button
@@ -926,25 +1284,31 @@ export function ChatSettingsPanel({ authToken }: Props) {
                         </button>
                       </label>
                       <div className="mt-1 text-[10px] text-slate-500">예시(MCP): {debugFieldMcpTools[0] || "-"} / 예시(Event): {debugFieldEventTypes[0] || "-"}</div>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="rounded-lg border border-slate-200 bg-white p-2">
-                      <div className="mb-2 text-[11px] font-semibold text-slate-700">Turn 그룹</div>
-                      <label className="flex items-center justify-between gap-3 text-xs">
-                        <span>Turn ON/OFF</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, enabled: !(debugTurn?.enabled ?? true) } },
-                            }))
-                          }
-                          className={(debugTurn?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white"}
-                        >
-                          {(debugTurn?.enabled ?? true) ? "ON" : "OFF"}
-                        </button>
-                      </label>
+                      <GroupToggleField
+                        label="Turn 그룹"
+                        checked={debugTurn?.enabled ?? true}
+                        onChange={(checked) =>
+                          updateDebugCopyOptions(page, (prev) => ({
+                            ...prev,
+                            sections: { ...prev.sections, turn: { ...prev.sections?.turn, enabled: checked } },
+                          }))
+                        }
+                        expandable
+                        expanded={showDebugTurnDetails}
+                        onToggleExpanded={() =>
+                          setDebugTurnDetailsOpenByPage((prev) => ({
+                            ...prev,
+                            [page]: !prev[page],
+                          }))
+                        }
+                      />
+                      {(debugTurn?.enabled ?? true) && showDebugTurnDetails ? (
+                        <div className="mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
                       <label className="mt-2 flex items-center justify-between gap-3 text-xs">
                         <span>TURN_ID</span>
                         <button
@@ -1079,25 +1443,31 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           {(debugTurn?.enabled ?? true) ? ((debugTurn?.quickReplyRule ?? true) ? "ON" : "OFF") : "OFF"}
                         </button>
                       </label>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div className="rounded-lg border border-slate-200 bg-white p-2">
-                      <div className="mb-2 text-[11px] font-semibold text-slate-700">Logs 그룹</div>
-                      <label className="flex items-center justify-between gap-3 text-xs">
-                        <span>Logs ON/OFF</span>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, enabled: !(debugLogs?.enabled ?? true) } },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white"}
-                        >
-                          {(debugLogs?.enabled ?? true) ? "ON" : "OFF"}
-                        </button>
-                      </label>
+                      <GroupToggleField
+                        label="Logs 그룹"
+                        checked={debugLogs?.enabled ?? true}
+                        onChange={(checked) =>
+                          updateDebugCopyOptions(page, (prev) => ({
+                            ...prev,
+                            sections: { ...prev.sections, logs: { ...prev.sections?.logs, enabled: checked } },
+                          }))
+                        }
+                        expandable
+                        expanded={showDebugLogsDetails}
+                        onToggleExpanded={() =>
+                          setDebugLogsDetailsOpenByPage((prev) => ({
+                            ...prev,
+                            [page]: !prev[page],
+                          }))
+                        }
+                      />
+                      {(debugLogs?.enabled ?? true) && showDebugLogsDetails ? (
+                        <div className="mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
                       <label className="mt-2 flex items-center justify-between gap-3 text-xs">
                         <span>문제 요약</span>
                         <button
@@ -1237,65 +1607,91 @@ export function ChatSettingsPanel({ authToken }: Props) {
                       </label>
                       <label className="mt-2 flex items-center justify-between gap-3 text-xs">
                         <span>Event 로그</span>
-                        <button
-                          type="button"
-                          disabled={!(debugLogs?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, enabled: !(debugLogEvent?.enabled ?? true) } } },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugLogs?.enabled ?? true) ? ((debugLogEvent?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        <span className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            disabled={!(debugLogs?.enabled ?? true) || !(debugLogEvent?.enabled ?? true)}
+                            onClick={() =>
+                              setDebugEventDetailsOpenByPage((prev) => ({
+                                ...prev,
+                                [page]: !prev[page],
+                              }))
+                            }
+                            className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700 disabled:text-slate-400"
+                            aria-label="Event 하위 토글"
+                          >
+                            {showDebugEventDetails ? "▼" : "▶"}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!(debugLogs?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, enabled: !(debugLogEvent?.enabled ?? true) } } },
+                              }))
+                            }
+                            className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugLogs?.enabled ?? true) ? ((debugLogEvent?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        </span>
                       </label>
-                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
-                        <span>Event payload</span>
-                        <button
-                          type="button"
-                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogEvent?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, payload: !(debugLogEvent?.payload ?? true) } },
-                              },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) && (debugLogEvent?.payload ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? ((debugLogEvent?.payload ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
-                      </label>
-                      <div className="mt-1 text-[10px] text-slate-500">예시: {pickExample(["event.payload.intent", "event.payload.error", "event.payload.tool"]) || "-"}</div>
-                      <label className="mt-2 block">
-                        <div className="mb-1 text-[11px] font-semibold text-slate-600">Event allowlist (CSV)</div>
-                        <input
-                          type="text"
-                          value={toEventCsv(debugLogEvent?.allowlist)}
-                          onChange={(e) =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                logs: {
-                                  ...prev.sections?.logs,
-                                  event: {
-                                    ...prev.sections?.logs?.event,
-                                    allowlist: parseCsv(e.target.value).map((item) => item.toUpperCase()),
-                                  },
-                                },
-                              },
-                            }))
-                          }
-                          className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700"
-                          placeholder="예: PRE_MCP_DECISION, MCP_TOOL_FAILED"
-                        />
-                      </label>
-                      <div className="mt-1 text-[10px] text-slate-500">감지된 타입: {debugFieldEventTypes.join(", ") || "-"}</div>
+                      {(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? (
+                        showDebugEventDetails ? (
+                            <div className="mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                              <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                                <span>Event payload</span>
+                                <button
+                                  type="button"
+                                  disabled={!(debugLogs?.enabled ?? true) || !(debugLogEvent?.enabled ?? true)}
+                                  onClick={() =>
+                                    updateDebugCopyOptions(page, (prev) => ({
+                                      ...prev,
+                                      sections: {
+                                        ...prev.sections,
+                                        logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, payload: !(debugLogEvent?.payload ?? true) } },
+                                      },
+                                    }))
+                                  }
+                                  className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) && (debugLogEvent?.payload ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                                >
+                                  {(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? ((debugLogEvent?.payload ?? true) ? "ON" : "OFF") : "OFF"}
+                                </button>
+                              </label>
+                              <div className="mt-1 text-[10px] text-slate-500">
+                                예시: {pickExample(["event.payload.intent", "event.payload.error", "event.payload.tool"]) || "-"}
+                              </div>
+                              <label className="mt-2 block">
+                                <div className="mb-1 text-[11px] font-semibold text-slate-600">Event allowlist (CSV)</div>
+                                <input
+                                  type="text"
+                                  value={toEventCsv(debugLogEvent?.allowlist)}
+                                  onChange={(e) =>
+                                    updateDebugCopyOptions(page, (prev) => ({
+                                      ...prev,
+                                      sections: {
+                                        ...prev.sections,
+                                        logs: {
+                                          ...prev.sections?.logs,
+                                          event: {
+                                            ...prev.sections?.logs?.event,
+                                            allowlist: parseCsv(e.target.value).map((item) => item.toUpperCase()),
+                                          },
+                                        },
+                                      },
+                                    }))
+                                  }
+                                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700"
+                                  placeholder="예: PRE_MCP_DECISION, MCP_TOOL_FAILED"
+                                />
+                              </label>
+                              <div className="mt-1 text-[10px] text-slate-500">감지된 타입: {debugFieldEventTypes.join(", ") || "-"}</div>
+                            </div>
+                          ) : null
+                      ) : null}
+                        </div>
+                      ) : null}
                     </div>
 
                     <label className="block">
@@ -1367,137 +1763,247 @@ export function ChatSettingsPanel({ authToken }: Props) {
 
                   <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs font-semibold text-slate-900">Setup</div>
-                    <ToggleField
-                      label="모델 선택"
-                      checked={draft.setup.modelSelector}
-                      visibility={draft.visibility.setup.modelSelector}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modelSelector: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modelSelector: mode } },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      label="LLM 선택"
-                      checked={draft.setup.llmSelector}
-                      visibility={draft.visibility.setup.llmSelector}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, llmSelector: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, llmSelector: mode } },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      label="KB 선택(저장)"
-                      checked={draft.setup.kbSelector}
-                      visibility={draft.visibility.setup.kbSelector}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, kbSelector: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, kbSelector: mode } },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      label="Admin KB 선택"
-                      checked={draft.setup.adminKbSelector}
-                      visibility={draft.visibility.setup.adminKbSelector}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, adminKbSelector: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, adminKbSelector: mode } },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      label="Existing 모드"
-                      checked={draft.setup.modeExisting}
-                      visibility={draft.visibility.setup.modeExisting}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeExisting: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeExisting: mode } },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      label="New 모드"
-                      checked={draft.setup.modeNew}
-                      visibility={draft.visibility.setup.modeNew}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeNew: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeNew: mode } },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      label="Route 선택"
-                      checked={draft.setup.routeSelector}
-                      visibility={draft.visibility.setup.routeSelector}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, routeSelector: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, routeSelector: mode } },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      label="KB 입력(임시)"
-                      checked={draft.setup.inlineUserKbInput}
-                      visibility={draft.visibility.setup.inlineUserKbInput}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, inlineUserKbInput: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: {
-                            ...prev.visibility,
-                            setup: { ...prev.visibility.setup, inlineUserKbInput: mode },
-                          },
-                        }))
-                      }
-                    />
-                    <label className="block">
-                      <div className="mb-1 text-[11px] font-semibold text-slate-600">기본 모드</div>
-                      <select
-                        value={draft.setup.defaultSetupMode}
-                        onChange={(e) =>
-                          updatePage(page, (prev) => ({
-                            ...prev,
-                            setup: { ...prev.setup, defaultSetupMode: e.target.value as "existing" | "new" },
-                          }))
-                        }
-                        className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700"
-                      >
-                        <option value="existing">existing</option>
-                        <option value="new">new</option>
-                      </select>
-                    </label>
-                    <label className="block">
-                      <div className="mb-1 text-[11px] font-semibold text-slate-600">기본 LLM</div>
-                      <select
-                        value={draft.setup.defaultLlm}
-                        onChange={(e) =>
-                          updatePage(page, (prev) => ({
-                            ...prev,
-                            setup: { ...prev.setup, defaultLlm: e.target.value as "chatgpt" | "gemini" },
-                          }))
-                        }
-                        className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700"
-                      >
-                        <option value="chatgpt">chatgpt</option>
-                        <option value="gemini">gemini</option>
-                      </select>
-                    </label>
+                    {setupDetailsOpen ? (
+                      <>
+                        {effectiveModelSelector ? (
+                          <div className="space-y-2">
+                            {draft.setup.modeExisting ? (
+                              <label className="block rounded-lg border border-slate-200 bg-white p-2">
+                                <div className="mb-1 text-[11px] font-semibold text-slate-600">기본 모드</div>
+                                <select
+                                  value={draft.setup.defaultSetupMode}
+                                  onChange={(e) =>
+                                    updatePage(page, (prev) => ({
+                                      ...prev,
+                                      setup: { ...prev.setup, defaultSetupMode: e.target.value as "existing" | "new" },
+                                    }))
+                                  }
+                                  className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700"
+                                >
+                                  <option value="new">new</option>
+                                  <option value="existing">existing</option>
+                                </select>
+                              </label>
+                            ) : null}
+                            <div className="rounded-lg border border-slate-200 bg-white p-2">
+                              <ToggleField
+                                label="Existing 모드"
+                                checked={draft.setup.modeExisting}
+                                visibility={draft.visibility.setup.modeExisting}
+                                onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeExisting: v } }))}
+                                onChangeVisibility={(mode) =>
+                                  updatePage(page, (prev) => ({
+                                    ...prev,
+                                    visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeExisting: mode } },
+                                  }))
+                                }
+                                expandable
+                                expanded={showSetupExistingDetails}
+                                onToggleExpanded={() =>
+                                  setSetupExistingDetailsOpenByPage((prev) => ({
+                                    ...prev,
+                                    [page]: !prev[page],
+                                  }))
+                                }
+                              />
+                              {draft.setup.modeExisting ? (
+                                showSetupExistingDetails ? (
+                                  <div className="mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                                    <ToggleField
+                                      label="세션 ID 검색"
+                                      checked={draft.setup.sessionIdSearch}
+                                      visibility={draft.visibility.setup.sessionIdSearch}
+                                      onChange={(v) =>
+                                        updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, sessionIdSearch: v } }))
+                                      }
+                                      onChangeVisibility={(mode) =>
+                                        updatePage(page, (prev) => ({
+                                          ...prev,
+                                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, sessionIdSearch: mode } },
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                ) : null
+                              ) : null}
+                            </div>
+                            <div className="rounded-lg border border-slate-200 bg-white p-2">
+                              <ToggleField
+                                label="New 모드"
+                                checked={draft.setup.modeNew}
+                                visibility={draft.visibility.setup.modeNew}
+                                onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeNew: v } }))}
+                                onChangeVisibility={(mode) =>
+                                  updatePage(page, (prev) => ({
+                                    ...prev,
+                                    visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeNew: mode } },
+                                  }))
+                                }
+                                expandable
+                                expanded={showSetupNewDetails}
+                                onToggleExpanded={() =>
+                                  setSetupNewDetailsOpenByPage((prev) => ({
+                                    ...prev,
+                                    [page]: !prev[page],
+                                  }))
+                                }
+                              />
+                              {draft.setup.modeNew ? (
+                                showSetupNewDetails ? (
+                                    <div className="mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                                      <ToggleField
+                                        label="LLM 선택"
+                                        checked={draft.setup.llmSelector}
+                                        visibility={draft.visibility.setup.llmSelector}
+                                        onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, llmSelector: v } }))}
+                                        onChangeVisibility={(mode) =>
+                                          updatePage(page, (prev) => ({
+                                            ...prev,
+                                            visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, llmSelector: mode } },
+                                          }))
+                                        }
+                                      />
+                                      <div className="border-l-2 border-slate-200 pl-3">
+                                        <label className="block">
+                                          <div className="mb-1 text-[11px] font-semibold text-slate-600">기본 LLM</div>
+                                          <select
+                                            value={draft.setup.defaultLlm}
+                                            onChange={(e) =>
+                                              updatePage(page, (prev) => ({
+                                                ...prev,
+                                                setup: { ...prev.setup, defaultLlm: e.target.value as "chatgpt" | "gemini" },
+                                              }))
+                                            }
+                                            className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700"
+                                          >
+                                            <option value="chatgpt">chatgpt</option>
+                                            <option value="gemini">gemini</option>
+                                          </select>
+                                        </label>
+                                      </div>
+                                      <ToggleField
+                                        label="KB 선택(저장)"
+                                        checked={draft.setup.kbSelector}
+                                        visibility={draft.visibility.setup.kbSelector}
+                                        onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, kbSelector: v } }))}
+                                        onChangeVisibility={(mode) =>
+                                          updatePage(page, (prev) => ({
+                                            ...prev,
+                                            visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, kbSelector: mode } },
+                                          }))
+                                        }
+                                      />
+                                      <ToggleField
+                                        label="Admin KB 선택"
+                                        checked={draft.setup.adminKbSelector}
+                                        visibility={draft.visibility.setup.adminKbSelector}
+                                        onChange={(v) =>
+                                          updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, adminKbSelector: v } }))
+                                        }
+                                        onChangeVisibility={(mode) =>
+                                          updatePage(page, (prev) => ({
+                                            ...prev,
+                                            visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, adminKbSelector: mode } },
+                                          }))
+                                        }
+                                      />
+                                      <ToggleField
+                                        label="Route 선택"
+                                        checked={draft.setup.routeSelector}
+                                        visibility={draft.visibility.setup.routeSelector}
+                                        onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, routeSelector: v } }))}
+                                        onChangeVisibility={(mode) =>
+                                          updatePage(page, (prev) => ({
+                                            ...prev,
+                                            visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, routeSelector: mode } },
+                                          }))
+                                        }
+                                      />
+                                      <ToggleField
+                                        label="KB 입력(임시)"
+                                        checked={draft.setup.inlineUserKbInput}
+                                        visibility={draft.visibility.setup.inlineUserKbInput}
+                                        onChange={(v) =>
+                                          updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, inlineUserKbInput: v } }))
+                                        }
+                                        onChangeVisibility={(mode) =>
+                                          updatePage(page, (prev) => ({
+                                            ...prev,
+                                            visibility: {
+                                              ...prev.visibility,
+                                              setup: { ...prev.visibility.setup, inlineUserKbInput: mode },
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    </div>
+                                  ) : null
+                              ) : null}
+                            </div>
+                          </div>
+                        ) : null}
+                        <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
+                          <div className="mb-2 text-[11px] font-semibold text-slate-700">Setup 출력 순서/표시명</div>
+                          <div className="mb-2 grid grid-cols-[200px_minmax(0,1fr)] gap-2 text-[11px] font-semibold text-slate-600">
+                            <div className="px-1">순서 / 정의명(코드에서 정의된 이름)</div>
+                            <div className="px-1">
+                              {page === "/" ? "메인(/) 표시명" : "실험실(/app/laboratory) 표시명"}
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            {setupUiDraft.order.filter(isSetupUiConfigurableKey).map((key, idx) => {
+                              const current = SETUP_FIELD_OPTIONS.find((item) => item.key === key);
+                              return (
+                                <div
+                                  key={`${page}-${key}-${idx}`}
+                                  draggable
+                                  onDragStart={handleSetupDragStart(page, key)}
+                                  onDragOver={handleSetupDragOver}
+                                  onDrop={handleSetupDrop(page, key)}
+                                  onDragEnd={handleSetupDragEnd(page)}
+                                  className={
+                                    draggingSetupFieldByPage[page] === key
+                                      ? "grid cursor-grab grid-cols-[200px_minmax(0,1fr)] items-center gap-2 opacity-70"
+                                      : "grid cursor-grab grid-cols-[200px_minmax(0,1fr)] items-center gap-2"
+                                  }
+                                  title="드래그해서 순서를 변경할 수 있습니다."
+                                >
+                                  <div className="inline-flex h-8 w-[200px] items-center justify-between rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700">
+                                    <span className="font-semibold text-slate-900">{idx + 1}</span>
+                                    <span className="ml-2 min-w-0 flex-1 truncate text-right font-mono text-[11px] text-slate-700">
+                                      {key}
+                                    </span>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={setupUiDraft.labels[key] || current?.defaultLabel || key}
+                                    onChange={(e) =>
+                                      setSetupUiByPage((prev) => ({
+                                        "/": {
+                                          order: [...prev["/"].order],
+                                          labels: {
+                                            ...prev["/"].labels,
+                                            [key]: e.target.value,
+                                          },
+                                        },
+                                        "/app/laboratory": {
+                                          order: [...prev["/"].order],
+                                          labels: {
+                                            ...prev["/"].labels,
+                                            [key]: e.target.value,
+                                          },
+                                        },
+                                      }))
+                                    }
+                                    className="h-8 w-full rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 </div>
 
