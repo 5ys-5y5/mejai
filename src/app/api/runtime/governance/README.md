@@ -30,6 +30,13 @@
     - `proposal_id: string`
     - `reason?: string`
     - `reviewer_note?: string`
+- `POST /api/runtime/governance/proposals/reassess`
+  - 기존 proposal을 동일 위반 근거로 재평가해 새 proposal을 생성.
+  - Body:
+    - `proposal_id: string`
+- `GET/POST /api/runtime/governance/repro/address`
+  - 주소 0건/다건 재현으로 self-heal 제안 payload를 검증.
+  - 개발환경(localhost) 재현 점검용.
 
 ## Access
 - Admin user (IAM `is_admin=true`) or cron secret.
@@ -53,3 +60,9 @@
 - `RUNTIME_PROPOSAL_APPLY_ENABLED=1`: allow patch apply on approval
 - `POST /api/runtime/governance/proposals/hold`
   - 보류(미실행) 처리
+
+## Self-Heal Mapping
+- Central keys: `src/app/api/runtime/governance/selfHeal/principles.ts`
+- Navigation doc: `src/app/api/runtime/governance/selfHeal/README.md`
+- Detection implementation: `src/app/api/runtime/governance/_lib/detector.ts`
+- Proposal implementation: `src/app/api/runtime/governance/_lib/proposer.ts`

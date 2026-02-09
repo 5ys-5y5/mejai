@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { CopyPageKey } from "@/lib/transcriptCopyPolicy";
 import type { DebugTranscriptOptions, LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
-import { fetchSessionLogs, runConversation } from "@/lib/conversation/client/runtimeClient";
+import { fetchSessionLogs, runConversation, saveTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 
 export type ConversationUiMessage = TranscriptMessage & {
@@ -47,6 +47,18 @@ function makeId() {
 
 function makeTraceId(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function resolveSnapshotTurnId(messages: ConversationUiMessage[], selectedMessageIds: string[]) {
+  const selected = new Set((selectedMessageIds || []).filter(Boolean));
+  const fromSelected = [...messages]
+    .reverse()
+    .find((msg) => msg.role === "bot" && selected.has(msg.id) && String(msg.turnId || "").trim().length > 0);
+  if (fromSelected?.turnId) return String(fromSelected.turnId).trim();
+  const fromAll = [...messages]
+    .reverse()
+    .find((msg) => msg.role === "bot" && String(msg.turnId || "").trim().length > 0);
+  return fromAll?.turnId ? String(fromAll.turnId).trim() : null;
 }
 
 export function useConversationController(options: ControllerOptions) {
@@ -181,9 +193,20 @@ export function useConversationController(options: ControllerOptions) {
         messageLogs,
         enabledOverride,
         conversationDebugOptionsOverride,
+        onCopiedText: async (text) => {
+          if (!sessionId) return;
+          const turnId = resolveSnapshotTurnId(messages, selectedMessageIds);
+          await saveTranscriptSnapshot({
+            sessionId,
+            page: options.page,
+            kind,
+            transcriptText: text,
+            turnId,
+          }).catch(() => null);
+        },
       });
     },
-    [messageLogs, messages, options.page, selectedMessageIds]
+    [messageLogs, messages, options.page, selectedMessageIds, sessionId]
   );
 
   const copyConversation = useCallback(

@@ -4,6 +4,7 @@ import {
   resolveQuickReplyConfig,
 } from "./quickReplyConfigRuntime";
 import { buildNumberedChoicePrompt, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
+import { splitAddressForUpdate } from "../shared/slotUtils";
 
 export function createToolAccessEvaluator(denied: Set<string>, allowed: Set<string>) {
   return (name: string) => {
@@ -76,10 +77,6 @@ export async function normalizeAndFilterFinalCalls(input: Record<string, any>) {
       noteMcpSkip(call.name, "DEFERRED_TO_DETERMINISTIC_RESTOCK_SUBSCRIBE", { intent: resolvedIntent }, call.args || {});
       return false;
     }
-    if (resolvedIntent === "order_change" && call.name === "update_order_shipping_address") {
-      noteMcpSkip(call.name, "DEFERRED_TO_DETERMINISTIC_UPDATE", { intent: resolvedIntent }, call.args || {});
-      return false;
-    }
     if (compiledPolicy?.toolPolicies?.[call.name]) {
       usedToolPolicies.push(call.name);
     }
@@ -93,6 +90,27 @@ export async function normalizeAndFilterFinalCalls(input: Record<string, any>) {
     }
     if ((call.name === "lookup_order" || call.name === "update_order_shipping_address") && customerVerificationToken) {
       call.args = { ...(call.args || {}), customer_verification_token: customerVerificationToken };
+    }
+    if (call.name === "update_order_shipping_address") {
+      const entity = (policyContext?.entity || {}) as Record<string, unknown>;
+      const rawAddressFromArgs = String(call?.args?.address1 || "").trim();
+      const rawAddressFromEntity = typeof entity.address === "string" ? String(entity.address).trim() : "";
+      const rawAddress = rawAddressFromArgs || rawAddressFromEntity;
+      if (rawAddress) {
+        const resolvedRoad = typeof entity.resolved_road_address === "string" ? String(entity.resolved_road_address).trim() : "";
+        const resolvedJibun = typeof entity.resolved_jibun_address === "string" ? String(entity.resolved_jibun_address).trim() : "";
+        const fallbackBase = typeof entity.shipping_before_address1 === "string" ? String(entity.shipping_before_address1).trim() : "";
+        const split = splitAddressForUpdate(rawAddress, {
+          baseAddress: resolvedRoad || resolvedJibun || null,
+          baseAddressCandidates: [resolvedRoad, resolvedJibun],
+          fallbackBaseAddress: fallbackBase || null,
+        });
+        call.args = {
+          ...(call.args || {}),
+          address1: String(split.address1 || rawAddress).trim(),
+          address2: String(split.address2 || "").trim(),
+        };
+      }
     }
     if (call.name === "lookup_order" || call.name === "update_order_shipping_address") {
       const candidateOrderId = String(call?.args?.order_id || "").trim();
@@ -162,6 +180,19 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
   let listOrdersCalled = false;
   let listOrdersEmpty = false;
   let listOrdersChoices: Array<Record<string, unknown>> = [];
+  const shouldPreserveOriginalEntity = Boolean(
+    (CHAT_PRINCIPLES as any)?.audit?.preserveOriginalEntityForMutationTargets
+  );
+  const isMutationToolCall = (name: string) => {
+    const normalized = String(name || "").trim().toLowerCase();
+    if (!normalized) return false;
+    return (
+      normalized.startsWith("update_") ||
+      normalized.startsWith("delete_") ||
+      normalized.includes(":update_") ||
+      normalized.includes(":delete_")
+    );
+  };
 
   for (const call of finalCalls) {
     if (!hasAllowedToolName(call.name)) {
@@ -181,6 +212,37 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
         call.args as Record<string, unknown>
       );
       continue;
+    }
+    if (call.name === "update_order_shipping_address") {
+      const entity = ((policyContext?.entity || {}) as Record<string, unknown>);
+      const requestZipcode = String(call?.args?.zipcode || "").trim();
+      const requestAddress1 = String(call?.args?.address1 || "").trim();
+      const requestAddress2 = String(call?.args?.address2 || "").trim();
+      policyContext.entity = {
+        ...entity,
+        shipping_request_zipcode: requestZipcode || null,
+        shipping_request_address1: requestAddress1 || null,
+        shipping_request_address2: requestAddress2 || null,
+      };
+    }
+    if (shouldPreserveOriginalEntity && isMutationToolCall(call.name)) {
+      const entity = ((policyContext?.entity || {}) as Record<string, unknown>);
+      const byTool =
+        entity.original_entity_before_by_tool && typeof entity.original_entity_before_by_tool === "object"
+          ? ({ ...(entity.original_entity_before_by_tool as Record<string, unknown>) } as Record<string, unknown>)
+          : {};
+      if (!byTool[call.name]) {
+        byTool[call.name] = { ...entity };
+      }
+      policyContext.entity = {
+        ...entity,
+        original_entity_before_all_mutations:
+          entity.original_entity_before_all_mutations && typeof entity.original_entity_before_all_mutations === "object"
+            ? entity.original_entity_before_all_mutations
+            : { ...entity },
+        original_entity_before_by_tool: byTool,
+        original_entity_before_last_tool: call.name,
+      };
     }
     const result = await callMcpTool(
       context,
@@ -430,6 +492,7 @@ export async function flushMcpSkipLogsWithAudit(input: {
     allowedToolVersionByName,
     nowIso,
   } = input;
+  const traceId = String((context as any)?.runtimeTraceId || "").trim();
   for (const skip of mcpSkipQueue) {
     await insertEvent(
       context,
@@ -461,7 +524,11 @@ export async function flushMcpSkipLogsWithAudit(input: {
         masked_fields: [],
         policy_decision: { allowed: false, reason: skip.reason },
         created_at: nowIso(),
-        bot_context: { intent_name: resolvedIntent, entity: policyEntity },
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: policyEntity,
+          ...(traceId ? { trace_id: traceId } : {}),
+        },
       });
     } catch (error) {
       console.warn("[runtime/chat_mk2] failed to insert MCP skip audit", {
@@ -499,8 +566,28 @@ export async function handleToolForcedResponse(input: Record<string, any>): Prom
   } = input;
 
   if (!toolGate?.actions?.forcedResponse) return null;
+  const markDeferredTemplate = (reason: string, templateKey: string) => {
+    const conversation =
+      policyContext.conversation && typeof policyContext.conversation === "object"
+        ? (policyContext.conversation as Record<string, unknown>)
+        : {};
+    const flags =
+      conversation.flags && typeof conversation.flags === "object"
+        ? (conversation.flags as Record<string, unknown>)
+        : {};
+    policyContext.conversation = {
+      ...conversation,
+      flags: {
+        ...flags,
+        deferred_force_response_template: true,
+        deferred_force_response_reason: reason,
+        deferred_force_response_template_key: templateKey,
+      },
+    };
+  };
 
   if (conversationMode === "natural" && resolvedIntent === "order_change") {
+    markDeferredTemplate("NATURAL_MODE_ORDER_CHANGE", "tool_forced_response");
     await insertEvent(
       context,
       sessionId,
@@ -528,6 +615,7 @@ export async function handleToolForcedResponse(input: Record<string, any>): Prom
   const shouldDeferZipcodeTemplate = isNeedZipcodeTemplate && resolvedIntent === "order_change" && Boolean(currentAddress);
 
   if (shouldDeferZipcodeTemplate) {
+    markDeferredTemplate("ORDER_AND_ADDRESS_ALREADY_AVAILABLE", "order_change_need_zipcode");
     await insertEvent(
       context,
       sessionId,
@@ -773,12 +861,25 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
   if (!resolvedOrderId && hasUniqueAnswerCandidate(listOrdersChoices.length)) {
     const selected = listOrdersChoices[0];
     const phoneFromSlot = typeof policyContext.entity?.phone === "string" ? normalizePhoneDigits(policyContext.entity.phone) : "";
-    const lookupForSelected = toolResults.find((tool: any) => {
-      if (tool.name !== "lookup_order" || !tool.ok || !tool.data) return false;
-      const parsed = readLookupOrderView(tool.data);
-      const core = parsed.core || {};
-      return String(core.order_id || core.order_no || "").trim() === selected.order_id;
-    });
+    const selectedOrderId = String(selected.order_id || "").trim();
+    const successfulLookupTools = toolResults.filter(
+      (tool: any) => tool.name === "lookup_order" && tool.ok && tool.data
+    );
+    const getLookupOrderId = (tool: any) => {
+      const parsed = readLookupOrderView(tool?.data);
+      const core = (parsed?.core || {}) as Record<string, unknown>;
+      const order = (parsed?.order || {}) as Record<string, unknown>;
+      return String(
+        core.order_id ||
+        core.order_no ||
+        order.order_id ||
+        order.order_no ||
+        ""
+      ).trim();
+    };
+    const lookupForSelected =
+      successfulLookupTools.find((tool: any) => getLookupOrderId(tool) === selectedOrderId) ||
+      (successfulLookupTools.length === 1 ? successfulLookupTools[0] : null);
     const receiverPhoneFromLookup = (() => {
       if (!lookupForSelected?.data) return "";
       const parsed = readLookupOrderView(lookupForSelected.data);
@@ -822,11 +923,30 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     }
 
     resolvedOrderId = selected.order_id;
+    const shippingBeforeSnapshot = (() => {
+      if (!lookupForSelected?.data) return null;
+      const parsed = readLookupOrderView(lookupForSelected.data);
+      const orderObj = (parsed.order || {}) as any;
+      const receivers = Array.isArray(orderObj.receivers) ? orderObj.receivers : [];
+      const first = (receivers[0] || {}) as Record<string, unknown>;
+      const zipcode = String(first.zipcode || "").trim();
+      const address1 = String(first.address1 || "").trim();
+      const address2 = String(first.address2 || "").trim();
+      const addressFull = String(first.address_full || "").trim();
+      if (!zipcode && !address1 && !address2 && !addressFull) return null;
+      return {
+        shipping_before_zipcode: zipcode || null,
+        shipping_before_address1: address1 || null,
+        shipping_before_address2: address2 || null,
+        shipping_before_address_full: addressFull || null,
+      };
+    })();
     policyContext = {
       ...policyContext,
       entity: {
         ...(policyContext.entity || {}),
         order_id: selected.order_id,
+        ...(shippingBeforeSnapshot || {}),
       },
     };
     await insertEvent(

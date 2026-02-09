@@ -32,6 +32,7 @@ export type PageCopyPolicy = {
 };
 
 export const DEFAULT_CONVERSATION_DEBUG_OPTIONS: DebugTranscriptOptions = {
+  outputMode: "full",
   includePrincipleHeader: true,
   includeResponseSchema: true,
   includeRenderPlan: true,
@@ -97,6 +98,7 @@ function normalizeConversationDebugOptions(input?: Partial<DebugTranscriptOption
   const defaultLogsEvent = defaultLogs?.event;
 
   return {
+    outputMode: input?.outputMode === "summary" ? "summary" : "full",
     includePrincipleHeader: input?.includePrincipleHeader ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includePrincipleHeader,
     includeResponseSchema: input?.includeResponseSchema ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includeResponseSchema,
     includeRenderPlan: input?.includeRenderPlan ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includeRenderPlan,

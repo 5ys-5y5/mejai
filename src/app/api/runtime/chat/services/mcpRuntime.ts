@@ -12,6 +12,18 @@ export async function callMcpTool(
     }
     | undefined
 ) {
+  const traceId = String((context as any)?.runtimeTraceId || "").trim();
+  const tracedBotContext =
+    botContext && typeof botContext === "object"
+      ? ({
+          ...(botContext as Record<string, unknown>),
+          ...(traceId && !Object.prototype.hasOwnProperty.call(botContext, "trace_id")
+            ? { trace_id: traceId }
+            : {}),
+        } as Record<string, unknown>)
+      : traceId
+        ? ({ trace_id: traceId } as Record<string, unknown>)
+        : {};
   const auditBlocked = async (
     status: string,
     reason: string,
@@ -34,7 +46,7 @@ export async function callMcpTool(
         masked_fields: [],
         policy_decision: { allowed: false, reason },
         created_at: new Date().toISOString(),
-        bot_context: botContext,
+        bot_context: tracedBotContext,
       });
     } catch (error) {
       console.warn("[runtime/chat_mk2] failed to audit blocked MCP call", {
@@ -140,7 +152,7 @@ export async function callMcpTool(
         masked_fields: [],
         policy_decision: { allowed: true, reason: "ADAPTER_THROWN_ERROR" },
         created_at: new Date().toISOString(),
-        bot_context: botContext,
+        bot_context: tracedBotContext,
       });
     } catch (auditError) {
       console.warn("[runtime/chat_mk2] failed to audit MCP adapter error", {
@@ -172,7 +184,7 @@ export async function callMcpTool(
       masked_fields: masked.maskedFields,
       policy_decision: { allowed: true },
       created_at: new Date().toISOString(),
-      bot_context: botContext,
+      bot_context: tracedBotContext,
     });
   } catch (auditError) {
     console.warn("[runtime/chat_mk2] failed to audit MCP result", {
@@ -227,6 +239,18 @@ export async function callAddressSearchWithAudit(
   turnId: string | null,
   botContext: Record<string, unknown>
 ) {
+  const traceId = String((context as any)?.runtimeTraceId || "").trim();
+  const tracedBotContext =
+    botContext && typeof botContext === "object"
+      ? ({
+          ...(botContext as Record<string, unknown>),
+          ...(traceId && !Object.prototype.hasOwnProperty.call(botContext, "trace_id")
+            ? { trace_id: traceId }
+            : {}),
+        } as Record<string, unknown>)
+      : traceId
+        ? ({ trace_id: traceId } as Record<string, unknown>)
+        : {};
   const { callAdapter } = await import("@/lib/mcpAdapters");
   const start = Date.now();
   const keywords = buildAddressSearchKeywords(keyword);
@@ -296,7 +320,7 @@ export async function callAddressSearchWithAudit(
       masked_fields: [],
       policy_decision: { allowed: true, reason: "INTERNAL_FALLBACK" },
       created_at: new Date().toISOString(),
-      bot_context: botContext,
+      bot_context: tracedBotContext,
     });
   } catch {
     // noop: address search audit insert failure should not block response

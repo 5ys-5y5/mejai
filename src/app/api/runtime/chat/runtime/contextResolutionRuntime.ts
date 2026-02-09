@@ -51,6 +51,25 @@ type ContextResolutionResult = {
   contaminationSummaries: string[];
 };
 
+function shouldPreserveEntityAuditKey(key: string) {
+  const normalized = String(key || "").trim();
+  if (!normalized) return false;
+  if (normalized.startsWith("shipping_before_")) return true;
+  if (normalized.startsWith("original_")) return true;
+  if (normalized.startsWith("mutation_")) return true;
+  if (normalized.endsWith("_before")) return true;
+  if (normalized.includes("_before_")) return true;
+  return false;
+}
+
+function pickPreservedEntityAuditFields(entity: Record<string, unknown>) {
+  const entries = Object.entries(entity || {}).filter(([key, value]) => {
+    if (!shouldPreserveEntityAuditKey(key)) return false;
+    return value !== undefined;
+  });
+  return Object.fromEntries(entries);
+}
+
 export async function resolveIntentAndPolicyContext(params: ContextResolutionParams): Promise<ContextResolutionResult> {
   const {
     context,
@@ -289,6 +308,22 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     );
     resolvedZipcode = null;
   }
+  const confirmedRoadAddress =
+    addressStage === "awaiting_zipcode_confirm" && isYesText(message)
+      ? String(prevBotContext.pending_road_addr || "").trim() || null
+      : null;
+  const confirmedJibunAddress =
+    addressStage === "awaiting_zipcode_confirm" && isYesText(message)
+      ? String(prevBotContext.pending_jibun_addr || "").trim() || null
+      : null;
+  const carriedRoadAddress =
+    confirmedRoadAddress ||
+    (typeof prevEntity.resolved_road_address === "string" ? String(prevEntity.resolved_road_address).trim() : "") ||
+    null;
+  const carriedJibunAddress =
+    confirmedJibunAddress ||
+    (typeof prevEntity.resolved_jibun_address === "string" ? String(prevEntity.resolved_jibun_address).trim() : "") ||
+    null;
 
   const explicitUserConfirmed = isYesText(message);
   const detectedIntent = detectIntent(message);
@@ -319,15 +354,19 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     prevAddressFromTranscript,
     recentEntityAddress: recentEntity?.address || null,
   });
+  const preservedAuditFields = pickPreservedEntityAuditFields(prevEntity);
   const policyContext: PolicyEvalContext = {
     input: { text: message },
     intent: { name: nextResolvedIntent },
     entity: {
+      ...preservedAuditFields,
       channel: derivedChannel ?? (typeof prevEntity.channel === "string" ? prevEntity.channel : null),
       order_id: resolvedOrderId,
       phone: resolvedPhone,
       address: resolvedAddress,
       zipcode: resolvedZipcode,
+      resolved_road_address: carriedRoadAddress,
+      resolved_jibun_address: carriedJibunAddress,
     },
     user: { confirmed: explicitUserConfirmed },
     conversation: { repeat_count: 0, flags: {} },

@@ -1,5 +1,18 @@
 import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "./quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
+import {
+  shouldRequireCandidateSelectionWhenMultipleZipcodes,
+  shouldRequireAddressRetryWhenZipcodeNotFound,
+  shouldRequireJibunRoadZipTripleInChoice,
+  shouldResolveZipcodeViaJusoWhenAddressGiven,
+} from "../policies/principles";
+import {
+  buildAddressCandidateChoicePrompt,
+  buildAddressCandidateQuickReplies,
+  extractAddressCandidatesFromSearchData,
+  parseAddressCandidateSelection,
+  type AddressCandidate,
+} from "../shared/addressCandidateUtils";
 
 type PendingStateParams = {
   context: any;
@@ -58,6 +71,33 @@ type PendingStateResult = {
   refundConfirmAcceptedThisTurn: boolean;
 };
 
+function readPendingCandidates(raw: unknown) {
+  const source = Array.isArray(raw) ? raw : [];
+  return source
+    .map((item, idx) => {
+      const zipNo = String((item as any)?.zip_no || "").trim();
+      const roadAddr = String((item as any)?.road_addr || "").trim();
+      const jibunAddr = String((item as any)?.jibun_addr || "").trim();
+      if (!zipNo) return null;
+      return {
+        index: idx + 1,
+        zip_no: zipNo,
+        road_addr: roadAddr,
+        jibun_addr: jibunAddr,
+        display_label: `${jibunAddr || roadAddr || "-"} / ${roadAddr || "-"} / ${zipNo}`,
+      } as AddressCandidate;
+    })
+    .filter(Boolean) as AddressCandidate[];
+}
+
+function hasCompleteAddressTriple(input: {
+  zipNo?: string | null;
+  roadAddr?: string | null;
+  jibunAddr?: string | null;
+}) {
+  return Boolean(String(input.zipNo || "").trim() && String(input.roadAddr || "").trim() && String(input.jibunAddr || "").trim());
+}
+
 export async function handleAddressChangeRefundPending(params: PendingStateParams): Promise<PendingStateResult> {
   const {
     context,
@@ -89,6 +129,204 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
   let nextDerivedAddress = params.derivedAddress;
   let nextUpdateConfirmAccepted = params.updateConfirmAcceptedThisTurn;
   let nextRefundConfirmAccepted = params.refundConfirmAcceptedThisTurn;
+
+  if (prevBotContext.address_pending && prevBotContext.address_stage === "awaiting_zipcode_choice") {
+    const pendingAddress = String(prevBotContext.pending_address || "").trim();
+    const pendingOrderId = String(prevBotContext.pending_order_id || "").trim();
+    const candidates = readPendingCandidates(prevBotContext.pending_candidates);
+    if (candidates.length === 0) {
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "ADDRESS_FLOW_ANOMALY_DETECTED",
+        {
+          anomaly_key: "ADDRESS_SELECTION_STEP_MISSING",
+          reason: "CANDIDATE_LIST_EMPTY_IN_CHOICE_STAGE",
+          address_stage: "awaiting_zipcode_choice",
+        },
+        { intent_name: resolvedIntent }
+      );
+      const reply = makeReply("주소 후보를 다시 찾지 못했습니다. 도로명/지번 주소를 다시 입력해 주세요.");
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: prevEntity,
+          selected_order_id: prevSelectedOrderId,
+          address_pending: true,
+          address_stage: "awaiting_address_retry",
+          pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+        },
+      });
+      return {
+        response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
+        derivedOrderId: nextDerivedOrderId,
+        derivedZipcode: nextDerivedZipcode,
+        derivedAddress: nextDerivedAddress,
+        updateConfirmAcceptedThisTurn: nextUpdateConfirmAccepted,
+        refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
+      };
+    }
+    const selected = parseAddressCandidateSelection(message, candidates.length);
+    if (!selected) {
+      const prompt = buildAddressCandidateChoicePrompt({ candidates, originalAddress: pendingAddress });
+      const reply = makeReply(prompt);
+      const quickReplies = buildAddressCandidateQuickReplies(candidates);
+      const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+        optionsCount: quickReplies.length,
+        criteria: "state:awaiting_zipcode_choice",
+        sourceFunction: "handleAddressChangeRefundPending",
+        sourceModule: "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
+        contextText: reply,
+      });
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: prevEntity,
+          selected_order_id: prevSelectedOrderId,
+          address_pending: true,
+          address_stage: "awaiting_zipcode_choice",
+          pending_address: pendingAddress || null,
+          pending_candidates: candidates,
+          pending_candidate_count: candidates.length,
+          pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+        },
+      });
+      return {
+        response: respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
+          quick_replies: quickReplies,
+          quick_reply_config: quickReplyConfig,
+        }),
+        derivedOrderId: nextDerivedOrderId,
+        derivedZipcode: nextDerivedZipcode,
+        derivedAddress: nextDerivedAddress,
+        updateConfirmAcceptedThisTurn: nextUpdateConfirmAccepted,
+        refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
+      };
+    }
+    const picked = candidates[selected - 1];
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "ADDRESS_CANDIDATE_SELECTED",
+      {
+        selected_index: selected,
+        selected_candidate: picked,
+        selection_source: "number_input",
+      },
+      { intent_name: resolvedIntent }
+    );
+    if (
+      shouldRequireJibunRoadZipTripleInChoice() &&
+      !hasCompleteAddressTriple({
+        zipNo: picked.zip_no,
+        roadAddr: picked.road_addr,
+        jibunAddr: picked.jibun_addr,
+      })
+    ) {
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "ADDRESS_FLOW_ANOMALY_DETECTED",
+        {
+          anomaly_key: "ADDRESS_TRIPLE_INCOMPLETE",
+          reason: "CHOICE_SELECTED_CANDIDATE_MISSING_TRIPLE",
+          selected_index: selected,
+          selected_candidate: picked,
+        },
+        { intent_name: resolvedIntent }
+      );
+      const retryReply = makeReply("주소 후보 정보가 불완전하여 확인을 진행할 수 없습니다. 도로명/지번 주소를 다시 입력해 주세요.");
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: retryReply,
+        final_answer: retryReply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: prevEntity,
+          selected_order_id: prevSelectedOrderId,
+          address_pending: true,
+          address_stage: "awaiting_address_retry",
+          pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+        },
+      });
+      return {
+        response: respond({ session_id: sessionId, step: "confirm", message: retryReply, mcp_actions: [] }),
+        derivedOrderId: nextDerivedOrderId,
+        derivedZipcode: nextDerivedZipcode,
+        derivedAddress: nextDerivedAddress,
+        updateConfirmAcceptedThisTurn: nextUpdateConfirmAccepted,
+        refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
+      };
+    }
+    const prompt = buildYesNoConfirmationPrompt(
+      `선택하신 주소가 맞는지 확인해 주세요.\n- 지번주소: ${picked.jibun_addr || pendingAddress || "-"}\n- 도로명주소: ${picked.road_addr || "-"}\n- 우편번호: ${picked.zip_no || "-"}`,
+      { botContext: prevBotContext, entity: prevEntity }
+    );
+    const reply = makeReply(prompt);
+    const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+      optionsCount: YES_NO_QUICK_REPLIES.length,
+      criteria: "state:awaiting_zipcode_confirm_from_choice",
+      sourceFunction: "handleAddressChangeRefundPending",
+      sourceModule: "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
+      contextText: reply,
+    });
+    await insertTurn({
+      session_id: sessionId,
+      seq: nextSeq,
+      transcript_text: message,
+      answer_text: reply,
+      final_answer: reply,
+      bot_context: {
+        intent_name: resolvedIntent,
+        entity: prevEntity,
+        selected_order_id: prevSelectedOrderId,
+        address_pending: true,
+        address_stage: "awaiting_zipcode_confirm",
+        pending_address: pendingAddress || null,
+        pending_zipcode: picked.zip_no || null,
+        pending_road_addr: picked.road_addr || null,
+        pending_jibun_addr: picked.jibun_addr || null,
+        pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+        pending_candidates: candidates,
+        pending_candidate_count: candidates.length,
+        pending_selected_index: selected,
+      },
+    });
+    return {
+      response: respond({
+        session_id: sessionId,
+        step: "confirm",
+        message: reply,
+        mcp_actions: [],
+        quick_replies: YES_NO_QUICK_REPLIES,
+        quick_reply_config: quickReplyConfig,
+      }),
+      derivedOrderId: nextDerivedOrderId,
+      derivedZipcode: nextDerivedZipcode,
+      derivedAddress: nextDerivedAddress,
+      updateConfirmAcceptedThisTurn: nextUpdateConfirmAccepted,
+      refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
+    };
+  }
 
   if (prevBotContext.address_pending && prevBotContext.address_stage === "awaiting_zipcode_confirm") {
     const pendingAddress = String(prevBotContext.pending_address || "").trim();
@@ -180,11 +418,58 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
 
   if (prevBotContext.address_pending && prevBotContext.address_stage === "awaiting_zipcode") {
     const pendingAddress = String(prevBotContext.pending_address || "").trim();
+    const pendingOrderId = String(prevBotContext.pending_order_id || "").trim();
     const pendingDigits = message.replace(/[^\d]/g, "");
     const pendingStrictFive = /^\d{5}$/.test(pendingDigits) ? pendingDigits : "";
     const pendingZip = extractZipcode(message) || pendingStrictFive;
     if (!pendingZip) {
+      if (!shouldResolveZipcodeViaJusoWhenAddressGiven()) {
+        const fallbackReply = makeReply("우편번호 5자리를 입력해 주세요.");
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "ADDRESS_FLOW_POLICY_DECISION",
+          {
+            action: "REQUEST_ZIPCODE_DIRECT",
+            reason: "PRINCIPLE_DISABLED_RESOLVE_ZIPCODE_VIA_JUSO",
+          },
+          { intent_name: resolvedIntent }
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: fallbackReply,
+          final_answer: fallbackReply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: prevEntity,
+            selected_order_id: prevSelectedOrderId,
+            address_pending: true,
+            address_stage: "awaiting_zipcode",
+            pending_address: pendingAddress || null,
+            pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+          },
+        });
+        return {
+          response: respond({ session_id: sessionId, step: "confirm", message: fallbackReply, mcp_actions: [] }),
+          derivedOrderId: nextDerivedOrderId,
+          derivedZipcode: nextDerivedZipcode,
+          derivedAddress: nextDerivedAddress,
+          updateConfirmAcceptedThisTurn: nextUpdateConfirmAccepted,
+          refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
+        };
+      }
       if (pendingAddress) {
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "ADDRESS_SEARCH_STARTED",
+          { query_text: pendingAddress },
+          { intent_name: resolvedIntent }
+        );
         const search = await callAddressSearchWithAudit(
           context,
           pendingAddress,
@@ -193,14 +478,91 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
         );
         if (search.status === "success") {
-          const rows = Array.isArray((search.data as any)?.results) ? (search.data as any).results : [];
-          const first = rows[0];
-          const candidateZip = String(first?.zipNo || "").trim();
-          const roadAddr = String(first?.roadAddr || first?.roadAddrPart1 || "").trim();
-          const jibunAddr = String(first?.jibunAddr || "").trim();
-          if (candidateZip) {
+          const candidates = extractAddressCandidatesFromSearchData(search.data, 5);
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "ADDRESS_SEARCH_COMPLETED",
+            {
+              query_text: pendingAddress,
+              result_count: candidates.length,
+              candidate_count: candidates.length,
+            },
+            { intent_name: resolvedIntent }
+          );
+          if (candidates.length >= 2 && shouldRequireCandidateSelectionWhenMultipleZipcodes()) {
+            const prompt = buildAddressCandidateChoicePrompt({
+              candidates,
+              originalAddress: pendingAddress,
+            });
+            const reply = makeReply(prompt);
+            const quickReplies = buildAddressCandidateQuickReplies(candidates);
+            const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+              optionsCount: quickReplies.length,
+              criteria: "state:awaiting_zipcode_choice_from_search",
+              sourceFunction: "handleAddressChangeRefundPending",
+              sourceModule: "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
+              contextText: reply,
+            });
+            await insertEvent(
+              context,
+              sessionId,
+              latestTurnId,
+              "ADDRESS_CANDIDATES_PRESENTED",
+              {
+                query_text: pendingAddress,
+                candidate_count: candidates.length,
+                candidates,
+              },
+              { intent_name: resolvedIntent }
+            );
+            await insertTurn({
+              session_id: sessionId,
+              seq: nextSeq,
+              transcript_text: message,
+              answer_text: reply,
+              final_answer: reply,
+              bot_context: {
+                intent_name: resolvedIntent,
+                entity: prevEntity,
+                selected_order_id: prevSelectedOrderId,
+                address_pending: true,
+                address_stage: "awaiting_zipcode_choice",
+                pending_address: pendingAddress || null,
+                pending_candidates: candidates,
+                pending_candidate_count: candidates.length,
+                pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+              },
+            });
+            return {
+              response: respond({
+                session_id: sessionId,
+                step: "confirm",
+                message: reply,
+                mcp_actions: [],
+                quick_replies: quickReplies,
+                quick_reply_config: quickReplyConfig,
+              }),
+              derivedOrderId: nextDerivedOrderId,
+              derivedZipcode: nextDerivedZipcode,
+              derivedAddress: nextDerivedAddress,
+              updateConfirmAcceptedThisTurn: nextUpdateConfirmAccepted,
+              refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
+            };
+          }
+          const first = candidates[0];
+          if (
+            first?.zip_no &&
+            (!shouldRequireJibunRoadZipTripleInChoice() ||
+              hasCompleteAddressTriple({
+                zipNo: first.zip_no,
+                roadAddr: first.road_addr,
+                jibunAddr: first.jibun_addr,
+              }))
+          ) {
             const prompt = buildYesNoConfirmationPrompt(
-              `입력하신 주소로 우편번호를 찾았습니다.\n- 지번주소: ${jibunAddr || pendingAddress}\n- 도로명주소: ${roadAddr || "-"}\n- 우편번호: ${candidateZip}\n위 정보가 맞는지 확인해 주세요.`,
+              `입력하신 주소로 우편번호를 찾았습니다.\n- 지번주소: ${first.jibun_addr || pendingAddress}\n- 도로명주소: ${first.road_addr || "-"}\n- 우편번호: ${first.zip_no}\n위 정보가 맞는지 확인해 주세요.`,
               { botContext: prevBotContext, entity: prevEntity }
             );
             const reply = makeReply(prompt);
@@ -224,9 +586,12 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
                 address_pending: true,
                 address_stage: "awaiting_zipcode_confirm",
                 pending_address: pendingAddress || null,
-                pending_zipcode: candidateZip,
-                pending_road_addr: roadAddr || null,
-                pending_jibun_addr: jibunAddr || null,
+                pending_zipcode: first.zip_no,
+                pending_road_addr: first.road_addr || null,
+                pending_jibun_addr: first.jibun_addr || null,
+                pending_candidate_count: 1,
+                pending_candidates: [first],
+                pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
               },
             });
             return {
@@ -245,6 +610,33 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
               refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
             };
           }
+          if (first?.zip_no && shouldRequireJibunRoadZipTripleInChoice()) {
+            await insertEvent(
+              context,
+              sessionId,
+              latestTurnId,
+              "ADDRESS_FLOW_ANOMALY_DETECTED",
+              {
+                anomaly_key: "ADDRESS_TRIPLE_INCOMPLETE",
+                reason: "SEARCH_RESULT_TOP1_MISSING_TRIPLE",
+                query_text: pendingAddress,
+                candidate: first,
+              },
+              { intent_name: resolvedIntent }
+            );
+          }
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "ADDRESS_FLOW_POLICY_DECISION",
+            {
+              action: "REQUIRE_ADDRESS_RETRY",
+              reason: "ADDRESS_SEARCH_NO_RESULT",
+              query_text: pendingAddress,
+            },
+            { intent_name: resolvedIntent }
+          );
         } else {
           await insertEvent(
             context,
@@ -256,7 +648,9 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           );
         }
       }
-      const prompt = "입력하신 주소를 확인할 수 없습니다. 도로명/지번 포함 주소를 다시 입력해 주세요.";
+      const prompt = shouldRequireAddressRetryWhenZipcodeNotFound()
+        ? "입력하신 주소와 일치하는 결과를 찾지 못했습니다. 도로명/지번 주소를 다시 입력해 주세요."
+        : "입력하신 주소와 일치하는 결과를 찾지 못했습니다. 우편번호 5자리를 입력해 주세요.";
       const reply = makeReply(prompt);
       await insertTurn({
         session_id: sessionId,
@@ -269,8 +663,9 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           entity: prevEntity,
           selected_order_id: prevSelectedOrderId,
           address_pending: true,
-          address_stage: "awaiting_address",
-          pending_order_id: isLikelyOrderId(prevSelectedOrderId) ? prevSelectedOrderId : null,
+          address_stage: shouldRequireAddressRetryWhenZipcodeNotFound() ? "awaiting_address_retry" : "awaiting_zipcode",
+          pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+          pending_address: pendingAddress || null,
         },
       });
       return {
@@ -286,7 +681,10 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
     nextDerivedAddress = pendingAddress || nextDerivedAddress;
   }
 
-  if (prevBotContext.address_pending && prevBotContext.address_stage === "awaiting_address") {
+  if (
+    prevBotContext.address_pending &&
+    (prevBotContext.address_stage === "awaiting_address" || prevBotContext.address_stage === "awaiting_address_retry")
+  ) {
     const nextAddress = extractAddress(message, null, null, extractZipcode(message)) || message.trim();
     if (!nextAddress) {
       const prompt = "변경할 주소를 다시 입력해 주세요.";

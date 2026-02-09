@@ -134,6 +134,8 @@ export async function POST(req: NextRequest) {
   const runtimeTraceId =
     String(req.headers.get("x-runtime-trace-id") || "").trim() ||
     `rt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  const runtimeTurnId =
+    String(req.headers.get("x-runtime-turn-id") || "").trim() || crypto.randomUUID();
   const timingStages: RuntimeTimingStage[] = [];
   let runtimeContext: any = null;
   let currentSessionId: string | null = null;
@@ -205,6 +207,11 @@ export async function POST(req: NextRequest) {
       nextSeq,
       prevBotContext,
     } = bootstrap.state;
+    if (context && typeof context === "object") {
+      (context as any).runtimeTraceId = runtimeTraceId;
+      (context as any).runtimeRequestStartedAt = new Date(requestStartedAt).toISOString();
+      (context as any).runtimeTurnId = runtimeTurnId;
+    }
     const runtimeTemplateOverrides = resolveRuntimeTemplateOverridesFromPolicy((compiledPolicy as any)?.templates || {});
     const effectivePrevBotContext = mergeRuntimeTemplateOverrides(
       (prevBotContext || {}) as Record<string, unknown>,
@@ -213,6 +220,7 @@ export async function POST(req: NextRequest) {
     runtimeContext = context;
     currentSessionId = sessionId;
     firstTurnInSession = firstInSession;
+    latestTurnId = runtimeTurnId;
     auditMessage = message;
     auditConversationMode = conversationMode;
     pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts", "initializeRuntimeState");

@@ -28,7 +28,12 @@ type ProposalItem = {
   status_label: string;
   latest_event_type: string;
   suggested_diff: string | null;
-  event_history: Array<{ event_type: string; created_at: string | null; payload: Record<string, unknown> }>;
+  event_history: Array<{
+    event_type: string;
+    created_at: string | null;
+    payload: Record<string, unknown>;
+    bot_context?: Record<string, unknown>;
+  }>;
   violation: {
     summary: string | null;
     severity: string | null;
@@ -46,6 +51,23 @@ type ProposalItem = {
 type ProposalListResponse = {
   ok: boolean;
   proposals: ProposalItem[];
+  self_heal_map?: {
+    registry?: { source?: string; scope?: string };
+    principle?: Record<string, { key?: string; summary?: string; ownerModules?: Record<string, string> }>;
+    event?: Record<string, string>;
+    violation?: Record<string, { key?: string; summary?: string; severityDefault?: string }>;
+    evidenceContract?: {
+      requiredAddressEvidence?: string[];
+      requiredMemoryEvidence?: string[];
+    };
+    scenarioMatrix?: Array<{
+      key?: string;
+      when?: string;
+      expectedAction?: string;
+      expectedPrompt?: string;
+      expectedEvents?: string[];
+    }>;
+  };
   error?: string;
 };
 
@@ -74,6 +96,212 @@ async function parseJsonBody<T>(res: Response): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+function prettyJson(value: unknown) {
+  return JSON.stringify(value ?? {}, null, 2);
+}
+
+function extractDecisionCodePaths(events: ProposalItem["event_history"]) {
+  const paths: string[] = [];
+  const collectDecisionNodes = (value: unknown, out: Record<string, unknown>[], seen: Set<unknown>) => {
+    if (!value || typeof value !== "object") return;
+    if (seen.has(value)) return;
+    seen.add(value);
+    const obj = value as Record<string, unknown>;
+    const direct = obj._decision;
+    if (direct && typeof direct === "object") {
+      out.push(direct as Record<string, unknown>);
+    }
+    for (const child of Object.values(obj)) {
+      if (child && typeof child === "object") {
+        collectDecisionNodes(child, out, seen);
+      }
+    }
+  };
+  for (const event of events || []) {
+    const payload = (event.payload || {}) as Record<string, unknown>;
+    const botContext =
+      event.bot_context && typeof event.bot_context === "object"
+        ? (event.bot_context as Record<string, unknown>)
+        : {};
+    const decisions: Record<string, unknown>[] = [];
+    collectDecisionNodes(payload, decisions, new Set<unknown>());
+    collectDecisionNodes(botContext, decisions, new Set<unknown>());
+    for (const decision of decisions) {
+      const modulePath = String(decision.module_path || "").trim();
+      const functionName = String(decision.function_name || "").trim();
+      if (modulePath || functionName) {
+        paths.push(`${event.event_type}: ${modulePath || "unknown"}#${functionName || "unknown"}`);
+      }
+    }
+  }
+  return Array.from(new Set(paths));
+}
+
+function deriveRootCauseEvidence(proposal: ProposalItem) {
+  const evidence = (proposal.violation?.evidence || {}) as Record<string, unknown>;
+  const mismatchType = String(evidence.mismatch_type || "").trim();
+  const policyReason = String(evidence.policy_decision_reason || "").trim();
+  const skipReason = String(evidence.mcp_skipped_reason || "").trim();
+  const forcedTemplate = String(evidence.final_response_forced_template_applied || "").trim();
+  return {
+    mismatch_type: mismatchType || null,
+    policy_decision_reason: policyReason || null,
+    mcp_skipped_reason: skipReason || null,
+    final_response_forced_template_applied: forcedTemplate || null,
+  };
+}
+
+function deriveBeforeAfterEvidence(proposal: ProposalItem) {
+  const evidence = (proposal.violation?.evidence || {}) as Record<string, unknown>;
+  const conversation = proposal.conversation || [];
+  const lastTurn = conversation.length > 0 ? conversation[conversation.length - 1] : null;
+  const finalAnswerEvent = [...(proposal.event_history || [])]
+    .reverse()
+    .find((evt) => String(evt.event_type || "").trim() === "FINAL_ANSWER_READY");
+  const finalPayload =
+    finalAnswerEvent?.payload && typeof finalAnswerEvent.payload === "object"
+      ? (finalAnswerEvent.payload as Record<string, unknown>)
+      : {};
+  const changeAudit =
+    finalPayload.change_audit && typeof finalPayload.change_audit === "object"
+      ? (finalPayload.change_audit as Record<string, unknown>)
+      : null;
+  const beforeFromAudit =
+    changeAudit?.before && typeof changeAudit.before === "object"
+      ? (changeAudit.before as Record<string, unknown>)
+      : null;
+  const requestFromAudit =
+    changeAudit?.request && typeof changeAudit.request === "object"
+      ? (changeAudit.request as Record<string, unknown>)
+      : null;
+  const afterFromAudit =
+    changeAudit?.after && typeof changeAudit.after === "object"
+      ? (changeAudit.after as Record<string, unknown>)
+      : null;
+  const before = {
+    resolved_fields: beforeFromAudit || (
+      evidence.resolved_fields && typeof evidence.resolved_fields === "object"
+        ? evidence.resolved_fields
+        : null
+    ),
+    request_fields: requestFromAudit || (
+      evidence.request_fields && typeof evidence.request_fields === "object"
+        ? evidence.request_fields
+        : null
+    ),
+    previous_answer: evidence.previous_answer ?? null,
+  };
+  const after = {
+    response_fields: afterFromAudit || (
+      evidence.response_fields && typeof evidence.response_fields === "object"
+        ? evidence.response_fields
+        : null
+    ),
+    final_answer: lastTurn?.bot || null,
+    repeated_answer: evidence.repeated_answer ?? null,
+  };
+  return { before, after };
+}
+
+function hasObjectKeys(value: unknown) {
+  return Boolean(value && typeof value === "object" && Object.keys(value as Record<string, unknown>).length > 0);
+}
+
+function summarizeKeyEvents(events: ProposalItem["event_history"]) {
+  const lines: string[] = [];
+  const collectDecisionNodes = (value: unknown, out: Record<string, unknown>[], seen: Set<unknown>) => {
+    if (!value || typeof value !== "object") return;
+    if (seen.has(value)) return;
+    seen.add(value);
+    const obj = value as Record<string, unknown>;
+    const direct = obj._decision;
+    if (direct && typeof direct === "object") out.push(direct as Record<string, unknown>);
+    for (const child of Object.values(obj)) {
+      if (child && typeof child === "object") collectDecisionNodes(child, out, seen);
+    }
+  };
+  for (const event of events || []) {
+    const payload = (event.payload || {}) as Record<string, unknown>;
+    const botContext =
+      event.bot_context && typeof event.bot_context === "object"
+        ? (event.bot_context as Record<string, unknown>)
+        : {};
+    const nodes: Record<string, unknown>[] = [];
+    collectDecisionNodes(payload, nodes, new Set<unknown>());
+    collectDecisionNodes(botContext, nodes, new Set<unknown>());
+    const first = nodes[0] || {};
+    const modulePath = String(first.module_path || "").trim();
+    const functionName = String(first.function_name || "").trim();
+    const when = event.created_at || "-";
+    const tail = modulePath || functionName ? ` / ${modulePath || "unknown"}#${functionName || "unknown"}` : "";
+    lines.push(`- ${when} / ${event.event_type}${tail}`);
+  }
+  return lines;
+}
+
+function buildCriticalEventPayloadDump(events: ProposalItem["event_history"]) {
+  const criticalTypes = new Set([
+    "PRINCIPLE_VIOLATION_DETECTED",
+    "RUNTIME_PATCH_PROPOSAL_CREATED",
+    "PRE_MCP_DECISION",
+    "FINAL_ANSWER_READY",
+    "POLICY_DECISION",
+    "EXECUTION_GUARD_TRIGGERED",
+  ]);
+  const rows = (events || []).filter((evt) => criticalTypes.has(String(evt.event_type || "").trim()));
+  if (rows.length === 0) return ["-"];
+  return rows.map((evt) => {
+    const payload = evt.payload && typeof evt.payload === "object" ? evt.payload : {};
+    return `- ${evt.created_at || "-"} / ${evt.event_type}\n${prettyJson(payload)}`;
+  });
+}
+
+function deriveReadinessReport(
+  proposal: ProposalItem,
+  codePaths: string[],
+  beforeAfter: {
+    before: { resolved_fields: unknown; request_fields: unknown; previous_answer: unknown };
+    after: { response_fields: unknown; final_answer: unknown; repeated_answer: unknown };
+  }
+) {
+  const events = proposal.event_history || [];
+  const eventSet = new Set(events.map((evt) => String(evt.event_type || "").trim()));
+  const evidence = (proposal.violation?.evidence || {}) as Record<string, unknown>;
+  const mustEvents = [
+    "PRE_MCP_DECISION",
+    "FINAL_ANSWER_READY",
+    "RUNTIME_PATCH_PROPOSAL_CREATED",
+    "PRINCIPLE_VIOLATION_DETECTED",
+  ];
+  const report = {
+    has_violation_evidence: hasObjectKeys(evidence),
+    has_tool_name: Boolean(String(evidence.tool_name || "").trim()),
+    has_mismatch_type: Boolean(String(evidence.mismatch_type || "").trim()),
+    has_request_fields: hasObjectKeys(evidence.request_fields),
+    has_response_fields: hasObjectKeys(evidence.response_fields),
+    has_contract_expectation: Boolean(String(evidence.contract_expectation || "").trim()),
+    has_decision_code_paths: codePaths.length > 0,
+    has_before_snapshot: hasObjectKeys(beforeAfter.before.resolved_fields) || hasObjectKeys(beforeAfter.before.request_fields),
+    has_after_snapshot: hasObjectKeys(beforeAfter.after.response_fields) || Boolean(beforeAfter.after.final_answer),
+    required_events_present: mustEvents.filter((eventType) => eventSet.has(eventType)),
+    required_events_missing: mustEvents.filter((eventType) => !eventSet.has(eventType)),
+  };
+  const missingFactors: string[] = [];
+  if (!report.has_violation_evidence) missingFactors.push("violation.evidence");
+  if (!report.has_tool_name) missingFactors.push("violation.evidence.tool_name");
+  if (!report.has_mismatch_type) missingFactors.push("violation.evidence.mismatch_type");
+  if (!report.has_request_fields) missingFactors.push("violation.evidence.request_fields");
+  if (!report.has_response_fields) missingFactors.push("violation.evidence.response_fields");
+  if (!report.has_contract_expectation) missingFactors.push("violation.evidence.contract_expectation");
+  if (!report.has_decision_code_paths) missingFactors.push("decision_code_paths");
+  if (!report.has_before_snapshot) missingFactors.push("before_snapshot");
+  if (!report.has_after_snapshot) missingFactors.push("after_snapshot");
+  for (const eventType of report.required_events_missing) {
+    missingFactors.push(`event:${eventType}`);
+  }
+  return { report, missingFactors };
 }
 
 function badgeClass(status: ProposalStatus) {
@@ -146,6 +374,7 @@ export function ProposalSettingsPanel({ authToken }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [proposals, setProposals] = useState<ProposalItem[]>([]);
+  const [selfHealMap, setSelfHealMap] = useState<ProposalListResponse["self_heal_map"] | null>(null);
   const [busyProposalId, setBusyProposalId] = useState<string | null>(null);
   const [busyBulk, setBusyBulk] = useState(false);
   const [statusNote, setStatusNote] = useState<string>("");
@@ -174,16 +403,44 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       if (!res.ok || !body?.ok) {
         setError(body?.error || "proposal 목록 조회에 실패했습니다.");
         setProposals([]);
+        setSelfHealMap(null);
         return;
       }
       setProposals(body.proposals || []);
+      setSelfHealMap(body.self_heal_map || null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "proposal 목록 조회에 실패했습니다.");
       setProposals([]);
+      setSelfHealMap(null);
     } finally {
       setLoading(false);
     }
   }, [headers]);
+
+  const principleRows = useMemo(
+    () =>
+      Object.values(selfHealMap?.principle || {}).filter(
+        (item): item is { key: string; summary?: string; ownerModules?: Record<string, string> } => Boolean(item?.key)
+      ),
+    [selfHealMap]
+  );
+  const violationRows = useMemo(
+    () =>
+      Object.values(selfHealMap?.violation || {}).filter(
+        (item): item is { key: string; summary?: string; severityDefault?: string } => Boolean(item?.key)
+      ),
+    [selfHealMap]
+  );
+  const eventRows = useMemo(() => Object.values(selfHealMap?.event || {}).filter(Boolean), [selfHealMap]);
+  const scenarioRows = useMemo(() => selfHealMap?.scenarioMatrix || [], [selfHealMap]);
+
+  const principleSummaryByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const row of principleRows) {
+      map.set(String(row.key), String(row.summary || "-"));
+    }
+    return map;
+  }, [principleRows]);
 
   useEffect(() => {
     void load();
@@ -241,6 +498,28 @@ export function ProposalSettingsPanel({ authToken }: Props) {
   );
 
   const buildProposalClipboardText = useCallback((proposal: ProposalItem) => {
+    const extractedCodePaths = extractDecisionCodePaths(proposal.event_history || []);
+    const codePaths =
+      extractedCodePaths.length > 0
+        ? extractedCodePaths
+        : (proposal.target_files || [])
+            .filter(Boolean)
+            .map((file) => `[inferred] ${file}`);
+    const rootCauseEvidence = deriveRootCauseEvidence(proposal);
+    const beforeAfter = deriveBeforeAfterEvidence(proposal);
+    const evidence = (proposal.violation?.evidence || {}) as Record<string, unknown>;
+    const failingInvariant =
+      String(evidence.contract_expectation || "").trim() ||
+      "deterministic runtime invariant required (slot->request->response semantic consistency)";
+    const validationChecklist = [
+      "1) 동일 입력 재현 시 violation_id가 동일 원인군으로 생성되는지 확인",
+      "2) 실패 경계 직전/직후 이벤트(PRE_MCP_DECISION, MCP/FINAL_ANSWER_READY)가 모두 저장되는지 확인",
+      "3) 변경 전/후 값(before/request/after/diff)이 payload에 남는지 확인",
+      "4) 적용 후 동일 시나리오 재실행 시 PRINCIPLE_VIOLATION_DETECTED가 0인지 확인",
+    ];
+    const readiness = deriveReadinessReport(proposal, codePaths, beforeAfter);
+    const eventTimeline = summarizeKeyEvents(proposal.event_history || []);
+    const criticalEventPayloads = buildCriticalEventPayloadDump(proposal.event_history || []);
     const lines: string[] = [
       "[Runtime Proposal]",
       `proposal_id: ${proposal.proposal_id}`,
@@ -252,6 +531,19 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       `runtime_scope: ${proposal.runtime_scope || "-"}`,
       `violation_id: ${proposal.violation_id || "-"}`,
       `created_at: ${proposal.created_at || "-"}`,
+      "",
+      "[Root Cause Hypothesis]",
+      prettyJson(rootCauseEvidence),
+      "",
+      "[Failing Invariant]",
+      failingInvariant,
+      "",
+      "[Decision Code Paths]",
+      codePaths.length > 0 ? codePaths.map((v) => `- ${v}`).join("\n") : "- (no _decision paths found)",
+      "",
+      "[Self-Heal Readiness]",
+      prettyJson(readiness.report),
+      `[Missing Critical Factors] ${readiness.missingFactors.length > 0 ? readiness.missingFactors.join(", ") : "-"}`,
       "",
       "[Why Failed]",
       proposal.why_failed || "-",
@@ -266,6 +558,18 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       `[Violation Summary] ${proposal.violation?.summary || "-"}`,
       `[Violation Severity] ${proposal.violation?.severity || "-"}`,
       `[Violation Evidence] ${JSON.stringify(proposal.violation?.evidence || {}, null, 2)}`,
+      "",
+      "[Before/After Snapshot]",
+      prettyJson(beforeAfter),
+      "",
+      "[Implementation Checklist]",
+      ...validationChecklist,
+      "",
+      "[Key Event Timeline]",
+      ...(eventTimeline.length > 0 ? eventTimeline : ["-"]),
+      "",
+      "[Critical Event Payloads]",
+      ...criticalEventPayloads,
       "",
       "[Conversation Snippet]",
       ...proposal.conversation.map(
@@ -291,6 +595,25 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       }
     },
     [buildProposalClipboardText]
+  );
+
+  const reassessProposal = useCallback(
+    async (proposalId: string) => {
+      setError(null);
+      setStatusNote("");
+      const res = await fetch("/api/runtime/governance/proposals/reassess", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ proposal_id: proposalId }),
+      });
+      const body = await parseJsonBody<{ ok?: boolean; proposal_id?: string; error?: string }>(res);
+      if (!res.ok || !body?.ok) {
+        throw new Error(body?.error || "제안 재평가에 실패했습니다.");
+      }
+      setStatusNote(`제안 재평가 완료: ${proposalId} -> ${body.proposal_id || "-"}`);
+      await load();
+    },
+    [headers, load]
   );
 
   const handleSingleAction = useCallback(
@@ -448,6 +771,94 @@ export function ProposalSettingsPanel({ authToken }: Props) {
         {statusNote ? <div className="mt-3 text-xs text-emerald-700">{statusNote}</div> : null}
         {error ? <div className="mt-3 text-xs text-rose-700">{error}</div> : null}
       </div>
+
+      {selfHealMap ? (
+        <details className="rounded-xl border border-slate-200 bg-white" open>
+          <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-900">
+            자가 회복 기준 맵
+          </summary>
+          <div className="border-t border-slate-200 px-4 py-3">
+            <div className="text-xs text-slate-600">
+              source: <span className="font-mono">{selfHealMap.registry?.source || "-"}</span> / scope:{" "}
+              <span className="font-mono">{selfHealMap.registry?.scope || "-"}</span>
+            </div>
+            <div className="mt-3 grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold text-slate-700">Principles</div>
+                <div className="mt-2 space-y-2">
+                  {principleRows.map((row) => (
+                    <div key={row.key} className="rounded border border-slate-200 bg-white p-2">
+                      <div className="text-[11px] font-mono text-slate-800">{row.key}</div>
+                      <div className="mt-1 text-[11px] text-slate-600">{row.summary || "-"}</div>
+                      <div className="mt-1 text-[10px] text-slate-500">
+                        owners:{" "}
+                        {row.ownerModules ? Object.values(row.ownerModules).join(" | ") : "-"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold text-slate-700">Violations</div>
+                <div className="mt-2 space-y-2">
+                  {violationRows.map((row) => (
+                    <div key={row.key} className="rounded border border-slate-200 bg-white p-2">
+                      <div className="text-[11px] font-mono text-slate-800">{row.key}</div>
+                      <div className="mt-1 text-[11px] text-slate-600">{row.summary || "-"}</div>
+                      <div className="mt-1 text-[10px] text-slate-500">default severity: {row.severityDefault || "-"}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold text-slate-700">Events / Evidence</div>
+                <div className="mt-2 space-y-1 text-[11px] text-slate-700">
+                  {eventRows.map((eventType) => (
+                    <div key={eventType} className="font-mono">
+                      {eventType}
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-3 text-[11px] text-slate-600">
+                  address evidence:{" "}
+                  {(selfHealMap.evidenceContract?.requiredAddressEvidence || []).join(", ") || "-"}
+                </div>
+                <div className="mt-1 text-[11px] text-slate-600">
+                  memory evidence:{" "}
+                  {(selfHealMap.evidenceContract?.requiredMemoryEvidence || []).join(", ") || "-"}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-semibold text-slate-700">Scenario Matrix</div>
+              <div className="mt-2 overflow-x-auto">
+                <table className="min-w-full text-[11px] text-slate-700">
+                  <thead>
+                    <tr className="text-left text-slate-500">
+                      <th className="px-2 py-1 font-medium">key</th>
+                      <th className="px-2 py-1 font-medium">when</th>
+                      <th className="px-2 py-1 font-medium">expected_action</th>
+                      <th className="px-2 py-1 font-medium">expected_prompt</th>
+                      <th className="px-2 py-1 font-medium">expected_events</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scenarioRows.map((row, idx) => (
+                      <tr key={`${row.key || "scenario"}_${idx}`} className="border-t border-slate-200">
+                        <td className="px-2 py-1 font-mono">{row.key || "-"}</td>
+                        <td className="px-2 py-1">{row.when || "-"}</td>
+                        <td className="px-2 py-1 font-mono">{row.expectedAction || "-"}</td>
+                        <td className="px-2 py-1">{row.expectedPrompt || "-"}</td>
+                        <td className="px-2 py-1 font-mono">{(row.expectedEvents || []).join(", ") || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </details>
+      ) : null}
 
       <div className="rounded-xl border border-slate-200 bg-white px-3 py-2">
         <div className="flex flex-wrap items-center gap-2">
@@ -629,6 +1040,10 @@ export function ProposalSettingsPanel({ authToken }: Props) {
                     <span className="font-mono">-</span>
                   )}
                 </div>
+                <div className="mt-1 text-xs text-slate-700">
+                  principle_summary:{" "}
+                  {proposal.principle_key ? principleSummaryByKey.get(proposal.principle_key) || "-" : "-"}
+                </div>
                 <div className="mt-2 text-xs text-slate-700">target_files: {proposal.target_files.length > 0 ? proposal.target_files.join(", ") : "-"}</div>
                 <div className="mt-1 text-xs text-slate-700">change_plan: {proposal.change_plan.length > 0 ? proposal.change_plan.join(" | ") : "-"}</div>
                 <div className="mt-1 text-xs text-slate-700">rationale: {proposal.rationale || "-"}</div>
@@ -696,6 +1111,14 @@ export function ProposalSettingsPanel({ authToken }: Props) {
                 disabled={busyProposalId === proposal.proposal_id || busyBulk}
               >
                 제안 복사
+              </button>
+              <button
+                type="button"
+                className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-1.5 text-xs font-semibold text-sky-700 hover:bg-sky-100 disabled:opacity-50"
+                onClick={() => void reassessProposal(proposal.proposal_id).catch((err) => setError(err instanceof Error ? err.message : "제안 재평가에 실패했습니다."))}
+                disabled={busyProposalId === proposal.proposal_id || busyBulk}
+              >
+                제안 재평가
               </button>
               {actions.length === 0 ? <span className="text-xs text-slate-400">변경 가능한 상태 액션이 없습니다.</span> : null}
               {actions.map((action) => (

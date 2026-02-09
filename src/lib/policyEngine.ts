@@ -34,6 +34,8 @@ export type PolicyEvalContext = {
     zipcode?: string | null;
     phone?: string | null;
     channel?: string | null;
+    resolved_road_address?: string | null;
+    resolved_jibun_address?: string | null;
   };
   product?: {
     id?: string | null;

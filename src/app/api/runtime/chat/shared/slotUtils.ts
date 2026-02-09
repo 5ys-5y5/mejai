@@ -173,21 +173,51 @@ export function extractAddressDetail(text: string) {
 
 export function splitAddressForUpdate(
   rawAddress: string,
-  opts?: { baseAddress?: string | null; fallbackBaseAddress?: string | null }
+  opts?: {
+    baseAddress?: string | null;
+    fallbackBaseAddress?: string | null;
+    baseAddressCandidates?: Array<string | null | undefined>;
+  }
 ) {
   const raw = normalizeAddressText(rawAddress);
   const parsed = parseAddressParts(raw);
   const baseAddress = normalizeAddressText(opts?.baseAddress || "");
   const fallbackBaseAddress = normalizeAddressText(opts?.fallbackBaseAddress || "");
+  const candidateBases = [
+    baseAddress,
+    ...(Array.isArray(opts?.baseAddressCandidates) ? opts!.baseAddressCandidates : []),
+    fallbackBaseAddress,
+  ]
+    .map((value) => normalizeAddressText(String(value || "")))
+    .filter(Boolean);
+  const chosenBase = candidateBases[0] || "";
+  const candidateTerminalTokens = new Set(
+    candidateBases
+      .map((value) => {
+        const tokens = value.split(" ").filter(Boolean);
+        return normalizeAddressText(tokens[tokens.length - 1] || "");
+      })
+      .filter(Boolean)
+  );
 
-  if (baseAddress) {
-    const detailFromSuffix = raw.startsWith(baseAddress)
-      ? normalizeAddressText(raw.slice(baseAddress.length))
+  if (chosenBase) {
+    const detailFromSuffix = raw.startsWith(chosenBase)
+      ? normalizeAddressText(raw.slice(chosenBase.length))
       : "";
-    const detail = detailFromSuffix || extractAddressDetail(raw) || parsed.address2;
+    const extractedDetail = normalizeAddressText(extractAddressDetail(raw) || "");
+    const hasExplicitUnitMarker = /(호|층|실|동)$/i.test(extractedDetail) || /(호|층|실|동)\b/i.test(raw);
+    const extractedLooksLikeLotOnly = /^\d{1,5}(?:-\d{1,5})?$/.test(extractedDetail);
+    const detailFromParsed = isLikelyAddressDetailOnly(raw) ? normalizeAddressText(parsed.address2) : "";
+    let detail = detailFromSuffix || extractedDetail || detailFromParsed;
+    if (candidateTerminalTokens.has(normalizeAddressText(detail))) {
+      detail = "";
+    }
+    if (!hasExplicitUnitMarker && extractedLooksLikeLotOnly && !isLikelyAddressDetailOnly(raw)) {
+      detail = detailFromSuffix || "";
+    }
     return {
       zipcode: parsed.zipcode,
-      address1: baseAddress,
+      address1: chosenBase,
       address2: detail,
     };
   }

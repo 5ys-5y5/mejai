@@ -234,6 +234,7 @@ export async function insertEvent(
   payload: Record<string, unknown>,
   botContext: Record<string, unknown>
 ) {
+  const traceId = String((context as any)?.runtimeTraceId || "").trim();
   const decisionRaw = captureDecisionTrace(eventType, payload || {});
   const fallback = inferDecisionFallback(eventType, payload || {});
   let decision =
@@ -258,6 +259,9 @@ export async function insertEvent(
     botContext && typeof botContext === "object"
       ? ({ ...(botContext as Record<string, unknown>), _decision: decision } as Record<string, unknown>)
       : ({ _decision: decision } as Record<string, unknown>);
+  if (traceId && !Object.prototype.hasOwnProperty.call(safeBotContext, "trace_id")) {
+    safeBotContext.trace_id = traceId;
+  }
   try {
     await context.supabase.from("F_audit_events").insert({
       session_id: sessionId,

@@ -18,16 +18,25 @@ export async function executeTranscriptCopy(input: {
   successConversationMessage?: string;
   successIssueMessage?: string;
   failedMessage?: string;
+  prebuiltTextOverride?: string | null;
+  onCopiedText?: (text: string) => Promise<void> | void;
 }) {
-  const payload = buildCopyPayload({
-    page: input.page,
-    kind: input.kind,
-    messages: input.messages,
-    selectedMessageIds: input.selectedMessageIds || [],
-    messageLogs: input.messageLogs || {},
-    enabledOverride: input.enabledOverride,
-    conversationDebugOptionsOverride: input.conversationDebugOptionsOverride,
-  });
+  const hasOverride = typeof input.prebuiltTextOverride === "string" && input.prebuiltTextOverride.trim().length > 0;
+  const payload = hasOverride
+    ? {
+        allowed: true,
+        reason: null,
+        text: input.prebuiltTextOverride || "",
+      }
+    : buildCopyPayload({
+        page: input.page,
+        kind: input.kind,
+        messages: input.messages,
+        selectedMessageIds: input.selectedMessageIds || [],
+        messageLogs: input.messageLogs || {},
+        enabledOverride: input.enabledOverride,
+        conversationDebugOptionsOverride: input.conversationDebugOptionsOverride,
+      });
   if (!payload.allowed) {
     toast.error(input.blockedMessage || payload.reason || "이 페이지에서는 해당 복사를 지원하지 않습니다.");
     return false;
@@ -42,6 +51,9 @@ export async function executeTranscriptCopy(input: {
   }
   try {
     await navigator.clipboard.writeText(payload.text);
+    if (input.onCopiedText) {
+      await input.onCopiedText(payload.text);
+    }
     toast.success(
       input.kind === "conversation"
         ? input.successConversationMessage || "대화를 복사했습니다."

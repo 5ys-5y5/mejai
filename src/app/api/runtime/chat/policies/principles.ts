@@ -1,4 +1,16 @@
 export const CHAT_PRINCIPLES = {
+  // Runtime architecture contract (non-negotiable).
+  // Goal: keep intent-driven flexibility by using semantic contracts, not case-specific hardcoding.
+  architecture: {
+    enforceIntentContractRuntime: true,
+    rejectCaseSpecificHotfixAsPrimaryFix: true,
+    requireGeneralizableFixAcrossTools: true,
+    // Required self-heal design baseline:
+    // 1) intent/slot semantics -> request contract mapping
+    // 2) response contract -> conversation/entity projection
+    // 3) deterministic invariants at pre/post tool boundaries
+    requireSlotRequestResponseContractValidation: true,
+  },
   // Non-negotiable privacy gate for high-risk operations.
   safety: {
     otpRequiredIntents: ["order_change", "shipping_inquiry", "refund_request"] as const,
@@ -26,6 +38,17 @@ export const CHAT_PRINCIPLES = {
     restockPreferKbWhenNoMallNameMatch: true,
     restockNewProductLabel: "신상품",
   },
+  // Address/zipcode resolution contract for shipping address changes.
+  address: {
+    // Users usually know road/jibun address but not zipcode.
+    resolveZipcodeViaJusoWhenAddressGiven: true,
+    // If JUSO returns multiple candidates, force user choice from explicit triples.
+    requireCandidateSelectionWhenMultipleZipcodes: true,
+    // Candidate choice must include jibun/road/zipcode together for deterministic confirmation.
+    requireJibunRoadZipTripleInChoice: true,
+    // If zipcode cannot be found from input address, treat as typo and ask address again.
+    requireAddressRetryWhenZipcodeNotFound: true,
+  },
   // High-priority memory reuse contract.
   // Promise: do not ask again for information already provided by the user when it can be safely reused.
   memory: {
@@ -42,10 +65,39 @@ export const CHAT_PRINCIPLES = {
       entityCarryOver: "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
     } as const,
   },
+  // Mutation audit contract.
+  // Promise: every state-changing operation must persist before/after evidence for deterministic debugging.
+  audit: {
+    requireBeforeAfterOnMutation: true,
+    requireFailureBoundaryLogs: true,
+    mutationTools: ["update_order_shipping_address"] as const,
+    mutationEvidenceFields: ["before", "request", "after", "diff"] as const,
+    // Generic contract: for every mutating MCP/API call, preserve original entity snapshot
+    // whenever the target has an existing value (update/delete style operations).
+    preserveOriginalEntityForMutationTargets: true,
+    preserveOriginalEntityMutationKinds: ["update", "delete"] as const,
+    preserveOriginalEntityScope: "all_mcp_and_api_calls" as const,
+  },
 } as const;
 
 export function requiresOtpForIntent(intent: string) {
   return (CHAT_PRINCIPLES.safety.otpRequiredIntents as readonly string[]).includes(String(intent || ""));
+}
+
+export function shouldEnforceIntentContractRuntime() {
+  return Boolean(CHAT_PRINCIPLES.architecture.enforceIntentContractRuntime);
+}
+
+export function shouldRejectCaseSpecificHotfixAsPrimaryFix() {
+  return Boolean(CHAT_PRINCIPLES.architecture.rejectCaseSpecificHotfixAsPrimaryFix);
+}
+
+export function shouldRequireGeneralizableFixAcrossTools() {
+  return Boolean(CHAT_PRINCIPLES.architecture.requireGeneralizableFixAcrossTools);
+}
+
+export function shouldRequireSlotRequestResponseContractValidation() {
+  return Boolean(CHAT_PRINCIPLES.architecture.requireSlotRequestResponseContractValidation);
 }
 
 export function isOtpRequiredTool(toolName: string) {
@@ -87,6 +139,22 @@ export function shouldEnforceNoRepeatQuestions() {
   return Boolean(CHAT_PRINCIPLES.memory.enforceNoRepeatQuestions);
 }
 
+export function shouldResolveZipcodeViaJusoWhenAddressGiven() {
+  return Boolean(CHAT_PRINCIPLES.address.resolveZipcodeViaJusoWhenAddressGiven);
+}
+
+export function shouldRequireCandidateSelectionWhenMultipleZipcodes() {
+  return Boolean(CHAT_PRINCIPLES.address.requireCandidateSelectionWhenMultipleZipcodes);
+}
+
+export function shouldRequireJibunRoadZipTripleInChoice() {
+  return Boolean(CHAT_PRINCIPLES.address.requireJibunRoadZipTripleInChoice);
+}
+
+export function shouldRequireAddressRetryWhenZipcodeNotFound() {
+  return Boolean(CHAT_PRINCIPLES.address.requireAddressRetryWhenZipcodeNotFound);
+}
+
 export function getEntityReuseOrder() {
   return CHAT_PRINCIPLES.memory.entityReuseOrder as readonly string[];
 }
@@ -97,4 +165,32 @@ export function isSelfUpdateEnabledByDefault() {
 
 export function getSelfUpdateVisibilityDefault() {
   return CHAT_PRINCIPLES.memory.selfUpdateVisibilityDefault as "user" | "admin";
+}
+
+export function shouldRequireBeforeAfterOnMutation() {
+  return Boolean(CHAT_PRINCIPLES.audit.requireBeforeAfterOnMutation);
+}
+
+export function shouldRequireFailureBoundaryLogs() {
+  return Boolean(CHAT_PRINCIPLES.audit.requireFailureBoundaryLogs);
+}
+
+export function getMutationAuditTools() {
+  return CHAT_PRINCIPLES.audit.mutationTools as readonly string[];
+}
+
+export function getMutationEvidenceFields() {
+  return CHAT_PRINCIPLES.audit.mutationEvidenceFields as readonly string[];
+}
+
+export function shouldPreserveOriginalEntityForMutationTargets() {
+  return Boolean(CHAT_PRINCIPLES.audit.preserveOriginalEntityForMutationTargets);
+}
+
+export function getPreserveOriginalEntityMutationKinds() {
+  return CHAT_PRINCIPLES.audit.preserveOriginalEntityMutationKinds as readonly string[];
+}
+
+export function getPreserveOriginalEntityScope() {
+  return CHAT_PRINCIPLES.audit.preserveOriginalEntityScope as "all_mcp_and_api_calls";
 }

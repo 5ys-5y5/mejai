@@ -171,30 +171,71 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
   }
 
   let phoneReusePending = false;
+  let forcedTemplateApplied: string | null = null;
+  let forcedTemplateSkippedReason: string | null = null;
   if (outputGate.actions.forcedResponse) {
     const forcedTemplate = normalizeOrderChangeAddressPrompt(resolvedIntent, outputGate.actions.forcedResponse);
     const rawPhone = typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : "";
     const normalizedPhone = normalizePhoneDigits(rawPhone);
+    const resolvedAddress =
+      typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
+    const conversationFlags =
+      policyContext.conversation && typeof policyContext.conversation === "object"
+        ? ((policyContext.conversation as Record<string, unknown>).flags as Record<string, unknown>) || {}
+        : {};
+    const deferredForceReason = String(conversationFlags.deferred_force_response_reason || "").trim();
+    const isAddressPromptTemplate =
+      forcedTemplate === (compiledPolicy.templates?.order_change_need_address || "") ||
+      forcedTemplate === (compiledPolicy.templates?.order_change_need_zipcode || "") ||
+      usedTemplateIds.includes("order_change_need_address") ||
+      usedTemplateIds.includes("order_change_need_zipcode") ||
+      /(주소|배송지).*(알려|입력|적어)/.test(forcedTemplate);
+    if (resolvedIntent === "order_change" && isAddressPromptTemplate && resolvedAddress) {
+      forcedTemplateSkippedReason = deferredForceReason || "ADDRESS_ALREADY_RESOLVED";
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_DECISION",
+        {
+          stage: "final",
+          action: "SKIP_FORCE_RESPONSE_TEMPLATE",
+          reason: forcedTemplateSkippedReason,
+          forced_template: forcedTemplate,
+          output_force_reason: outputGate.actions.forceReason || null,
+          resolved_address: resolvedAddress,
+        },
+        { intent_name: resolvedIntent }
+      );
+      if (debugEnabled) {
+        console.log("[runtime/chat/mk2] skipping forced template", {
+          reason: forcedTemplateSkippedReason,
+          forced_template: forcedTemplate,
+        });
+      }
+    } else {
     const isNeedOrderIdTemplate =
       forcedTemplate === (compiledPolicy.templates?.order_change_need_order_id || "") ||
       usedTemplateIds.includes("order_change_need_order_id");
-    if (
-      canOfferPhoneReusePrompt({
-        resolvedIntent,
-        isNeedOrderIdTemplate,
-        normalizedPhone,
-        listOrdersCalled,
-      })
-    ) {
-      phoneReusePending = true;
-      finalAnswer = buildYesNoConfirmationPrompt(`이미 제공해주신 휴대폰 번호(${maskPhone(normalizedPhone)})로 주문을 조회할까요?`, {
-        entity: policyContext.entity,
-      });
-    } else {
-      finalAnswer = forcedTemplate;
-    }
-    if (debugEnabled) {
-      console.log("[runtime/chat/mk2] forcing template", { reason: outputGate.actions.forceReason });
+      if (
+        canOfferPhoneReusePrompt({
+          resolvedIntent,
+          isNeedOrderIdTemplate,
+          normalizedPhone,
+          listOrdersCalled,
+        })
+      ) {
+        phoneReusePending = true;
+        finalAnswer = buildYesNoConfirmationPrompt(`이미 제공해주신 휴대폰 번호(${maskPhone(normalizedPhone)})로 주문을 조회할까요?`, {
+          entity: policyContext.entity,
+        });
+      } else {
+        finalAnswer = forcedTemplate;
+        forcedTemplateApplied = forcedTemplate;
+      }
+      if (debugEnabled) {
+        console.log("[runtime/chat/mk2] forcing template", { reason: outputGate.actions.forceReason });
+      }
     }
   }
 
@@ -228,6 +269,13 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
           }
         : null,
       mcp_actions: mcpActions,
+      final_response_debug: {
+        forced_template_applied: forcedTemplateApplied,
+        forced_template_skipped_reason: forcedTemplateSkippedReason,
+        output_force_reason: outputGate.actions.forceReason || null,
+        resolved_address:
+          typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() || null : null,
+      },
       ...(phoneReusePending
         ? {
             phone_reuse_pending: true,

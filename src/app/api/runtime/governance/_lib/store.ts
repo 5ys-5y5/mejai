@@ -1,4 +1,4 @@
-import type { RuntimeEvent, RuntimeTurn } from "./detector";
+import type { RuntimeEvent, RuntimeMcpAudit, RuntimeTurn } from "./detector";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function nowIso() {
@@ -43,6 +43,25 @@ export async function fetchEventsForSessions(input: {
   return out;
 }
 
+export async function fetchMcpForSessions(input: {
+  supabase: SupabaseClient;
+  sessionIds: string[];
+  limitPerSession: number;
+}) {
+  const out = new Map<string, RuntimeMcpAudit[]>();
+  for (const sessionId of input.sessionIds) {
+    const { data, error } = await input.supabase
+      .from("F_audit_mcp_tools")
+      .select("id, session_id, turn_id, tool_name, status, request_payload, response_payload, created_at")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: false })
+      .limit(Math.max(1, Math.min(1000, input.limitPerSession)));
+    if (error) throw new Error(error.message);
+    out.set(sessionId, (data || []) as RuntimeMcpAudit[]);
+  }
+  return out;
+}
+
 export async function insertAuditEvent(input: {
   supabase: SupabaseClient;
   sessionId: string | null;
@@ -51,7 +70,7 @@ export async function insertAuditEvent(input: {
   payload: Record<string, unknown>;
   botContext?: Record<string, unknown>;
 }) {
-  await input.supabase.from("F_audit_events").insert({
+  const { error } = await input.supabase.from("F_audit_events").insert({
     session_id: input.sessionId,
     turn_id: input.turnId,
     event_type: input.eventType,
@@ -59,6 +78,9 @@ export async function insertAuditEvent(input: {
     created_at: nowIso(),
     bot_context: input.botContext || {},
   });
+  if (error) {
+    throw new Error(`insertAuditEvent failed: ${error.message}`);
+  }
 }
 
 export async function fetchProposalById(input: {

@@ -1,3 +1,5 @@
+import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
+
 export type KbItem = {
   id: string;
   title: string;
@@ -134,6 +136,50 @@ export type TurnRow = {
   transcript_text: string | null;
   answer_text: string | null;
   final_answer: string | null;
+  turn_id?: string | null;
+  quick_replies?: Array<{ label?: string; value?: string }> | null;
+  quick_reply_config?: {
+    selection_mode?: "single" | "multi";
+    min_select?: number;
+    max_select?: number;
+    submit_format?: "single" | "csv";
+    criteria?: string;
+    source_function?: string;
+    source_module?: string;
+  } | null;
+  response_schema?: {
+    message?: string | null;
+    ui_hints?: { view?: "text" | "choice" | "cards"; choice_mode?: "single" | "multi" };
+    quick_replies?: Array<{ label?: string; value?: string }>;
+    cards?: Array<Record<string, unknown>>;
+  } | null;
+  response_schema_issues?: string[] | null;
+  render_plan?: {
+    view?: "text" | "choice" | "cards";
+    enable_quick_replies?: boolean;
+    enable_cards?: boolean;
+    selection_mode?: "single" | "multi";
+    min_select?: number;
+    max_select?: number;
+    submit_format?: "single" | "csv";
+    grid_columns?: { quick_replies?: number; cards?: number };
+    prompt_kind?:
+      | "lead_day"
+      | "intent_disambiguation"
+      | "restock_product_choice"
+      | "restock_subscribe_confirm"
+      | "restock_subscribe_phone"
+      | "restock_post_subscribe"
+      | "restock_alternative_confirm"
+      | null;
+    quick_reply_source?: {
+      type?: "explicit" | "config" | "fallback" | "none";
+      criteria?: string;
+      source_function?: string;
+      source_module?: string;
+    };
+    debug?: Record<string, unknown>;
+  } | null;
 };
 
 export type ConversationMode = "history" | "edit" | "new";
@@ -215,6 +261,8 @@ export type ModelState = {
   sessionsLoading: boolean;
   sessionsError: string | null;
   selectedSessionId: string | null;
+  conversationSnapshotText: string | null;
+  issueSnapshotText: string | null;
   historyMessages: ChatMessage[];
   conversationMode: ConversationMode;
   editSessionId: string | null;
@@ -266,6 +314,8 @@ export function createDefaultModel(): ModelState {
     sessionsLoading: false,
     sessionsError: null,
     selectedSessionId: null,
+    conversationSnapshotText: null,
+    issueSnapshotText: null,
     historyMessages: [],
     conversationMode: "new",
     editSessionId: null,
@@ -328,11 +378,77 @@ export function buildHistoryMessages(turns: TurnRow[]) {
   const acc: ChatMessage[] = [];
   turns.forEach((turn) => {
     if (turn.transcript_text) {
-      acc.push({ id: `${turn.id}-user`, role: "user", content: turn.transcript_text });
+      acc.push({ id: `${turn.id}-user`, role: "user", content: turn.transcript_text, turnId: turn.id });
     }
     const answer = turn.final_answer || turn.answer_text;
     if (answer) {
-      acc.push({ id: `${turn.id}-bot`, role: "bot", content: answer });
+      const mapped = mapRuntimeResponseToTranscriptFields({
+        turn_id: turn.id,
+        quick_replies: turn.quick_replies || undefined,
+        quick_reply_config: turn.quick_reply_config || undefined,
+        response_schema: turn.response_schema || undefined,
+        response_schema_issues: turn.response_schema_issues || undefined,
+        render_plan: turn.render_plan || undefined,
+      });
+      const fallbackResponseSchema: ChatMessage["responseSchema"] = {
+        message: answer,
+        ui_hints: { view: "text", choice_mode: "single" },
+        quick_replies: [],
+        cards: [],
+      };
+      const fallbackRenderPlan: ChatMessage["renderPlan"] = {
+        view: "text",
+        enable_quick_replies: false,
+        enable_cards: false,
+        quick_reply_source: { type: "none" },
+        selection_mode: "single",
+        min_select: 1,
+        max_select: 1,
+        submit_format: "single",
+        grid_columns: { quick_replies: 1, cards: 1 },
+        prompt_kind: null,
+      };
+      const normalizedRenderPlan: ChatMessage["renderPlan"] = mapped.renderPlan
+        ? {
+            view: mapped.renderPlan.view,
+            enable_quick_replies: Boolean(mapped.renderPlan.enable_quick_replies),
+            enable_cards: Boolean(mapped.renderPlan.enable_cards),
+            quick_reply_source: {
+              type:
+                mapped.renderPlan.quick_reply_source?.type === "explicit" ||
+                mapped.renderPlan.quick_reply_source?.type === "config" ||
+                mapped.renderPlan.quick_reply_source?.type === "fallback"
+                  ? mapped.renderPlan.quick_reply_source.type
+                  : "none",
+              criteria: mapped.renderPlan.quick_reply_source?.criteria,
+              source_function: mapped.renderPlan.quick_reply_source?.source_function,
+              source_module: mapped.renderPlan.quick_reply_source?.source_module,
+            },
+            selection_mode: mapped.renderPlan.selection_mode === "multi" ? "multi" : "single",
+            min_select: Number.isFinite(Number(mapped.renderPlan.min_select)) ? Number(mapped.renderPlan.min_select) : 1,
+            max_select: Number.isFinite(Number(mapped.renderPlan.max_select)) ? Number(mapped.renderPlan.max_select) : 1,
+            submit_format: mapped.renderPlan.submit_format === "csv" ? "csv" : "single",
+            grid_columns: {
+              quick_replies: Number.isFinite(Number(mapped.renderPlan.grid_columns?.quick_replies))
+                ? Number(mapped.renderPlan.grid_columns?.quick_replies)
+                : 1,
+              cards: Number.isFinite(Number(mapped.renderPlan.grid_columns?.cards))
+                ? Number(mapped.renderPlan.grid_columns?.cards)
+                : 1,
+            },
+            prompt_kind: mapped.renderPlan.prompt_kind || null,
+          }
+        : fallbackRenderPlan;
+      acc.push({
+        id: `${turn.id}-bot`,
+        role: "bot",
+        content: answer,
+        turnId: turn.id,
+        responseSchema: mapped.responseSchema || fallbackResponseSchema,
+        responseSchemaIssues: mapped.responseSchemaIssues,
+        quickReplyConfig: mapped.quickReplyConfig,
+        renderPlan: normalizedRenderPlan,
+      });
     }
   });
   return acc;

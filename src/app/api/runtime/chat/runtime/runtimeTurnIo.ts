@@ -1,5 +1,10 @@
 import { readGovernanceConfig } from "../../governance/_lib/config";
-import { detectPrincipleViolations, type RuntimeEvent, type RuntimeTurn } from "../../governance/_lib/detector";
+import {
+  detectPrincipleViolations,
+  type RuntimeEvent,
+  type RuntimeMcpAudit,
+  type RuntimeTurn,
+} from "../../governance/_lib/detector";
 import { getPrincipleBaseline } from "../../governance/_lib/principleBaseline";
 import { buildPatchProposal } from "../../governance/_lib/proposer";
 
@@ -148,6 +153,17 @@ function toTurnEventMap(events: RuntimeEvent[]) {
   return map;
 }
 
+function toTurnMcpMap(rows: RuntimeMcpAudit[]) {
+  const map = new Map<string, RuntimeMcpAudit[]>();
+  for (const row of rows) {
+    if (!row.turn_id) continue;
+    const list = map.get(row.turn_id) || [];
+    list.push(row);
+    map.set(row.turn_id, list);
+  }
+  return map;
+}
+
 function nearbyTurns(turns: RuntimeTurn[], turnId: string) {
   const sorted = [...turns].sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
   const idx = sorted.findIndex((turn) => turn.id === turnId);
@@ -209,10 +225,18 @@ function violationFingerprint(input: {
     normalizeText(evidence.answer) ||
     normalizeText(evidence.current_user_text) ||
     normalizeText(input.summary);
+  const flavor = [
+    normalizeText(input.summary),
+    normalizeText(evidence.asking_address_again),
+    normalizeText(evidence.address_like_user_input),
+    normalizeText(evidence.expected_input),
+    normalizeText(evidence.policy_decision_reason),
+  ].join("|");
   return [
     normalizeText(input.principle_key),
     normalizeText(input.runtime_scope),
     coreText,
+    flavor,
   ].join("|");
 }
 
@@ -264,6 +288,50 @@ async function insertAuditEvent(context: any, input: {
   });
 }
 
+async function backfillTurnIdForRuntimeTrace(input: {
+  context: any;
+  sessionId: string;
+  turnId: string;
+}) {
+  const { context, sessionId, turnId } = input;
+  const requestStartedAt = String((context as any)?.runtimeRequestStartedAt || "").trim();
+  if (!requestStartedAt) return;
+  const targets = ["F_audit_events", "F_audit_mcp_tools"] as const;
+  for (const table of targets) {
+    const { data, error: fetchError } = await context.supabase
+      .from(table)
+      .select("id, bot_context")
+      .eq("session_id", sessionId)
+      .is("turn_id", null)
+      .gte("created_at", requestStartedAt);
+    if (fetchError) {
+      console.warn("[runtime/chat_mk2] failed to backfill turn_id", {
+        table,
+        session_id: sessionId,
+        turn_id: turnId,
+        error: fetchError.message,
+      });
+      continue;
+    }
+    const ids = ((data || []) as Array<{ id?: string }>)
+      .map((row) => String(row.id || "").trim())
+      .filter(Boolean);
+    if (ids.length === 0) continue;
+    const { error: updateError } = await context.supabase
+      .from(table)
+      .update({ turn_id: turnId })
+      .in("id", ids);
+    if (updateError) {
+      console.warn("[runtime/chat_mk2] failed to backfill turn_id update", {
+        table,
+        session_id: sessionId,
+        turn_id: turnId,
+        error: updateError.message,
+      });
+    }
+  }
+}
+
 async function runRuntimeSelfUpdateReview(params: {
   context: any;
   orgId: string;
@@ -287,7 +355,7 @@ async function runRuntimeSelfUpdateReview(params: {
     botContext: { org_id: orgId, stage: "runtime_self_update" },
   });
 
-  const [{ data: turnsData }, { data: eventsData }] = await Promise.all([
+  const [{ data: turnsData }, { data: eventsData }, { data: mcpData }] = await Promise.all([
     context.supabase
       .from("D_conv_turns")
       .select("id, session_id, seq, transcript_text, answer_text, final_answer, bot_context, created_at")
@@ -300,12 +368,20 @@ async function runRuntimeSelfUpdateReview(params: {
       .eq("session_id", sessionId)
       .order("created_at", { ascending: false })
       .limit(300),
+    context.supabase
+      .from("F_audit_mcp_tools")
+      .select("id, session_id, turn_id, tool_name, status, request_payload, response_payload, created_at")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: false })
+      .limit(300),
   ]);
   const turns = ((turnsData || []) as RuntimeTurn[]).reverse();
   const events = (eventsData || []) as RuntimeEvent[];
+  const mcpRows = (mcpData || []) as RuntimeMcpAudit[];
   const eventsByTurnId = toTurnEventMap(events);
+  const mcpByTurnId = toTurnMcpMap(mcpRows);
   const baseline = getPrincipleBaseline();
-  const detected = detectPrincipleViolations({ turns, eventsByTurnId, baseline });
+  const detected = detectPrincipleViolations({ turns, eventsByTurnId, mcpByTurnId, baseline });
   const duplicateViolation = buildDuplicateAnswerViolation(turns, turnId);
   const scoped = detected.filter((item) => String(item.turn_id) === turnId) as Array<{
     violation_id: string;
@@ -448,6 +524,12 @@ export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
   if (!Object.prototype.hasOwnProperty.call(payload, "failed")) {
     payload.failed = null;
   }
+  if (!Object.prototype.hasOwnProperty.call(payload, "id")) {
+    const runtimeTurnId = String((context as any)?.runtimeTurnId || "").trim();
+    if (runtimeTurnId) {
+      payload.id = runtimeTurnId;
+    }
+  }
   if (pendingIntentQueue.length > 0) {
     const currentBotContext =
       payload.bot_context && typeof payload.bot_context === "object"
@@ -464,6 +546,11 @@ export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
   const latestTurnId = result.data?.id || null;
   if (!result.error && latestTurnId && result.data?.session_id && orgId) {
     try {
+      await backfillTurnIdForRuntimeTrace({
+        context,
+        sessionId: String(result.data.session_id),
+        turnId: String(latestTurnId),
+      });
       await runRuntimeSelfUpdateReview({
         context,
         orgId: String(orgId),

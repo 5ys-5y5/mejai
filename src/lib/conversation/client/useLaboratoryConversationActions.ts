@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 import { loadLaboratoryLogs, sendLaboratoryMessage, type LaboratoryRunConfig } from "@/lib/conversation/client/laboratoryTransport";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
+import { saveTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import type { TranscriptMessage, LogBundle } from "@/lib/debugTranscript";
 
@@ -47,6 +48,8 @@ type BaseModel<TMessage extends BaseMessage> = {
   editSessionId: string | null;
   setupMode: SetupMode;
   historyMessages: TMessage[];
+  conversationSnapshotText?: string | null;
+  issueSnapshotText?: string | null;
 };
 
 function makeId() {
@@ -61,6 +64,27 @@ function visibleMessages<TMessage extends BaseMessage, TModel extends BaseModel<
       : target.messages;
 }
 
+function resolveActiveSessionId<TMessage extends BaseMessage, TModel extends BaseModel<TMessage>>(target: TModel) {
+  if (target.conversationMode === "history") return target.selectedSessionId || null;
+  if (target.conversationMode === "edit") return target.editSessionId || target.sessionId || null;
+  return target.sessionId || null;
+}
+
+function resolveSnapshotTurnId<TMessage extends BaseMessage>(
+  messages: TMessage[],
+  selectedMessageIds: string[]
+) {
+  const selected = new Set((selectedMessageIds || []).filter(Boolean));
+  const fromSelected = [...messages]
+    .reverse()
+    .find((msg) => msg.role === "bot" && selected.has(msg.id) && String(msg.turnId || "").trim().length > 0);
+  if (fromSelected?.turnId) return String(fromSelected.turnId).trim();
+  const fromAll = [...messages]
+    .reverse()
+    .find((msg) => msg.role === "bot" && String(msg.turnId || "").trim().length > 0);
+  return fromAll?.turnId ? String(fromAll.turnId).trim() : null;
+}
+
 export function useLaboratoryConversationActions<TMessage extends BaseMessage, TModel extends BaseModel<TMessage>>(params: {
   models: TModel[];
   updateModel: (id: string, updater: (model: TModel) => TModel) => void;
@@ -70,10 +94,11 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
   const { models, updateModel, ensureEditableSession, isAdminUser } = params;
 
   const loadLogs = useCallback(
-    async (id: string, messageId: string, sessionIdOverride?: string | null) => {
+    async (id: string, messageId: string, sessionIdOverride?: string | null, turnIdOverride?: string | null) => {
       const target = models.find((model) => model.id === id);
       const sessionId = sessionIdOverride ?? target?.sessionId;
       if (!sessionId) return;
+      const turnId = (turnIdOverride || "").trim();
       updateModel(id, (model) => ({
         ...model,
         messageLogs: {
@@ -89,14 +114,26 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
       }));
       try {
         const loaded = await loadLaboratoryLogs(sessionId, target?.lastLogAt, 30);
+        const mcpLogs =
+          turnId.length > 0
+            ? loaded.mcpLogs.filter((log) => String(log.turn_id || "") === turnId)
+            : loaded.mcpLogs;
+        const eventLogs =
+          turnId.length > 0
+            ? loaded.eventLogs.filter((log) => String(log.turn_id || "") === turnId)
+            : loaded.eventLogs;
+        const debugLogs =
+          turnId.length > 0
+            ? loaded.debugLogs.filter((log) => String(log.turn_id || "") === turnId)
+            : loaded.debugLogs;
         updateModel(id, (model) => ({
           ...model,
           messageLogs: {
             ...model.messageLogs,
             [messageId]: {
-              mcp_logs: loaded.mcpLogs,
-              event_logs: loaded.eventLogs,
-              debug_logs: loaded.debugLogs,
+              mcp_logs: mcpLogs,
+              event_logs: eventLogs,
+              debug_logs: debugLogs,
               logsError: null,
               logsLoading: false,
             },
@@ -240,7 +277,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
             sending: false,
           }));
           if (botMessageId) {
-            await loadLogs(modelId, botMessageId, res.session_id || target.sessionId);
+            await loadLogs(modelId, botMessageId, res.session_id || target.sessionId, transcriptFields.turnId);
           }
         } else {
           updateModel(modelId, (model) => ({
@@ -292,6 +329,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
     async (id: string, enabledOverride?: boolean, conversationDebugOptionsOverride?: DebugTranscriptOptions) => {
       const target = models.find((model) => model.id === id);
       if (!target) return;
+      const activeSessionId = resolveActiveSessionId(target);
       await executeTranscriptCopy({
         page: "/app/laboratory",
         kind: "conversation",
@@ -301,15 +339,30 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         enabledOverride,
         conversationDebugOptionsOverride,
         blockedMessage: "이 페이지에서는 대화 복사를 지원하지 않습니다.",
+        prebuiltTextOverride: target.conversationSnapshotText || null,
+        onCopiedText: async (text) => {
+          const viewMessages = visibleMessages(target);
+          const turnId = resolveSnapshotTurnId(viewMessages, target.selectedMessageIds || []);
+          updateModel(id, (model) => ({ ...model, conversationSnapshotText: text }));
+          if (!activeSessionId) return;
+          await saveTranscriptSnapshot({
+            sessionId: activeSessionId,
+            page: "/app/laboratory",
+            kind: "conversation",
+            transcriptText: text,
+            turnId,
+          }).catch(() => null);
+        },
       });
     },
-    [models]
+    [models, updateModel]
   );
 
   const copyIssue = useCallback(
     async (id: string, enabledOverride?: boolean) => {
       const target = models.find((model) => model.id === id);
       if (!target) return;
+      const activeSessionId = resolveActiveSessionId(target);
       await executeTranscriptCopy({
         page: "/app/laboratory",
         kind: "issue",
@@ -318,9 +371,23 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         messageLogs: target.messageLogs || {},
         enabledOverride,
         blockedMessage: "이 페이지에서는 문제 로그 복사를 지원하지 않습니다.",
+        prebuiltTextOverride: target.issueSnapshotText || null,
+        onCopiedText: async (text) => {
+          const viewMessages = visibleMessages(target);
+          const turnId = resolveSnapshotTurnId(viewMessages, target.selectedMessageIds || []);
+          updateModel(id, (model) => ({ ...model, issueSnapshotText: text }));
+          if (!activeSessionId) return;
+          await saveTranscriptSnapshot({
+            sessionId: activeSessionId,
+            page: "/app/laboratory",
+            kind: "issue",
+            transcriptText: text,
+            turnId,
+          }).catch(() => null);
+        },
       });
     },
-    [models]
+    [models, updateModel]
   );
 
   return {

@@ -306,6 +306,7 @@ export function LaboratoryModelCard({
               <LaboratoryExistingSetup
                 showModelSelector={pageFeatures.setup.modelSelector}
                 modelSelectorAdminOnly={pageFeatures.visibility.setup.modelSelector === "admin"}
+                showAgentSelector={pageFeatures.setup.agentSelector}
                 showModeExisting={pageFeatures.setup.modeExisting}
                 modeExistingAdminOnly={pageFeatures.visibility.setup.modeExisting === "admin"}
                 showSessionIdSearch={pageFeatures.setup.sessionIdSearch}
@@ -358,6 +359,8 @@ export function LaboratoryModelCard({
                   void onSearchSessionById(model.id, value);
                 }}
                 onChangeConversationMode={(mode) => onChangeConversationMode(model.id, mode)}
+                existingFieldOrder={setupUi.existingOrder}
+                existingLabels={setupUi.existingLabels}
               />
               {model.setupMode === "new" ? (
                 <div className="space-y-3">

@@ -10,9 +10,19 @@ export type SetupFieldKey =
   | "mcpProviderSelector"
   | "mcpActionSelector";
 
+export type ExistingSetupFieldKey =
+  | "agentSelector"
+  | "versionSelector"
+  | "sessionSelector"
+  | "sessionIdSearch"
+  | "conversationMode";
+export type ExistingSetupLabelKey = ExistingSetupFieldKey | "modeExisting" | "modeNew";
+
 export type ConversationSetupUi = {
   order: SetupFieldKey[];
   labels: Record<SetupFieldKey, string>;
+  existingOrder: ExistingSetupFieldKey[];
+  existingLabels: Record<ExistingSetupLabelKey, string>;
 };
 
 /**
@@ -85,6 +95,8 @@ export type ConversationPageFeatures = {
   setup: {
     /** 모델(기존/신규) 선택 UI 노출 */
     modelSelector: boolean;
+    /** existing 모드 하위 에이전트 선택 UI 노출 */
+    agentSelector: boolean;
     /** LLM 선택 UI 노출 */
     llmSelector: boolean;
     /** KB 선택 UI 노출 */
@@ -122,6 +134,8 @@ export type ConversationFeaturesProviderShape = {
         {
           order?: SetupFieldKey[];
           labels?: Partial<Record<SetupFieldKey, string>>;
+          existing_order?: ExistingSetupFieldKey[];
+          existing_labels?: Partial<Record<ExistingSetupLabelKey, string>>;
         }
       >
     >;
@@ -147,6 +161,16 @@ const DEFAULT_SETUP_UI: ConversationSetupUi = {
     mcpProviderSelector: "MCP 프로바이더 선택",
     mcpActionSelector: "MCP 액션 선택",
   },
+  existingOrder: ["agentSelector", "versionSelector", "sessionSelector", "sessionIdSearch", "conversationMode"],
+  existingLabels: {
+    modeExisting: "기존 모델",
+    modeNew: "신규 모델",
+    agentSelector: "에이전트 선택",
+    versionSelector: "버전 선택",
+    sessionSelector: "세션 선택",
+    sessionIdSearch: "세션 ID 직접 조회",
+    conversationMode: "모드 선택",
+  },
 };
 
 function normalizeSetupOrder(order?: SetupFieldKey[]) {
@@ -166,6 +190,23 @@ function normalizeSetupOrder(order?: SetupFieldKey[]) {
   return normalized;
 }
 
+function normalizeExistingSetupOrder(order?: ExistingSetupFieldKey[]) {
+  const seen = new Set<ExistingSetupFieldKey>();
+  const normalized: ExistingSetupFieldKey[] = [];
+  (order || []).forEach((key) => {
+    if (seen.has(key)) return;
+    if (!DEFAULT_SETUP_UI.existingOrder.includes(key)) return;
+    seen.add(key);
+    normalized.push(key);
+  });
+  DEFAULT_SETUP_UI.existingOrder.forEach((key) => {
+    if (seen.has(key)) return;
+    seen.add(key);
+    normalized.push(key);
+  });
+  return normalized;
+}
+
 export function resolveConversationSetupUi(
   page: ConversationPageKey,
   providerValue?: ConversationFeaturesProviderShape | null
@@ -176,6 +217,11 @@ export function resolveConversationSetupUi(
     labels: {
       ...DEFAULT_SETUP_UI.labels,
       ...(override?.labels || {}),
+    },
+    existingOrder: normalizeExistingSetupOrder(override?.existing_order),
+    existingLabels: {
+      ...DEFAULT_SETUP_UI.existingLabels,
+      ...(override?.existing_labels || {}),
     },
   };
 }
@@ -232,6 +278,7 @@ export function mergeConversationPageFeatures(
     },
     setup: {
       modelSelector: override.setup?.modelSelector ?? base.setup.modelSelector,
+      agentSelector: override.setup?.agentSelector ?? base.setup.agentSelector,
       llmSelector: override.setup?.llmSelector ?? base.setup.llmSelector,
       kbSelector: override.setup?.kbSelector ?? base.setup.kbSelector,
       adminKbSelector: override.setup?.adminKbSelector ?? base.setup.adminKbSelector,
@@ -265,6 +312,7 @@ export function mergeConversationPageFeatures(
       },
       setup: {
         modelSelector: override.visibility?.setup?.modelSelector ?? base.visibility.setup.modelSelector,
+        agentSelector: override.visibility?.setup?.agentSelector ?? base.visibility.setup.agentSelector,
         llmSelector: override.visibility?.setup?.llmSelector ?? base.visibility.setup.llmSelector,
         kbSelector: override.visibility?.setup?.kbSelector ?? base.visibility.setup.kbSelector,
         adminKbSelector: override.visibility?.setup?.adminKbSelector ?? base.visibility.setup.adminKbSelector,
@@ -364,6 +412,7 @@ export function applyConversationFeatureVisibility(
     setup: {
       ...features.setup,
       modelSelector: withVisibilityFlag(features.setup.modelSelector, features.visibility.setup.modelSelector, isAdminUser),
+      agentSelector: withVisibilityFlag(features.setup.agentSelector, features.visibility.setup.agentSelector, isAdminUser),
       llmSelector: withVisibilityFlag(features.setup.llmSelector, features.visibility.setup.llmSelector, isAdminUser),
       kbSelector: withVisibilityFlag(features.setup.kbSelector, features.visibility.setup.kbSelector, isAdminUser),
       adminKbSelector: withVisibilityFlag(
@@ -426,6 +475,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
     },
     setup: {
       modelSelector: false,
+      agentSelector: false,
       llmSelector: true,
       kbSelector: false,
       adminKbSelector: false,
@@ -458,6 +508,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
       },
       setup: {
         modelSelector: "user",
+        agentSelector: "user",
         llmSelector: "user",
         kbSelector: "user",
         adminKbSelector: "admin",
@@ -493,6 +544,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
     },
     setup: {
       modelSelector: true,
+      agentSelector: true,
       llmSelector: true,
       kbSelector: true,
       adminKbSelector: true,
@@ -525,6 +577,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
       },
       setup: {
         modelSelector: "user",
+        agentSelector: "user",
         llmSelector: "user",
         kbSelector: "user",
         adminKbSelector: "admin",

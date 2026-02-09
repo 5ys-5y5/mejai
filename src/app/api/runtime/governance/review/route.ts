@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureGovernanceAccess } from "../_lib/access";
 import { getPrincipleBaseline } from "../_lib/principleBaseline";
-import { detectPrincipleViolations, type RuntimeEvent, type RuntimeTurn } from "../_lib/detector";
+import { detectPrincipleViolations, type RuntimeEvent, type RuntimeMcpAudit, type RuntimeTurn } from "../_lib/detector";
 import { buildPatchProposal } from "../_lib/proposer";
 import { notifyAdmins } from "../_lib/notifier";
-import { fetchEventsForSessions, fetchRecentTurns, insertAuditEvent } from "../_lib/store";
+import { fetchEventsForSessions, fetchMcpForSessions, fetchRecentTurns, insertAuditEvent } from "../_lib/store";
 import { readGovernanceConfig } from "../_lib/config";
 
 type ReviewBody = {
@@ -21,6 +21,19 @@ function toTurnEventMap(eventsBySession: Map<string, RuntimeEvent[]>) {
       const list = map.get(event.turn_id) || [];
       list.push(event);
       map.set(event.turn_id, list);
+    }
+  }
+  return map;
+}
+
+function toTurnMcpMap(rowsBySession: Map<string, RuntimeMcpAudit[]>) {
+  const map = new Map<string, RuntimeMcpAudit[]>();
+  for (const rows of rowsBySession.values()) {
+    for (const row of rows) {
+      if (!row.turn_id) continue;
+      const list = map.get(row.turn_id) || [];
+      list.push(row);
+      map.set(row.turn_id, list);
     }
   }
   return map;
@@ -69,8 +82,14 @@ export async function POST(req: NextRequest) {
     sessionIds,
     limitPerSession: 300,
   });
+  const mcpBySession = await fetchMcpForSessions({
+    supabase: access.supabaseAdmin,
+    sessionIds,
+    limitPerSession: 300,
+  });
   const eventsByTurnId = toTurnEventMap(eventsBySession);
-  const violations = detectPrincipleViolations({ turns, eventsByTurnId, baseline });
+  const mcpByTurnId = toTurnMcpMap(mcpBySession);
+  const violations = detectPrincipleViolations({ turns, eventsByTurnId, mcpByTurnId, baseline });
 
   const createdProposalIds: string[] = [];
   for (const violation of violations) {

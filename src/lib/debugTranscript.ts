@@ -84,6 +84,7 @@ export type TranscriptMessage = {
 };
 
 export type DebugTranscriptOptions = {
+  outputMode?: "full" | "summary";
   sections?: {
     header?: {
       enabled?: boolean;
@@ -135,6 +136,7 @@ export type DebugTranscriptOptions = {
 };
 
 type NormalizedDebugTranscriptOptions = {
+  outputMode: "full" | "summary";
   auditBotScope: "all_bot_messages" | "runtime_turns_only";
   header: {
     enabled: boolean;
@@ -178,6 +180,7 @@ type NormalizedDebugTranscriptOptions = {
 
 function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): NormalizedDebugTranscriptOptions {
   const input = options || {};
+  const outputMode = input.outputMode === "summary" ? "summary" : "full";
   const auditBotScope = input.auditBotScope === "all_bot_messages" ? "all_bot_messages" : "runtime_turns_only";
 
   const includePrincipleHeader = input.includePrincipleHeader ?? true;
@@ -204,6 +207,7 @@ function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): Norm
     .filter(Boolean);
 
   return {
+    outputMode,
     auditBotScope,
     header: {
       enabled: headerEnabled,
@@ -244,6 +248,85 @@ function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): Norm
       },
     },
   };
+}
+
+function compactText(value: unknown, max = 200) {
+  const text = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  return text.length > max ? `${text.slice(0, max)}...` : text;
+}
+
+function buildProblemSignalLines(bundle: LogBundle, turnId?: string | null) {
+  const signals = new Set<string>();
+  const issueSummary = buildIssueSummary(bundle, turnId);
+  issueSummary.forEach((line) => signals.add(line));
+
+  (bundle.event_logs || []).forEach((event) => {
+    const type = String(event.event_type || "").toUpperCase();
+    const payload = (event.payload || {}) as Record<string, unknown>;
+    if (type === "PRINCIPLE_VIOLATION_DETECTED") {
+      const summary = compactText(payload.summary, 260);
+      if (summary) signals.add(`event.PRINCIPLE_VIOLATION_DETECTED: ${summary}`);
+      const evidence = (payload.evidence || {}) as Record<string, unknown>;
+      const answer = compactText(evidence.answer, 220);
+      if (answer) signals.add(`위반 근거 answer: ${answer}`);
+      return;
+    }
+    if (type === "RUNTIME_PATCH_PROPOSAL_CREATED") {
+      const whyFailed = compactText(payload.why_failed, 260);
+      if (whyFailed) signals.add(`event.RUNTIME_PATCH_PROPOSAL_CREATED: ${whyFailed}`);
+      const proposalId = compactText(payload.proposal_id, 120);
+      if (proposalId) signals.add(`proposal_id: ${proposalId}`);
+      return;
+    }
+    if (type === "POLICY_DECISION") {
+      const action = compactText(payload.action, 120);
+      const reason = compactText(payload.reason, 160);
+      if (action || reason) signals.add(`event.POLICY_DECISION: action=${action || "-"}, reason=${reason || "-"}`);
+      return;
+    }
+    if (type === "POLICY_STATIC_CONFLICT") {
+      const resolution = compactText(payload.resolution, 160);
+      if (resolution) signals.add(`event.POLICY_STATIC_CONFLICT: resolution=${resolution}`);
+      return;
+    }
+    if (type.includes("FAILED") || type.includes("ERROR") || type.includes("VIOLATION")) {
+      const raw = compactText(payload.message || payload.reason || payload.summary || payload.error, 220);
+      if (raw) signals.add(`event.${type}: ${raw}`);
+    }
+  });
+
+  (bundle.mcp_logs || []).forEach((log) => {
+    if (isMcpIssue(log)) {
+      const error = readErrorPayload(log.response_payload);
+      const reason = compactText(error?.message || error?.code || log.status, 200);
+      signals.add(`mcp.${log.tool_name}: ${reason || "error"}`);
+    }
+  });
+
+  return Array.from(signals);
+}
+
+function summarizeEventPayloadCompact(eventType: string, payload: Record<string, unknown>) {
+  const type = String(eventType || "").toUpperCase();
+  if (type === "PRINCIPLE_VIOLATION_DETECTED") {
+    return compactText(payload.summary, 200);
+  }
+  if (type === "RUNTIME_PATCH_PROPOSAL_CREATED") {
+    return compactText(payload.why_failed || payload.proposal_id, 200);
+  }
+  if (type === "POLICY_DECISION") {
+    const action = compactText(payload.action, 60);
+    const reason = compactText(payload.reason, 120);
+    return compactText(`action=${action || "-"}, reason=${reason || "-"}`, 200);
+  }
+  if (type === "PRE_MCP_DECISION") {
+    return compactText(payload.query_text || payload.intent, 180);
+  }
+  if (type === "FINAL_ANSWER_READY") {
+    return compactText(payload.answer, 180);
+  }
+  return compactText(payload.message || payload.reason || payload.summary || "", 180);
 }
 
 function stringifyPretty(value: unknown) {
@@ -404,6 +487,63 @@ function buildIssueSummary(bundle?: LogBundle, turnId?: string | null) {
 
 function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | undefined, options: NormalizedDebugTranscriptOptions) {
   if (!bundle) return "";
+  if (options.outputMode === "summary") {
+    const lines: string[] = [];
+    if (bundle.logsError) lines.push(`MCP 로그 오류: ${bundle.logsError}`);
+
+    const signals = buildProblemSignalLines(bundle, turnId);
+    lines.push("문제 예상 요약:");
+    if (signals.length > 0) {
+      signals.forEach((item) => lines.push(`- ${item}`));
+    } else {
+      lines.push("- 명시적 오류 신호 없음");
+    }
+
+    const debugLogs = turnId
+      ? (bundle.debug_logs || []).filter((log) => log.turn_id === turnId)
+      : (bundle.debug_logs || []);
+    if (options.logs.debug.enabled && debugLogs.length > 0) {
+      lines.push("DEBUG 로그(요약):");
+      debugLogs.forEach((log) => {
+        const map = getDebugEntryMap(log);
+        const fn = map.get("MCP.last_function") || "-";
+        const status = map.get("MCP.last_status") || "-";
+        const err = map.get("MCP.last_error") || "-";
+        lines.push(`- ${log.id || "-"} fn=${fn}, status=${status}, error=${err}, at=${log.created_at || "-"}`);
+      });
+    }
+
+    const mcpLogs = (bundle.mcp_logs || []).filter((log) => {
+      const isSuccess = String(log.status || "").toLowerCase() === "success" && !readErrorPayload(log.response_payload);
+      if (isSuccess && !options.logs.mcp.includeSuccess) return false;
+      if (!isSuccess && !options.logs.mcp.includeError) return false;
+      return true;
+    });
+    if (options.logs.mcp.enabled && mcpLogs.length > 0) {
+      lines.push("MCP 로그(요약):");
+      mcpLogs.forEach((log) => {
+        const turnLabel = log.turn_id || turnId || "-";
+        lines.push(`- ${log.tool_name}@${log.tool_version || "-"}: ${log.status} (${log.created_at || "-"}) (turn_id=${turnLabel})`);
+      });
+    }
+
+    const allowedEvents = new Set(options.logs.event.allowlist || []);
+    const eventLogs = (bundle.event_logs || []).filter((log) => {
+      if (allowedEvents.size === 0) return true;
+      return allowedEvents.has(String(log.event_type || "").toUpperCase());
+    });
+    if (options.logs.event.enabled && eventLogs.length > 0) {
+      lines.push("이벤트 로그(요약):");
+      eventLogs.forEach((log) => {
+        const turnLabel = log.turn_id || turnId || "-";
+        const summary = summarizeEventPayloadCompact(log.event_type, (log.payload || {}) as Record<string, unknown>);
+        lines.push(`- ${log.event_type} (${log.created_at || "-"}) (turn_id=${turnLabel})${summary ? `: ${summary}` : ""}`);
+      });
+    }
+
+    return lines.join("\n");
+  }
+
   const lines: string[] = [];
   if (bundle.logsError) {
     lines.push(`MCP 로그 오류: ${bundle.logsError}`);
@@ -859,7 +999,8 @@ export function buildDebugTranscript(input: {
     } else if (!msg.responseSchema && !msg.renderPlan && !msg.quickReplyConfig) {
       return answerText;
     }
-    if (msg.responseSchema && (normalized.turn.responseSchemaSummary || normalized.turn.responseSchemaDetail)) {
+    const allowResponseSchemaDetail = normalized.outputMode === "full" && normalized.turn.responseSchemaDetail;
+    if (msg.responseSchema && (normalized.turn.responseSchemaSummary || allowResponseSchemaDetail)) {
       const schema = msg.responseSchema;
       const schemaView = schema.ui_hints?.view || "text";
       const schemaChoiceMode = schema.ui_hints?.choice_mode || "-";
@@ -870,19 +1011,20 @@ export function buildDebugTranscript(input: {
           `RESPONSE_SCHEMA: view=${schemaView}, choice_mode=${schemaChoiceMode}, quick_replies=${schemaQuickReplyCount}, cards=${schemaCardCount}`
         );
       }
-      if (normalized.turn.responseSchemaDetail) {
+      if (allowResponseSchemaDetail) {
         lines.push("RESPONSE_SCHEMA_DETAIL:");
         lines.push(indentBlock(stringifyPretty(schema), 2));
       }
     }
-    if (msg.renderPlan && (normalized.turn.renderPlanSummary || normalized.turn.renderPlanDetail)) {
+    const allowRenderPlanDetail = normalized.outputMode === "full" && normalized.turn.renderPlanDetail;
+    if (msg.renderPlan && (normalized.turn.renderPlanSummary || allowRenderPlanDetail)) {
       const plan = msg.renderPlan;
       if (normalized.turn.renderPlanSummary) {
         lines.push(
           `RENDER_PLAN: view=${plan.view}, quick_replies=${plan.enable_quick_replies}, cards=${plan.enable_cards}, mode=${plan.selection_mode}, min=${plan.min_select}, max=${plan.max_select}, submit=${plan.submit_format}, prompt=${plan.prompt_kind || "-"}`
         );
       }
-      if (normalized.turn.renderPlanDetail) {
+      if (allowRenderPlanDetail) {
         lines.push("RENDER_PLAN_DETAIL:");
         lines.push(indentBlock(stringifyPretty(plan), 2));
       }
@@ -909,7 +1051,12 @@ export function buildDebugTranscript(input: {
     ].join("\n\n");
     const tokenUsedPrefix = normalized.turn.tokenUsed ? "[TOKEN_USED]\n\n" : "";
     const unusedLines = normalized.turn.enabled && normalized.turn.tokenUnused ? ["[TOKEN_UNUSED]"].join("\n") : "";
-    const logText = normalized.logs.enabled ? formatLogBundle(input.messageLogs[msg.id], msg.turnId, normalized) : "";
+    const logText =
+      normalized.outputMode === "summary"
+        ? formatLogBundle(input.messageLogs[msg.id], msg.turnId, normalized)
+        : normalized.logs.enabled
+          ? formatLogBundle(input.messageLogs[msg.id], msg.turnId, normalized)
+          : "";
     const turnId = normalized.turn.enabled && normalized.turn.turnId ? (msg.turnId ? `TURN_ID: ${msg.turnId}` : "TURN_ID: -") : "";
     const tail = logText ? `\n${logText}` : "";
     const bodyCore = `${tokenUsedPrefix}${turnBody}`;

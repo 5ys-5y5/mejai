@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureGovernanceReadAccess } from "../_lib/access";
 import { readGovernanceConfig } from "../_lib/config";
+import { SELF_HEAL_PRINCIPLES } from "../selfHeal/principles";
 
 type ProposalStatus = "proposed" | "approved" | "rejected" | "on_hold" | "applied" | "failed";
 
@@ -101,7 +102,12 @@ export async function GET(req: NextRequest) {
     status_label: string;
     latest_event_type: string;
     suggested_diff: string | null;
-    event_history: Array<{ event_type: string; created_at: string | null; payload: Record<string, unknown> }>;
+    event_history: Array<{
+      event_type: string;
+      created_at: string | null;
+      payload: Record<string, unknown>;
+      bot_context?: Record<string, unknown>;
+    }>;
     violation: {
       summary: string | null;
       severity: string | null;
@@ -146,7 +152,7 @@ export async function GET(req: NextRequest) {
         status_label: statusLabel("proposed"),
         latest_event_type: row.event_type,
         suggested_diff: typeof payload.suggested_diff === "string" ? payload.suggested_diff : null,
-        event_history: [{ event_type: row.event_type, created_at: row.created_at, payload }],
+        event_history: [{ event_type: row.event_type, created_at: row.created_at, payload, bot_context: readObj(row.bot_context) }],
         violation: null,
         conversation: [],
       });
@@ -155,7 +161,12 @@ export async function GET(req: NextRequest) {
 
     const current = byProposal.get(proposalId);
     if (!current) continue;
-    current.event_history.push({ event_type: row.event_type, created_at: row.created_at, payload });
+    current.event_history.push({
+      event_type: row.event_type,
+      created_at: row.created_at,
+      payload,
+      bot_context: readObj(row.bot_context),
+    });
     current.latest_event_type = row.event_type;
     if (row.event_type === "RUNTIME_PATCH_PROPOSAL_APPROVED") current.status = "approved";
     if (row.event_type === "RUNTIME_PATCH_PROPOSAL_ON_HOLD") current.status = "on_hold";
@@ -195,6 +206,95 @@ export async function GET(req: NextRequest) {
       severity: String(payload.severity || "") || null,
       evidence: payload.evidence && typeof payload.evidence === "object" ? (payload.evidence as Record<string, unknown>) : null,
     };
+    const violationEventKey = `${hit.event_type}::${String(hit.created_at || "")}`;
+    const hasViolationEventInHistory = proposal.event_history.some(
+      (evt) => `${evt.event_type}::${String(evt.created_at || "")}` === violationEventKey
+    );
+    if (!hasViolationEventInHistory) {
+      proposal.event_history.push({
+        event_type: hit.event_type,
+        created_at: hit.created_at,
+        payload,
+        bot_context: readObj(hit.bot_context),
+      });
+    }
+  }
+
+  const proposalTurnIds = Array.from(
+    new Set(
+      proposalList
+        .map((proposal) => String(proposal.turn_id || "").trim())
+        .filter(Boolean)
+    )
+  );
+  if (proposalTurnIds.length > 0) {
+    const runtimeEventTypes = [
+      "FINAL_ANSWER_READY",
+      "RUNTIME_SELF_UPDATE_REVIEW_COMPLETED",
+      "RUNTIME_SELF_UPDATE_REVIEW_STARTED",
+      "PRE_MCP_DECISION",
+      "SLOT_EXTRACTED",
+      "POLICY_STATIC_CONFLICT",
+      "ORDER_CHOICES_PRESENTED",
+      "QUICK_REPLY_RULE_DECISION",
+      "EXECUTION_GUARD_TRIGGERED",
+      "ADDRESS_CANDIDATES_PRESENTED",
+      "ADDRESS_SEARCH_COMPLETED",
+      "ADDRESS_SEARCH_STARTED",
+      "POLICY_DECISION",
+      "ADDRESS_CANDIDATE_SELECTED",
+      "MCP_CALL_SKIPPED",
+    ];
+    const { data: runtimeRows, error: runtimeRowsError } = await access.supabaseAdmin
+      .from("F_audit_events")
+      .select("id, session_id, turn_id, event_type, payload, bot_context, created_at")
+      .in("turn_id", proposalTurnIds)
+      .in("event_type", runtimeEventTypes)
+      .order("created_at", { ascending: true })
+      .limit(Math.max(500, proposalTurnIds.length * 30));
+    let effectiveRuntimeRows = (runtimeRows || []) as EventRow[];
+    if (runtimeRowsError || effectiveRuntimeRows.length === 0) {
+      const fallbackRows: EventRow[] = [];
+      for (const turnId of proposalTurnIds) {
+        const { data: oneTurnRows } = await access.supabaseAdmin
+          .from("F_audit_events")
+          .select("id, session_id, turn_id, event_type, payload, bot_context, created_at")
+          .eq("turn_id", turnId)
+          .in("event_type", runtimeEventTypes)
+          .order("created_at", { ascending: true })
+          .limit(60);
+        fallbackRows.push(...(((oneTurnRows || []) as EventRow[])));
+      }
+      effectiveRuntimeRows = fallbackRows;
+    }
+    const runtimeByTurnId = new Map<string, Array<{
+      event_type: string;
+      created_at: string | null;
+      payload: Record<string, unknown>;
+      bot_context?: Record<string, unknown>;
+    }>>();
+    for (const row of effectiveRuntimeRows) {
+      const turnId = String(row.turn_id || "").trim();
+      if (!turnId) continue;
+      const payload = readObj(row.payload);
+      const arr = runtimeByTurnId.get(turnId) || [];
+      arr.push({ event_type: row.event_type, created_at: row.created_at, payload, bot_context: readObj(row.bot_context) });
+      runtimeByTurnId.set(turnId, arr);
+    }
+    for (const proposal of proposalList) {
+      const turnId = String(proposal.turn_id || "").trim();
+      if (!turnId) continue;
+      const runtimeEvents = runtimeByTurnId.get(turnId) || [];
+      if (runtimeEvents.length === 0) continue;
+      const seen = new Set(
+        proposal.event_history.map((evt) => `${evt.event_type}::${String(evt.created_at || "")}`)
+      );
+      for (const evt of runtimeEvents) {
+        const key = `${evt.event_type}::${String(evt.created_at || "")}`;
+        if (seen.has(key)) continue;
+        proposal.event_history.push(evt);
+      }
+    }
   }
 
   const sessionIds = Array.from(
@@ -238,5 +338,18 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => Date.parse(String(b.created_at || "")) - Date.parse(String(a.created_at || "")))
     .slice(0, limit);
 
-  return NextResponse.json({ ok: true, proposals, config, viewer: { is_admin: access.isAdmin } });
+  return NextResponse.json({
+    ok: true,
+    proposals,
+    config,
+    viewer: { is_admin: access.isAdmin },
+    self_heal_map: {
+      registry: SELF_HEAL_PRINCIPLES.registry,
+      principle: SELF_HEAL_PRINCIPLES.principle,
+      event: SELF_HEAL_PRINCIPLES.event,
+      violation: SELF_HEAL_PRINCIPLES.violation,
+      evidenceContract: SELF_HEAL_PRINCIPLES.evidenceContract,
+      scenarioMatrix: SELF_HEAL_PRINCIPLES.scenarioMatrix,
+    },
+  });
 }

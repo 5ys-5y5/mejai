@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useSearchParams } from "next/navigation";
 import { type SelectOption } from "@/components/SelectPopover";
 import { apiFetch } from "@/lib/apiClient";
+import { fetchSessionLogs, fetchTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
 import { isProviderEnabled, isToolEnabled, resolveConversationSetupUi } from "@/lib/conversation/pageFeaturePolicy";
 import { useLaboratoryConversationActions } from "@/lib/conversation/client/useLaboratoryConversationActions";
 import { useConversationPageFeatures } from "@/lib/conversation/client/useConversationPageFeatures";
@@ -88,10 +89,11 @@ export function useLaboratoryPageController() {
           }
         }
         if (model.messages.length === 0 && model.historyMessages.length === 0) {
+          const nextSetupMode = pageFeatures.setup.modeExisting ? "existing" : "new";
           return {
             ...model,
-            setupMode: pageFeatures.setup.defaultSetupMode,
-            conversationMode: pageFeatures.setup.defaultSetupMode === "existing" ? "history" : "new",
+            setupMode: nextSetupMode,
+            conversationMode: nextSetupMode === "existing" ? "history" : "new",
             config: { ...model.config, llm: pageFeatures.setup.defaultLlm },
           };
         }
@@ -102,7 +104,6 @@ export function useLaboratoryPageController() {
     pageFeatures.setup.modelSelector,
     pageFeatures.setup.modeExisting,
     pageFeatures.setup.modeNew,
-    pageFeatures.setup.defaultSetupMode,
     pageFeatures.setup.defaultLlm,
   ]);
 
@@ -465,6 +466,8 @@ export function useLaboratoryPageController() {
       selectedMessageIds: [],
       messageLogs: {},
       lastLogAt: null,
+      conversationSnapshotText: null,
+      issueSnapshotText: null,
     }));
   }, [updateModel]);
 
@@ -477,6 +480,8 @@ export function useLaboratoryPageController() {
         selectedMessageIds: [],
         messageLogs: {},
         lastLogAt: null,
+        conversationSnapshotText: null,
+        issueSnapshotText: null,
       }))
     );
   };
@@ -485,7 +490,7 @@ export function useLaboratoryPageController() {
     setModels((prev) => {
       if (prev.length >= MAX_MODELS) return prev;
       const next = createDefaultModel();
-      next.setupMode = pageFeatures.setup.modelSelector ? pageFeatures.setup.defaultSetupMode : "new";
+      next.setupMode = pageFeatures.setup.modelSelector ? (pageFeatures.setup.modeExisting ? "existing" : "new") : "new";
       next.conversationMode = next.setupMode === "existing" ? "history" : "new";
       next.config.llm = pageFeatures.setup.defaultLlm;
       return [...prev, next];
@@ -536,6 +541,8 @@ export function useLaboratoryPageController() {
       selectedMessageIds: [],
       messageLogs: {},
       lastLogAt: null,
+      conversationSnapshotText: null,
+      issueSnapshotText: null,
     }));
     try {
       const res = await apiFetch<{ items: SessionItem[] }>("/api/sessions?limit=100&order=started_at.desc");
@@ -573,6 +580,8 @@ export function useLaboratoryPageController() {
       selectedMessageIds: [],
       messageLogs: {},
       lastLogAt: null,
+      conversationSnapshotText: null,
+      issueSnapshotText: null,
       conversationMode: "history",
       input: "",
     }));
@@ -630,6 +639,8 @@ export function useLaboratoryPageController() {
       ...model,
       selectedSessionId: sessionId || null,
       sessionsError: null,
+      conversationSnapshotText: null,
+      issueSnapshotText: null,
       historyMessages: [],
       editSessionId: null,
       sessionId: null,
@@ -640,10 +651,52 @@ export function useLaboratoryPageController() {
     }));
     if (!sessionId) return;
     try {
-      const turns = await apiFetch<TurnRow[]>(`/api/sessions/${sessionId}/turns`);
+      const [turns, logs, conversationSnapshot, issueSnapshot] = await Promise.all([
+        apiFetch<TurnRow[]>(`/api/sessions/${sessionId}/turns`),
+        fetchSessionLogs(sessionId, 500).catch(() => null),
+        fetchTranscriptSnapshot(sessionId, "/app/laboratory", "conversation").catch(() => null),
+        fetchTranscriptSnapshot(sessionId, "/app/laboratory", "issue").catch(() => null),
+      ]);
+      const historyMessages = buildHistoryMessages(turns || []);
+      const botTurnIds = new Set(
+        historyMessages.filter((msg) => msg.role === "bot" && msg.turnId).map((msg) => String(msg.turnId))
+      );
+      const nextMessageLogs: ModelState["messageLogs"] = {};
+      if (logs) {
+        const mcpLogs = logs.mcp_logs || [];
+        const eventLogs = logs.event_logs || [];
+        const debugLogs = logs.debug_logs || [];
+        botTurnIds.forEach((turnId) => {
+          const bundle = {
+            mcp_logs: mcpLogs.filter((log) => String(log.turn_id || "") === turnId),
+            event_logs: eventLogs.filter((log) => String(log.turn_id || "") === turnId),
+            debug_logs: debugLogs.filter((log) => String(log.turn_id || "") === turnId),
+            logsError: null,
+            logsLoading: false,
+          };
+          const hasAny =
+            bundle.mcp_logs.length > 0 || bundle.event_logs.length > 0 || bundle.debug_logs.length > 0;
+          if (hasAny) {
+            nextMessageLogs[`${turnId}-bot`] = bundle;
+          }
+        });
+      }
+      const newestTs = logs
+        ? Math.max(
+            ...[...(logs.mcp_logs || []), ...(logs.event_logs || []), ...(logs.debug_logs || [])].map((log) => {
+              const ts = log.created_at ? new Date(log.created_at).getTime() : 0;
+              return Number.isNaN(ts) ? 0 : ts;
+            }),
+            0
+          )
+        : 0;
       updateModel(modelId, (model) => ({
         ...model,
-        historyMessages: buildHistoryMessages(turns || []),
+        historyMessages,
+        messageLogs: nextMessageLogs,
+        lastLogAt: newestTs > 0 ? new Date(newestTs).toISOString() : null,
+        conversationSnapshotText: conversationSnapshot?.transcript_text || null,
+        issueSnapshotText: issueSnapshot?.transcript_text || null,
       }));
     } catch {
       updateModel(modelId, (model) => ({
@@ -663,15 +716,6 @@ export function useLaboratoryPageController() {
       return;
     }
 
-    const target = models.find((model) => model.id === modelId);
-    if (!target?.selectedAgentId) {
-      updateModel(modelId, (model) => ({
-        ...model,
-        sessionsError: "먼저 에이전트 버전을 선택해 주세요.",
-      }));
-      return;
-    }
-
     updateModel(modelId, (model) => ({
       ...model,
       sessionsLoading: true,
@@ -680,19 +724,17 @@ export function useLaboratoryPageController() {
 
     try {
       const session = await apiFetch<SessionItem>(`/api/sessions/${encodeURIComponent(sessionId)}`);
-      if (session.agent_id && session.agent_id !== target.selectedAgentId) {
-        updateModel(modelId, (model) => ({
-          ...model,
-          sessionsLoading: false,
-          sessionsError: "선택한 에이전트 버전의 세션이 아닙니다.",
-        }));
-        return;
-      }
 
       updateModel(modelId, (model) => ({
         ...model,
         sessionsLoading: false,
         sessionsError: null,
+        selectedSessionId: session.id,
+        selectedAgentId: session.agent_id || model.selectedAgentId,
+        selectedAgentGroupId:
+          session.agent_id && agentById.get(session.agent_id)
+            ? agentById.get(session.agent_id)?.parent_id ?? session.agent_id
+            : model.selectedAgentGroupId,
         sessions: model.sessions.some((item) => item.id === session.id) ? model.sessions : [session, ...model.sessions],
       }));
 
@@ -716,6 +758,8 @@ export function useLaboratoryPageController() {
       selectedMessageIds: mode === "new" ? [] : model.selectedMessageIds,
       messageLogs: mode === "new" ? {} : model.messageLogs,
       lastLogAt: mode === "new" ? null : model.lastLogAt,
+      conversationSnapshotText: mode === "new" ? null : model.conversationSnapshotText,
+      issueSnapshotText: mode === "new" ? null : model.issueSnapshotText,
       sessionId: mode === "new" ? null : model.sessionId,
       editSessionId: mode === "new" ? null : model.editSessionId,
       input: "",
@@ -824,6 +868,8 @@ export function useLaboratoryPageController() {
         selectedMessageIds: [],
         messageLogs: {},
         lastLogAt: null,
+        conversationSnapshotText: null,
+        issueSnapshotText: null,
         sessionId: null,
         editSessionId: null,
         historyMessages: [],
@@ -846,6 +892,8 @@ export function useLaboratoryPageController() {
         selectedMessageIds: [],
         messageLogs: {},
         lastLogAt: null,
+        conversationSnapshotText: null,
+        issueSnapshotText: null,
       }));
       toast.success("세션이 삭제되었습니다.");
     } catch (err) {
