@@ -5,7 +5,11 @@ import {
   type LogBundle,
   type TranscriptMessage,
 } from "@/lib/debugTranscript";
-import { PAGE_CONVERSATION_FEATURES, type ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
+import {
+  PAGE_CONVERSATION_FEATURES,
+  type ConversationFeaturesProviderShape,
+  type ConversationPageKey,
+} from "@/lib/conversation/pageFeaturePolicy";
 
 export type CopyPageKey = ConversationPageKey;
 export type CopyKind = "conversation" | "issue";
@@ -27,7 +31,7 @@ export type PageCopyPolicy = {
   note: string;
 };
 
-const DEFAULT_CONVERSATION_DEBUG_OPTIONS: DebugTranscriptOptions = {
+export const DEFAULT_CONVERSATION_DEBUG_OPTIONS: DebugTranscriptOptions = {
   includePrincipleHeader: true,
   includeResponseSchema: true,
   includeRenderPlan: true,
@@ -36,7 +40,126 @@ const DEFAULT_CONVERSATION_DEBUG_OPTIONS: DebugTranscriptOptions = {
   includeTokenUnused: true,
   includeTurnId: true,
   auditBotScope: "runtime_turns_only",
+  sections: {
+    header: {
+      enabled: true,
+      principle: true,
+      expectedLists: true,
+      runtimeModules: true,
+      auditStatus: true,
+    },
+    turn: {
+      enabled: true,
+      turnId: true,
+      tokenUsed: true,
+      tokenUnused: true,
+      responseSchemaSummary: true,
+      responseSchemaDetail: true,
+      renderPlanSummary: true,
+      renderPlanDetail: true,
+      quickReplyRule: true,
+    },
+    logs: {
+      enabled: true,
+      issueSummary: true,
+      debug: {
+        enabled: true,
+        prefixJson: true,
+      },
+      mcp: {
+        enabled: true,
+        request: true,
+        response: true,
+        includeSuccess: true,
+        includeError: true,
+      },
+      event: {
+        enabled: true,
+        payload: true,
+        allowlist: [],
+      },
+    },
+  },
 };
+
+function normalizeConversationDebugOptions(input?: Partial<DebugTranscriptOptions> | null): DebugTranscriptOptions {
+  const headerInput = input?.sections?.header;
+  const turnInput = input?.sections?.turn;
+  const logsInput = input?.sections?.logs;
+  const logsDebugInput = logsInput?.debug;
+  const logsMcpInput = logsInput?.mcp;
+  const logsEventInput = logsInput?.event;
+  const defaultHeader = DEFAULT_CONVERSATION_DEBUG_OPTIONS.sections?.header;
+  const defaultTurn = DEFAULT_CONVERSATION_DEBUG_OPTIONS.sections?.turn;
+  const defaultLogs = DEFAULT_CONVERSATION_DEBUG_OPTIONS.sections?.logs;
+  const defaultLogsDebug = defaultLogs?.debug;
+  const defaultLogsMcp = defaultLogs?.mcp;
+  const defaultLogsEvent = defaultLogs?.event;
+
+  return {
+    includePrincipleHeader: input?.includePrincipleHeader ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includePrincipleHeader,
+    includeResponseSchema: input?.includeResponseSchema ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includeResponseSchema,
+    includeRenderPlan: input?.includeRenderPlan ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includeRenderPlan,
+    includeQuickReplyRule: input?.includeQuickReplyRule ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includeQuickReplyRule,
+    includeTurnLogs: input?.includeTurnLogs ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includeTurnLogs,
+    includeTokenUnused: input?.includeTokenUnused ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includeTokenUnused,
+    includeTurnId: input?.includeTurnId ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includeTurnId,
+    auditBotScope:
+      input?.auditBotScope === "all_bot_messages" || input?.auditBotScope === "runtime_turns_only"
+        ? input.auditBotScope
+        : DEFAULT_CONVERSATION_DEBUG_OPTIONS.auditBotScope,
+    sections: {
+      header: {
+        enabled: headerInput?.enabled ?? defaultHeader?.enabled,
+        principle: headerInput?.principle ?? defaultHeader?.principle,
+        expectedLists: headerInput?.expectedLists ?? defaultHeader?.expectedLists,
+        runtimeModules: headerInput?.runtimeModules ?? defaultHeader?.runtimeModules,
+        auditStatus: headerInput?.auditStatus ?? defaultHeader?.auditStatus,
+      },
+      turn: {
+        enabled: turnInput?.enabled ?? defaultTurn?.enabled,
+        turnId: turnInput?.turnId ?? defaultTurn?.turnId,
+        tokenUsed: turnInput?.tokenUsed ?? defaultTurn?.tokenUsed,
+        tokenUnused: turnInput?.tokenUnused ?? defaultTurn?.tokenUnused,
+        responseSchemaSummary: turnInput?.responseSchemaSummary ?? defaultTurn?.responseSchemaSummary,
+        responseSchemaDetail: turnInput?.responseSchemaDetail ?? defaultTurn?.responseSchemaDetail,
+        renderPlanSummary: turnInput?.renderPlanSummary ?? defaultTurn?.renderPlanSummary,
+        renderPlanDetail: turnInput?.renderPlanDetail ?? defaultTurn?.renderPlanDetail,
+        quickReplyRule: turnInput?.quickReplyRule ?? defaultTurn?.quickReplyRule,
+      },
+      logs: {
+        enabled: logsInput?.enabled ?? defaultLogs?.enabled,
+        issueSummary: logsInput?.issueSummary ?? defaultLogs?.issueSummary,
+        debug: {
+          enabled: logsDebugInput?.enabled ?? defaultLogsDebug?.enabled,
+          prefixJson: logsDebugInput?.prefixJson ?? defaultLogsDebug?.prefixJson,
+        },
+        mcp: {
+          enabled: logsMcpInput?.enabled ?? defaultLogsMcp?.enabled,
+          request: logsMcpInput?.request ?? defaultLogsMcp?.request,
+          response: logsMcpInput?.response ?? defaultLogsMcp?.response,
+          includeSuccess: logsMcpInput?.includeSuccess ?? defaultLogsMcp?.includeSuccess,
+          includeError: logsMcpInput?.includeError ?? defaultLogsMcp?.includeError,
+        },
+        event: {
+          enabled: logsEventInput?.enabled ?? defaultLogsEvent?.enabled,
+          payload: logsEventInput?.payload ?? defaultLogsEvent?.payload,
+          allowlist: Array.isArray(logsEventInput?.allowlist)
+            ? logsEventInput?.allowlist.map((item) => String(item || "").trim()).filter(Boolean)
+            : defaultLogsEvent?.allowlist || [],
+        },
+      },
+    },
+  };
+}
+
+export function resolvePageConversationDebugOptions(
+  page: CopyPageKey,
+  providerValue?: ConversationFeaturesProviderShape | null
+): DebugTranscriptOptions {
+  const override = providerValue?.debug_copy?.[page];
+  return normalizeConversationDebugOptions(override || null);
+}
 
 export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
   "/": {
@@ -88,6 +211,7 @@ export function buildCopyPayload(input: {
   selectedMessageIds?: string[];
   messageLogs?: Record<string, LogBundle>;
   enabledOverride?: boolean;
+  conversationDebugOptionsOverride?: DebugTranscriptOptions;
 }) {
   const policy = PAGE_COPY_POLICY[input.page];
   const selectedIds = input.selectedMessageIds || [];
@@ -104,9 +228,10 @@ export function buildCopyPayload(input: {
     };
   }
   const scopedMessages = pickMessages(input.messages, selectedIds, rule.useSelectedMessages);
+  const effectiveDebugOptions = input.conversationDebugOptionsOverride || rule.debugOptions;
   const text =
     rule.formatter === "debug_transcript_v1"
-      ? buildDebugTranscript({ messages: scopedMessages, messageLogs: logs, options: rule.debugOptions })
+      ? buildDebugTranscript({ messages: scopedMessages, messageLogs: logs, options: effectiveDebugOptions })
       : buildIssueTranscript({ messages: scopedMessages, messageLogs: logs });
   return {
     policy,

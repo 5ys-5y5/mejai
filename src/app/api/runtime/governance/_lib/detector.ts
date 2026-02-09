@@ -35,6 +35,7 @@ const PHONE_REGEX = /\b01[016789]-?\d{3,4}-?\d{4}\b/;
 const ADDRESS_HINT_REGEX = /(주소|배송지|도로명|지번)/;
 const ASK_PHONE_REGEX = /(휴대폰 번호|전화번호).*(알려|입력|적어)/;
 const ASK_ADDRESS_REGEX = /(주소|배송지).*(알려|입력|적어)/;
+const KOREAN_ADDRESS_REGEX = /(서울|경기|인천|부산|대구|광주|대전|울산|세종|제주|강원|충북|충남|전북|전남|경북|경남).*(구|군|시|동|읍|면|로|길)/;
 
 function normalizeDigits(value: string) {
   return String(value || "").replace(/[^\d]/g, "");
@@ -42,6 +43,12 @@ function normalizeDigits(value: string) {
 
 function unique<T>(items: T[]) {
   return Array.from(new Set(items));
+}
+
+function looksLikeAddressText(value: string) {
+  const text = String(value || "").trim();
+  if (text.length < 6) return false;
+  return KOREAN_ADDRESS_REGEX.test(text) || /\d{2,}-\d{1,}/.test(text);
 }
 
 function inferRuntimeScope(turn: RuntimeTurn) {
@@ -80,7 +87,7 @@ export function detectPrincipleViolations(input: {
     const userText = String(turn.transcript_text || "");
     const phoneInUser = (userText.match(PHONE_REGEX) || []).map((v) => normalizeDigits(v)).filter(Boolean);
     if (phoneInUser.length > 0) knownPhones = unique([...knownPhones, ...phoneInUser]);
-    if (ADDRESS_HINT_REGEX.test(userText) && userText.trim().length >= 6) {
+    if ((ADDRESS_HINT_REGEX.test(userText) && userText.trim().length >= 6) || looksLikeAddressText(userText)) {
       knownAddresses = unique([...knownAddresses, userText.trim()]);
     }
 
@@ -90,6 +97,14 @@ export function detectPrincipleViolations(input: {
 
     const answer = String(turn.final_answer || turn.answer_text || "");
     const turnEvents = eventsByTurnId.get(turn.id) || [];
+    const slotExtracted = turnEvents.find((event) => String(event.event_type || "").toUpperCase() === "SLOT_EXTRACTED");
+    const slotPayload = ((slotExtracted?.payload || {}) as Record<string, unknown>) || {};
+    const slotResolved =
+      slotPayload.resolved && typeof slotPayload.resolved === "object"
+        ? (slotPayload.resolved as Record<string, unknown>)
+        : {};
+    const slotResolvedAddress = String(slotResolved.address || "").trim();
+    if (slotResolvedAddress) knownAddresses = unique([...knownAddresses, slotResolvedAddress]);
     const mcpFailed = turnEvents.find((event) => String(event.event_type) === "MCP_TOOL_FAILED");
     const mcpFailurePayload = (mcpFailed?.payload || {}) as Record<string, unknown>;
     const mcpError = String(mcpFailurePayload.error || "");
@@ -139,4 +154,3 @@ export function detectPrincipleViolations(input: {
 function sessionIdFor(turn: RuntimeTurn) {
   return String(turn.session_id || "");
 }
-

@@ -1,3 +1,5 @@
+import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
+
 export type ConversationPageKey = "/" | "/app/laboratory";
 
 /**
@@ -97,6 +99,7 @@ export type ConversationPageFeaturesOverride = Partial<ConversationPageFeatures>
 
 export type ConversationFeaturesProviderShape = {
   pages?: Partial<Record<ConversationPageKey, ConversationPageFeaturesOverride>>;
+  debug_copy?: Partial<Record<ConversationPageKey, Partial<DebugTranscriptOptions>>>;
   settings_ui?: {
     chat_card_base_width?: number;
   };

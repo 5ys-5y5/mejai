@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import {
   PAGE_CONVERSATION_FEATURES,
   mergeConversationPageFeatures,
@@ -11,8 +12,16 @@ import {
   type ConversationPageFeatures,
   type ConversationPageKey,
 } from "@/lib/conversation/pageFeaturePolicy";
+import {
+  DEFAULT_CONVERSATION_DEBUG_OPTIONS,
+  resolvePageConversationDebugOptions,
+} from "@/lib/transcriptCopyPolicy";
 
 const PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory"];
+const DEFAULT_DEBUG_COPY_BY_PAGE: Record<ConversationPageKey, DebugTranscriptOptions> = {
+  "/": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
+  "/app/laboratory": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
+};
 
 type Props = {
   authToken: string;
@@ -34,6 +43,13 @@ type SettingFileItem = {
   usedByPages: ConversationPageKey[] | "common";
 };
 
+type DebugFieldExamplesPayload = {
+  event_types?: string[];
+  mcp_tools?: string[];
+  sample_paths?: Record<string, unknown>;
+  error?: string;
+};
+
 function parseCsv(value: string) {
   return value
     .split(",")
@@ -43,6 +59,20 @@ function parseCsv(value: string) {
 
 function toCsv(values?: string[]) {
   return (values || []).join(", ");
+}
+
+function toEventCsv(values?: string[]) {
+  return (values || []).join(", ");
+}
+
+async function parseJsonBody<T>(res: Response): Promise<T | null> {
+  const text = await res.text().catch(() => "");
+  if (!text.trim()) return null;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return null;
+  }
 }
 
 type ToggleFieldProps = {
@@ -69,8 +99,8 @@ function ToggleField({ label, checked, visibility, onChange, onChangeVisibility 
           onClick={() => onChange(!checked)}
           className={
             checked
-              ? "rounded-md border border-emerald-900 bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
-              : "rounded-md border border-rose-700 bg-rose-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+              ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+              : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
           }
         >
           {checked ? "ON" : "OFF"}
@@ -80,8 +110,8 @@ function ToggleField({ label, checked, visibility, onChange, onChangeVisibility 
           onClick={() => onChangeVisibility(visibility === "user" ? "admin" : "user")}
           className={
             visibility === "admin"
-              ? "rounded-md border border-amber-700 bg-amber-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
-              : "rounded-md border border-slate-700 bg-slate-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+              ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-amber-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+              : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
           }
         >
           {visibility === "admin" ? "ADMIN" : "USER"}
@@ -187,6 +217,18 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     usedByPages: ["/", "/app/laboratory"],
   },
   {
+    key: "adminPanel.copy.debug",
+    label: "Admin Panel > 대화 복사 디버그 항목",
+    files: [
+      "src/components/settings/ChatSettingsPanel.tsx",
+      "src/lib/transcriptCopyPolicy.ts",
+      "src/lib/conversation/client/useHeroPageController.ts",
+      "src/lib/conversation/client/useLaboratoryPageController.ts",
+    ],
+    notes: "페이지별 대화 복사 시 포함할 디버그 항목(debugOptions)을 제어합니다.",
+    usedByPages: ["/", "/app/laboratory"],
+  },
+  {
     key: "interaction.quickReplies",
     label: "Interaction > Quick Replies",
     files: [
@@ -251,6 +293,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
 export function ChatSettingsPanel({ authToken }: Props) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [governanceSaving, setGovernanceSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [governanceConfig, setGovernanceConfig] = useState<GovernanceConfig | null>(null);
@@ -261,6 +304,11 @@ export function ChatSettingsPanel({ authToken }: Props) {
     "/": PAGE_CONVERSATION_FEATURES["/"],
     "/app/laboratory": PAGE_CONVERSATION_FEATURES["/app/laboratory"],
   });
+  const [debugCopyDraftByPage, setDebugCopyDraftByPage] =
+    useState<Record<ConversationPageKey, DebugTranscriptOptions>>(DEFAULT_DEBUG_COPY_BY_PAGE);
+  const [debugFieldExamples, setDebugFieldExamples] = useState<Record<string, unknown>>({});
+  const [debugFieldEventTypes, setDebugFieldEventTypes] = useState<string[]>([]);
+  const [debugFieldMcpTools, setDebugFieldMcpTools] = useState<string[]>([]);
 
   const headers = useMemo<Record<string, string>>(() => {
     const next: Record<string, string> = {
@@ -270,15 +318,57 @@ export function ChatSettingsPanel({ authToken }: Props) {
     return next;
   }, [authToken]);
 
+  const loadDebugFieldExamples = useCallback(async () => {
+    try {
+      const res = await fetch("/api/runtime/debug-fields", {
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+        cache: "no-store",
+      });
+      const payload = await parseJsonBody<DebugFieldExamplesPayload>(res);
+      if (!res.ok) return;
+      setDebugFieldExamples((payload?.sample_paths || {}) as Record<string, unknown>);
+      setDebugFieldEventTypes(Array.isArray(payload?.event_types) ? payload!.event_types! : []);
+      setDebugFieldMcpTools(Array.isArray(payload?.mcp_tools) ? payload!.mcp_tools! : []);
+    } catch {
+      // optional data for UI hint
+    }
+  }, [authToken]);
+
+  const pickExample = useCallback(
+    (paths: string[]) => {
+      for (const path of paths) {
+        if (!(path in debugFieldExamples)) continue;
+        const value = debugFieldExamples[path];
+        if (value === null || value === undefined) return `${path}: null`;
+        if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+          return `${path}: ${String(value)}`;
+        }
+        try {
+          return `${path}: ${JSON.stringify(value)}`;
+        } catch {
+          return `${path}: [unserializable]`;
+        }
+      }
+      return "";
+    },
+    [debugFieldExamples]
+  );
+
   const applyProviderToDraft = useCallback((providerValue?: ConversationFeaturesProviderShape | null) => {
     const next: Record<ConversationPageKey, ConversationPageFeatures> = {
       "/": PAGE_CONVERSATION_FEATURES["/"],
       "/app/laboratory": PAGE_CONVERSATION_FEATURES["/app/laboratory"],
     };
+    const nextDebug: Record<ConversationPageKey, DebugTranscriptOptions> = {
+      "/": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
+      "/app/laboratory": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
+    };
     for (const page of PAGE_KEYS) {
       next[page] = mergeConversationPageFeatures(PAGE_CONVERSATION_FEATURES[page], providerValue?.pages?.[page]);
+      nextDebug[page] = resolvePageConversationDebugOptions(page, providerValue);
     }
     setDraftByPage(next);
+    setDebugCopyDraftByPage(nextDebug);
   }, []);
 
   const updatePage = useCallback(
@@ -288,6 +378,27 @@ export function ChatSettingsPanel({ authToken }: Props) {
     []
   );
 
+  const updateDebugCopyOptions = useCallback(
+    (page: ConversationPageKey, updater: (prev: DebugTranscriptOptions) => DebugTranscriptOptions) => {
+      setDebugCopyDraftByPage((prev) => ({ ...prev, [page]: updater(prev[page]) }));
+    },
+    []
+  );
+
+  const loadGovernanceConfig = useCallback(async () => {
+    const governanceRes = await fetch("/api/runtime/governance/config", {
+      headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+      cache: "no-store",
+    });
+    if (!governanceRes.ok) return null;
+    const governancePayload = await parseJsonBody<{ config?: GovernanceConfig }>(governanceRes);
+    if (governancePayload?.config) {
+      setGovernanceConfig(governancePayload.config);
+      return governancePayload.config;
+    }
+    return null;
+  }, [authToken]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -295,52 +406,70 @@ export function ChatSettingsPanel({ authToken }: Props) {
       const res = await fetch("/api/auth-settings/providers?provider=chat_policy", {
         headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
       });
-      const payload = (await res.json()) as { provider?: ConversationFeaturesProviderShape; error?: string };
+      const payload = await parseJsonBody<{ provider?: ConversationFeaturesProviderShape; error?: string }>(res);
       if (!res.ok) {
-        setError(payload.error || "대화 설정을 불러오지 못했습니다.");
+        setError(payload?.error || "대화 설정을 불러오지 못했습니다.");
         return;
       }
-      applyProviderToDraft(payload.provider || null);
-      const loadedCardWidth = Number(payload.provider?.settings_ui?.chat_card_base_width);
+      applyProviderToDraft(payload?.provider || null);
+      const loadedCardWidth = Number(payload?.provider?.settings_ui?.chat_card_base_width);
       const nextCardWidth = Number.isFinite(loadedCardWidth)
-        ? Math.max(180, Math.min(480, Math.round(loadedCardWidth)))
+        ? Math.max(180, Math.min(600, Math.round(loadedCardWidth)))
         : 240;
       setCardBaseWidth(nextCardWidth);
       setCardBaseWidthDraft(String(nextCardWidth));
       try {
-        const governanceRes = await fetch("/api/runtime/governance/config", {
-          headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
-          cache: "no-store",
-        });
-        if (governanceRes.ok) {
-          const governancePayload = (await governanceRes.json()) as { config?: GovernanceConfig };
-          if (governancePayload.config) setGovernanceConfig(governancePayload.config);
-        }
+        await loadGovernanceConfig();
       } catch {
         // governance config is optional for this panel
+      }
+      try {
+        await loadDebugFieldExamples();
+      } catch {
+        // debug field examples are optional for this panel
       }
     } catch {
       setError("대화 설정을 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
-  }, [applyProviderToDraft, authToken]);
+  }, [applyProviderToDraft, authToken, loadDebugFieldExamples, loadGovernanceConfig]);
 
   const saveGovernanceConfig = useCallback(
     async (next: { enabled: boolean; visibility_mode: "user" | "admin" }) => {
+      setGovernanceSaving(true);
       const res = await fetch("/api/runtime/governance/config", {
         method: "POST",
         headers,
         body: JSON.stringify(next),
       });
-      const payload = (await res.json()) as { config?: GovernanceConfig; error?: string };
-      if (!res.ok || payload.error || !payload.config) {
-        throw new Error(payload.error || "self update 설정 저장에 실패했습니다.");
+      const payload = await parseJsonBody<{ config?: GovernanceConfig; error?: string }>(res);
+      if (!res.ok || payload?.error) {
+        throw new Error(payload?.error || "self update 설정 저장에 실패했습니다.");
       }
-      setGovernanceConfig(payload.config);
+      if (payload?.config) {
+        setGovernanceConfig(payload.config);
+      } else {
+        await loadGovernanceConfig();
+      }
+      setError(null);
       setSavedAt(new Date().toLocaleString("ko-KR"));
+      setGovernanceSaving(false);
     },
-    [headers]
+    [headers, loadGovernanceConfig]
+  );
+
+  const handleGovernanceChange = useCallback(
+    async (next: { enabled: boolean; visibility_mode: "user" | "admin" }) => {
+      try {
+        await saveGovernanceConfig(next);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "self update 설정 저장에 실패했습니다.");
+      } finally {
+        setGovernanceSaving(false);
+      }
+    },
+    [saveGovernanceConfig]
   );
 
   useEffect(() => {
@@ -358,6 +487,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
 
   const handleResetToDefaults = () => {
     applyProviderToDraft(null);
+    setDebugCopyDraftByPage(DEFAULT_DEBUG_COPY_BY_PAGE);
     setCardBaseWidthDraft("240");
     setError(null);
   };
@@ -370,9 +500,13 @@ export function ChatSettingsPanel({ authToken }: Props) {
         "/": draftByPage["/"],
         "/app/laboratory": draftByPage["/app/laboratory"],
       };
+      const debug_copy: Partial<Record<ConversationPageKey, Partial<DebugTranscriptOptions>>> = {
+        "/": debugCopyDraftByPage["/"],
+        "/app/laboratory": debugCopyDraftByPage["/app/laboratory"],
+      };
       const parsedDraft = Number(cardBaseWidthDraft);
       const nextCardWidth = Number.isFinite(parsedDraft)
-        ? Math.max(180, Math.min(480, Math.round(parsedDraft)))
+        ? Math.max(180, Math.min(600, Math.round(parsedDraft)))
         : cardBaseWidth;
 
       const res = await fetch("/api/auth-settings/providers", {
@@ -382,6 +516,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
           provider: "chat_policy",
           values: {
             pages,
+            debug_copy,
             settings_ui: {
               chat_card_base_width: nextCardWidth,
             },
@@ -389,9 +524,9 @@ export function ChatSettingsPanel({ authToken }: Props) {
           commit: true,
         }),
       });
-      const payload = (await res.json()) as { ok?: boolean; error?: string };
-      if (!res.ok || payload.error || !payload.ok) {
-        throw new Error(payload.error || "대화 설정 저장에 실패했습니다.");
+      const payload = await parseJsonBody<{ ok?: boolean; error?: string }>(res);
+      if (!res.ok || payload?.error || !payload?.ok) {
+        throw new Error(payload?.error || "대화 설정 저장에 실패했습니다.");
       }
       setCardBaseWidth(nextCardWidth);
       setSavedAt(new Date().toLocaleString("ko-KR"));
@@ -442,6 +577,13 @@ export function ChatSettingsPanel({ authToken }: Props) {
         <div className="flex min-w-full gap-4">
           {PAGE_KEYS.map((page) => {
             const draft = draftByPage[page];
+            const debugCopyDraft = debugCopyDraftByPage[page];
+            const debugHeader = debugCopyDraft.sections?.header;
+            const debugTurn = debugCopyDraft.sections?.turn;
+            const debugLogs = debugCopyDraft.sections?.logs;
+            const debugLogMcp = debugLogs?.mcp;
+            const debugLogEvent = debugLogs?.event;
+            const debugLogDebug = debugLogs?.debug;
             return (
               <Card
                 key={page}
@@ -457,18 +599,43 @@ export function ChatSettingsPanel({ authToken }: Props) {
                     <div className="text-[11px] text-slate-500">
                       기준: <code>src/app/api/runtime/chat/policies/principles.ts</code>
                     </div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-2 text-[11px] leading-5 text-slate-700">
+                      <div>
+                        기능 설명:
+                        <ul className="list-disc space-y-1 pl-4">
+                          <li>원칙 기준선(<code>C:\dev\1227\mejai\src\app\api\runtime\chat\policies\principles.ts</code>)과 최근 대화/이벤트를 비교</li>
+                          <li>위배 항목을 감지하고, 패치 제안(proposal)을 생성하는 거버넌스 기능</li>
+                        </ul>
+                      </div>
+                      <div className="mt-5">
+                        참고:
+                        <ul className="list-disc space-y-1 pl-4">
+                          <li>위배 감지는 대화 중 실시간 자동 실행이 아니라, <code>POST /api/runtime/governance/review</code> 호출</li>
+                          <li>(또는 <code>/runtime/principles</code>의 &quot;문제 감지 실행&quot; 버튼) 시 실행</li>
+                        </ul>
+                      </div>
+                      <div className="mt-5">
+                        실험 방법
+                        <ol className="list-decimal space-y-1 pl-4">
+                          <li>이 카드에서 Self Update를 ON으로 설정하고 저장.</li>
+                          <li>테스트 세션에서 이미 제공한 전화번호/주소를 봇이 다시 물어보는 대화를 의도적으로 생성</li>
+                          <li>관리자 계정으로 <code>/runtime/principles</code> 이동 후 &quot;문제 감지 실행&quot;을 누르거나, <code>POST /api/runtime/governance/review</code>를 호출</li>
+                          <li><code>GET /api/runtime/governance/proposals</code> 또는 동일 페이지 목록에서 생성된 proposal과 상태를 확인</li>
+                        </ol>
+                      </div>
+                    </div>
                     <ToggleField
                       label="Self Update 활성화"
                       checked={Boolean(governanceConfig?.enabled)}
                       visibility={governanceConfig?.visibility_mode || "admin"}
                       onChange={(v) =>
-                        void saveGovernanceConfig({
+                        void handleGovernanceChange({
                           enabled: v,
                           visibility_mode: governanceConfig?.visibility_mode || "admin",
                         })
                       }
                       onChangeVisibility={(mode) =>
-                        void saveGovernanceConfig({
+                        void handleGovernanceChange({
                           enabled: governanceConfig?.enabled ?? true,
                           visibility_mode: mode,
                         })
@@ -477,6 +644,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
                     <div className="text-[11px] text-slate-500">
                       상태: {governanceConfig?.enabled ? "활성" : "비활성"} / visible: {governanceConfig?.visibility_mode || "-"}
                     </div>
+                    {governanceSaving ? <div className="text-[11px] text-slate-500">Self Update 저장 중...</div> : null}
                   </div>
 
                   <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -652,6 +820,501 @@ export function ChatSettingsPanel({ authToken }: Props) {
                         }))
                       }
                     />
+                  </div>
+
+                  <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs font-semibold text-slate-900">Debug Transcript (대화 복사)</div>
+                    <div className="text-[11px] leading-5 text-slate-500">
+                      상위 그룹 OFF 시 하위는 모두 OFF 처리됩니다. 예시값은 최근 로그 테이블에서 읽은 값입니다.
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="mb-2 text-[11px] font-semibold text-slate-700">Header 그룹</div>
+                      <label className="flex items-center justify-between gap-3 text-xs">
+                        <span>Header ON/OFF</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                header: { ...prev.sections?.header, enabled: !(debugHeader?.enabled ?? true) },
+                              },
+                            }))
+                          }
+                          className={(debugHeader?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white"}
+                        >
+                          {(debugHeader?.enabled ?? true) ? "ON" : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>대원칙</span>
+                        <button
+                          type="button"
+                          disabled={!(debugHeader?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                header: { ...prev.sections?.header, principle: !(debugHeader?.principle ?? true) },
+                              },
+                            }))
+                          }
+                          className={(debugHeader?.enabled ?? true) && (debugHeader?.principle ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugHeader?.enabled ?? true) ? ((debugHeader?.principle ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>기대 목록</span>
+                        <button
+                          type="button"
+                          disabled={!(debugHeader?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                header: { ...prev.sections?.header, expectedLists: !(debugHeader?.expectedLists ?? true) },
+                              },
+                            }))
+                          }
+                          className={(debugHeader?.enabled ?? true) && (debugHeader?.expectedLists ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugHeader?.enabled ?? true) ? ((debugHeader?.expectedLists ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>사용 모듈</span>
+                        <button
+                          type="button"
+                          disabled={!(debugHeader?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                header: { ...prev.sections?.header, runtimeModules: !(debugHeader?.runtimeModules ?? true) },
+                              },
+                            }))
+                          }
+                          className={(debugHeader?.enabled ?? true) && (debugHeader?.runtimeModules ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugHeader?.enabled ?? true) ? ((debugHeader?.runtimeModules ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <div className="mt-1 text-[10px] text-slate-500">예시: {pickExample(["debug.prefix_json.execution.call_chain[0].module_path"]) || "-"}</div>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>점검 상태</span>
+                        <button
+                          type="button"
+                          disabled={!(debugHeader?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                header: { ...prev.sections?.header, auditStatus: !(debugHeader?.auditStatus ?? true) },
+                              },
+                            }))
+                          }
+                          className={(debugHeader?.enabled ?? true) && (debugHeader?.auditStatus ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugHeader?.enabled ?? true) ? ((debugHeader?.auditStatus ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <div className="mt-1 text-[10px] text-slate-500">예시(MCP): {debugFieldMcpTools[0] || "-"} / 예시(Event): {debugFieldEventTypes[0] || "-"}</div>
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="mb-2 text-[11px] font-semibold text-slate-700">Turn 그룹</div>
+                      <label className="flex items-center justify-between gap-3 text-xs">
+                        <span>Turn ON/OFF</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, enabled: !(debugTurn?.enabled ?? true) } },
+                            }))
+                          }
+                          className={(debugTurn?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white"}
+                        >
+                          {(debugTurn?.enabled ?? true) ? "ON" : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>TURN_ID</span>
+                        <button
+                          type="button"
+                          disabled={!(debugTurn?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, turnId: !(debugTurn?.turnId ?? true) } },
+                            }))
+                          }
+                          className={(debugTurn?.enabled ?? true) && (debugTurn?.turnId ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.turnId ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>TOKEN_USED</span>
+                        <button
+                          type="button"
+                          disabled={!(debugTurn?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, tokenUsed: !(debugTurn?.tokenUsed ?? true) } },
+                            }))
+                          }
+                          className={(debugTurn?.enabled ?? true) && (debugTurn?.tokenUsed ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.tokenUsed ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>TOKEN_UNUSED</span>
+                        <button
+                          type="button"
+                          disabled={!(debugTurn?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, tokenUnused: !(debugTurn?.tokenUnused ?? true) } },
+                            }))
+                          }
+                          className={(debugTurn?.enabled ?? true) && (debugTurn?.tokenUnused ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.tokenUnused ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>RESPONSE_SCHEMA(요약)</span>
+                        <button
+                          type="button"
+                          disabled={!(debugTurn?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                turn: { ...prev.sections?.turn, responseSchemaSummary: !(debugTurn?.responseSchemaSummary ?? true) },
+                              },
+                            }))
+                          }
+                          className={(debugTurn?.enabled ?? true) && (debugTurn?.responseSchemaSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.responseSchemaSummary ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>RESPONSE_SCHEMA(상세)</span>
+                        <button
+                          type="button"
+                          disabled={!(debugTurn?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                turn: { ...prev.sections?.turn, responseSchemaDetail: !(debugTurn?.responseSchemaDetail ?? true) },
+                              },
+                            }))
+                          }
+                          className={(debugTurn?.enabled ?? true) && (debugTurn?.responseSchemaDetail ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.responseSchemaDetail ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>RENDER_PLAN(요약)</span>
+                        <button
+                          type="button"
+                          disabled={!(debugTurn?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, renderPlanSummary: !(debugTurn?.renderPlanSummary ?? true) } },
+                            }))
+                          }
+                          className={(debugTurn?.enabled ?? true) && (debugTurn?.renderPlanSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanSummary ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>RENDER_PLAN(상세)</span>
+                        <button
+                          type="button"
+                          disabled={!(debugTurn?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, renderPlanDetail: !(debugTurn?.renderPlanDetail ?? true) } },
+                            }))
+                          }
+                          className={(debugTurn?.enabled ?? true) && (debugTurn?.renderPlanDetail ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanDetail ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>QUICK_REPLY_RULE</span>
+                        <button
+                          type="button"
+                          disabled={!(debugTurn?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, quickReplyRule: !(debugTurn?.quickReplyRule ?? true) } },
+                            }))
+                          }
+                          className={(debugTurn?.enabled ?? true) && (debugTurn?.quickReplyRule ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.quickReplyRule ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                    </div>
+
+                    <div className="rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="mb-2 text-[11px] font-semibold text-slate-700">Logs 그룹</div>
+                      <label className="flex items-center justify-between gap-3 text-xs">
+                        <span>Logs ON/OFF</span>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, enabled: !(debugLogs?.enabled ?? true) } },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white"}
+                        >
+                          {(debugLogs?.enabled ?? true) ? "ON" : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>문제 요약</span>
+                        <button
+                          type="button"
+                          disabled={!(debugLogs?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, issueSummary: !(debugLogs?.issueSummary ?? true) } },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) && (debugLogs?.issueSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugLogs?.enabled ?? true) ? ((debugLogs?.issueSummary ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>DEBUG 로그</span>
+                        <button
+                          type="button"
+                          disabled={!(debugLogs?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, debug: { ...prev.sections?.logs?.debug, enabled: !(debugLogDebug?.enabled ?? true) } } },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) && (debugLogDebug?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugLogs?.enabled ?? true) ? ((debugLogDebug?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>DEBUG prefix_json</span>
+                        <button
+                          type="button"
+                          disabled={!(debugLogs?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, debug: { ...prev.sections?.logs?.debug, prefixJson: !(debugLogDebug?.prefixJson ?? true) } } },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) && (debugLogDebug?.prefixJson ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugLogs?.enabled ?? true) ? ((debugLogDebug?.prefixJson ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <div className="mt-1 text-[10px] text-slate-500">예시: {pickExample(["debug.prefix_json.mcp.last.function", "debug.prefix_json.decision.function_name"]) || "-"}</div>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>MCP 로그</span>
+                        <button
+                          type="button"
+                          disabled={!(debugLogs?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, enabled: !(debugLogMcp?.enabled ?? true) } } },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugLogs?.enabled ?? true) ? ((debugLogMcp?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>MCP request</span>
+                        <button
+                          type="button"
+                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, request: !(debugLogMcp?.request ?? true) } },
+                              },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.request ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.request ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <div className="mt-1 text-[10px] text-slate-500">예시: {pickExample(["mcp.request_payload.path", "mcp.request_payload.method"]) || "-"}</div>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>MCP response</span>
+                        <button
+                          type="button"
+                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, response: !(debugLogMcp?.response ?? true) } },
+                              },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.response ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.response ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <div className="mt-1 text-[10px] text-slate-500">예시: {pickExample(["mcp.response_payload.error.code", "mcp.response_payload.verified"]) || "-"}</div>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>MCP success 포함</span>
+                        <button
+                          type="button"
+                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, includeSuccess: !(debugLogMcp?.includeSuccess ?? true) } } },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.includeSuccess ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.includeSuccess ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>MCP error 포함</span>
+                        <button
+                          type="button"
+                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, includeError: !(debugLogMcp?.includeError ?? true) } } },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.includeError ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.includeError ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>Event 로그</span>
+                        <button
+                          type="button"
+                          disabled={!(debugLogs?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, enabled: !(debugLogEvent?.enabled ?? true) } } },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugLogs?.enabled ?? true) ? ((debugLogEvent?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <label className="mt-2 flex items-center justify-between gap-3 text-xs">
+                        <span>Event payload</span>
+                        <button
+                          type="button"
+                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogEvent?.enabled ?? true)}
+                          onClick={() =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, payload: !(debugLogEvent?.payload ?? true) } },
+                              },
+                            }))
+                          }
+                          className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) && (debugLogEvent?.payload ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                        >
+                          {(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? ((debugLogEvent?.payload ?? true) ? "ON" : "OFF") : "OFF"}
+                        </button>
+                      </label>
+                      <div className="mt-1 text-[10px] text-slate-500">예시: {pickExample(["event.payload.intent", "event.payload.error", "event.payload.tool"]) || "-"}</div>
+                      <label className="mt-2 block">
+                        <div className="mb-1 text-[11px] font-semibold text-slate-600">Event allowlist (CSV)</div>
+                        <input
+                          type="text"
+                          value={toEventCsv(debugLogEvent?.allowlist)}
+                          onChange={(e) =>
+                            updateDebugCopyOptions(page, (prev) => ({
+                              ...prev,
+                              sections: {
+                                ...prev.sections,
+                                logs: {
+                                  ...prev.sections?.logs,
+                                  event: {
+                                    ...prev.sections?.logs?.event,
+                                    allowlist: parseCsv(e.target.value).map((item) => item.toUpperCase()),
+                                  },
+                                },
+                              },
+                            }))
+                          }
+                          className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700"
+                          placeholder="예: PRE_MCP_DECISION, MCP_TOOL_FAILED"
+                        />
+                      </label>
+                      <div className="mt-1 text-[10px] text-slate-500">감지된 타입: {debugFieldEventTypes.join(", ") || "-"}</div>
+                    </div>
+
+                    <label className="block">
+                      <div className="mb-1 text-[11px] font-semibold text-slate-600">Audit 대상 BOT 범위</div>
+                      <select
+                        value={debugCopyDraft.auditBotScope || "runtime_turns_only"}
+                        onChange={(e) =>
+                          updateDebugCopyOptions(page, (prev) => ({
+                            ...prev,
+                            auditBotScope:
+                              e.target.value === "all_bot_messages" ? "all_bot_messages" : "runtime_turns_only",
+                          }))
+                        }
+                        className="h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700"
+                      >
+                        <option value="runtime_turns_only">runtime_turns_only</option>
+                        <option value="all_bot_messages">all_bot_messages</option>
+                      </select>
+                    </label>
                   </div>
                   <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs font-semibold text-slate-900">Interaction</div>

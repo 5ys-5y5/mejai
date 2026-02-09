@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { CopyPageKey } from "@/lib/transcriptCopyPolicy";
-import type { LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
+import type { DebugTranscriptOptions, LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 import { fetchSessionLogs, runConversation } from "@/lib/conversation/client/runtimeClient";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
@@ -172,7 +172,7 @@ export function useConversationController(options: ControllerOptions) {
   );
 
   const copyByKind = useCallback(
-    async (kind: "conversation" | "issue", enabledOverride?: boolean) => {
+    async (kind: "conversation" | "issue", enabledOverride?: boolean, conversationDebugOptionsOverride?: DebugTranscriptOptions) => {
       return executeTranscriptCopy({
         page: options.page,
         kind,
@@ -180,12 +180,17 @@ export function useConversationController(options: ControllerOptions) {
         selectedMessageIds,
         messageLogs,
         enabledOverride,
+        conversationDebugOptionsOverride,
       });
     },
     [messageLogs, messages, options.page, selectedMessageIds]
   );
 
-  const copyConversation = useCallback(async (enabledOverride?: boolean) => copyByKind("conversation", enabledOverride), [copyByKind]);
+  const copyConversation = useCallback(
+    async (enabledOverride?: boolean, conversationDebugOptionsOverride?: DebugTranscriptOptions) =>
+      copyByKind("conversation", enabledOverride, conversationDebugOptionsOverride),
+    [copyByKind]
+  );
   const copyIssue = useCallback(async (enabledOverride?: boolean) => copyByKind("issue", enabledOverride), [copyByKind]);
 
   const toggleMessageSelection = useCallback((id: string) => {

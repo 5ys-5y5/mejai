@@ -42,6 +42,7 @@ export function createRuntimeConversationIo(input: {
   context: any;
   insertFinalTurn: (context: any, payload: Record<string, unknown>, debugPrefixJson: Record<string, unknown>) => Promise<any>;
   pendingIntentQueue: string[];
+  orgId?: string | null;
   getSnapshot: (llmModel: string | null, tools: string[]) => RuntimeStateSnapshot;
   getFallbackSnapshot: () => RuntimeStateSnapshot;
   getToolResults: () => Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }>;
@@ -55,6 +56,7 @@ export function createRuntimeConversationIo(input: {
     context,
     insertFinalTurn,
     pendingIntentQueue,
+    orgId,
     getSnapshot,
     getFallbackSnapshot,
     getToolResults,
@@ -89,6 +91,7 @@ export function createRuntimeConversationIo(input: {
       pendingIntentQueue,
       insertFinalTurn,
       context,
+      orgId,
     });
     setLastDebugPrefixJson(inserted.lastDebugPrefixJson);
     setLatestTurnId(inserted.latestTurnId);

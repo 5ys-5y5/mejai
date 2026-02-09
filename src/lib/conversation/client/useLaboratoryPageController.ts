@@ -7,6 +7,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { isProviderEnabled, isToolEnabled } from "@/lib/conversation/pageFeaturePolicy";
 import { useLaboratoryConversationActions } from "@/lib/conversation/client/useLaboratoryConversationActions";
 import { useConversationPageFeatures } from "@/lib/conversation/client/useConversationPageFeatures";
+import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import {
   buildHistoryMessages,
   compareAgentVersions,
@@ -32,7 +33,7 @@ import { toast } from "sonner";
 
 export function useLaboratoryPageController() {
   const [isAdminUser, setIsAdminUser] = useState(false);
-  const { features: pageFeatures } = useConversationPageFeatures("/app/laboratory", isAdminUser);
+  const { features: pageFeatures, providerValue } = useConversationPageFeatures("/app/laboratory", isAdminUser);
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -717,7 +718,11 @@ export function useLaboratoryPageController() {
   };
 
   const handleCopyTranscript = async (id: string) => {
-    await labActions.copyConversation(id, pageFeatures.adminPanel.copyConversation);
+    await labActions.copyConversation(
+      id,
+      pageFeatures.adminPanel.copyConversation,
+      resolvePageConversationDebugOptions("/app/laboratory", providerValue)
+    );
   };
 
   const handleCopyIssueTranscript = async (id: string) => {

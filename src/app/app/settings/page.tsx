@@ -12,8 +12,9 @@ import { ExternalLink, Eye, EyeOff, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { PerformanceSettingsPanel } from "@/components/settings/PerformanceSettingsPanel";
 import { ChatSettingsPanel } from "@/components/settings/ChatSettingsPanel";
+import { ProposalSettingsPanel } from "@/components/settings/ProposalSettingsPanel";
 
-type TabKey = "profile" | "workspaces" | "team" | "audit" | "env" | "performance" | "chat";
+type TabKey = "profile" | "workspaces" | "team" | "audit" | "env" | "performance" | "chat" | "proposal";
 type ProviderKey = "cafe24" | "shopify";
 
 type Cafe24ProviderDraft = {
@@ -159,6 +160,7 @@ export default function SettingsPage() {
     if (isAdmin) {
       base.push({ key: "env", label: "환경 변수" });
       base.push({ key: "chat", label: "대화 설정" });
+      base.push({ key: "proposal", label: "제안" });
       base.push({ key: "performance", label: "성능" });
     }
     return base;
@@ -955,6 +957,8 @@ export default function SettingsPage() {
             </div>
           ) : tab === "chat" && isAdmin ? (
             <ChatSettingsPanel authToken={authToken} />
+          ) : tab === "proposal" && isAdmin ? (
+            <ProposalSettingsPanel authToken={authToken} />
           ) : tab === "performance" && isAdmin ? (
             <PerformanceSettingsPanel />
           ) : tab === "env" && isAdmin ? (

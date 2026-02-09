@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { isProviderEnabled, isToolEnabled } from "@/lib/conversation/pageFeaturePolicy";
 import { useConversationController } from "@/lib/conversation/client/useConversationController";
 import { useConversationPageFeatures } from "@/lib/conversation/client/useConversationPageFeatures";
+import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 
 type McpAction = {
   id: string;
@@ -29,7 +30,7 @@ const NEW_MODEL_CONFIG = {
 
 export function useHeroPageController() {
   const [isAdminUser, setIsAdminUser] = useState(false);
-  const { features: pageFeatures } = useConversationPageFeatures("/", isAdminUser);
+  const { features: pageFeatures, providerValue } = useConversationPageFeatures("/", isAdminUser);
   const [input, setInput] = useState("");
   const [userKb, setUserKb] = useState("");
   const [providerOptions, setProviderOptions] = useState<SelectOption[]>([]);
@@ -147,7 +148,10 @@ export function useHeroPageController() {
   const placeholder = "신규 대화 질문을 입력하세요";
 
   const handleCopyTranscript = async () => {
-    await convo.copyConversation(pageFeatures.adminPanel.copyConversation);
+    await convo.copyConversation(
+      pageFeatures.adminPanel.copyConversation,
+      resolvePageConversationDebugOptions("/", providerValue)
+    );
   };
 
   const handleCopyIssueTranscript = async () => {

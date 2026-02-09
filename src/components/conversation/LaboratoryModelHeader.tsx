@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Trash2, X } from "lucide-react";
+import { Copy, ExternalLink, Trash2, X } from "lucide-react";
 
 type Props = {
   modelIndex: number;
@@ -41,11 +41,12 @@ export function LaboratoryModelHeader({
       <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
         <button
           type="button"
-          className="mr-auto inline-flex h-8 items-center rounded-md border border-transparent px-2 text-left text-xs text-slate-500 hover:text-slate-700 disabled:opacity-60"
+          className="mr-auto inline-flex h-8 items-center gap-1.5 rounded-md border border-transparent px-2 text-left text-xs text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700 hover:cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
           onClick={() => onCopySessionId(activeSessionId)}
           disabled={!activeSessionId}
           aria-label="세션 ID 복사"
         >
+          <Copy className="h-3.5 w-3.5 shrink-0" />
           {activeSessionId || "-"}
         </button>
         <button
@@ -70,4 +71,3 @@ export function LaboratoryModelHeader({
     </div>
   );
 }
-

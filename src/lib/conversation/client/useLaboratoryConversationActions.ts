@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 import { loadLaboratoryLogs, sendLaboratoryMessage, type LaboratoryRunConfig } from "@/lib/conversation/client/laboratoryTransport";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
+import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import type { TranscriptMessage, LogBundle } from "@/lib/debugTranscript";
 
 type ConversationMode = "history" | "edit" | "new";
@@ -288,7 +289,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
   );
 
   const copyConversation = useCallback(
-    async (id: string, enabledOverride?: boolean) => {
+    async (id: string, enabledOverride?: boolean, conversationDebugOptionsOverride?: DebugTranscriptOptions) => {
       const target = models.find((model) => model.id === id);
       if (!target) return;
       await executeTranscriptCopy({
@@ -298,6 +299,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         selectedMessageIds: target.selectedMessageIds || [],
         messageLogs: target.messageLogs || {},
         enabledOverride,
+        conversationDebugOptionsOverride,
         blockedMessage: "이 페이지에서는 대화 복사를 지원하지 않습니다.",
       });
     },

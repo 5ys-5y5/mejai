@@ -317,6 +317,7 @@ export async function POST(req: NextRequest) {
       context,
       insertFinalTurn,
       pendingIntentQueue,
+      orgId: userOrgId || authContext.orgId || null,
       getSnapshot: buildRuntimeSnapshot,
       getFallbackSnapshot: () => buildRuntimeSnapshot(null, []),
       getToolResults: () => toolResults,

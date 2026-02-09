@@ -84,6 +84,46 @@ export type TranscriptMessage = {
 };
 
 export type DebugTranscriptOptions = {
+  sections?: {
+    header?: {
+      enabled?: boolean;
+      principle?: boolean;
+      expectedLists?: boolean;
+      runtimeModules?: boolean;
+      auditStatus?: boolean;
+    };
+    turn?: {
+      enabled?: boolean;
+      turnId?: boolean;
+      tokenUsed?: boolean;
+      tokenUnused?: boolean;
+      responseSchemaSummary?: boolean;
+      responseSchemaDetail?: boolean;
+      renderPlanSummary?: boolean;
+      renderPlanDetail?: boolean;
+      quickReplyRule?: boolean;
+    };
+    logs?: {
+      enabled?: boolean;
+      issueSummary?: boolean;
+      debug?: {
+        enabled?: boolean;
+        prefixJson?: boolean;
+      };
+      mcp?: {
+        enabled?: boolean;
+        request?: boolean;
+        response?: boolean;
+        includeSuccess?: boolean;
+        includeError?: boolean;
+      };
+      event?: {
+        enabled?: boolean;
+        payload?: boolean;
+        allowlist?: string[];
+      };
+    };
+  };
   includePrincipleHeader?: boolean;
   includeResponseSchema?: boolean;
   includeRenderPlan?: boolean;
@@ -93,6 +133,118 @@ export type DebugTranscriptOptions = {
   includeTurnId?: boolean;
   auditBotScope?: "all_bot_messages" | "runtime_turns_only";
 };
+
+type NormalizedDebugTranscriptOptions = {
+  auditBotScope: "all_bot_messages" | "runtime_turns_only";
+  header: {
+    enabled: boolean;
+    principle: boolean;
+    expectedLists: boolean;
+    runtimeModules: boolean;
+    auditStatus: boolean;
+  };
+  turn: {
+    enabled: boolean;
+    turnId: boolean;
+    tokenUsed: boolean;
+    tokenUnused: boolean;
+    responseSchemaSummary: boolean;
+    responseSchemaDetail: boolean;
+    renderPlanSummary: boolean;
+    renderPlanDetail: boolean;
+    quickReplyRule: boolean;
+  };
+  logs: {
+    enabled: boolean;
+    issueSummary: boolean;
+    debug: {
+      enabled: boolean;
+      prefixJson: boolean;
+    };
+    mcp: {
+      enabled: boolean;
+      request: boolean;
+      response: boolean;
+      includeSuccess: boolean;
+      includeError: boolean;
+    };
+    event: {
+      enabled: boolean;
+      payload: boolean;
+      allowlist: string[];
+    };
+  };
+};
+
+function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): NormalizedDebugTranscriptOptions {
+  const input = options || {};
+  const auditBotScope = input.auditBotScope === "all_bot_messages" ? "all_bot_messages" : "runtime_turns_only";
+
+  const includePrincipleHeader = input.includePrincipleHeader ?? true;
+  const includeResponseSchema = input.includeResponseSchema ?? true;
+  const includeRenderPlan = input.includeRenderPlan ?? true;
+  const includeQuickReplyRule = input.includeQuickReplyRule ?? true;
+  const includeTurnLogs = input.includeTurnLogs ?? true;
+  const includeTokenUnused = input.includeTokenUnused ?? true;
+  const includeTurnId = input.includeTurnId ?? true;
+
+  const sectionHeader = input.sections?.header;
+  const sectionTurn = input.sections?.turn;
+  const sectionLogs = input.sections?.logs;
+  const sectionLogDebug = sectionLogs?.debug;
+  const sectionLogMcp = sectionLogs?.mcp;
+  const sectionLogEvent = sectionLogs?.event;
+
+  const headerEnabled = sectionHeader?.enabled ?? includePrincipleHeader;
+  const turnEnabled = sectionTurn?.enabled ?? true;
+  const logsEnabled = sectionLogs?.enabled ?? includeTurnLogs;
+
+  const eventAllowlist = (sectionLogEvent?.allowlist || [])
+    .map((value) => String(value || "").trim().toUpperCase())
+    .filter(Boolean);
+
+  return {
+    auditBotScope,
+    header: {
+      enabled: headerEnabled,
+      principle: sectionHeader?.principle ?? true,
+      expectedLists: sectionHeader?.expectedLists ?? true,
+      runtimeModules: sectionHeader?.runtimeModules ?? true,
+      auditStatus: sectionHeader?.auditStatus ?? true,
+    },
+    turn: {
+      enabled: turnEnabled,
+      turnId: sectionTurn?.turnId ?? includeTurnId,
+      tokenUsed: sectionTurn?.tokenUsed ?? true,
+      tokenUnused: sectionTurn?.tokenUnused ?? includeTokenUnused,
+      responseSchemaSummary: sectionTurn?.responseSchemaSummary ?? includeResponseSchema,
+      responseSchemaDetail: sectionTurn?.responseSchemaDetail ?? includeResponseSchema,
+      renderPlanSummary: sectionTurn?.renderPlanSummary ?? includeRenderPlan,
+      renderPlanDetail: sectionTurn?.renderPlanDetail ?? includeRenderPlan,
+      quickReplyRule: sectionTurn?.quickReplyRule ?? includeQuickReplyRule,
+    },
+    logs: {
+      enabled: logsEnabled,
+      issueSummary: sectionLogs?.issueSummary ?? true,
+      debug: {
+        enabled: sectionLogDebug?.enabled ?? true,
+        prefixJson: sectionLogDebug?.prefixJson ?? true,
+      },
+      mcp: {
+        enabled: sectionLogMcp?.enabled ?? true,
+        request: sectionLogMcp?.request ?? true,
+        response: sectionLogMcp?.response ?? true,
+        includeSuccess: sectionLogMcp?.includeSuccess ?? true,
+        includeError: sectionLogMcp?.includeError ?? true,
+      },
+      event: {
+        enabled: sectionLogEvent?.enabled ?? true,
+        payload: sectionLogEvent?.payload ?? true,
+        allowlist: eventAllowlist,
+      },
+    },
+  };
+}
 
 function stringifyPretty(value: unknown) {
   try {
@@ -193,9 +345,21 @@ function sanitizeEventPayloadForDisplay(eventType: string, payload: Record<strin
   };
 }
 
+function readErrorPayload(value: unknown): { code?: unknown; message?: unknown } | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = (value as Record<string, unknown>).error;
+  if (!candidate || typeof candidate !== "object") return null;
+  return candidate as { code?: unknown; message?: unknown };
+}
+
 function getDebugEntryMap(log: NonNullable<LogBundle["debug_logs"]>[number]) {
   const entries = Array.isArray(log.prefix_json?.entries) ? log.prefix_json?.entries : [];
-  const map = new Map(entries.map((entry: any) => [String(entry.key), String(entry.value ?? "")]));
+  const map = new Map(
+    entries.map((entry) => {
+      const record = (entry || {}) as Record<string, unknown>;
+      return [String(record.key), String(record.value ?? "")] as [string, string];
+    })
+  );
   const prefix = (log.prefix_json || {}) as Record<string, unknown>;
   const mcp = (prefix.mcp || {}) as Record<string, unknown>;
   const mcpLast = (mcp.last || {}) as Record<string, unknown>;
@@ -223,7 +387,7 @@ function buildIssueSummary(bundle?: LogBundle, turnId?: string | null) {
     if (lastError && lastError !== "-") summary.add(`MCP.last_error: ${lastError}`);
   });
   (bundle.mcp_logs || []).forEach((log) => {
-    const error = (log.response_payload as any)?.error;
+    const error = readErrorPayload(log.response_payload);
     if (error?.message) summary.add(`${log.tool_name}: ${String(error.message)}`);
     else if (error?.code) summary.add(`${log.tool_name}: ${String(error.code)}`);
     else if (String(log.status || "").toLowerCase() !== "success") {
@@ -231,14 +395,14 @@ function buildIssueSummary(bundle?: LogBundle, turnId?: string | null) {
     }
   });
   (bundle.event_logs || []).forEach((log) => {
-    const payloadError = (log.payload as any)?.error;
+    const payloadError = readErrorPayload(log.payload)?.message || readErrorPayload(log.payload)?.code;
     if (payloadError) summary.add(`${log.event_type}: ${String(payloadError)}`);
   });
   if (bundle.logsError) summary.add(`MCP 로그 오류: ${bundle.logsError}`);
   return Array.from(summary);
 }
 
-function formatLogBundle(bundle?: LogBundle, turnId?: string | null) {
+function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | undefined, options: NormalizedDebugTranscriptOptions) {
   if (!bundle) return "";
   const lines: string[] = [];
   if (bundle.logsError) {
@@ -247,40 +411,59 @@ function formatLogBundle(bundle?: LogBundle, turnId?: string | null) {
   const debugLogs = turnId
     ? (bundle.debug_logs || []).filter((log) => log.turn_id === turnId)
     : (bundle.debug_logs || []);
-  if (debugLogs.length > 0) {
+  if (options.logs.debug.enabled && debugLogs.length > 0) {
     lines.push("DEBUG 로그:");
     debugLogs.forEach((log) => {
       lines.push(`- ${log.id || "-"} (turn_id=${log.turn_id || "-"}) (${log.created_at || "-"})`);
-      lines.push("  prefix_json:");
-      lines.push(indentBlock(stringifyPretty(log.prefix_json || {}), 4));
+      if (options.logs.debug.prefixJson) {
+        lines.push("  prefix_json:");
+        lines.push(indentBlock(stringifyPretty(log.prefix_json || {}), 4));
+      }
     });
   }
-  const summary = buildIssueSummary(bundle, turnId);
-  if (summary.length > 0) {
+  const summary = options.logs.issueSummary ? buildIssueSummary(bundle, turnId) : [];
+  if (options.logs.issueSummary && summary.length > 0) {
     lines.push("문제 요약:");
     summary.forEach((item) => lines.push(`- ${item}`));
   }
-  if ((bundle.mcp_logs || []).length > 0) {
+  const mcpLogs = (bundle.mcp_logs || []).filter((log) => {
+    const isSuccess = String(log.status || "").toLowerCase() === "success" && !readErrorPayload(log.response_payload);
+    if (isSuccess && !options.logs.mcp.includeSuccess) return false;
+    if (!isSuccess && !options.logs.mcp.includeError) return false;
+    return true;
+  });
+  if (options.logs.mcp.enabled && mcpLogs.length > 0) {
     lines.push("MCP 로그:");
-    (bundle.mcp_logs || []).forEach((log) => {
+    mcpLogs.forEach((log) => {
       const turnLabel = log.turn_id || turnId || "-";
       lines.push(
         `- ${log.id || "-"} ${log.tool_name}@${log.tool_version || "-"}: ${log.status} (${log.created_at || "-"}) (turn_id=${turnLabel})`
       );
-      lines.push("  request:");
-      lines.push(indentBlock(stringifyPretty(log.request_payload || {}), 4));
-      lines.push("  response:");
-      lines.push(indentBlock(stringifyPretty(log.response_payload || log.policy_decision || {}), 4));
+      if (options.logs.mcp.request) {
+        lines.push("  request:");
+        lines.push(indentBlock(stringifyPretty(log.request_payload || {}), 4));
+      }
+      if (options.logs.mcp.response) {
+        lines.push("  response:");
+        lines.push(indentBlock(stringifyPretty(log.response_payload || log.policy_decision || {}), 4));
+      }
     });
   }
-  if ((bundle.event_logs || []).length > 0) {
+  const allowedEvents = new Set(options.logs.event.allowlist || []);
+  const eventLogs = (bundle.event_logs || []).filter((log) => {
+    if (allowedEvents.size === 0) return true;
+    return allowedEvents.has(String(log.event_type || "").toUpperCase());
+  });
+  if (options.logs.event.enabled && eventLogs.length > 0) {
     lines.push("이벤트 로그:");
-    (bundle.event_logs || []).forEach((log) => {
+    eventLogs.forEach((log) => {
       const turnLabel = log.turn_id || turnId || "-";
       const safePayload = sanitizeEventPayloadForDisplay(log.event_type, log.payload || {});
       lines.push(`- ${log.id || "-"} ${log.event_type} (${log.created_at || "-"}) (turn_id=${turnLabel})`);
-      lines.push("  payload:");
-      lines.push(indentBlock(stringifyPretty(safePayload), 4));
+      if (options.logs.event.payload) {
+        lines.push("  payload:");
+        lines.push(indentBlock(stringifyPretty(safePayload), 4));
+      }
     });
   }
   return lines.join("\n");
@@ -336,7 +519,12 @@ function formatIssueBundle(bundle?: LogBundle, turnId?: string | null) {
 
 function isDebugIssue(log: NonNullable<LogBundle["debug_logs"]>[number]) {
   const entries = Array.isArray(log.prefix_json?.entries) ? log.prefix_json?.entries : [];
-  const entryMap = new Map(entries.map((entry: any) => [String(entry.key), String(entry.value ?? "")]));
+  const entryMap = new Map(
+    entries.map((entry) => {
+      const record = (entry || {}) as Record<string, unknown>;
+      return [String(record.key), String(record.value ?? "")] as [string, string];
+    })
+  );
   const lastStatus = (entryMap.get("MCP.last_status") || "").toLowerCase();
   const lastError = entryMap.get("MCP.last_error") || "";
   return lastStatus === "error" || (lastError && lastError !== "-");
@@ -344,14 +532,14 @@ function isDebugIssue(log: NonNullable<LogBundle["debug_logs"]>[number]) {
 
 function isMcpIssue(log: NonNullable<LogBundle["mcp_logs"]>[number]) {
   if (String(log.status || "").toLowerCase() !== "success") return true;
-  const error = (log.response_payload as any)?.error;
+  const error = readErrorPayload(log.response_payload);
   return Boolean(error);
 }
 
 function isEventIssue(log: NonNullable<LogBundle["event_logs"]>[number]) {
   const type = String(log.event_type || "").toUpperCase();
   if (type.includes("FAILED") || type.includes("ERROR")) return true;
-  return Boolean((log.payload as any)?.error);
+  return Boolean(readErrorPayload(log.payload));
 }
 
 function hasIssue(bundle?: LogBundle, turnId?: string | null) {
@@ -394,7 +582,8 @@ function inferRuntimeUsageSummary(messages: TranscriptMessage[], messageLogs: Re
 
   let tracedCount = 0;
   allDebugLogs.forEach((log) => {
-    const decision = (log.prefix_json as any)?.decision;
+    const prefix = (log.prefix_json || {}) as Record<string, unknown>;
+    const decision = (prefix.decision || {}) as Record<string, unknown>;
     if (addByPath(typeof decision?.module_path === "string" ? decision.module_path : null)) tracedCount += 1;
   });
 
@@ -567,8 +756,8 @@ function buildAuditStatus(
           return map.get("MCP.last_function") === fn;
         });
         const missing = logs.some((log) => {
-          const prefix = log.prefix_json as any;
-          const entries = Array.isArray(prefix?.entries) ? prefix.entries : [];
+          const prefix = (log.prefix_json || {}) as Record<string, unknown>;
+          const entries = Array.isArray(prefix.entries) ? prefix.entries : [];
           const map = getDebugEntryMap(log);
           return !prefix || (entries.length === 0 && !map.get("MCP.last_function"));
         });
@@ -618,71 +807,93 @@ export function buildDebugTranscript(input: {
   options?: DebugTranscriptOptions;
 }): string {
   const visibleMessages = input.messages;
-  const options = input.options || {};
-  const includePrincipleHeader = options.includePrincipleHeader ?? true;
-  const includeResponseSchema = options.includeResponseSchema ?? true;
-  const includeRenderPlan = options.includeRenderPlan ?? true;
-  const includeQuickReplyRule = options.includeQuickReplyRule ?? true;
-  const includeTurnLogs = options.includeTurnLogs ?? true;
-  const includeTokenUnused = options.includeTokenUnused ?? true;
-  const includeTurnId = options.includeTurnId ?? true;
+  const normalized = normalizeDebugTranscriptOptions(input.options);
   const runtimeUsage = inferRuntimeUsageSummary(visibleMessages, input.messageLogs || {});
-  const auditStatus = buildAuditStatus(visibleMessages, input.messageLogs || {}, options);
+  const auditStatus = buildAuditStatus(visibleMessages, input.messageLogs || {}, input.options);
 
-  const corePrinciple = [
-    "디버그 대원칙:",
-    "- 본 원칙은 F_audit_mcp_tools, F_audit_events, F_audit_turn_specs 테이블에 내용을 기록할 때에 최소한의 디버깅으로 최대한의 개선을 위해 반드시 준수하여 해당 테이블에 기록하게 할 것(기록하는 기능 설계시 아래의 원칙 미준수가 감지되면 개선하여 기록하도록 할 것)",
-    "- 원인 미확인은 로그 누락/정밀도 부족에서 발생한다.",
-    "- 단계별 로그를 촘촘히 남겨 범위를 줄인다 (5->2->1 단계).",
-    "- 실패 지점의 직전/직후 로그를 반드시 기록한다.",
-    "",
-    `기대 목록(MCP): ${auditStatus.expected.mcp_tools.join(", ") || "-"}`,
-    `기대 목록(Event): ${auditStatus.expected.event_types.join(", ") || "-"}`,
-    `기대 목록(Debug): ${auditStatus.expected.debug_functions.join(", ") || "-"}`,
-    "",
-    `사용 모듈(Runtime): ${runtimeUsage.runtime.join(", ") || "-"}`,
-    `사용 모듈(Handlers): ${runtimeUsage.handlers.join(", ") || "-"}`,
-    `사용 모듈(Services): ${runtimeUsage.services.join(", ") || "-"}`,
-    `사용 모듈(Policies): ${runtimeUsage.policies.join(", ") || "-"}`,
-    `사용 모듈(Shared): ${runtimeUsage.shared.join(", ") || "-"}`,
-    "",
-    `점검 완료 항목: ${auditStatus.completed.join(", ") || "-"}`,
-    `점검 미완료: ${auditStatus.incomplete.map((item) => `${item.key}(${item.reasons.join(", ")})`).join(", ") || "-"}`,
-    `점검 불가: ${auditStatus.blocked.join(", ") || "-"}`,
-    "",
-  ].join("\n");
+  const headerLines: string[] = [];
+  if (normalized.header.principle) {
+    headerLines.push(
+      "디버그 대원칙:",
+      "- 본 원칙은 F_audit_mcp_tools, F_audit_events, F_audit_turn_specs 테이블에 내용을 기록할 때에 최소한의 디버깅으로 최대한의 개선을 위해 반드시 준수하여 해당 테이블에 기록하게 할 것(기록하는 기능 설계시 아래의 원칙 미준수가 감지되면 개선하여 기록하도록 할 것)",
+      "- 원인 미확인은 로그 누락/정밀도 부족에서 발생한다.",
+      "- 단계별 로그를 촘촘히 남겨 범위를 줄인다 (5->2->1 단계).",
+      "- 실패 지점의 직전/직후 로그를 반드시 기록한다.",
+      ""
+    );
+  }
+  if (normalized.header.expectedLists) {
+    headerLines.push(
+      `기대 목록(MCP): ${auditStatus.expected.mcp_tools.join(", ") || "-"}`,
+      `기대 목록(Event): ${auditStatus.expected.event_types.join(", ") || "-"}`,
+      `기대 목록(Debug): ${auditStatus.expected.debug_functions.join(", ") || "-"}`,
+      ""
+    );
+  }
+  if (normalized.header.runtimeModules) {
+    headerLines.push(
+      `사용 모듈(Runtime): ${runtimeUsage.runtime.join(", ") || "-"}`,
+      `사용 모듈(Handlers): ${runtimeUsage.handlers.join(", ") || "-"}`,
+      `사용 모듈(Services): ${runtimeUsage.services.join(", ") || "-"}`,
+      `사용 모듈(Policies): ${runtimeUsage.policies.join(", ") || "-"}`,
+      `사용 모듈(Shared): ${runtimeUsage.shared.join(", ") || "-"}`,
+      ""
+    );
+  }
+  if (normalized.header.auditStatus) {
+    headerLines.push(
+      `점검 완료 항목: ${auditStatus.completed.join(", ") || "-"}`,
+      `점검 미완료: ${auditStatus.incomplete.map((item) => `${item.key}(${item.reasons.join(", ")})`).join(", ") || "-"}`,
+      `점검 불가: ${auditStatus.blocked.join(", ") || "-"}`,
+      ""
+    );
+  }
+  const corePrinciple = headerLines.join("\n").trimEnd();
 
   const formatBody = (msg: TranscriptMessage) => {
     const answerText = msg.content.includes("debug_prefix") ? extractDebugText(msg.content) : msg.content;
-    if ((!msg.responseSchema || !includeResponseSchema) && (!msg.renderPlan || !includeRenderPlan)) return answerText;
-    const lines: string[] = [answerText];
-    if (msg.responseSchema && includeResponseSchema) {
+    if (!normalized.turn.enabled) return answerText;
+    const lines: string[] = [];
+    if (normalized.turn.tokenUsed) {
+      lines.push(answerText);
+    } else if (!msg.responseSchema && !msg.renderPlan && !msg.quickReplyConfig) {
+      return answerText;
+    }
+    if (msg.responseSchema && (normalized.turn.responseSchemaSummary || normalized.turn.responseSchemaDetail)) {
       const schema = msg.responseSchema;
       const schemaView = schema.ui_hints?.view || "text";
       const schemaChoiceMode = schema.ui_hints?.choice_mode || "-";
       const schemaQuickReplyCount = Array.isArray(schema.quick_replies) ? schema.quick_replies.length : 0;
       const schemaCardCount = Array.isArray(schema.cards) ? schema.cards.length : 0;
-      lines.push(
-        `RESPONSE_SCHEMA: view=${schemaView}, choice_mode=${schemaChoiceMode}, quick_replies=${schemaQuickReplyCount}, cards=${schemaCardCount}`
-      );
-      lines.push("RESPONSE_SCHEMA_DETAIL:");
-      lines.push(indentBlock(stringifyPretty(schema), 2));
+      if (normalized.turn.responseSchemaSummary) {
+        lines.push(
+          `RESPONSE_SCHEMA: view=${schemaView}, choice_mode=${schemaChoiceMode}, quick_replies=${schemaQuickReplyCount}, cards=${schemaCardCount}`
+        );
+      }
+      if (normalized.turn.responseSchemaDetail) {
+        lines.push("RESPONSE_SCHEMA_DETAIL:");
+        lines.push(indentBlock(stringifyPretty(schema), 2));
+      }
     }
-    if (msg.renderPlan && includeRenderPlan) {
+    if (msg.renderPlan && (normalized.turn.renderPlanSummary || normalized.turn.renderPlanDetail)) {
       const plan = msg.renderPlan;
-      lines.push(
-        `RENDER_PLAN: view=${plan.view}, quick_replies=${plan.enable_quick_replies}, cards=${plan.enable_cards}, mode=${plan.selection_mode}, min=${plan.min_select}, max=${plan.max_select}, submit=${plan.submit_format}, prompt=${plan.prompt_kind || "-"}`
-      );
-      lines.push("RENDER_PLAN_DETAIL:");
-      lines.push(indentBlock(stringifyPretty(plan), 2));
+      if (normalized.turn.renderPlanSummary) {
+        lines.push(
+          `RENDER_PLAN: view=${plan.view}, quick_replies=${plan.enable_quick_replies}, cards=${plan.enable_cards}, mode=${plan.selection_mode}, min=${plan.min_select}, max=${plan.max_select}, submit=${plan.submit_format}, prompt=${plan.prompt_kind || "-"}`
+        );
+      }
+      if (normalized.turn.renderPlanDetail) {
+        lines.push("RENDER_PLAN_DETAIL:");
+        lines.push(indentBlock(stringifyPretty(plan), 2));
+      }
     }
-    if (msg.quickReplyConfig && includeQuickReplyRule) {
+    if (msg.quickReplyConfig && normalized.turn.quickReplyRule) {
       const rule = msg.quickReplyConfig;
       lines.push(
         `QUICK_REPLY_RULE: mode=${rule.selection_mode}, min=${rule.min_select ?? "-"}, max=${rule.max_select ?? "-"}, submit=${rule.submit_format ?? "-"}, criteria=${rule.criteria || "-"}, source=${rule.source_module || "-"}#${rule.source_function || "-"}`
       );
     }
-    return lines.join("\n");
+    return lines.length > 0 ? lines.join("\n") : answerText;
   };
 
   const turnBlocks: string[] = [];
@@ -692,29 +903,31 @@ export function buildDebugTranscript(input: {
       bufferedUsers.push(msg);
       return;
     }
-    const usedLines = [
-      "[TOKEN_USED]",
+    const turnBody = [
       ...bufferedUsers.map((u) => `USER:\n${formatBody(u)}`),
       `BOT:\n${formatBody(msg)}`,
     ].join("\n\n");
-    const unusedLines = includeTokenUnused ? ["[TOKEN_UNUSED]"].join("\n") : "";
-    const logText = includeTurnLogs ? formatLogBundle(input.messageLogs[msg.id], msg.turnId) : "";
-    const turnId = includeTurnId ? (msg.turnId ? `TURN_ID: ${msg.turnId}` : "TURN_ID: -") : "";
+    const tokenUsedPrefix = normalized.turn.tokenUsed ? "[TOKEN_USED]\n\n" : "";
+    const unusedLines = normalized.turn.enabled && normalized.turn.tokenUnused ? ["[TOKEN_UNUSED]"].join("\n") : "";
+    const logText = normalized.logs.enabled ? formatLogBundle(input.messageLogs[msg.id], msg.turnId, normalized) : "";
+    const turnId = normalized.turn.enabled && normalized.turn.turnId ? (msg.turnId ? `TURN_ID: ${msg.turnId}` : "TURN_ID: -") : "";
     const tail = logText ? `\n${logText}` : "";
-    const body = includeTokenUnused ? `${usedLines}\n\n${unusedLines}${tail}` : `${usedLines}${tail}`;
+    const bodyCore = `${tokenUsedPrefix}${turnBody}`;
+    const body = unusedLines ? `${bodyCore}\n\n${unusedLines}${tail}` : `${bodyCore}${tail}`;
     turnBlocks.push(turnId ? `${turnId}\n\n${body}` : body);
     bufferedUsers = [];
   });
   if (bufferedUsers.length > 0) {
-    const usedLines = ["[TOKEN_USED]", ...bufferedUsers.map((u) => `USER:\n${formatBody(u)}`)].join("\n\n");
-    const turnId = includeTurnId ? "TURN_ID: -" : "";
-    const tokenUnusedTail = includeTokenUnused ? "\n\n[TOKEN_UNUSED]\n-" : "";
-    const block = `${usedLines}${tokenUnusedTail}`;
+    const tokenUsedPrefix = normalized.turn.tokenUsed ? "[TOKEN_USED]\n\n" : "";
+    const usedLines = bufferedUsers.map((u) => `USER:\n${formatBody(u)}`).join("\n\n");
+    const turnId = normalized.turn.enabled && normalized.turn.turnId ? "TURN_ID: -" : "";
+    const tokenUnusedTail = normalized.turn.enabled && normalized.turn.tokenUnused ? "\n\n[TOKEN_UNUSED]\n-" : "";
+    const block = `${tokenUsedPrefix}${usedLines}${tokenUnusedTail}`;
     turnBlocks.push(turnId ? `${turnId}\n\n${block}` : block);
   }
 
-  if (includePrincipleHeader) {
-    return [corePrinciple.trimEnd(), ...turnBlocks].join("\n\n\n");
+  if (normalized.header.enabled && corePrinciple) {
+    return [corePrinciple, ...turnBlocks].join("\n\n\n");
   }
   return turnBlocks.join("\n\n\n");
 }

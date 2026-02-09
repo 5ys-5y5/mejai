@@ -20,7 +20,8 @@ type Proposal = {
   title: string;
   why_failed: string;
   how_to_improve: string;
-  status: "pending" | "completed" | "failed" | "on_hold";
+  status: "pending" | "completed" | "failed" | "on_hold" | "proposed" | "approved" | "rejected" | "applied";
+  status_label?: string;
   latest_event_type: string;
 };
 
@@ -320,7 +321,7 @@ export function PrinciplesClient() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-semibold">{proposal.title}</div>
                 <div className="text-xs">
-                  상태: <span className="font-semibold">{proposal.status}</span>
+                  상태: <span className="font-semibold">{proposal.status_label || proposal.status}</span>
                 </div>
               </div>
               <div className="mt-2 text-xs text-zinc-500">
@@ -338,7 +339,7 @@ export function PrinciplesClient() {
                 <button
                   type="button"
                   className="rounded-full bg-black px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
-                  disabled={busyProposalId === proposal.proposal_id || proposal.status === "completed"}
+                  disabled={busyProposalId === proposal.proposal_id || proposal.status === "completed" || proposal.status === "applied"}
                   onClick={() => void executeProposal(proposal.proposal_id)}
                 >
                   실행
@@ -346,7 +347,7 @@ export function PrinciplesClient() {
                 <button
                   type="button"
                   className="rounded-full border border-zinc-300 px-4 py-1.5 text-sm font-semibold disabled:opacity-50"
-                  disabled={busyProposalId === proposal.proposal_id || proposal.status === "completed"}
+                  disabled={busyProposalId === proposal.proposal_id || proposal.status === "completed" || proposal.status === "applied"}
                   onClick={() => void holdProposal(proposal.proposal_id)}
                 >
                   보류

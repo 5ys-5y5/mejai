@@ -73,6 +73,13 @@ export default function DashboardPage() {
   const [simulateError, setSimulateError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [plan, setPlan] = useState("starter");
+  const [cafe24IssueDetected, setCafe24IssueDetected] = useState(false);
+  const [cafe24Issue, setCafe24Issue] = useState<string | null>(null);
+  const [cafe24ReconnectBusy, setCafe24ReconnectBusy] = useState(false);
+  const [cafe24ReconnectNotice, setCafe24ReconnectNotice] = useState<string>("");
+  const [showCafe24CleanLoginGuide, setShowCafe24CleanLoginGuide] = useState(false);
+  const [cafe24ProviderMallId, setCafe24ProviderMallId] = useState<string>("-");
+  const cafe24ProviderRef = useRef<Record<string, unknown> | null>(null);
   const loadInFlightRef = useRef(false);
   const lastAuthRefreshRef = useRef(0);
   const { isLeader, tabId } = useMultiTabLeaderLock(
@@ -296,6 +303,163 @@ export default function DashboardPage() {
     }
   }, [loadData]);
 
+  const refreshCafe24ProviderState = useCallback(async () => {
+    if (!isAdmin || !orgId) {
+      setCafe24IssueDetected(false);
+      setCafe24Issue(null);
+      return;
+    }
+    try {
+      const res = await apiFetch<{ provider?: Record<string, unknown> }>(`/api/auth-settings/providers?provider=cafe24`);
+      const provider = (res.provider || {}) as Record<string, unknown>;
+      cafe24ProviderRef.current = provider;
+      const mallId = String(provider.mall_id || "").trim();
+      setCafe24ProviderMallId(mallId || "-");
+      const accessToken = String(provider.access_token || "").trim();
+      const refreshToken = String(provider.refresh_token || "").trim();
+      if (!mallId) {
+        setCafe24IssueDetected(true);
+        setCafe24Issue("Cafe24 mall_id is missing.");
+        return;
+      }
+      if (!accessToken || !refreshToken) {
+        setCafe24IssueDetected(true);
+        setCafe24Issue("");
+        return;
+      }
+      const lastError = String(provider.last_refresh_error || "").trim();
+      if (lastError) {
+        setCafe24IssueDetected(true);
+        setCafe24Issue(lastError);
+        return;
+      }
+      const expiresAt = String(provider.expires_at || "").trim();
+      if (expiresAt) {
+        const exp = Date.parse(expiresAt);
+        if (!Number.isNaN(exp) && exp <= Date.now()) {
+          setCafe24IssueDetected(true);
+          setCafe24Issue("Cafe24 access token expired. Refresh is required.");
+          return;
+        }
+      }
+      setCafe24IssueDetected(false);
+      setCafe24Issue(null);
+    } catch {
+      setCafe24IssueDetected(false);
+      setCafe24Issue(null);
+    }
+  }, [isAdmin, orgId]);
+
+  const startCafe24Reconnect = useCallback(async () => {
+    setCafe24ReconnectNotice("");
+    setCafe24ReconnectBusy(true);
+    try {
+      const providerRes = await apiFetch<{ provider?: Record<string, unknown> }>(`/api/auth-settings/providers?provider=cafe24`);
+      const provider = (providerRes.provider || {}) as Record<string, unknown>;
+      cafe24ProviderRef.current = provider;
+      const mallId = String(provider.mall_id || "").trim();
+      setCafe24ProviderMallId(mallId || "-");
+      const scope = String(provider.scope || "").trim();
+      if (!mallId) {
+        setCafe24ReconnectNotice("Cafe24 mall_id가 없습니다. /app/settings?tab=env에서 확인해 주세요.");
+        setCafe24ReconnectBusy(false);
+        return;
+      }
+
+      const authorizeUrl = new URL("/api/cafe24/authorize", window.location.origin);
+      authorizeUrl.searchParams.set("mode", "json");
+      authorizeUrl.searchParams.set("mall_id", mallId);
+      if (scope) authorizeUrl.searchParams.set("scope", scope);
+
+      const payload = await apiFetch<{ url?: string }>(authorizeUrl.toString());
+      const target = String(payload.url || "").trim();
+      if (!target) {
+        setCafe24ReconnectNotice("Cafe24 OAuth URL 생성에 실패했습니다.");
+        setCafe24ReconnectBusy(false);
+        return;
+      }
+
+      const popup = window.open(target, "cafe24_oauth_dashboard", "width=520,height=720");
+      if (!popup) {
+        setCafe24ReconnectNotice("팝업이 차단되었습니다. 브라우저 팝업 허용 후 다시 시도해 주세요.");
+        setCafe24ReconnectBusy(false);
+      }
+    } catch {
+      setCafe24ReconnectNotice("Cafe24 재연동 시작에 실패했습니다.");
+      setCafe24ReconnectBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCafe24ProviderState();
+  }, [refreshCafe24ProviderState]);
+
+  useEffect(() => {
+    const onMessage = async (event: MessageEvent) => {
+      const allowedOrigins = new Set([window.location.origin, "https://mejai.help", "https://www.mejai.help"]);
+      if (!allowedOrigins.has(event.origin)) return;
+      const data = (event.data || {}) as {
+        type?: string;
+        error?: string;
+        mall_id?: string;
+        scope?: string;
+        access_token?: string;
+        refresh_token?: string;
+        expires_at?: string;
+      };
+
+      if (data.type === "cafe24_oauth_error") {
+        setCafe24ReconnectNotice(`Cafe24 OAuth 오류: ${data.error || "UNKNOWN_ERROR"}`);
+        setCafe24ReconnectBusy(false);
+        return;
+      }
+
+      if (data.type !== "cafe24_oauth_complete") return;
+      try {
+        const current = cafe24ProviderRef.current || {};
+        const expectedMallId = String((current as Record<string, unknown>).mall_id || "").trim();
+        const receivedMallId = String(data.mall_id || "").trim();
+        if (expectedMallId && receivedMallId && expectedMallId !== receivedMallId) {
+          setCafe24ReconnectNotice(
+            `로그인 계정 mall_id 불일치: expected=${expectedMallId}, received=${receivedMallId}. 시크릿 창에서 다시 진행해 주세요.`
+          );
+          setCafe24ReconnectBusy(false);
+          return;
+        }
+        const values = {
+          ...(current as Record<string, unknown>),
+          mall_id: String(data.mall_id || current.mall_id || "").trim(),
+          scope: String(data.scope || current.scope || "").trim(),
+          access_token: String(data.access_token || "").trim(),
+          refresh_token: String(data.refresh_token || "").trim(),
+          expires_at: String(data.expires_at || "").trim(),
+        };
+        await apiFetch("/api/auth-settings/providers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: "cafe24", values, commit: true }),
+        });
+
+        const refreshNow = await apiFetch<{ refreshed?: boolean; error?: string }>("/api/cafe24/refresh-now", {
+          method: "POST",
+        });
+        if (refreshNow.refreshed) {
+          setCafe24ReconnectNotice("Cafe24 토큰 재연동 및 즉시 갱신이 완료되었습니다.");
+          setCafe24Issue(null);
+        } else {
+          setCafe24ReconnectNotice(`Cafe24 즉시 갱신 실패: ${refreshNow.error || "UNKNOWN_ERROR"}`);
+        }
+      } catch {
+        setCafe24ReconnectNotice("Cafe24 토큰 저장 또는 즉시 갱신 처리에 실패했습니다.");
+      } finally {
+        setCafe24ReconnectBusy(false);
+        void refreshCafe24ProviderState();
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [refreshCafe24ProviderState]);
+
   const sessionsForSelection = useMemo(() => {
     if (selectedAgentId === "all") return sessions;
     return sessions.filter((s) => (s.agent_id || "미지정") === selectedAgentId);
@@ -426,6 +590,82 @@ export default function DashboardPage() {
                 </Link>
               </div>
             </CardShell>
+          ) : null}
+
+          {isAdmin && orgId && cafe24IssueDetected ? (
+            <CardShell className="bg-rose-50 p-5">
+              <div className="text-sm font-semibold text-slate-900">Cafe24 토큰 갱신 이슈가 감지되었습니다.</div>
+              <ul className="mt-2 list-disc pl-5 text-xs text-slate-700">
+                <li>
+                  provider: <span className="font-semibold">cafe24</span>
+                </li>
+                <li>
+                  mall_id: <span className="font-semibold">{cafe24ProviderMallId || "-"}</span>
+                </li>
+              </ul>
+              {cafe24Issue ? <div className="mt-2 text-sm text-slate-700 break-all">{cafe24Issue}</div> : null}
+              <div className="mt-3 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={startCafe24Reconnect}
+                  disabled={cafe24ReconnectBusy}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-xs font-semibold",
+                    cafe24ReconnectBusy
+                      ? "border-slate-200 bg-slate-100 text-slate-400"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  )}
+                >
+                  {cafe24ReconnectBusy ? "토큰 갱신 진행 중..." : `토큰 갱신 (${cafe24ProviderMallId || "-"})`}
+                </button>
+              </div>
+              {cafe24ReconnectNotice ? <div className="mt-2 text-xs text-slate-700">{cafe24ReconnectNotice}</div> : null}
+            </CardShell>
+          ) : null}
+
+          {showCafe24CleanLoginGuide ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4">
+              <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5">
+                <div className="text-sm font-semibold text-slate-900">Cafe24 클린 로그인 권장</div>
+                <div className="mt-2 text-sm text-slate-700">
+                  현재 브라우저에 다른 Cafe24 계정이 로그인되어 있으면 mall_id 불일치가 발생할 수 있습니다.
+                </div>
+                <div className="mt-3 text-xs text-slate-600">
+                  1. 시크릿 창(또는 새 브라우저 프로필)에서 이 페이지를 열어주세요.
+                </div>
+                <div className="mt-1 text-xs text-slate-600">
+                  2. 기대 mall_id 계정으로 Cafe24 로그인 후 갱신을 진행하세요.
+                </div>
+                <div className="mt-1 text-xs text-slate-600">
+                  3. OAuth 완료 후 토큰 저장과 즉시 refresh 검증이 자동 실행됩니다.
+                </div>
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCafe24CleanLoginGuide(false)}
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    닫기
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCafe24CleanLoginGuide(false);
+                      void startCafe24Reconnect();
+                    }}
+                    disabled={cafe24ReconnectBusy}
+                    className={cn(
+                      "rounded-xl border px-3 py-2 text-xs font-semibold",
+                      cafe24ReconnectBusy
+                        ? "border-slate-200 bg-slate-100 text-slate-400"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    )}
+                  >
+                    갱신 계속
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : null}
 
           {isAdmin ? <div className="border-t border-slate-200" /> : null}

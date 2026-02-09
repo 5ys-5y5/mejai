@@ -62,6 +62,8 @@ function inferDecisionFallback(eventType: string, payload: Record<string, unknow
   const stage = String((payload as any)?.stage || "").toLowerCase();
   const action = String((payload as any)?.action || "").toUpperCase();
   const model = String((payload as any)?.model || "").toLowerCase();
+  const reason = String((payload as any)?.reason || "").toUpperCase();
+  const tool = String((payload as any)?.tool || "").toLowerCase();
 
   if (type === "SLOT_EXTRACTED") {
     return {
@@ -79,11 +81,75 @@ function inferDecisionFallback(eventType: string, payload: Record<string, unknow
       column: 0,
     };
   }
+  if (type === "POLICY_STATIC_CONFLICT") {
+    return {
+      module_path: "src/app/api/runtime/chat/runtime/policyInputRuntime.ts",
+      function_name: "emit:POLICY_STATIC_CONFLICT",
+      line: 42,
+      column: 0,
+    };
+  }
+  if (type === "MCP_TOOL_FAILED") {
+    if (tool === "list_orders") {
+      return {
+        module_path: "src/app/api/runtime/chat/runtime/postToolRuntime.ts",
+        function_name: "emit:MCP_TOOL_FAILED",
+        line: 47,
+        column: 0,
+      };
+    }
+    return {
+      module_path: "src/app/api/runtime/chat/runtime/postToolRuntime.ts",
+      function_name: "emit:MCP_TOOL_FAILED",
+      line: 47,
+      column: 0,
+    };
+  }
+  if (type === "EXECUTION_GUARD_TRIGGERED") {
+    if (reason === "MCP_TOKEN_REFRESH_FAILED" || reason === "MCP_SCOPE_MISSING") {
+      return {
+        module_path: "src/app/api/runtime/chat/runtime/toolRuntime.ts",
+        function_name: "emit:EXECUTION_GUARD_TRIGGERED",
+        line: reason === "MCP_SCOPE_MISSING" ? 942 : 995,
+        column: 0,
+      };
+    }
+    return {
+      module_path: "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
+      function_name: "emit:EXECUTION_GUARD_TRIGGERED",
+      line: 125,
+      column: 0,
+    };
+  }
   if (type === "FINAL_ANSWER_READY" && model.includes("intent_disambiguation")) {
     return {
       module_path: "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
       function_name: "emit:FINAL_ANSWER_READY",
       line: 155,
+      column: 0,
+    };
+  }
+  if (type === "FINAL_ANSWER_READY") {
+    if (model.includes("deterministic_token_refresh_guard") || model.includes("deterministic_scope_guard")) {
+      return {
+        module_path: "src/app/api/runtime/chat/runtime/toolRuntime.ts",
+        function_name: "emit:FINAL_ANSWER_READY",
+        line: model.includes("deterministic_scope_guard") ? 955 : 1007,
+        column: 0,
+      };
+    }
+    if (model.includes("deterministic_escalation_guard")) {
+      return {
+        module_path: "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+        function_name: "emit:FINAL_ANSWER_READY",
+        line: 93,
+        column: 0,
+      };
+    }
+    return {
+      module_path: "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+      function_name: "emit:FINAL_ANSWER_READY",
+      line: 248,
       column: 0,
     };
   }
@@ -114,7 +180,7 @@ function inferDecisionFallback(eventType: string, payload: Record<string, unknow
   return null;
 }
 
-function captureDecisionTrace(eventType: string) {
+function captureDecisionTrace(eventType: string, payload: Record<string, unknown>) {
   const stack = new Error().stack || "";
   const frames = stack.split("\n").slice(1);
   const chain = frames
@@ -133,7 +199,7 @@ function captureDecisionTrace(eventType: string) {
       column: frame.column,
     }));
   const picked = chain[0] || null;
-  const fallback = inferDecisionFallback(eventType, {});
+  const fallback = inferDecisionFallback(eventType, payload || {});
   const fallbackChain = fallback
     ? [
         {
@@ -168,7 +234,7 @@ export async function insertEvent(
   payload: Record<string, unknown>,
   botContext: Record<string, unknown>
 ) {
-  const decisionRaw = captureDecisionTrace(eventType);
+  const decisionRaw = captureDecisionTrace(eventType, payload || {});
   const fallback = inferDecisionFallback(eventType, payload || {});
   let decision =
     decisionRaw.module_path === "unknown" && fallback
@@ -241,7 +307,7 @@ export async function insertFinalTurn(
   payload: Record<string, unknown>,
   prefixJson: Record<string, unknown> | null
 ) {
-  const turnDecision = captureDecisionTrace("TURN_WRITE");
+  const turnDecision = captureDecisionTrace("TURN_WRITE", {});
   const nextPayload = {
     ...payload,
     bot_context: {
