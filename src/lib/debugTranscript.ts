@@ -50,6 +50,7 @@ export type TranscriptMessage = {
     view: "text" | "choice" | "cards";
     enable_quick_replies: boolean;
     enable_cards: boolean;
+    interaction_scope?: "latest_only" | "any";
     selection_mode: "single" | "multi";
     min_select: number;
     max_select: number;
