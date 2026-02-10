@@ -46,15 +46,6 @@ export type TranscriptMessage = {
     cards?: Array<Record<string, unknown>>;
   };
   responseSchemaIssues?: string[];
-  quickReplyConfig?: {
-    selection_mode: "single" | "multi";
-    min_select?: number;
-    max_select?: number;
-    submit_format?: "single" | "csv";
-    criteria?: string;
-    source_function?: string;
-    source_module?: string;
-  };
   renderPlan?: {
     view: "text" | "choice" | "cards";
     enable_quick_replies: boolean;
@@ -996,7 +987,7 @@ export function buildDebugTranscript(input: {
     const lines: string[] = [];
     if (normalized.turn.tokenUsed) {
       lines.push(answerText);
-    } else if (!msg.responseSchema && !msg.renderPlan && !msg.quickReplyConfig) {
+    } else if (!msg.responseSchema && !msg.renderPlan) {
       return answerText;
     }
     const allowResponseSchemaDetail = normalized.outputMode === "full" && normalized.turn.responseSchemaDetail;
@@ -1029,10 +1020,10 @@ export function buildDebugTranscript(input: {
         lines.push(indentBlock(stringifyPretty(plan), 2));
       }
     }
-    if (msg.quickReplyConfig && normalized.turn.quickReplyRule) {
-      const rule = msg.quickReplyConfig;
+    if (msg.renderPlan && normalized.turn.quickReplyRule) {
+      const rule = msg.renderPlan;
       lines.push(
-        `QUICK_REPLY_RULE: mode=${rule.selection_mode}, min=${rule.min_select ?? "-"}, max=${rule.max_select ?? "-"}, submit=${rule.submit_format ?? "-"}, criteria=${rule.criteria || "-"}, source=${rule.source_module || "-"}#${rule.source_function || "-"}`
+        `QUICK_REPLY_RULE: mode=${rule.selection_mode}, min=${rule.min_select ?? "-"}, max=${rule.max_select ?? "-"}, submit=${rule.submit_format ?? "-"}, source=${rule.quick_reply_source?.type || "-"}, criteria=${rule.quick_reply_source?.criteria || "-"}, module=${rule.quick_reply_source?.source_module || "-"}, function=${rule.quick_reply_source?.source_function || "-"}`
       );
     }
     return lines.length > 0 ? lines.join("\n") : answerText;

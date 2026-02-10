@@ -139,11 +139,11 @@ export function useConversationController(options: ControllerOptions) {
           options.makeRunBody({ text: trimmed, sessionId }),
           makeTraceId(traceIdPrefix)
         );
-        const mapped = mapRuntimeResponseToTranscriptFields(res);
-        const nextSessionId = res.session_id || sessionId;
-        setSessionId(nextSessionId);
-        setMessages((prev) =>
-          prev.map((msg) =>
+                const mapped = mapRuntimeResponseToTranscriptFields(res);
+                const nextSessionId = res.session_id || sessionId;
+                setSessionId(nextSessionId);
+                setMessages((prev) =>
+                  prev.map((msg) =>
             msg.id === loadingId
               ? {
                   ...msg,
@@ -152,7 +152,6 @@ export function useConversationController(options: ControllerOptions) {
                   turnId: mapped.turnId,
                   responseSchema: mapped.responseSchema,
                   responseSchemaIssues: mapped.responseSchemaIssues,
-                  quickReplyConfig: mapped.quickReplyConfig,
                   renderPlan: mapped.renderPlan,
                   quickReplies: mapped.quickReplies.length > 0 ? mapped.quickReplies : undefined,
                   productCards: mapped.productCards.length > 0 ? mapped.productCards : undefined,

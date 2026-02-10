@@ -40,6 +40,7 @@ export type RuntimeRunResponseLike = {
     view?: "text" | "choice" | "cards";
     enable_quick_replies?: boolean;
     enable_cards?: boolean;
+    interaction_scope?: "latest_only" | "any";
     quick_reply_source?: {
       type?: "explicit" | "config" | "fallback" | "none";
       criteria?: string;
@@ -102,23 +103,6 @@ export function mapRuntimeResponseToTranscriptFields(res: RuntimeRunResponseLike
         }
       : undefined;
 
-  const quickReplyConfig: TranscriptMessage["quickReplyConfig"] =
-    res.response_schema?.quick_reply_config && typeof res.response_schema.quick_reply_config === "object"
-      ? {
-          selection_mode: res.response_schema.quick_reply_config.selection_mode === "multi" ? "multi" : "single",
-          min_select: Number.isFinite(Number(res.response_schema.quick_reply_config.min_select))
-            ? Number(res.response_schema.quick_reply_config.min_select)
-            : undefined,
-          max_select: Number.isFinite(Number(res.response_schema.quick_reply_config.max_select))
-            ? Number(res.response_schema.quick_reply_config.max_select)
-            : undefined,
-          submit_format: res.response_schema.quick_reply_config.submit_format === "csv" ? "csv" : "single",
-          criteria: String(res.response_schema.quick_reply_config.criteria || "").trim() || undefined,
-          source_function: String(res.response_schema.quick_reply_config.source_function || "").trim() || undefined,
-          source_module: String(res.response_schema.quick_reply_config.source_module || "").trim() || undefined,
-        }
-      : undefined;
-
   const responseSchemaIssues = Array.isArray(res.response_schema_issues)
     ? res.response_schema_issues.map((item) => String(item || "").trim()).filter(Boolean)
     : undefined;
@@ -129,6 +113,7 @@ export function mapRuntimeResponseToTranscriptFields(res: RuntimeRunResponseLike
           view: res.render_plan.view === "choice" || res.render_plan.view === "cards" ? res.render_plan.view : "text",
           enable_quick_replies: Boolean(res.render_plan.enable_quick_replies),
           enable_cards: Boolean(res.render_plan.enable_cards),
+          interaction_scope: res.render_plan.interaction_scope === "any" ? "any" : "latest_only",
           quick_reply_source:
             res.render_plan.quick_reply_source && typeof res.render_plan.quick_reply_source === "object"
               ? {
@@ -197,23 +182,6 @@ export function mapRuntimeResponseToTranscriptFields(res: RuntimeRunResponseLike
         .filter((item) => item.label && item.value)
     : [];
 
-  const fallbackQuickReplyConfig: TranscriptMessage["quickReplyConfig"] =
-    res.quick_reply_config && typeof res.quick_reply_config === "object"
-      ? {
-          selection_mode: res.quick_reply_config.selection_mode === "multi" ? "multi" : "single",
-          min_select: Number.isFinite(Number(res.quick_reply_config.min_select))
-            ? Number(res.quick_reply_config.min_select)
-            : undefined,
-          max_select: Number.isFinite(Number(res.quick_reply_config.max_select))
-            ? Number(res.quick_reply_config.max_select)
-            : undefined,
-          submit_format: res.quick_reply_config.submit_format === "csv" ? "csv" : "single",
-          criteria: String(res.quick_reply_config.criteria || "").trim() || undefined,
-          source_function: String(res.quick_reply_config.source_function || "").trim() || undefined,
-          source_module: String(res.quick_reply_config.source_module || "").trim() || undefined,
-        }
-      : undefined;
-
   const productCards = Array.isArray(res.product_cards)
     ? res.product_cards
         .map((item, idx) => ({
@@ -231,7 +199,6 @@ export function mapRuntimeResponseToTranscriptFields(res: RuntimeRunResponseLike
     turnId: res.turn_id || null,
     responseSchema,
     responseSchemaIssues,
-    quickReplyConfig: quickReplyConfig || fallbackQuickReplyConfig,
     renderPlan,
     quickReplies,
     productCards,

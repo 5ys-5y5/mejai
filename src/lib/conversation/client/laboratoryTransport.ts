@@ -25,7 +25,8 @@ export async function sendLaboratoryMessage(
   sessionId: string | null,
   message: string,
   selectedAgentId?: string,
-  hooks?: { onProgress?: (line: string) => void }
+  hooks?: { onProgress?: (line: string) => void },
+  pageKey: string = "/app/laboratory"
 ): Promise<RuntimeRunResponse> {
   const traceId = makeTraceId("labc");
   const startedAt = performance.now();
@@ -41,6 +42,7 @@ export async function sendLaboratoryMessage(
     const res = await runConversation(
       "/api/laboratory/run",
       {
+        page_key: pageKey,
         route: config.route,
         llm: config.llm,
         kb_id: config.kbId,

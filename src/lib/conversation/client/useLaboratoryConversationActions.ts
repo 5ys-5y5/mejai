@@ -231,7 +231,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
 
         const result = await sendLaboratoryMessage(target.config, activeSessionId, text, target.selectedAgentId, {
           onProgress: appendLoadingLog,
-        }).then(
+        }, pageKey).then(
           (value) => ({ status: "fulfilled" as const, value }),
           (reason) => ({ status: "rejected" as const, reason })
         );
@@ -241,7 +241,6 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           const botMessageId = res.message ? loadingMessageId : null;
           const transcriptFields = mapRuntimeResponseToTranscriptFields(res);
           const quickReplies = transcriptFields.quickReplies;
-          const quickReplyConfig = transcriptFields.quickReplyConfig;
           const productCards = transcriptFields.productCards;
           const responseSchema = transcriptFields.responseSchema;
           const responseSchemaIssues = transcriptFields.responseSchemaIssues;
@@ -267,7 +266,6 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
                   isLoading: false,
                   loadingLogs: persistedLogs,
                   quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
-                  quickReplyConfig: quickReplies.length > 0 ? quickReplyConfig : undefined,
                   productCards: productCards.length > 0 ? productCards : undefined,
                   responseSchema,
                   responseSchemaIssues:
@@ -324,7 +322,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         }
       }
     },
-    [ensureEditableSession, isAdminUser, loadLogs, models, updateModel]
+    [ensureEditableSession, isAdminUser, loadLogs, models, pageKey, updateModel]
   );
 
   const copyConversation = useCallback(

@@ -5,9 +5,10 @@ import { useSearchParams } from "next/navigation";
 import { type SelectOption } from "@/components/SelectPopover";
 import { apiFetch } from "@/lib/apiClient";
 import { fetchSessionLogs, fetchTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
-import { isProviderEnabled, isToolEnabled, resolveConversationSetupUi, type ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
+import { isProviderEnabled, isToolEnabled, type ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
+import { useConversationMcpCatalog } from "@/lib/conversation/client/useConversationMcpCatalog";
 import { useLaboratoryConversationActions } from "@/lib/conversation/client/useLaboratoryConversationActions";
-import { useConversationPageFeatures } from "@/lib/conversation/client/useConversationPageFeatures";
+import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
 import { isAdminKbValue } from "@/lib/kbType";
@@ -35,15 +36,12 @@ import { formatKstDateTime } from "@/lib/kst";
 import { toast } from "sonner";
 
 export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app/laboratory") {
-  const [isAdminUser, setIsAdminUser] = useState(false);
-  const { features: pageFeatures, providerValue } = useConversationPageFeatures(pageKey, isAdminUser);
-  const setupUi = useMemo(() => resolveConversationSetupUi(pageKey, providerValue), [pageKey, providerValue]);
+  const { isAdminUser, pageFeatures, providerValue, loadPlan, setupUi } = useConversationPageRuntimeConfig(pageKey);
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [kbItems, setKbItems] = useState<KbItem[]>([]);
-  const [mcpProviders, setMcpProviders] = useState<McpProvider[]>([]);
-  const [tools, setTools] = useState<MpcTool[]>([]);
+  const { providers: mcpProviders, tools } = useConversationMcpCatalog(loadPlan.loadMcp, pageFeatures);
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [inlineKbSamples, setInlineKbSamples] = useState<InlineKbSampleItem[]>([]);
   const [wsStatus, setWsStatus] = useState("연결 대기");
@@ -62,34 +60,32 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
   useEffect(() => {
     setModels((prev) =>
       prev.map((model) => {
-        if (!pageFeatures.setup.modelSelector) {
+        const existingEnabled = pageFeatures.setup.modeExisting;
+        const newEnabled = pageFeatures.setup.modeNew;
+        const defaultMode =
+          pageFeatures.setup.defaultSetupMode === "existing" && existingEnabled
+            ? "existing"
+            : pageFeatures.setup.defaultSetupMode === "new" && newEnabled
+              ? "new"
+              : existingEnabled
+                ? "existing"
+                : "new";
+        const resolvedMode =
+          existingEnabled && newEnabled
+            ? (model.setupMode === "existing" || model.setupMode === "new" ? model.setupMode : defaultMode)
+            : existingEnabled
+              ? "existing"
+              : "new";
+        if (model.setupMode !== resolvedMode) {
           return {
             ...model,
-            setupMode: "new",
-            conversationMode: "new",
+            setupMode: resolvedMode,
+            conversationMode: resolvedMode === "existing" ? "history" : "new",
             config: { ...model.config, llm: pageFeatures.setup.defaultLlm },
           };
         }
-        if (pageFeatures.setup.modeExisting || pageFeatures.setup.modeNew) {
-          if (!pageFeatures.setup.modeExisting && model.setupMode === "existing") {
-            return {
-              ...model,
-              setupMode: "new",
-              conversationMode: "new",
-              config: { ...model.config, llm: pageFeatures.setup.defaultLlm },
-            };
-          }
-          if (!pageFeatures.setup.modeNew && model.setupMode === "new") {
-            return {
-              ...model,
-              setupMode: "existing",
-              conversationMode: "history",
-              config: { ...model.config, llm: pageFeatures.setup.defaultLlm },
-            };
-          }
-        }
         if (model.messages.length === 0 && model.historyMessages.length === 0) {
-          const nextSetupMode = pageFeatures.setup.modeExisting ? "existing" : "new";
+          const nextSetupMode = resolvedMode;
           return {
             ...model,
             setupMode: nextSetupMode,
@@ -101,9 +97,9 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
       })
     );
   }, [
-    pageFeatures.setup.modelSelector,
     pageFeatures.setup.modeExisting,
     pageFeatures.setup.modeNew,
+    pageFeatures.setup.defaultSetupMode,
     pageFeatures.setup.defaultLlm,
   ]);
 
@@ -123,26 +119,21 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
       setLoading(true);
       setError(null);
       try {
-        const [kbRes, agentRes, profileRes, sampleRes] = await Promise.all([
-          apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
-          apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200").catch(() => ({ items: [] })),
-          apiFetch<{ is_admin?: boolean }>("/api/user-profile").catch(() => ({ is_admin: false })),
-          apiFetch<{ items?: InlineKbSampleItem[] }>("/api/kb/samples").catch(() => ({ items: [] })),
+        const [kbRes, agentRes, sampleRes] = await Promise.all([
+          loadPlan.loadKb
+            ? apiFetch<{ items: KbItem[] }>("/api/kb?limit=200")
+            : Promise.resolve({ items: [] as KbItem[] }),
+          loadPlan.loadAgents
+            ? apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200").catch(() => ({ items: [] }))
+            : Promise.resolve({ items: [] as AgentItem[] }),
+          loadPlan.loadInlineKbSamples
+            ? apiFetch<{ items?: InlineKbSampleItem[] }>("/api/kb/samples").catch(() => ({ items: [] }))
+            : Promise.resolve({ items: [] as InlineKbSampleItem[] }),
         ]);
-        const mcpRes = await apiFetch<{ providers?: McpProvider[] }>("/api/mcp").catch(() => ({
-          providers: [],
-        }));
         if (!mounted) return;
         setKbItems(kbRes.items || []);
         setAgents(agentRes.items || []);
         setInlineKbSamples((sampleRes.items || []).filter((item) => item.content?.trim().length > 0));
-        setIsAdminUser(Boolean(profileRes?.is_admin));
-        const providers = (mcpRes.providers || []).filter((provider) => isProviderEnabled(provider.key, pageFeatures));
-        setMcpProviders(providers);
-        const flattened = providers.flatMap((provider) =>
-          (provider.actions || []).map((tool) => ({ ...tool, provider: provider.key }))
-        ).filter((tool) => isToolEnabled(tool.id, pageFeatures));
-        setTools(flattened);
       } catch {
         if (!mounted) return;
         setError("실험실 데이터를 불러오지 못했습니다.");
@@ -155,7 +146,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     return () => {
       mounted = false;
     };
-  }, [pageFeatures]);
+  }, [loadPlan, pageFeatures]);
 
   const connectWs = useCallback(() => {
     if (!WS_URL) {
@@ -490,7 +481,12 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     setModels((prev) => {
       if (prev.length >= MAX_MODELS) return prev;
       const next = createDefaultModel();
-      next.setupMode = pageFeatures.setup.modelSelector ? (pageFeatures.setup.modeExisting ? "existing" : "new") : "new";
+      if (pageFeatures.setup.modeExisting && pageFeatures.setup.modeNew) {
+        next.setupMode =
+          pageFeatures.setup.defaultSetupMode === "existing" ? "existing" : "new";
+      } else {
+        next.setupMode = pageFeatures.setup.modeExisting ? "existing" : "new";
+      }
       next.conversationMode = next.setupMode === "existing" ? "history" : "new";
       next.config.llm = pageFeatures.setup.defaultLlm;
       return [...prev, next];

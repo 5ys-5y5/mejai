@@ -122,6 +122,30 @@ export type ConversationPageFeatures = {
   visibility: ConversationFeatureVisibility;
 };
 
+export type ConversationDataLoadPlan = {
+  loadMcp: boolean;
+  loadInlineKbSamples: boolean;
+  loadKb: boolean;
+  loadAgents: boolean;
+};
+
+export function deriveConversationDataLoadPlan(features: ConversationPageFeatures): ConversationDataLoadPlan {
+  return {
+    loadMcp: features.mcp.providerSelector || features.mcp.actionSelector,
+    loadInlineKbSamples: features.setup.inlineUserKbInput,
+    loadKb:
+      features.setup.kbSelector ||
+      features.setup.adminKbSelector ||
+      features.setup.modeExisting ||
+      features.setup.modelSelector,
+    loadAgents:
+      features.setup.modelSelector ||
+      features.setup.agentSelector ||
+      features.setup.modeExisting ||
+      features.setup.sessionIdSearch,
+  };
+}
+
 export type ConversationPageFeaturesOverride = Partial<ConversationPageFeatures>;
 
 export type ConversationFeaturesProviderShape = {

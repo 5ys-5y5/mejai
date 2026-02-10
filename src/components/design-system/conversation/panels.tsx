@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties, ReactNode, WheelEvent } from "react";
 import { cn } from "@/lib/utils";
 
 export function ConversationSplitLayout({
@@ -48,13 +48,15 @@ export function ConversationChatPanel({
   children,
   className,
   style,
+  onWheel,
 }: {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
+  onWheel?: (event: WheelEvent<HTMLDivElement>) => void;
 }) {
   return (
-    <div className={cn("relative h-full flex flex-col overflow-visible", className)} style={style}>
+    <div className={cn("relative h-full flex flex-col overflow-visible", className)} style={style} onWheel={onWheel}>
       {children}
     </div>
   );

@@ -55,5 +55,14 @@ export {
   ConversationThread,
   ConversationSetupFields,
   ConversationReplySelectors,
-} from "@/components/design-system/conversation/ConversationUI";
+  ConversationWorkbenchTopBar,
+  ConversationModelSetupColumnLego,
+  ConversationModelChatColumnLego,
+  ConversationModelComposedLego,
+  ConversationModelCard,
+  assembleConversationModelLegos,
+  type ConversationModelSetupColumnLegoProps,
+  type ConversationModelChatColumnLegoProps,
+  type ConversationModelLegoAssembly,
+} from "@/components/design-system/conversation/ConversationUI.parts";
 

@@ -3,29 +3,15 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { type SelectOption } from "@/components/SelectPopover";
 import { apiFetch } from "@/lib/apiClient";
-import { isProviderEnabled, isToolEnabled, resolveConversationSetupUi } from "@/lib/conversation/pageFeaturePolicy";
+import { useConversationMcpCatalog } from "@/lib/conversation/client/useConversationMcpCatalog";
 import { useConversationController } from "@/lib/conversation/client/useConversationController";
-import { useConversationPageFeatures } from "@/lib/conversation/client/useConversationPageFeatures";
+import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import {
   appendInlineKbSample,
   hasConflictingInlineKbSamples,
   type InlineKbSampleItem,
 } from "@/lib/conversation/inlineKbSamples";
-
-type McpAction = {
-  id: string;
-  provider_key?: string;
-  provider?: string;
-  name: string;
-  description?: string | null;
-};
-
-type McpProvider = {
-  key: string;
-  title: string;
-  actions: McpAction[];
-};
 
 const NEW_MODEL_CONFIG = {
   route: "shipping",
@@ -34,13 +20,10 @@ const NEW_MODEL_CONFIG = {
 };
 
 export function useHeroPageController() {
-  const [isAdminUser, setIsAdminUser] = useState(false);
-  const { features: pageFeatures, providerValue } = useConversationPageFeatures("/", isAdminUser);
-  const setupUi = useMemo(() => resolveConversationSetupUi("/", providerValue), [providerValue]);
+  const { isAdminUser, pageFeatures, providerValue, loadPlan, setupUi } = useConversationPageRuntimeConfig("/");
+  const { providers: mcpProviders, tools: mcpTools } = useConversationMcpCatalog(loadPlan.loadMcp, pageFeatures);
   const [input, setInput] = useState("");
   const [userKb, setUserKb] = useState("");
-  const [providerOptions, setProviderOptions] = useState<SelectOption[]>([]);
-  const [actionOptions, setActionOptions] = useState<SelectOption[]>([]);
   const [selectedProviderKeys, setSelectedProviderKeys] = useState<string[]>(["solapi", "juso"]);
   const [selectedMcpToolIds, setSelectedMcpToolIds] = useState<string[]>([]);
   const [selectedLlmOverride, setSelectedLlmOverride] = useState<"chatgpt" | "gemini" | null>(null);
@@ -51,9 +34,36 @@ export function useHeroPageController() {
   const [lockedReplySelections, setLockedReplySelections] = useState<Record<string, string[]>>({});
   const [inlineKbSamples, setInlineKbSamples] = useState<InlineKbSampleItem[]>([]);
   const [inlineKbSampleSelectionOrder, setInlineKbSampleSelectionOrder] = useState<string[]>([]);
+  const providerOptions = useMemo<SelectOption[]>(
+    () =>
+      mcpProviders.map((provider) => ({
+        id: provider.key,
+        label: provider.title || provider.key,
+      })),
+    [mcpProviders]
+  );
+  const actionOptions = useMemo<SelectOption[]>(
+    () =>
+      mcpTools.map((action) => ({
+        id: action.id,
+        label: action.name,
+        group: action.provider,
+        description: action.description || undefined,
+      })),
+    [mcpTools]
+  );
   const selectedLlm = selectedLlmOverride ?? pageFeatures.setup.defaultLlm;
-  const effectiveProviderKeys = selectedProviderKeys.filter((key) => providerOptions.some((option) => option.id === key));
-  const effectiveMcpToolIds = selectedMcpToolIds.filter((id) => actionOptions.some((option) => option.id === id));
+  const effectiveProviderKeys = useMemo(
+    () => selectedProviderKeys.filter((key) => providerOptions.some((option) => option.id === key)),
+    [providerOptions, selectedProviderKeys]
+  );
+  const effectiveMcpToolIds = useMemo(() => {
+    const validSelected = selectedMcpToolIds.filter((id) => actionOptions.some((option) => option.id === id));
+    if (validSelected.length > 0) return validSelected;
+    return actionOptions
+      .filter((option) => effectiveProviderKeys.includes(option.group || ""))
+      .map((option) => option.id);
+  }, [actionOptions, effectiveProviderKeys, selectedMcpToolIds]);
   const convo = useConversationController({
     page: "/",
     traceIdPrefix: "hero",
@@ -62,6 +72,7 @@ export function useHeroPageController() {
       { role: "bot", content: "압도적으로 저렴하게 사용해보세요" },
     ],
     makeRunBody: ({ text, sessionId }) => ({
+      page_key: "/",
       route: NEW_MODEL_CONFIG.route,
       llm: selectedLlm,
       kb_id: undefined,
@@ -87,48 +98,9 @@ export function useHeroPageController() {
   }, [messages]);
 
   useEffect(() => {
-    let active = true;
-    apiFetch<{ providers?: McpProvider[] }>("/api/mcp")
-      .then((res) => {
-        if (!active) return;
-        const providers = (res.providers || []).filter((provider) => isProviderEnabled(provider.key, pageFeatures));
-        const nextProviderOptions = providers
-          .map((provider) => ({
-            id: provider.key,
-            label: provider.title || provider.key,
-          }));
-        const nextActionOptions = providers
-          .flatMap((provider) =>
-            (provider.actions || []).map((action) => ({
-              id: action.id,
-              label: action.name,
-              group: provider.key,
-              description: action.description || undefined,
-            }))
-          )
-          .filter((action) => isToolEnabled(action.id, pageFeatures));
-        setProviderOptions(nextProviderOptions);
-        setActionOptions(nextActionOptions);
-        setSelectedProviderKeys((prev) => prev.filter((key) => nextProviderOptions.some((opt) => opt.id === key)));
-        setSelectedMcpToolIds((prev) => {
-          if (prev.length > 0) return prev.filter((id) => nextActionOptions.some((opt) => opt.id === id));
-          const nextSelected = nextActionOptions
-            .filter((option) => selectedProviderKeys.includes(option.group || ""))
-            .map((option) => option.id);
-          return nextSelected.length > 0 ? nextSelected : prev;
-        });
-      })
-      .catch(() => {
-        if (!active) return;
-        setProviderOptions([]);
-        setActionOptions([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [pageFeatures, selectedProviderKeys]);
-
-  useEffect(() => {
+    if (!loadPlan.loadInlineKbSamples) {
+      return;
+    }
     let active = true;
     apiFetch<{ items?: InlineKbSampleItem[] }>("/api/kb/samples")
       .then((res) => {
@@ -142,31 +114,15 @@ export function useHeroPageController() {
     return () => {
       active = false;
     };
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    apiFetch<{ is_admin?: boolean }>("/api/user-profile")
-      .then((res) => {
-        if (!active) return;
-        setIsAdminUser(Boolean(res?.is_admin));
-      })
-      .catch(() => {
-        if (!active) return;
-        setIsAdminUser(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+  }, [loadPlan.loadInlineKbSamples]);
 
   const llmOptions: SelectOption[] = [
     { id: "chatgpt", label: "ChatGPT" },
     { id: "gemini", label: "Gemini" },
   ];
   const filteredActionOptions = actionOptions.filter((option) => {
-    if (selectedProviderKeys.length === 0) return false;
-    return selectedProviderKeys.includes(option.group || "");
+    if (effectiveProviderKeys.length === 0) return false;
+    return effectiveProviderKeys.includes(option.group || "");
   });
 
   const placeholder = "신규 대화 질문을 입력하세요";
@@ -236,11 +192,13 @@ export function useHeroPageController() {
       setInlineKbSampleSelectionOrder((prev) => [...prev, ...validIds]);
     },
     providerOptions,
-    selectedProviderKeys,
-    setSelectedProviderKeys,
+    selectedProviderKeys: effectiveProviderKeys,
+    setSelectedProviderKeys: (next: string[]) =>
+      setSelectedProviderKeys(next.filter((key) => providerOptions.some((option) => option.id === key))),
     filteredActionOptions,
-    selectedMcpToolIds,
-    setSelectedMcpToolIds,
+    selectedMcpToolIds: effectiveMcpToolIds,
+    setSelectedMcpToolIds: (next: string[]) =>
+      setSelectedMcpToolIds(next.filter((id) => actionOptions.some((option) => option.id === id))),
     adminLogControlsOpen,
     setAdminLogControlsOpen,
     chatSelectionEnabled,

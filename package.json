@@ -11,7 +11,8 @@
     "validate:runtime:quick-reply": "node scripts/validate-runtime-quick-reply-config.mjs",
     "validate:runtime:prompt-templates": "node scripts/validate-runtime-prompt-templates.mjs",
     "validate:runtime:template-keys": "node scripts/validate-runtime-template-keys.mjs",
-    "validate:runtime:response-schema": "node scripts/validate-runtime-response-schema.mjs"
+    "validate:runtime:response-schema": "node scripts/validate-runtime-response-schema.mjs",
+    "validate:conversation:centralization": "node scripts/validate-conversation-centralization.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

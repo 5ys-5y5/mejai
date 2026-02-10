@@ -19,6 +19,7 @@ export type RenderPlan = {
   ui_type_id: RuntimeUiTypeId;
   enable_quick_replies: boolean;
   enable_cards: boolean;
+  interaction_scope: "latest_only" | "any";
   quick_reply_source: {
     type: QuickReplySourceType;
     criteria?: string;
@@ -47,6 +48,7 @@ export type RenderPlan = {
 
 export const RENDER_POLICY = {
   version: "v1",
+  interaction_scope: "latest_only",
   quick_reply_sources: {
     explicit: true,
     config: true,
@@ -221,6 +223,7 @@ export function buildRenderPlan(input: {
     ui_type_id: resolvedUi.uiTypeId,
     enable_quick_replies: viewDecision.enable_quick_replies,
     enable_cards: viewDecision.enable_cards,
+    interaction_scope: RENDER_POLICY.interaction_scope,
     quick_reply_source: input.quickReplySource,
     selection_mode: selectionMode === "multi" ? "multi" : "single",
     min_select: clamp(minSelect, 1, Math.max(1, maxSelect)),

@@ -37,15 +37,6 @@ export type ChatMessage = {
   isLoading?: boolean;
   loadingLogs?: string[];
   quickReplies?: Array<{ label: string; value: string }>;
-  quickReplyConfig?: {
-    selection_mode: "single" | "multi";
-    min_select?: number;
-    max_select?: number;
-    submit_format?: "single" | "csv";
-    criteria?: string;
-    source_function?: string;
-    source_module?: string;
-  };
   productCards?: Array<{
     id: string;
     title: string;
@@ -77,6 +68,7 @@ export type ChatMessage = {
     view: "text" | "choice" | "cards";
     enable_quick_replies: boolean;
     enable_cards: boolean;
+    interaction_scope: "latest_only" | "any";
     quick_reply_source: {
       type: "explicit" | "config" | "fallback" | "none";
       criteria?: string;
@@ -158,6 +150,7 @@ export type TurnRow = {
     view?: "text" | "choice" | "cards";
     enable_quick_replies?: boolean;
     enable_cards?: boolean;
+    interaction_scope?: "latest_only" | "any";
     selection_mode?: "single" | "multi";
     min_select?: number;
     max_select?: number;
@@ -396,23 +389,12 @@ export function buildHistoryMessages(turns: TurnRow[]) {
         quick_replies: [],
         cards: [],
       };
-      const fallbackRenderPlan: ChatMessage["renderPlan"] = {
-        view: "text",
-        enable_quick_replies: false,
-        enable_cards: false,
-        quick_reply_source: { type: "none" },
-        selection_mode: "single",
-        min_select: 1,
-        max_select: 1,
-        submit_format: "single",
-        grid_columns: { quick_replies: 1, cards: 1 },
-        prompt_kind: null,
-      };
       const normalizedRenderPlan: ChatMessage["renderPlan"] = mapped.renderPlan
         ? {
             view: mapped.renderPlan.view,
             enable_quick_replies: Boolean(mapped.renderPlan.enable_quick_replies),
             enable_cards: Boolean(mapped.renderPlan.enable_cards),
+            interaction_scope: mapped.renderPlan.interaction_scope === "any" ? "any" : "latest_only",
             quick_reply_source: {
               type:
                 mapped.renderPlan.quick_reply_source?.type === "explicit" ||
@@ -438,7 +420,7 @@ export function buildHistoryMessages(turns: TurnRow[]) {
             },
             prompt_kind: mapped.renderPlan.prompt_kind || null,
           }
-        : fallbackRenderPlan;
+        : undefined;
       acc.push({
         id: `${turn.id}-bot`,
         role: "bot",
@@ -446,7 +428,6 @@ export function buildHistoryMessages(turns: TurnRow[]) {
         turnId: turn.id,
         responseSchema: mapped.responseSchema || fallbackResponseSchema,
         responseSchemaIssues: mapped.responseSchemaIssues,
-        quickReplyConfig: mapped.quickReplyConfig,
         renderPlan: normalizedRenderPlan,
       });
     }
