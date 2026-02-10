@@ -2233,8 +2233,8 @@ export function ChatSettingsPanel({ authToken }: Props) {
                 {item.usedByPages === "common" ? "공통" : item.usedByPages.join(", ")}
               </div>
               <div className="mt-2 space-y-1">
-                {item.files.map((file) => (
-                  <div key={`common-${item.key}-${file}`} className="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] text-slate-700">
+                {item.files.map((file, idx) => (
+                  <div key={`common-${item.key}-${idx}-${file}`} className="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] text-slate-700">
                     {file}
                   </div>
                 ))}

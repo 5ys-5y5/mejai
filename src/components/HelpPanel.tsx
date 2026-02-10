@@ -85,7 +85,12 @@ export function HelpPanel() {
     let lastFocusRefreshAt = 0;
     let lastAuthRefreshAt = 0;
     const publish = (message: Record<string, unknown>) => {
-      channel?.postMessage({ ...message, sender: tabId, ts: Date.now() });
+      if (!channel) return;
+      try {
+        channel.postMessage({ ...message, sender: tabId, ts: Date.now() });
+      } catch {
+        // Channel may already be closed during unmount/race with async refresh.
+      }
     };
     const canRunFocusRefresh = () => {
       const now = Date.now();
@@ -211,7 +216,11 @@ export function HelpPanel() {
     return () => {
       mounted = false;
       if (timer) clearInterval(timer);
-      if (channel) channel.close();
+      if (channel) {
+        const closing = channel;
+        channel = null;
+        closing.close();
+      }
       if (config.help_panel_refresh_on_focus) {
         window.removeEventListener("focus", onFocus);
       }

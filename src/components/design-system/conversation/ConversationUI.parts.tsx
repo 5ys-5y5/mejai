@@ -1807,6 +1807,7 @@ export function ConversationModelSetupColumnLego({
   describeRoute,
 }: ConversationModelSetupColumnLegoProps) {
   const showModeSelector = pageFeatures.setup.modeExisting && pageFeatures.setup.modeNew;
+  const forceExistingSetupControls = pageFeatures.setup.modeExisting && !pageFeatures.setup.modeNew;
   return (
     <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden" data-lego="ConversationModelSetupColumnLego">
       <ConversationSetupBox
@@ -1817,10 +1818,10 @@ export function ConversationModelSetupColumnLego({
         <ConversationExistingSetup
           showModelSelector={showModeSelector}
           modelSelectorAdminOnly={pageFeatures.visibility.setup.modelSelector === "admin"}
-          showAgentSelector={pageFeatures.setup.agentSelector}
+          showAgentSelector={pageFeatures.setup.agentSelector || forceExistingSetupControls}
           showModeExisting={pageFeatures.setup.modeExisting}
           modeExistingAdminOnly={pageFeatures.visibility.setup.modeExisting === "admin"}
-          showSessionIdSearch={pageFeatures.setup.sessionIdSearch}
+          showSessionIdSearch={pageFeatures.setup.sessionIdSearch || forceExistingSetupControls}
           showModeNew={pageFeatures.setup.modeNew}
           modeNewAdminOnly={pageFeatures.visibility.setup.modeNew === "admin"}
           setupMode={model.setupMode}
