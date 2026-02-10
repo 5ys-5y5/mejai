@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { type SelectOption } from "@/components/SelectPopover";
 import { apiFetch } from "@/lib/apiClient";
 import { fetchSessionLogs, fetchTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
-import { isProviderEnabled, isToolEnabled, resolveConversationSetupUi } from "@/lib/conversation/pageFeaturePolicy";
+import { isProviderEnabled, isToolEnabled, resolveConversationSetupUi, type ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
 import { useLaboratoryConversationActions } from "@/lib/conversation/client/useLaboratoryConversationActions";
 import { useConversationPageFeatures } from "@/lib/conversation/client/useConversationPageFeatures";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
@@ -34,10 +34,10 @@ import {
 import { formatKstDateTime } from "@/lib/kst";
 import { toast } from "sonner";
 
-export function useLaboratoryPageController() {
+export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app/laboratory") {
   const [isAdminUser, setIsAdminUser] = useState(false);
-  const { features: pageFeatures, providerValue } = useConversationPageFeatures("/app/laboratory", isAdminUser);
-  const setupUi = useMemo(() => resolveConversationSetupUi("/app/laboratory", providerValue), [providerValue]);
+  const { features: pageFeatures, providerValue } = useConversationPageFeatures(pageKey, isAdminUser);
+  const setupUi = useMemo(() => resolveConversationSetupUi(pageKey, providerValue), [pageKey, providerValue]);
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -654,8 +654,8 @@ export function useLaboratoryPageController() {
       const [turns, logs, conversationSnapshot, issueSnapshot] = await Promise.all([
         apiFetch<TurnRow[]>(`/api/sessions/${sessionId}/turns`),
         fetchSessionLogs(sessionId, 500).catch(() => null),
-        fetchTranscriptSnapshot(sessionId, "/app/laboratory", "conversation").catch(() => null),
-        fetchTranscriptSnapshot(sessionId, "/app/laboratory", "issue").catch(() => null),
+        fetchTranscriptSnapshot(sessionId, pageKey, "conversation").catch(() => null),
+        fetchTranscriptSnapshot(sessionId, pageKey, "issue").catch(() => null),
       ]);
       const historyMessages = buildHistoryMessages(turns || []);
       const botTurnIds = new Set(
@@ -814,6 +814,7 @@ export function useLaboratoryPageController() {
     updateModel,
     ensureEditableSession,
     isAdminUser,
+    pageKey,
   });
 
   const toggleMessageSelection = (modelId: string, messageId: string) => {
@@ -834,7 +835,7 @@ export function useLaboratoryPageController() {
     await labActions.copyConversation(
       id,
       pageFeatures.adminPanel.copyConversation,
-      resolvePageConversationDebugOptions("/app/laboratory", providerValue)
+      resolvePageConversationDebugOptions(pageKey, providerValue)
     );
   };
 

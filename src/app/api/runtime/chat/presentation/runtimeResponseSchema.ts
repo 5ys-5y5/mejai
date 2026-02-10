@@ -1,8 +1,10 @@
 import type { RuntimeQuickReply, RuntimeQuickReplyConfig } from "./ui-responseDecorators";
+import type { RuntimeUiTypeId } from "@/components/design-system/conversation/runtimeUiCatalog";
 
 export type RuntimeUiHints = {
   view?: "text" | "choice" | "cards";
   choice_mode?: "single" | "multi";
+  ui_type_id?: RuntimeUiTypeId;
 };
 
 export type RuntimeCard = {
@@ -30,7 +32,8 @@ export type RuntimeResponderPayload = Record<string, unknown> & {
 };
 
 export function extractRuntimeCards(payload: Record<string, unknown>) {
-  const productCards = Array.isArray((payload as any).product_cards) ? ((payload as any).product_cards as RuntimeCard[]) : [];
+  const productCardsRaw = payload["product_cards"];
+  const productCards = Array.isArray(productCardsRaw) ? (productCardsRaw as RuntimeCard[]) : [];
   return productCards;
 }
 
@@ -39,14 +42,18 @@ export function buildRuntimeResponseSchema(input: {
   quickReplies: RuntimeQuickReply[];
   quickReplyConfig: RuntimeQuickReplyConfig | null;
   cards: RuntimeCard[];
+  decidedView: "text" | "choice" | "cards";
+  decidedChoiceMode: "single" | "multi";
+  decidedUiTypeId: RuntimeUiTypeId;
 }): RuntimeResponseSchema {
   const message = typeof input.message === "string" ? input.message : null;
   const cards = Array.isArray(input.cards) ? input.cards : [];
   const quickReplies = Array.isArray(input.quickReplies) ? input.quickReplies : [];
   const quickReplyConfig = input.quickReplyConfig || null;
   const uiHints: RuntimeUiHints = {
-    view: cards.length > 0 ? "cards" : quickReplies.length > 0 ? "choice" : "text",
-    ...(quickReplyConfig?.selection_mode ? { choice_mode: quickReplyConfig.selection_mode } : {}),
+    view: input.decidedView,
+    choice_mode: input.decidedChoiceMode,
+    ui_type_id: input.decidedUiTypeId,
   };
   return {
     message,

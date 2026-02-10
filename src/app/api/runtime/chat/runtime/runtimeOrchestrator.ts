@@ -108,6 +108,7 @@ import { runInputStageRuntime } from "./runtimeInputStageRuntime";
 import { initializeRuntimeState } from "./runtimeInitializationRuntime";
 import { createRuntimeResponder } from "../presentation/ui-runtimeResponseRuntime";
 import { mergeRuntimeTemplateOverrides, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
+import { applyReplyStyle, resolveReplyStyleDirective } from "../policies/replyStyleRuntime";
 import type {
   DisambiguationStepInput,
   DisambiguationStepOutput,
@@ -321,6 +322,10 @@ export async function POST(req: NextRequest) {
       runtimeCallChain,
       templateOverrides: runtimeTemplateOverrides as Record<string, string>,
     });
+    const replyStyleDirective = resolveReplyStyleDirective({
+      primaryKbContent: kb.content || "",
+      adminKbContents: adminKbs.map((item) => item.content || ""),
+    });
     const { makeReply, insertTurn } = createRuntimeConversationIo({
       context,
       insertFinalTurn,
@@ -338,6 +343,7 @@ export async function POST(req: NextRequest) {
       setLatestTurnId: (id) => {
         latestTurnId = id;
       },
+      decorateReplyText: (text) => applyReplyStyle(text, replyStyleDirective),
     });
     const disambiguationInput: DisambiguationStepInput = {
       message,

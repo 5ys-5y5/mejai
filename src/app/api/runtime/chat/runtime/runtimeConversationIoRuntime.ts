@@ -51,6 +51,7 @@ export function createRuntimeConversationIo(input: {
   getLastDebugPrefixJson: () => Record<string, unknown> | null;
   setLastDebugPrefixJson: (next: Record<string, unknown> | null) => void;
   setLatestTurnId: (id: string | null) => void;
+  decorateReplyText?: (text: string) => string;
 }) {
   const {
     context,
@@ -65,11 +66,13 @@ export function createRuntimeConversationIo(input: {
     getLastDebugPrefixJson,
     setLastDebugPrefixJson,
     setLatestTurnId,
+    decorateReplyText,
   } = input;
 
   function makeReply(text: string, llmModel?: string | null, tools?: string[]) {
+    const decoratedText = decorateReplyText ? decorateReplyText(text) : text;
     const made = makeReplyWithDebug({
-      text,
+      text: decoratedText,
       llmModel,
       tools,
       toolResults: getToolResults(),

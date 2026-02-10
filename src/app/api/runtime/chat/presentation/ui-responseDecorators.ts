@@ -1,5 +1,6 @@
 import { resolveQuickReplyConfig, YES_NO_QUICK_REPLIES } from "../runtime/quickReplyConfigRuntime";
 import { extractLeadDayOptionsFromText, extractNumberedOptionIndicesFromText } from "../policies/intentSlotPolicy";
+import { buildIntentDisambiguationTableHtmlFromText } from "@/components/design-system/conversation/runtimeUiCatalog";
 
 export type RuntimeQuickReply = { label: string; value: string };
 export type RuntimeQuickReplyDerivation = {
@@ -16,15 +17,6 @@ export type RuntimeQuickReplyConfig = {
   source_function?: string;
   source_module?: string;
 };
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export function deriveQuickRepliesWithTrace(
   message: unknown,
@@ -90,7 +82,7 @@ export function deriveQuickReplyConfig(
 
 export function deriveQuickRepliesFromConfig(config: unknown): RuntimeQuickReply[] {
   if (!config || typeof config !== "object") return [];
-  const criteria = String((config as any).criteria || "").toLowerCase();
+  const criteria = String((config as Record<string, unknown>).criteria || "").toLowerCase();
   if (criteria.includes("yes_no") || criteria.includes("yes/no")) {
     return [...YES_NO_QUICK_REPLIES];
   }
@@ -98,43 +90,5 @@ export function deriveQuickRepliesFromConfig(config: unknown): RuntimeQuickReply
 }
 
 export function deriveRichMessageHtml(message: unknown) {
-  const text = typeof message === "string" ? message : "";
-  if (!text) return null;
-  const lines = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length < 2) return null;
-  const title = lines[0];
-  const itemRows = lines
-    .map((line) => {
-      const match = line.match(/^-\s*(\d{1,2})번\s*\|\s*(.+)$/);
-      if (!match) return null;
-      const index = match[1];
-      const cols = String(match[2] || "")
-        .split("|")
-        .map((part) => part.trim())
-        .filter(Boolean);
-      if (cols.length === 0) return null;
-      return { index, cols };
-    })
-    .filter((row): row is { index: string; cols: string[] } => Boolean(row));
-  if (itemRows.length === 0) return null;
-
-  const example = lines.find((line) => /^예\s*:/.test(line)) || "";
-  const itemsHtml = itemRows
-    .map((row) => {
-      const productName = row.cols[0] || "-";
-      const schedule = row.cols.slice(1).join(" | ") || "-";
-      return `<tr><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#0f172a;font-size:11px;font-weight:700;white-space:nowrap;">${escapeHtml(row.index)}</td><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:inherit;font-size:12px;line-height:1.35;">${escapeHtml(productName)}</td><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;line-height:1.35;white-space:nowrap;">${escapeHtml(schedule)}</td></tr>`;
-    })
-    .join("");
-
-  const exampleHtml = example
-    ? `<div style="margin-top:8px;color:inherit;"><strong>입력 예시</strong>: ${escapeHtml(
-        example.replace(/^예\s*:\s*/, "")
-      )}</div>`
-    : "";
-
-  return `<div style="display:block;margin:0;padding:0;color:inherit;font:inherit;line-height:inherit;"><div style="margin:0;padding:0;color:inherit;font:inherit;line-height:inherit;">${escapeHtml(title)}</div><div style="margin-top:4px;overflow:hidden;border:1px solid #e2e8f0;border-radius:8px;background:rgba(255,255,255,0.55);"><table style="width:100%;border-collapse:collapse;table-layout:fixed;color:inherit;font:inherit;margin:0;"><thead><tr><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:center;width:42px;">번호</th><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:left;">항목명</th><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:left;width:110px;">일정</th></tr></thead><tbody>${itemsHtml}</tbody></table></div>${exampleHtml}</div>`;
+  return buildIntentDisambiguationTableHtmlFromText(message);
 }

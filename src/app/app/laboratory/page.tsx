@@ -1,8 +1,9 @@
 "use client";
 
-import { LaboratoryPageContainer } from "@/components/conversation/LaboratoryPageContainer";
+import { ConversationSurface } from "@/components/design-system/conversation/ConversationUI";
 
 export default function LaboratoryPage() {
-  return <LaboratoryPageContainer />;
+  return <ConversationSurface pageKey="/app/laboratory" />;
 }
+
 

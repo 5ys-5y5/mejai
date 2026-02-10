@@ -60,7 +60,7 @@ export function ConsolePreview({ settings }: { settings: LandingSettings }) {
                 <div className="w-3 h-3 rounded-full bg-zinc-300" />
                 <div className="w-3 h-3 rounded-full bg-zinc-300" />
               </div>
-              <div className="flex h-[500px]">
+              <div className="flex h-[626px]">
                 <div className="w-20 border-r border-zinc-100 flex flex-col items-center py-8 gap-8">
                   <div className="w-10 h-10 rounded-xl bg-zinc-900 flex items-center justify-center">
                     <LayoutDashboard className="w-5 h-5 text-white" />

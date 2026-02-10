@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import {
-  PAGE_CONVERSATION_FEATURES,
+  getDefaultConversationPageFeatures,
   mergeConversationPageFeatures,
   resolveConversationSetupUi,
   type ConversationFeaturesProviderShape,
@@ -16,6 +16,7 @@ import {
   type ConversationPageKey,
   type ConversationSetupUi,
   type ExistingSetupFieldKey,
+  type ExistingSetupLabelKey,
   type SetupFieldKey,
 } from "@/lib/conversation/pageFeaturePolicy";
 import {
@@ -23,20 +24,14 @@ import {
   resolvePageConversationDebugOptions,
 } from "@/lib/transcriptCopyPolicy";
 
-const PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory"];
-const COLUMN_KEYS: Array<"__header" | ConversationPageKey> = ["__header", "/", "/app/laboratory"];
-const DEFAULT_DEBUG_COPY_BY_PAGE: Record<ConversationPageKey, DebugTranscriptOptions> = {
-  "/": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
-  "/app/laboratory": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
-};
-const DEFAULT_SETUP_UI_BY_PAGE: Record<ConversationPageKey, ConversationSetupUi> = {
-  "/": resolveConversationSetupUi("/", null),
-  "/app/laboratory": resolveConversationSetupUi("/app/laboratory", null),
-};
+const BASE_PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory"];
 const SETTINGS_CARD_WIDTH_BY_PAGE: Record<ConversationPageKey, number> = {
   "/": 360,
   "/app/laboratory": 380,
 };
+function normalizePages(pages: ConversationPageKey[]) {
+  return Array.from(new Set([...BASE_PAGE_KEYS, ...pages.filter(Boolean)])).sort((a, b) => a.localeCompare(b));
+}
 const DEBUG_OUTPUT_MODE_OPTIONS: SelectOption[] = [
   { id: "full", label: "원문(Full)" },
   { id: "summary", label: "요약(Summary, 문제 신호 포함)" },
@@ -346,8 +341,8 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/lib/conversation/pageFeaturePolicy.ts",
       "src/lib/conversation/client/useHeroPageController.ts",
       "src/lib/conversation/client/useLaboratoryPageController.ts",
-      "src/components/conversation/HeroModelCard.tsx",
-      "src/components/conversation/LaboratoryModelCard.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "Provider 선택 UI 노출과 요청 payload 포함 여부를 제어합니다.",
     usedByPages: ["/", "/app/laboratory"],
@@ -359,8 +354,8 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/lib/conversation/pageFeaturePolicy.ts",
       "src/lib/conversation/client/useHeroPageController.ts",
       "src/lib/conversation/client/useLaboratoryPageController.ts",
-      "src/components/conversation/HeroModelCard.tsx",
-      "src/components/conversation/LaboratoryModelCard.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "Action 선택 UI 노출과 요청 payload 포함 여부를 제어합니다.",
     usedByPages: ["/", "/app/laboratory"],
@@ -392,9 +387,9 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     label: "Admin Panel (enabled/selection/logs/messageMeta)",
     files: [
       "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/conversation/ConversationAdminMenu.tsx",
-      "src/components/conversation/LaboratoryConversationPane.tsx",
-      "src/components/conversation/HeroModelCard.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "관리자 메뉴 표시, 선택/로그 토글, 메시지 메타 노출을 제어합니다.",
     usedByPages: ["/", "/app/laboratory"],
@@ -428,9 +423,9 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     label: "Interaction > Quick Replies",
     files: [
       "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/conversation/ConversationReplySelectors.tsx",
-      "src/components/conversation/LaboratoryConversationPane.tsx",
-      "src/components/conversation/HeroModelCard.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "퀵리플라이 렌더/선택/확정 UI를 활성/비활성합니다.",
     usedByPages: ["/", "/app/laboratory"],
@@ -440,9 +435,9 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     label: "Interaction > Product Cards",
     files: [
       "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/conversation/ConversationReplySelectors.tsx",
-      "src/components/conversation/LaboratoryConversationPane.tsx",
-      "src/components/conversation/HeroModelCard.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "카드 렌더/선택/확정 UI를 활성/비활성합니다.",
     usedByPages: ["/", "/app/laboratory"],
@@ -452,8 +447,8 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     label: "Interaction > 입력/전송",
     files: [
       "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/conversation/LaboratoryConversationPane.tsx",
-      "src/components/conversation/HeroModelCard.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "입력창/전송 버튼 자체 노출을 제어합니다.",
     usedByPages: ["/", "/app/laboratory"],
@@ -463,11 +458,11 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     label: "Setup (model/llm/kb/adminKb/mode/route/inlineUserKb/defaults)",
     files: [
       "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/conversation/ConversationSetupFields.tsx",
-      "src/components/conversation/LaboratoryExistingSetup.tsx",
-      "src/components/conversation/LaboratoryNewModelControls.tsx",
-      "src/components/conversation/HeroModelCard.tsx",
-      "src/components/conversation/LaboratoryModelCard.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "페이지별 설정 영역 구성요소(모델/LLM/저장KB/임시KB/AdminKB/모드/Route) 노출과 기본값을 제어하며, 임시KB 샘플 선택 UI에도 공통 반영됩니다.",
     usedByPages: ["/", "/app/laboratory"],
@@ -486,44 +481,60 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
 ];
 
 export function ChatSettingsPanel({ authToken }: Props) {
+  const initialPages = useMemo(() => normalizePages([]), []);
+  const buildInitialDraftByPage = useCallback(
+    (pages: ConversationPageKey[]) =>
+      pages.reduce<Record<ConversationPageKey, ConversationPageFeatures>>((acc, page) => {
+        acc[page] = getDefaultConversationPageFeatures(page);
+        return acc;
+      }, {}),
+    []
+  );
+  const buildInitialDebugByPage = useCallback(
+    (pages: ConversationPageKey[]) =>
+      pages.reduce<Record<ConversationPageKey, DebugTranscriptOptions>>((acc, page) => {
+        acc[page] = { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS };
+        return acc;
+      }, {}),
+    []
+  );
+  const buildInitialSetupUiByPage = useCallback(
+    (pages: ConversationPageKey[], provider: ConversationFeaturesProviderShape | null = null) =>
+      pages.reduce<Record<ConversationPageKey, ConversationSetupUi>>((acc, page) => {
+        acc[page] = resolveConversationSetupUi(page, provider);
+        return acc;
+      }, {}),
+    []
+  );
+  const buildOpenStateByPage = useCallback(
+    (pages: ConversationPageKey[]) =>
+      pages.reduce<Record<ConversationPageKey, boolean>>((acc, page) => {
+        acc[page] = false;
+        return acc;
+      }, {}),
+    []
+  );
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [governanceSaving, setGovernanceSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [governanceConfig, setGovernanceConfig] = useState<GovernanceConfig | null>(null);
-  const [draftByPage, setDraftByPage] = useState<Record<ConversationPageKey, ConversationPageFeatures>>({
-    "/": PAGE_CONVERSATION_FEATURES["/"],
-    "/app/laboratory": PAGE_CONVERSATION_FEATURES["/app/laboratory"],
-  });
+  const [draftByPage, setDraftByPage] = useState<Record<ConversationPageKey, ConversationPageFeatures>>(
+    buildInitialDraftByPage(initialPages)
+  );
   const [debugCopyDraftByPage, setDebugCopyDraftByPage] =
-    useState<Record<ConversationPageKey, DebugTranscriptOptions>>(DEFAULT_DEBUG_COPY_BY_PAGE);
+    useState<Record<ConversationPageKey, DebugTranscriptOptions>>(buildInitialDebugByPage(initialPages));
   const [setupUiByPage, setSetupUiByPage] =
-    useState<Record<ConversationPageKey, ConversationSetupUi>>(DEFAULT_SETUP_UI_BY_PAGE);
-  const [setupExistingDetailsOpenByPage, setSetupExistingDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
-    "/": false,
-    "/app/laboratory": false,
-  });
-  const [setupNewDetailsOpenByPage, setSetupNewDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
-    "/": false,
-    "/app/laboratory": false,
-  });
-  const [debugHeaderDetailsOpenByPage, setDebugHeaderDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
-    "/": false,
-    "/app/laboratory": false,
-  });
-  const [debugTurnDetailsOpenByPage, setDebugTurnDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
-    "/": false,
-    "/app/laboratory": false,
-  });
-  const [debugLogsDetailsOpenByPage, setDebugLogsDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
-    "/": false,
-    "/app/laboratory": false,
-  });
-  const [debugEventDetailsOpenByPage, setDebugEventDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>({
-    "/": false,
-    "/app/laboratory": false,
-  });
+    useState<Record<ConversationPageKey, ConversationSetupUi>>(buildInitialSetupUiByPage(initialPages));
+  const [registeredPages, setRegisteredPages] = useState<ConversationPageKey[]>(initialPages);
+  const [setupExistingDetailsOpenByPage, setSetupExistingDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
+  const [setupNewDetailsOpenByPage, setSetupNewDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
+  const [debugHeaderDetailsOpenByPage, setDebugHeaderDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
+  const [debugTurnDetailsOpenByPage, setDebugTurnDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
+  const [debugLogsDetailsOpenByPage, setDebugLogsDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
+  const [debugEventDetailsOpenByPage, setDebugEventDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
   const [debugFieldExamples, setDebugFieldExamples] = useState<Record<string, unknown>>({});
   const [debugFieldEventTypes, setDebugFieldEventTypes] = useState<string[]>([]);
   const [debugFieldMcpTools, setDebugFieldMcpTools] = useState<string[]>([]);
@@ -535,12 +546,14 @@ export function ChatSettingsPanel({ authToken }: Props) {
   >({});
   const setExpandAll = useCallback(
     (setter: (value: Record<ConversationPageKey, boolean>) => void, next: boolean) => {
-      setter({
-        "/": next,
-        "/app/laboratory": next,
-      });
+      setter(
+        registeredPages.reduce<Record<ConversationPageKey, boolean>>((acc, page) => {
+          acc[page] = next;
+          return acc;
+        }, {})
+      );
     },
-    []
+    [registeredPages]
   );
 
   const headers = useMemo<Record<string, string>>(() => {
@@ -588,26 +601,39 @@ export function ChatSettingsPanel({ authToken }: Props) {
   );
 
   const applyProviderToDraft = useCallback((providerValue?: ConversationFeaturesProviderShape | null) => {
-    const next: Record<ConversationPageKey, ConversationPageFeatures> = {
-      "/": PAGE_CONVERSATION_FEATURES["/"],
-      "/app/laboratory": PAGE_CONVERSATION_FEATURES["/app/laboratory"],
-    };
-    const nextDebug: Record<ConversationPageKey, DebugTranscriptOptions> = {
-      "/": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
-      "/app/laboratory": { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS },
-    };
-    const nextSetupUi: Record<ConversationPageKey, ConversationSetupUi> = {
-      "/": resolveConversationSetupUi("/", providerValue),
-      "/app/laboratory": resolveConversationSetupUi("/app/laboratory", providerValue),
-    };
-    for (const page of PAGE_KEYS) {
-      next[page] = mergeConversationPageFeatures(PAGE_CONVERSATION_FEATURES[page], providerValue?.pages?.[page]);
-      nextDebug[page] = resolvePageConversationDebugOptions(page, providerValue);
-    }
+    const discoveredPages = normalizePages(
+      [
+        ...Object.keys(providerValue?.pages || {}),
+        ...Object.keys(providerValue?.settings_ui?.setup_fields || {}),
+        ...((providerValue?.page_registry || []).map((p) => String(p || "").trim()).filter(Boolean) as string[]),
+      ].filter(Boolean)
+    );
+    const next = discoveredPages.reduce<Record<ConversationPageKey, ConversationPageFeatures>>((acc, page) => {
+      acc[page] = mergeConversationPageFeatures(
+        getDefaultConversationPageFeatures(page),
+        providerValue?.pages?.[page]
+      );
+      return acc;
+    }, {});
+    const nextDebug = discoveredPages.reduce<Record<ConversationPageKey, DebugTranscriptOptions>>((acc, page) => {
+      acc[page] = resolvePageConversationDebugOptions(page, providerValue);
+      return acc;
+    }, {});
+    const nextSetupUi = discoveredPages.reduce<Record<ConversationPageKey, ConversationSetupUi>>((acc, page) => {
+      acc[page] = resolveConversationSetupUi(page, providerValue);
+      return acc;
+    }, {});
+    setRegisteredPages(discoveredPages);
     setDraftByPage(next);
     setDebugCopyDraftByPage(nextDebug);
     setSetupUiByPage(nextSetupUi);
-  }, []);
+    setSetupExistingDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+    setSetupNewDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+    setDebugHeaderDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+    setDebugTurnDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+    setDebugLogsDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+    setDebugEventDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+  }, [buildOpenStateByPage]);
 
   const updatePage = useCallback(
     (page: ConversationPageKey, updater: (prev: ConversationPageFeatures) => ConversationPageFeatures) => {
@@ -624,22 +650,20 @@ export function ChatSettingsPanel({ authToken }: Props) {
   );
 
   const moveSetupField = useCallback(
-    (_page: ConversationPageKey, from: SetupFieldKey, to: SetupFieldKey) => {
+    (page: ConversationPageKey, from: SetupFieldKey, to: SetupFieldKey) => {
       if (from === to) return;
       setSetupUiByPage((prev) => {
-        const baseOrder = [...prev["/"].order];
+        const source = prev[page];
+        if (!source) return prev;
+        const baseOrder = [...source.order];
         const fromIdx = baseOrder.indexOf(from);
         const toIdx = baseOrder.indexOf(to);
         if (fromIdx < 0 || toIdx < 0) return prev;
         const [moved] = baseOrder.splice(fromIdx, 1);
         baseOrder.splice(toIdx, 0, moved);
         return {
-          "/": { ...prev["/"], order: baseOrder, labels: { ...prev["/"].labels } },
-          "/app/laboratory": {
-            ...prev["/app/laboratory"],
-            order: [...baseOrder],
-            labels: { ...prev["/app/laboratory"].labels },
-          },
+          ...prev,
+          [page]: { ...source, order: baseOrder, labels: { ...source.labels } },
         };
       });
     },
@@ -647,22 +671,20 @@ export function ChatSettingsPanel({ authToken }: Props) {
   );
 
   const moveExistingSetupField = useCallback(
-    (_page: ConversationPageKey, from: ExistingSetupFieldKey, to: ExistingSetupFieldKey) => {
+    (page: ConversationPageKey, from: ExistingSetupFieldKey, to: ExistingSetupFieldKey) => {
       if (from === to) return;
       setSetupUiByPage((prev) => {
-        const baseOrder = [...prev["/"].existingOrder];
+        const source = prev[page];
+        if (!source) return prev;
+        const baseOrder = [...source.existingOrder];
         const fromIdx = baseOrder.indexOf(from);
         const toIdx = baseOrder.indexOf(to);
         if (fromIdx < 0 || toIdx < 0) return prev;
         const [moved] = baseOrder.splice(fromIdx, 1);
         baseOrder.splice(toIdx, 0, moved);
         return {
-          "/": { ...prev["/"], existingOrder: baseOrder, existingLabels: { ...prev["/"].existingLabels } },
-          "/app/laboratory": {
-            ...prev["/app/laboratory"],
-            existingOrder: [...baseOrder],
-            existingLabels: { ...prev["/app/laboratory"].existingLabels },
-          },
+          ...prev,
+          [page]: { ...source, existingOrder: baseOrder, existingLabels: { ...source.existingLabels } },
         };
       });
     },
@@ -815,16 +837,22 @@ export function ChatSettingsPanel({ authToken }: Props) {
     void load();
   }, [load]);
 
+  const columnKeys = useMemo<Array<"__header" | ConversationPageKey>>(
+    () => ["__header", ...registeredPages],
+    [registeredPages]
+  );
+
   const handleResetToDefaults = () => {
     applyProviderToDraft(null);
-    setDebugCopyDraftByPage(DEFAULT_DEBUG_COPY_BY_PAGE);
-    setSetupUiByPage(DEFAULT_SETUP_UI_BY_PAGE);
-    setSetupExistingDetailsOpenByPage({ "/": false, "/app/laboratory": false });
-    setSetupNewDetailsOpenByPage({ "/": false, "/app/laboratory": false });
-    setDebugHeaderDetailsOpenByPage({ "/": false, "/app/laboratory": false });
-    setDebugTurnDetailsOpenByPage({ "/": false, "/app/laboratory": false });
-    setDebugLogsDetailsOpenByPage({ "/": false, "/app/laboratory": false });
-    setDebugEventDetailsOpenByPage({ "/": false, "/app/laboratory": false });
+    const pages = normalizePages(registeredPages);
+    setDebugCopyDraftByPage(buildInitialDebugByPage(pages));
+    setSetupUiByPage(buildInitialSetupUiByPage(pages, null));
+    setSetupExistingDetailsOpenByPage(buildOpenStateByPage(pages));
+    setSetupNewDetailsOpenByPage(buildOpenStateByPage(pages));
+    setDebugHeaderDetailsOpenByPage(buildOpenStateByPage(pages));
+    setDebugTurnDetailsOpenByPage(buildOpenStateByPage(pages));
+    setDebugLogsDetailsOpenByPage(buildOpenStateByPage(pages));
+    setDebugEventDetailsOpenByPage(buildOpenStateByPage(pages));
     setError(null);
   };
 
@@ -832,34 +860,41 @@ export function ChatSettingsPanel({ authToken }: Props) {
     setSaving(true);
     setError(null);
     try {
-      const pages: Partial<Record<ConversationPageKey, ConversationPageFeatures>> = {
-        "/": draftByPage["/"],
-        "/app/laboratory": {
-          ...draftByPage["/app/laboratory"],
-          setup: {
-            ...draftByPage["/app/laboratory"].setup,
-            modelSelector: true,
-          },
+      const pagesList = normalizePages(registeredPages);
+      const pages = pagesList.reduce<Partial<Record<ConversationPageKey, ConversationPageFeatures>>>((acc, page) => {
+        if (draftByPage[page]) acc[page] = draftByPage[page];
+        return acc;
+      }, {});
+      const debug_copy = pagesList.reduce<Partial<Record<ConversationPageKey, Partial<DebugTranscriptOptions>>>>(
+        (acc, page) => {
+          if (debugCopyDraftByPage[page]) acc[page] = debugCopyDraftByPage[page];
+          return acc;
         },
-      };
-      const debug_copy: Partial<Record<ConversationPageKey, Partial<DebugTranscriptOptions>>> = {
-        "/": debugCopyDraftByPage["/"],
-        "/app/laboratory": debugCopyDraftByPage["/app/laboratory"],
-      };
-      const setup_fields = {
-        "/": {
-          order: setupUiByPage["/"].order,
-          labels: setupUiByPage["/"].labels,
-          existing_order: setupUiByPage["/"].existingOrder,
-          existing_labels: setupUiByPage["/"].existingLabels,
-        },
-        "/app/laboratory": {
-          order: setupUiByPage["/app/laboratory"].order,
-          labels: setupUiByPage["/app/laboratory"].labels,
-          existing_order: setupUiByPage["/app/laboratory"].existingOrder,
-          existing_labels: setupUiByPage["/app/laboratory"].existingLabels,
-        },
-      };
+        {}
+      );
+      const setup_fields = pagesList.reduce<
+        Partial<
+          Record<
+            ConversationPageKey,
+            {
+              order: SetupFieldKey[];
+              labels: Record<SetupFieldKey, string>;
+              existing_order: ExistingSetupFieldKey[];
+              existing_labels: Record<ExistingSetupLabelKey, string>;
+            }
+          >
+        >
+      >((acc, page) => {
+        const ui = setupUiByPage[page];
+        if (!ui) return acc;
+        acc[page] = {
+          order: ui.order,
+          labels: ui.labels,
+          existing_order: ui.existingOrder,
+          existing_labels: ui.existingLabels,
+        };
+        return acc;
+      }, {});
 
       const res = await fetch("/api/auth-settings/providers", {
         method: "POST",
@@ -869,6 +904,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
           values: {
             pages,
             debug_copy,
+            page_registry: registeredPages,
             settings_ui: {
               setup_fields,
             },
@@ -911,9 +947,26 @@ export function ChatSettingsPanel({ authToken }: Props) {
         </div>
       </Card>
 
+      <Card className="p-4">
+        <div className="text-sm font-semibold text-slate-900">자동 등록된 대화 페이지</div>
+        <div className="mt-1 text-xs text-slate-500">
+          대화 UI(설정 박스/대화 박스)가 로드되면 경로가 자동 등록됩니다.
+        </div>
+        <div className="mt-2 space-y-1">
+          {registeredPages.map((page) => (
+            <div
+              key={`registered-page-${page}`}
+              className="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] text-slate-700"
+            >
+              {page}
+            </div>
+          ))}
+        </div>
+      </Card>
+
       <div className="overflow-x-auto pb-3">
         <div className="flex min-w-full gap-4">
-          {COLUMN_KEYS.map((column) => {
+          {columnKeys.map((column) => {
             const isHeader = column === "__header";
             const page: ConversationPageKey = isHeader ? "/" : column;
             const draft = draftByPage[page];
@@ -942,7 +995,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
                     ? "shrink-0 p-4 [&_.state-controls]:hidden [&_.config-input]:pointer-events-none [&_.config-input]:opacity-70"
                     : "shrink-0 p-4"
                 }
-                style={{ width: `${isHeader ? SETTINGS_CARD_WIDTH_BY_PAGE["/"] : SETTINGS_CARD_WIDTH_BY_PAGE[page]}px` }}
+                style={{ width: `${isHeader ? SETTINGS_CARD_WIDTH_BY_PAGE["/"] : SETTINGS_CARD_WIDTH_BY_PAGE[page] || 380}px` }}
               >
                 <div className="text-sm font-semibold text-slate-900">{isHeader ? "헤더" : page}</div>
                 <div className="mt-1 text-xs text-slate-500">{isHeader ? "코드 정의명/펼침 제어" : "해당 페이지에서 실제 적용될 대화 기능 설정"}</div>
@@ -2193,6 +2246,13 @@ export function ChatSettingsPanel({ authToken }: Props) {
     </div>
   );
 }
+
+
+
+
+
+
+
 
 
 

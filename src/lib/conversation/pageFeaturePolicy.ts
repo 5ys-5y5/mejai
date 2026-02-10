@@ -1,6 +1,6 @@
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 
-export type ConversationPageKey = "/" | "/app/laboratory";
+export type ConversationPageKey = string;
 export type SetupFieldKey =
   | "inlineUserKbInput"
   | "llmSelector"
@@ -127,6 +127,7 @@ export type ConversationPageFeaturesOverride = Partial<ConversationPageFeatures>
 export type ConversationFeaturesProviderShape = {
   pages?: Partial<Record<ConversationPageKey, ConversationPageFeaturesOverride>>;
   debug_copy?: Partial<Record<ConversationPageKey, Partial<DebugTranscriptOptions>>>;
+  page_registry?: ConversationPageKey[];
   settings_ui?: {
     setup_fields?: Partial<
       Record<
@@ -211,7 +212,8 @@ export function resolveConversationSetupUi(
   page: ConversationPageKey,
   providerValue?: ConversationFeaturesProviderShape | null
 ): ConversationSetupUi {
-  const override = providerValue?.settings_ui?.setup_fields?.[page];
+  const resolvedPage = resolveRegisteredPageKey(page, providerValue);
+  const override = providerValue?.settings_ui?.setup_fields?.[resolvedPage];
   return {
     order: normalizeSetupOrder(override?.order),
     labels: {
@@ -331,17 +333,18 @@ export function resolveConversationPageFeatures(
   page: ConversationPageKey,
   providerValue?: ConversationFeaturesProviderShape | null
 ): ConversationPageFeatures {
-  const base = PAGE_CONVERSATION_FEATURES[page];
-  const override = providerValue?.pages?.[page];
+  const resolvedPage = resolveRegisteredPageKey(page, providerValue);
+  const base = getDefaultConversationPageFeatures(resolvedPage);
+  const override = providerValue?.pages?.[resolvedPage];
   return mergeConversationPageFeatures(base, override);
 }
 
 export function isProviderEnabledForPage(page: ConversationPageKey, providerKey: string) {
-  return isEnabledByGate(providerKey, PAGE_CONVERSATION_FEATURES[page].mcp.providers);
+  return isEnabledByGate(providerKey, getDefaultConversationPageFeatures(page).mcp.providers);
 }
 
 export function isToolEnabledForPage(page: ConversationPageKey, toolId: string) {
-  return isEnabledByGate(toolId, PAGE_CONVERSATION_FEATURES[page].mcp.tools);
+  return isEnabledByGate(toolId, getDefaultConversationPageFeatures(page).mcp.tools);
 }
 
 export function isProviderEnabled(providerKey: string, features: ConversationPageFeatures) {
@@ -448,7 +451,7 @@ export function applyConversationFeatureVisibility(
  * 4) 선택형 응답(quickReplies/cards)만 끄고 싶으면:
  *    interaction.quickReplies / productCards = false
  */
-export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, ConversationPageFeatures> = {
+export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures> = {
   "/": {
     mcp: {
       providerSelector: true,
@@ -590,3 +593,28 @@ export const PAGE_CONVERSATION_FEATURES: Record<ConversationPageKey, Conversatio
     },
   },
 };
+
+export function getConversationPageBaseKey(page: ConversationPageKey): "/" | "/app/laboratory" {
+  const normalized = String(page || "").trim();
+  if (normalized === "/") return "/";
+  if (normalized === "/app/laboratory") return "/app/laboratory";
+  return "/";
+}
+
+export function getDefaultConversationPageFeatures(page: ConversationPageKey): ConversationPageFeatures {
+  const exact = PAGE_CONVERSATION_FEATURES[page];
+  if (exact) return exact;
+  return PAGE_CONVERSATION_FEATURES[getConversationPageBaseKey(page)];
+}
+
+export function resolveRegisteredPageKey(
+  page: ConversationPageKey,
+  providerValue?: ConversationFeaturesProviderShape | null
+): ConversationPageKey {
+  const normalized = String(page || "").trim();
+  if (!normalized) return "/";
+  if (providerValue?.pages?.[normalized]) return normalized;
+  if (providerValue?.settings_ui?.setup_fields?.[normalized]) return normalized;
+  if ((providerValue?.page_registry || []).includes(normalized)) return normalized;
+  return normalized;
+}

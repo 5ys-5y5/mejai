@@ -88,7 +88,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onToggleSidebar={toggleSidebar}
         />
 
-        <main className="flex-1 overflow-y-auto pt-[60px]">{renderedChildren}</main>
+        <main className="flex-1 overflow-y-auto pt-[10px]">{renderedChildren}</main>
 
         <HelpPanel />
       </div>

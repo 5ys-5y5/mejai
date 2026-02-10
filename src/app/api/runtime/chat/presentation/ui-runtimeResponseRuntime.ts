@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
-import { deriveQuickRepliesWithTrace, deriveQuickRepliesFromConfig, deriveQuickReplyConfig, deriveRichMessageHtml } from "./ui-responseDecorators";
+import {
+  deriveQuickRepliesWithTrace,
+  deriveQuickRepliesFromConfig,
+  deriveQuickReplyConfig,
+  deriveRichMessageHtml,
+  type RuntimeQuickReplyConfig,
+} from "./ui-responseDecorators";
 import { ENABLE_RUNTIME_TIMING, nowIso, type RuntimeTimingStage } from "../runtime/runtimeSupport";
 import {
   buildRuntimeResponseSchema,
@@ -9,12 +15,20 @@ import {
 } from "./runtimeResponseSchema";
 import { buildRenderPlan } from "../policies/renderPolicy";
 
+type RuntimeContextLike = {
+  supabase: {
+    from: (table: string) => {
+      insert: (value: Record<string, unknown>) => Promise<unknown>;
+    };
+  };
+};
+
 export function createRuntimeResponder(input: {
   runtimeTraceId: string;
   requestStartedAt: number;
   timingStages: RuntimeTimingStage[];
   quickReplyMax: number;
-  getRuntimeContext: () => any;
+  getRuntimeContext: () => RuntimeContextLike | null;
   getCurrentSessionId: () => string | null;
   getLatestTurnId: () => string | null;
   getFirstTurnInSession: () => boolean;
@@ -80,7 +94,7 @@ export function createRuntimeResponder(input: {
         })();
       }
     }
-    const quickReplyConfig =
+    const quickReplyConfig: RuntimeQuickReplyConfig | null =
       payload.quick_reply_config && typeof payload.quick_reply_config === "object"
         ? payload.quick_reply_config
         : null;
@@ -146,20 +160,23 @@ export function createRuntimeResponder(input: {
         }
       })();
     }
-    const responseSchema = buildRuntimeResponseSchema({
-      message: payload.message,
-      quickReplies,
-      quickReplyConfig: (resolvedQuickReplyConfig as any) || null,
-      cards,
-    });
-    const schemaValidation = validateRuntimeResponseSchema(responseSchema);
     const renderPlan = buildRenderPlan({
       message: typeof payload.message === "string" ? payload.message : null,
       quickReplies,
-      quickReplyConfig: (resolvedQuickReplyConfig as any) || null,
+      quickReplyConfig: resolvedQuickReplyConfig || null,
       cards,
       quickReplySource,
     });
+    const responseSchema = buildRuntimeResponseSchema({
+      message: payload.message,
+      quickReplies,
+      quickReplyConfig: resolvedQuickReplyConfig || null,
+      cards,
+      decidedView: renderPlan.view,
+      decidedChoiceMode: renderPlan.selection_mode,
+      decidedUiTypeId: renderPlan.ui_type_id,
+    });
+    const schemaValidation = validateRuntimeResponseSchema(responseSchema);
     return NextResponse.json(
       {
         ...payload,

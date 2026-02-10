@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/apiClient";
 import type { LogBundle } from "@/lib/debugTranscript";
 import type { RuntimeRunResponseLike } from "@/lib/runtimeResponseTranscript";
+import type { CopyPageKey } from "@/lib/transcriptCopyPolicy";
 
 export type RuntimeRunResponse = RuntimeRunResponseLike & {
   session_id: string;
@@ -33,7 +34,7 @@ export async function fetchSessionLogs(sessionId: string, limit = 30) {
 
 export async function fetchTranscriptSnapshot(
   sessionId: string,
-  page: "/" | "/app/laboratory",
+  page: CopyPageKey,
   kind: "conversation" | "issue"
 ) {
   return apiFetch<{
@@ -47,7 +48,7 @@ export async function fetchTranscriptSnapshot(
 
 export async function saveTranscriptSnapshot(input: {
   sessionId: string;
-  page: "/" | "/app/laboratory";
+  page: CopyPageKey;
   kind: "conversation" | "issue";
   transcriptText: string;
   turnId?: string | null;

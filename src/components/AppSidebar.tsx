@@ -9,6 +9,7 @@ import {
   CreditCard,
   HomeIcon,
   Inbox,
+  Palette,
   Phone,
   PhoneCall,
   Route as RouteIcon,
@@ -233,6 +234,13 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
           <SidebarLink to="/app/eval" icon={ClipboardCheck} label="평가/관리" collapsed={collapsed} onClick={onNavigate} />
           <SidebarLink to="/app/kb" icon={Book} label="지식 베이스" collapsed={collapsed} onClick={onNavigate} />
           <SidebarLink to="/app/rules" icon={RouteIcon} label="규칙" collapsed={collapsed} onClick={onNavigate} />
+          <SidebarLink
+            to="/app/design-system"
+            icon={Palette}
+            label="디자인 시스템"
+            collapsed={collapsed}
+            onClick={onNavigate}
+          />
         </SidebarGroup>
 
         <SidebarGroup header="온보딩" collapsed={collapsed}>

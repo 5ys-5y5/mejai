@@ -1,10 +1,22 @@
 import type { RuntimeQuickReply, RuntimeQuickReplyConfig } from "../presentation/ui-responseDecorators";
 import type { RuntimeCard } from "../presentation/runtimeResponseSchema";
+import { RUNTIME_UI_PROMPT_RULES, type RuntimeUiTypeId } from "@/components/design-system/conversation/runtimeUiCatalog";
 
 export type QuickReplySourceType = "explicit" | "config" | "fallback" | "none";
 
+export type PromptKind =
+  | "lead_day"
+  | "intent_disambiguation"
+  | "restock_product_choice"
+  | "restock_subscribe_confirm"
+  | "restock_subscribe_phone"
+  | "restock_post_subscribe"
+  | "restock_alternative_confirm"
+  | null;
+
 export type RenderPlan = {
   view: "text" | "choice" | "cards";
+  ui_type_id: RuntimeUiTypeId;
   enable_quick_replies: boolean;
   enable_cards: boolean;
   quick_reply_source: {
@@ -21,15 +33,7 @@ export type RenderPlan = {
     quick_replies: number;
     cards: number;
   };
-  prompt_kind:
-    | "lead_day"
-    | "intent_disambiguation"
-    | "restock_product_choice"
-    | "restock_subscribe_confirm"
-    | "restock_subscribe_phone"
-    | "restock_post_subscribe"
-    | "restock_alternative_confirm"
-    | null;
+  prompt_kind: PromptKind;
   debug?: {
     policy_version: string;
     quick_replies_count: number;
@@ -53,20 +57,17 @@ export const RENDER_POLICY = {
     cards: 3,
   },
   prompt_rules: {
-    lead_day_prompt_keyword: "예약 알림일을 선택해 주세요",
-    intent_disambiguation_keywords: ["의도 확인", "복수 선택 가능"],
-    min_select_regex: /최소\s*(\d+)/,
-    criteria_map: {
-      lead_day: ["ASK_RESTOCK_SUBSCRIBE_LEAD_DAYS", "restock_subscribe_lead_days"],
-      intent_disambiguation: ["ASK_INTENT_DISAMBIGUATION", "intent_disambiguation"],
-      restock_product_choice: ["ASK_RESTOCK_PRODUCT_CHOICE", "restock_product_choice", "not_in_target_fallback_choice"],
-      restock_subscribe_confirm: ["ASK_RESTOCK_SUBSCRIBE_CONFIRM", "awaiting_subscribe_confirm"],
-      restock_subscribe_phone: ["ASK_RESTOCK_SUBSCRIBE_PHONE", "awaiting_subscribe_phone"],
-      restock_post_subscribe: ["post_subscribe_next_step"],
-      restock_alternative_confirm: ["ASK_ALTERNATIVE_RESTOCK_TARGET_CONFIRM", "awaiting_non_target_alternative_confirm"],
-    },
+    lead_day_prompt_keyword: RUNTIME_UI_PROMPT_RULES.leadDayPromptKeyword,
+    intent_disambiguation_keywords: [...RUNTIME_UI_PROMPT_RULES.intentDisambiguationKeywords],
+    min_select_regex: RUNTIME_UI_PROMPT_RULES.minSelectRegex,
+    criteria_map: RUNTIME_UI_PROMPT_RULES.criteriaMap,
   },
 } as const;
+
+type UiTypeResolve = {
+  uiTypeId: RuntimeUiTypeId;
+  fallbackReason: string | null;
+};
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
@@ -78,38 +79,102 @@ function parseMinSelectFromText(text: string) {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
-function looksLikeLeadDayPrompt(text: string, quickReplies: RuntimeQuickReply[]) {
+function hasLeadDayShape(text: string, quickReplies: RuntimeQuickReply[]) {
   if (!text || quickReplies.length === 0) return false;
   if (text.includes(RENDER_POLICY.prompt_rules.lead_day_prompt_keyword)) return true;
   return quickReplies.every((item) => /^D-\d+$/i.test(String(item.label || "").trim()));
 }
 
-function looksLikeIntentDisambiguationPrompt(text: string, quickReplies: RuntimeQuickReply[]) {
+function hasIntentDisambiguationShape(text: string, quickReplies: RuntimeQuickReply[]) {
   if (!text || quickReplies.length === 0) return false;
   const keywords = RENDER_POLICY.prompt_rules.intent_disambiguation_keywords;
   if (!keywords.every((keyword) => text.includes(keyword))) return false;
   return quickReplies.every((item) => /^\d{1,2}$/.test(String(item.value || "").trim()));
 }
 
+function resolvePromptKindByCriteria(criteria: string): PromptKind {
+  if (!criteria) return null;
+  const map = RENDER_POLICY.prompt_rules.criteria_map;
+  const rules: Array<{ kind: PromptKind; keys: readonly string[] }> = [
+    { kind: "lead_day", keys: map.lead_day },
+    { kind: "intent_disambiguation", keys: map.intent_disambiguation },
+    { kind: "restock_product_choice", keys: map.restock_product_choice },
+    { kind: "restock_subscribe_confirm", keys: map.restock_subscribe_confirm },
+    { kind: "restock_subscribe_phone", keys: map.restock_subscribe_phone },
+    { kind: "restock_post_subscribe", keys: map.restock_post_subscribe },
+    { kind: "restock_alternative_confirm", keys: map.restock_alternative_confirm },
+  ];
+  for (const rule of rules) {
+    if (rule.keys.some((key) => criteria.includes(key))) return rule.kind;
+  }
+  return null;
+}
+
 function resolvePromptKind(
   text: string,
   quickReplies: RuntimeQuickReply[],
   quickReplyConfig: RuntimeQuickReplyConfig | null
-) {
+): PromptKind {
   const criteria = String(quickReplyConfig?.criteria || "").trim();
-  if (criteria) {
-    const map = RENDER_POLICY.prompt_rules.criteria_map;
-    if (map.lead_day.some((key) => criteria.includes(key))) return "lead_day" as const;
-    if (map.intent_disambiguation.some((key) => criteria.includes(key))) return "intent_disambiguation" as const;
-    if (map.restock_product_choice.some((key) => criteria.includes(key))) return "restock_product_choice" as const;
-    if (map.restock_subscribe_confirm.some((key) => criteria.includes(key))) return "restock_subscribe_confirm" as const;
-    if (map.restock_subscribe_phone.some((key) => criteria.includes(key))) return "restock_subscribe_phone" as const;
-    if (map.restock_post_subscribe.some((key) => criteria.includes(key))) return "restock_post_subscribe" as const;
-    if (map.restock_alternative_confirm.some((key) => criteria.includes(key))) return "restock_alternative_confirm" as const;
-  }
-  if (looksLikeLeadDayPrompt(text, quickReplies)) return "lead_day" as const;
-  if (looksLikeIntentDisambiguationPrompt(text, quickReplies)) return "intent_disambiguation" as const;
+  const byCriteria = resolvePromptKindByCriteria(criteria);
+  if (byCriteria) return byCriteria;
+  if (hasLeadDayShape(text, quickReplies)) return "lead_day";
+  if (hasIntentDisambiguationShape(text, quickReplies)) return "intent_disambiguation";
   return null;
+}
+
+function resolveUiType(view: RenderPlan["view"], promptKind: PromptKind): UiTypeResolve {
+  if (view === "cards") {
+    if (promptKind === "restock_product_choice") {
+      return { uiTypeId: "cards.restock_product_choice", fallbackReason: null };
+    }
+    return { uiTypeId: "cards.generic", fallbackReason: `cards:${String(promptKind || "unknown")}` };
+  }
+
+  if (view === "choice") {
+    if (promptKind === "lead_day") return { uiTypeId: "choice.lead_day", fallbackReason: null };
+    if (promptKind === "intent_disambiguation") {
+      return { uiTypeId: "choice.intent_disambiguation", fallbackReason: null };
+    }
+    return { uiTypeId: "choice.generic", fallbackReason: `choice:${String(promptKind || "unknown")}` };
+  }
+
+  return { uiTypeId: "text.default", fallbackReason: "text:default" };
+}
+
+function warnRenderFallback(input: {
+  fallbackReason: string | null;
+  view: RenderPlan["view"];
+  promptKind: PromptKind;
+  quickRepliesCount: number;
+  cardsCount: number;
+}) {
+  if (!input.fallbackReason) return;
+  console.warn(
+    `[renderPolicy:fallback] reason=${input.fallbackReason} view=${input.view} promptKind=${String(
+      input.promptKind
+    )} quickReplies=${input.quickRepliesCount} cards=${input.cardsCount}`
+  );
+}
+
+function isQuickReplySourceAllowed(type: QuickReplySourceType) {
+  if (type === "explicit") return RENDER_POLICY.quick_reply_sources.explicit;
+  if (type === "config") return RENDER_POLICY.quick_reply_sources.config;
+  if (type === "fallback") return RENDER_POLICY.quick_reply_sources.fallback;
+  return false;
+}
+
+function decideView(input: {
+  quickReplies: RuntimeQuickReply[];
+  cards: RuntimeCard[];
+  quickReplySourceType: QuickReplySourceType;
+}): Pick<RenderPlan, "view" | "enable_cards" | "enable_quick_replies"> {
+  const hasImageCards = input.cards.some((card) => String(card?.image_url || "").trim() !== "");
+  const enableCards = hasImageCards;
+  const allowQuickReplies = isQuickReplySourceAllowed(input.quickReplySourceType);
+  const enableQuickReplies = input.quickReplies.length > 0 && allowQuickReplies && !enableCards;
+  const view: RenderPlan["view"] = enableCards ? "cards" : enableQuickReplies ? "choice" : "text";
+  return { view, enable_cards: enableCards, enable_quick_replies: enableQuickReplies };
 }
 
 export function buildRenderPlan(input: {
@@ -122,43 +187,40 @@ export function buildRenderPlan(input: {
   const message = String(input.message || "");
   const quickReplies = Array.isArray(input.quickReplies) ? input.quickReplies : [];
   const cards = Array.isArray(input.cards) ? input.cards : [];
+
   const promptKind = resolvePromptKind(message, quickReplies, input.quickReplyConfig);
-  const fallbackMulti = promptKind === "lead_day" || promptKind === "intent_disambiguation";
-  const selectionMode =
-    input.quickReplyConfig?.selection_mode || (fallbackMulti ? "multi" : "single");
-  const selectionModeSource = input.quickReplyConfig?.selection_mode
-    ? "config"
-    : fallbackMulti
-      ? "prompt"
-      : "default";
-  const minSelect = input.quickReplyConfig?.min_select ?? (fallbackMulti ? parseMinSelectFromText(message) : 1);
-  const minSelectSource = input.quickReplyConfig?.min_select
-    ? "config"
-    : fallbackMulti
-      ? "prompt"
-      : "default";
+  const promptSuggestsMulti = promptKind === "lead_day" || promptKind === "intent_disambiguation";
+
+  const selectionMode = input.quickReplyConfig?.selection_mode || (promptSuggestsMulti ? "multi" : "single");
+  const minSelect = input.quickReplyConfig?.min_select ?? (promptSuggestsMulti ? parseMinSelectFromText(message) : 1);
   const maxSelect = input.quickReplyConfig?.max_select ?? (selectionMode === "multi" ? quickReplies.length : 1);
-  const maxSelectSource = input.quickReplyConfig?.max_select ? "config" : "default";
   const submitFormat = input.quickReplyConfig?.submit_format ?? (selectionMode === "multi" ? "csv" : "single");
+
+  const selectionModeSource = input.quickReplyConfig?.selection_mode ? "config" : promptSuggestsMulti ? "prompt" : "default";
+  const minSelectSource = input.quickReplyConfig?.min_select ? "config" : promptSuggestsMulti ? "prompt" : "default";
+  const maxSelectSource = input.quickReplyConfig?.max_select ? "config" : "default";
   const submitFormatSource = input.quickReplyConfig?.submit_format ? "config" : "default";
 
-  const allowBySource =
-    input.quickReplySource.type === "explicit"
-      ? RENDER_POLICY.quick_reply_sources.explicit
-      : input.quickReplySource.type === "config"
-        ? RENDER_POLICY.quick_reply_sources.config
-        : input.quickReplySource.type === "fallback"
-          ? RENDER_POLICY.quick_reply_sources.fallback
-          : false;
+  const viewDecision = decideView({
+    quickReplies,
+    cards,
+    quickReplySourceType: input.quickReplySource.type,
+  });
 
-  const enableQuickReplies = quickReplies.length > 0 && allowBySource;
-  const enableCards = cards.length > 0;
-  const view: RenderPlan["view"] = enableCards ? "cards" : enableQuickReplies ? "choice" : "text";
+  const resolvedUi = resolveUiType(viewDecision.view, promptKind);
+  warnRenderFallback({
+    fallbackReason: resolvedUi.fallbackReason,
+    view: viewDecision.view,
+    promptKind,
+    quickRepliesCount: quickReplies.length,
+    cardsCount: cards.length,
+  });
 
   return {
-    view,
-    enable_quick_replies: enableQuickReplies,
-    enable_cards: enableCards,
+    view: viewDecision.view,
+    ui_type_id: resolvedUi.uiTypeId,
+    enable_quick_replies: viewDecision.enable_quick_replies,
+    enable_cards: viewDecision.enable_cards,
     quick_reply_source: input.quickReplySource,
     selection_mode: selectionMode === "multi" ? "multi" : "single",
     min_select: clamp(minSelect, 1, Math.max(1, maxSelect)),

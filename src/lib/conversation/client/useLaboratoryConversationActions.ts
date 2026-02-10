@@ -8,6 +8,7 @@ import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 import { saveTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import type { TranscriptMessage, LogBundle } from "@/lib/debugTranscript";
+import type { ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
 
 type ConversationMode = "history" | "edit" | "new";
 type SetupMode = "existing" | "new";
@@ -90,8 +91,9 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
   updateModel: (id: string, updater: (model: TModel) => TModel) => void;
   ensureEditableSession: (target: TModel) => Promise<string | null>;
   isAdminUser: boolean;
+  pageKey?: ConversationPageKey;
 }) {
-  const { models, updateModel, ensureEditableSession, isAdminUser } = params;
+  const { models, updateModel, ensureEditableSession, isAdminUser, pageKey = "/app/laboratory" } = params;
 
   const loadLogs = useCallback(
     async (id: string, messageId: string, sessionIdOverride?: string | null, turnIdOverride?: string | null) => {
@@ -331,7 +333,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
       if (!target) return;
       const activeSessionId = resolveActiveSessionId(target);
       await executeTranscriptCopy({
-        page: "/app/laboratory",
+        page: pageKey,
         kind: "conversation",
         messages: visibleMessages(target),
         selectedMessageIds: target.selectedMessageIds || [],
@@ -347,7 +349,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           if (!activeSessionId) return;
           await saveTranscriptSnapshot({
             sessionId: activeSessionId,
-            page: "/app/laboratory",
+            page: pageKey,
             kind: "conversation",
             transcriptText: text,
             turnId,
@@ -355,7 +357,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         },
       });
     },
-    [models, updateModel]
+    [models, pageKey, updateModel]
   );
 
   const copyIssue = useCallback(
@@ -364,7 +366,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
       if (!target) return;
       const activeSessionId = resolveActiveSessionId(target);
       await executeTranscriptCopy({
-        page: "/app/laboratory",
+        page: pageKey,
         kind: "issue",
         messages: visibleMessages(target),
         selectedMessageIds: target.selectedMessageIds || [],
@@ -379,7 +381,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           if (!activeSessionId) return;
           await saveTranscriptSnapshot({
             sessionId: activeSessionId,
-            page: "/app/laboratory",
+            page: pageKey,
             kind: "issue",
             transcriptText: text,
             turnId,
@@ -387,7 +389,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         },
       });
     },
-    [models, updateModel]
+    [models, pageKey, updateModel]
   );
 
   return {

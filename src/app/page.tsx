@@ -1,6 +1,5 @@
-﻿"use client";
+"use client";
 
-import { Hero } from "@/components/landing/hero";
 import { Features } from "@/components/landing/features";
 import { Process } from "@/components/landing/process";
 import { Comparison } from "@/components/landing/comparison";
@@ -9,8 +8,9 @@ import { ConsolePreview } from "@/components/landing/console-preview";
 import { CTA } from "@/components/landing/cta";
 import { Footer } from "@/components/landing/footer";
 import { motion, useScroll, useSpring } from "framer-motion";
-import { defaultLandingSettings, loadLandingSettings, type LandingSettings } from "@/lib/landingSettings";
-import { useEffect, useState } from "react";
+import { loadLandingSettings, type LandingSettings } from "@/lib/landingSettings";
+import { Suspense, useEffect, useState } from "react";
+import { HeroConversationSurface } from "@/components/design-system/conversation/ConversationUI";
 
 export default function LandingPage() {
   const { scrollYProgress } = useScroll();
@@ -19,10 +19,9 @@ export default function LandingPage() {
     damping: 30,
     restDelta: 0.001,
   });
-  const [settings, setSettings] = useState<LandingSettings>(defaultLandingSettings);
+  const [settings, setSettings] = useState<LandingSettings>(() => loadLandingSettings());
 
   useEffect(() => {
-    setSettings(loadLandingSettings());
     const onStorage = (event: StorageEvent) => {
       if (event.key === "mejai_landing_settings_v1") {
         setSettings(loadLandingSettings());
@@ -37,12 +36,11 @@ export default function LandingPage() {
       className="relative bg-white text-black selection:bg-black selection:text-white"
       style={{ fontFamily: settings.landingFontFamily || undefined }}
     >
-      <motion.div
-        className="fixed top-0 left-0 right-0 h-1 bg-black z-[100] origin-left"
-        style={{ scaleX }}
-      />
+      <motion.div className="fixed top-0 left-0 right-0 h-1 bg-black z-[100] origin-left" style={{ scaleX }} />
 
-      <Hero settings={settings} />
+      <Suspense fallback={null}>
+        <HeroConversationSurface />
+      </Suspense>
 
       <div
         className="space-y-0"
@@ -65,3 +63,5 @@ export default function LandingPage() {
     </div>
   );
 }
+
+

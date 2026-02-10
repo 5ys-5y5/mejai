@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/apiClient";
 import {
   applyConversationFeatureVisibility,
-  PAGE_CONVERSATION_FEATURES,
+  getDefaultConversationPageFeatures,
   resolveConversationPageFeatures,
   type ConversationFeaturesProviderShape,
   type ConversationPageFeatures,
@@ -45,13 +45,24 @@ export function useConversationPageFeatures(page: ConversationPageKey, isAdminUs
     };
   }, []);
 
+  useEffect(() => {
+    const normalized = String(page || "").trim();
+    if (!normalized) return;
+    // Auto-register pages that mount conversation blocks so settings can discover them.
+    void fetch("/api/conversation/pages/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ page: normalized }),
+    }).catch(() => undefined);
+  }, [page]);
+
   const features: ConversationPageFeatures = useMemo(() => {
     const resolved = resolveConversationPageFeatures(page, providerValue);
     return applyConversationFeatureVisibility(resolved, isAdminUser);
   }, [isAdminUser, page, providerValue]);
 
   return {
-    defaults: PAGE_CONVERSATION_FEATURES[page],
+    defaults: getDefaultConversationPageFeatures(page),
     features,
     providerValue,
   };
