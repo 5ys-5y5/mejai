@@ -1,4 +1,4 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import "./globals.css";
 import { AppNavbarGate } from "@/components/AppNavbarGate";
 import { Toaster } from "sonner";

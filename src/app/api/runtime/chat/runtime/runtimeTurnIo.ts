@@ -2,6 +2,7 @@ import { readGovernanceConfig } from "../../governance/_lib/config";
 import {
   detectPrincipleViolations,
   type RuntimeEvent,
+  type RuntimeDebugAudit,
   type RuntimeMcpAudit,
   type RuntimeTurn,
 } from "../../governance/_lib/detector";
@@ -102,8 +103,8 @@ export function makeReplyWithDebug(params: MakeReplyParams): {
         llmModel: llmModel || null,
         mcpTools: tools || [],
         mcpProviders: [],
-        mcpLastFunction: "none",
-        mcpLastStatus: "none",
+        mcpLastFunction: "NO_TOOL_CALLED:MAKE_REPLY_DEBUG_FALLBACK",
+        mcpLastStatus: "skipped",
         mcpLastError: null,
         mcpLastCount: null,
         mcpLogs: [`make_reply_debug_fallback: ${error instanceof Error ? error.message : String(error)}`],
@@ -155,6 +156,17 @@ function toTurnEventMap(events: RuntimeEvent[]) {
 
 function toTurnMcpMap(rows: RuntimeMcpAudit[]) {
   const map = new Map<string, RuntimeMcpAudit[]>();
+  for (const row of rows) {
+    if (!row.turn_id) continue;
+    const list = map.get(row.turn_id) || [];
+    list.push(row);
+    map.set(row.turn_id, list);
+  }
+  return map;
+}
+
+function toTurnDebugMap(rows: RuntimeDebugAudit[]) {
+  const map = new Map<string, RuntimeDebugAudit[]>();
   for (const row of rows) {
     if (!row.turn_id) continue;
     const list = map.get(row.turn_id) || [];
@@ -355,7 +367,7 @@ async function runRuntimeSelfUpdateReview(params: {
     botContext: { org_id: orgId, stage: "runtime_self_update" },
   });
 
-  const [{ data: turnsData }, { data: eventsData }, { data: mcpData }] = await Promise.all([
+  const [{ data: turnsData }, { data: eventsData }, { data: mcpData }, { data: debugData }] = await Promise.all([
     context.supabase
       .from("D_conv_turns")
       .select("id, session_id, seq, transcript_text, answer_text, final_answer, bot_context, created_at")
@@ -374,14 +386,29 @@ async function runRuntimeSelfUpdateReview(params: {
       .eq("session_id", sessionId)
       .order("created_at", { ascending: false })
       .limit(300),
+    context.supabase
+      .from("F_audit_turn_specs_view")
+      .select("id, session_id, turn_id, seq, prefix_json, created_at")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: false })
+      .limit(300),
   ]);
   const turns = ((turnsData || []) as RuntimeTurn[]).reverse();
   const events = (eventsData || []) as RuntimeEvent[];
   const mcpRows = (mcpData || []) as RuntimeMcpAudit[];
+  const debugRows = (debugData || []) as RuntimeDebugAudit[];
   const eventsByTurnId = toTurnEventMap(events);
   const mcpByTurnId = toTurnMcpMap(mcpRows);
+  const debugByTurnId = toTurnDebugMap(debugRows);
   const baseline = getPrincipleBaseline();
-  const detected = detectPrincipleViolations({ turns, eventsByTurnId, mcpByTurnId, baseline });
+  const detected = detectPrincipleViolations({
+    turns,
+    eventsByTurnId,
+    mcpByTurnId,
+    debugByTurnId,
+    sessionEvents: events,
+    baseline,
+  });
   const duplicateViolation = buildDuplicateAnswerViolation(turns, turnId);
   const scoped = detected.filter((item) => String(item.turn_id) === turnId) as Array<{
     violation_id: string;

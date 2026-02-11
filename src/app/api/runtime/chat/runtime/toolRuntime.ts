@@ -756,6 +756,20 @@ export async function emitPreMcpDecisionEvent(input: {
     policyContext,
     maskPhone,
   } = input;
+  const conversation =
+    policyContext.conversation && typeof policyContext.conversation === "object"
+      ? (policyContext.conversation as Record<string, unknown>)
+      : {};
+  const flags =
+    conversation.flags && typeof conversation.flags === "object"
+      ? (conversation.flags as Record<string, unknown>)
+      : {};
+  const blockedByMissingSlots = Boolean(flags.intent_scope_gate_blocked);
+  const missingSlots = Array.isArray(flags.intent_scope_missing_slots) ? flags.intent_scope_missing_slots : [];
+  const resolvedSlots =
+    flags.intent_scope_resolved_slots && typeof flags.intent_scope_resolved_slots === "object"
+      ? (flags.intent_scope_resolved_slots as Record<string, unknown>)
+      : {};
 
   await insertEvent(
     context,
@@ -778,6 +792,9 @@ export async function emitPreMcpDecisionEvent(input: {
       allowed: Array.from(allowed),
       allowed_tool_names: Array.from(allowedToolNames),
       policy_conflicts: activePolicyConflicts,
+      blocked_by_missing_slots: blockedByMissingSlots,
+      missing_slots: missingSlots,
+      resolved_slots: resolvedSlots,
       entity: {
         order_id: resolvedOrderId || null,
         phone_masked:

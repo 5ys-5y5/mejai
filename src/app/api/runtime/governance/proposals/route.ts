@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { ensureGovernanceReadAccess } from "../_lib/access";
 import { readGovernanceConfig } from "../_lib/config";
 import { SELF_HEAL_PRINCIPLES } from "../selfHeal/principles";
+import {
+  SELF_HEAL_RULE_CATALOG,
+  buildRuleDrivenScenarioMatrix,
+  buildRuleDrivenViolationMap,
+} from "../selfHeal/ruleCatalog";
 
 type ProposalStatus = "proposed" | "approved" | "rejected" | "on_hold" | "applied" | "failed";
 
@@ -228,28 +233,10 @@ export async function GET(req: NextRequest) {
     )
   );
   if (proposalTurnIds.length > 0) {
-    const runtimeEventTypes = [
-      "FINAL_ANSWER_READY",
-      "RUNTIME_SELF_UPDATE_REVIEW_COMPLETED",
-      "RUNTIME_SELF_UPDATE_REVIEW_STARTED",
-      "PRE_MCP_DECISION",
-      "SLOT_EXTRACTED",
-      "POLICY_STATIC_CONFLICT",
-      "ORDER_CHOICES_PRESENTED",
-      "QUICK_REPLY_RULE_DECISION",
-      "EXECUTION_GUARD_TRIGGERED",
-      "ADDRESS_CANDIDATES_PRESENTED",
-      "ADDRESS_SEARCH_COMPLETED",
-      "ADDRESS_SEARCH_STARTED",
-      "POLICY_DECISION",
-      "ADDRESS_CANDIDATE_SELECTED",
-      "MCP_CALL_SKIPPED",
-    ];
     const { data: runtimeRows, error: runtimeRowsError } = await access.supabaseAdmin
       .from("F_audit_events")
       .select("id, session_id, turn_id, event_type, payload, bot_context, created_at")
       .in("turn_id", proposalTurnIds)
-      .in("event_type", runtimeEventTypes)
       .order("created_at", { ascending: true })
       .limit(Math.max(500, proposalTurnIds.length * 30));
     let effectiveRuntimeRows = (runtimeRows || []) as EventRow[];
@@ -260,7 +247,6 @@ export async function GET(req: NextRequest) {
           .from("F_audit_events")
           .select("id, session_id, turn_id, event_type, payload, bot_context, created_at")
           .eq("turn_id", turnId)
-          .in("event_type", runtimeEventTypes)
           .order("created_at", { ascending: true })
           .limit(60);
         fallbackRows.push(...(((oneTurnRows || []) as EventRow[])));
@@ -338,6 +324,12 @@ export async function GET(req: NextRequest) {
     .sort((a, b) => Date.parse(String(b.created_at || "")) - Date.parse(String(a.created_at || "")))
     .slice(0, limit);
 
+  const catalogPrincipleKeys = new Set(SELF_HEAL_RULE_CATALOG.map((rule) => String(rule.principleKey || "")));
+  const principleEntries = Object.entries(SELF_HEAL_PRINCIPLES.principle || {}).filter(([, value]) =>
+    catalogPrincipleKeys.has(String(value?.key || ""))
+  );
+  const catalogPrinciples = Object.fromEntries(principleEntries);
+
   return NextResponse.json({
     ok: true,
     proposals,
@@ -345,11 +337,12 @@ export async function GET(req: NextRequest) {
     viewer: { is_admin: access.isAdmin },
     self_heal_map: {
       registry: SELF_HEAL_PRINCIPLES.registry,
-      principle: SELF_HEAL_PRINCIPLES.principle,
+      principle: catalogPrinciples,
       event: SELF_HEAL_PRINCIPLES.event,
-      violation: SELF_HEAL_PRINCIPLES.violation,
-      evidenceContract: SELF_HEAL_PRINCIPLES.evidenceContract,
-      scenarioMatrix: SELF_HEAL_PRINCIPLES.scenarioMatrix,
+      violation: buildRuleDrivenViolationMap(),
+      evidenceContract: {},
+      scenarioMatrix: buildRuleDrivenScenarioMatrix(),
+      ruleCatalog: SELF_HEAL_RULE_CATALOG,
     },
   });
 }

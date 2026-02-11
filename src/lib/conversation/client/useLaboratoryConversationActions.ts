@@ -330,18 +330,17 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
       const target = models.find((model) => model.id === id);
       if (!target) return;
       const activeSessionId = resolveActiveSessionId(target);
+      const viewMessages = visibleMessages(target);
       await executeTranscriptCopy({
         page: pageKey,
         kind: "conversation",
-        messages: visibleMessages(target),
+        messages: viewMessages,
         selectedMessageIds: target.selectedMessageIds || [],
         messageLogs: target.messageLogs || {},
         enabledOverride,
         conversationDebugOptionsOverride,
         blockedMessage: "이 페이지에서는 대화 복사를 지원하지 않습니다.",
-        prebuiltTextOverride: target.conversationSnapshotText || null,
         onCopiedText: async (text) => {
-          const viewMessages = visibleMessages(target);
           const turnId = resolveSnapshotTurnId(viewMessages, target.selectedMessageIds || []);
           updateModel(id, (model) => ({ ...model, conversationSnapshotText: text }));
           if (!activeSessionId) return;
@@ -363,17 +362,16 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
       const target = models.find((model) => model.id === id);
       if (!target) return;
       const activeSessionId = resolveActiveSessionId(target);
+      const viewMessages = visibleMessages(target);
       await executeTranscriptCopy({
         page: pageKey,
         kind: "issue",
-        messages: visibleMessages(target),
+        messages: viewMessages,
         selectedMessageIds: target.selectedMessageIds || [],
         messageLogs: target.messageLogs || {},
         enabledOverride,
         blockedMessage: "이 페이지에서는 문제 로그 복사를 지원하지 않습니다.",
-        prebuiltTextOverride: target.issueSnapshotText || null,
         onCopiedText: async (text) => {
-          const viewMessages = visibleMessages(target);
           const turnId = resolveSnapshotTurnId(viewMessages, target.selectedMessageIds || []);
           updateModel(id, (model) => ({ ...model, issueSnapshotText: text }));
           if (!activeSessionId) return;

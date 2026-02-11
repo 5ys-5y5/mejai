@@ -38,6 +38,14 @@ export const CHAT_PRINCIPLES = {
     restockPreferKbWhenNoMallNameMatch: true,
     restockNewProductLabel: "신상품",
   },
+  // Intent-scoped slot gate contract.
+  // Promise: do not progress to tool/final-answer stage until required intent slots are resolved.
+  dialogue: {
+    enforceIntentScopedSlotGate: true,
+    blockFinalAnswerUntilRequiredSlotsResolved: true,
+    requireFollowupQuestionForMissingRequiredSlots: true,
+    requireScopeStateTransitionLogging: true,
+  },
   // Address/zipcode resolution contract for shipping address changes.
   address: {
     // Users usually know road/jibun address but not zipcode.
@@ -70,6 +78,7 @@ export const CHAT_PRINCIPLES = {
   audit: {
     requireBeforeAfterOnMutation: true,
     requireFailureBoundaryLogs: true,
+    requireMcpLastFunctionAlwaysRecorded: true,
     mutationTools: ["update_order_shipping_address"] as const,
     mutationEvidenceFields: ["before", "request", "after", "diff"] as const,
     // Generic contract: for every mutating MCP/API call, preserve original entity snapshot
@@ -173,6 +182,26 @@ export function shouldRequireBeforeAfterOnMutation() {
 
 export function shouldRequireFailureBoundaryLogs() {
   return Boolean(CHAT_PRINCIPLES.audit.requireFailureBoundaryLogs);
+}
+
+export function shouldEnforceIntentScopedSlotGate() {
+  return Boolean(CHAT_PRINCIPLES.dialogue.enforceIntentScopedSlotGate);
+}
+
+export function shouldBlockFinalAnswerUntilRequiredSlotsResolved() {
+  return Boolean(CHAT_PRINCIPLES.dialogue.blockFinalAnswerUntilRequiredSlotsResolved);
+}
+
+export function shouldRequireFollowupQuestionForMissingRequiredSlots() {
+  return Boolean(CHAT_PRINCIPLES.dialogue.requireFollowupQuestionForMissingRequiredSlots);
+}
+
+export function shouldRequireScopeStateTransitionLogging() {
+  return Boolean(CHAT_PRINCIPLES.dialogue.requireScopeStateTransitionLogging);
+}
+
+export function shouldRequireMcpLastFunctionAlwaysRecorded() {
+  return Boolean(CHAT_PRINCIPLES.audit.requireMcpLastFunctionAlwaysRecorded);
 }
 
 export function getMutationAuditTools() {

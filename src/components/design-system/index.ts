@@ -45,11 +45,9 @@ export {
 export {
   ConversationSplitLayout,
   ConversationSetupPanel,
-  ConversationChatPanel,
 } from "@/components/design-system/conversation/panels";
 export {
   ConversationSetupBox,
-  ConversationChatBox,
   ConversationAdminMenu,
   ConversationSessionHeader,
   ConversationThread,
@@ -59,8 +57,7 @@ export {
   ConversationModelSetupColumnLego,
   ConversationModelChatColumnLego,
   ConversationModelComposedLego,
-  ConversationModelCard,
-  assembleConversationModelLegos,
+  createConversationModelLegos,
   type ConversationModelSetupColumnLegoProps,
   type ConversationModelChatColumnLegoProps,
   type ConversationModelLegoAssembly,

@@ -169,6 +169,7 @@ export async function GET(req: NextRequest) {
 
     if (bypass) {
       sendOk = true;
+      sendError = "SOLAPI_BYPASS";
     } else if (!from) {
       sendError = "SOLAPI_FROM_MISSING";
     } else {
@@ -211,7 +212,14 @@ export async function GET(req: NextRequest) {
           message_id: row.id,
           product_id: row.product_id,
           lead_day: row.lead_day,
+          external_action_name: "restock_sms_dispatch",
+          external_provider: "solapi",
+          external_ack_required: true,
+          external_ack_received: Boolean(solapiMessageId) && !bypass,
+          external_ack_id: solapiMessageId,
+          provider_response_received: Boolean(solapiMessageId) && !bypass,
           bypass,
+          bypass_reason: bypass ? sendError : null,
           solapi_message_id: solapiMessageId,
           scheduled_for: row.scheduled_for,
         },
@@ -244,6 +252,12 @@ export async function GET(req: NextRequest) {
         message_id: row.id,
         product_id: row.product_id,
         lead_day: row.lead_day,
+        external_action_name: "restock_sms_dispatch",
+        external_provider: "solapi",
+        external_ack_required: true,
+        external_ack_received: false,
+        external_ack_id: null,
+        provider_response_received: false,
         error: sendError || "SEND_FAILED",
         scheduled_for: row.scheduled_for,
       },

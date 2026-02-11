@@ -614,6 +614,7 @@ export async function POST(req: NextRequest) {
       derivedPhone,
       derivedZipcode,
       derivedAddress,
+      prevBotContext: effectivePrevBotContext as Record<string, unknown>,
       context,
       sessionId,
       latestTurnId,

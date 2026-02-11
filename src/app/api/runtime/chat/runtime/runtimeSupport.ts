@@ -145,8 +145,9 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
   const providerConfig = Object.fromEntries(
     Object.entries(payload.providerConfig || {}).filter(([, value]) => Boolean(value))
   );
+  const normalizedLastFunction = resolveMcpLastFunctionValue(payload);
   const mcpLast: Record<string, unknown> = {
-    function: payload.mcpLastFunction || "none",
+    function: normalizedLastFunction,
     status: payload.mcpLastStatus || "none",
     error: payload.mcpLastError || null,
     result_count: payload.mcpLastCount ?? null,
@@ -298,6 +299,7 @@ export function buildDebugPrefix(payload: DebugPayload) {
 
 function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
   const uniq = (items?: string[]) => Array.from(new Set(items || [])).filter(Boolean);
+  const normalizedLastFunction = resolveMcpLastFunctionValue(payload);
   const providerConfig = payload.providerConfig || {};
   const configParts = Object.entries(providerConfig)
     .filter(([, value]) => value)
@@ -306,7 +308,7 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
     { key: "LLM.model", value: payload.llmModel || "-" },
     { key: "MCP.functions", value: uniq(payload.mcpTools).join(", ") || "-" },
     { key: "MCP.provider", value: uniq(payload.mcpProviders).join(", ") || "-" },
-    { key: "MCP.last_function", value: payload.mcpLastFunction || "none" },
+    { key: "MCP.last_function", value: normalizedLastFunction },
     { key: "MCP.last_status", value: payload.mcpLastStatus || "-" },
     { key: "MCP.last_error", value: payload.mcpLastError || "-" },
     { key: "MCP.last_result_count", value: payload.mcpLastCount ?? "-" },
@@ -361,6 +363,19 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
       : [{ key: "MCP.skipped", value: "-" }]),
     { key: "MODE", value: payload.conversationMode || "-" },
   ];
+}
+
+function resolveMcpLastFunctionValue(payload: DebugPayload) {
+  const explicit = String(payload.mcpLastFunction || "").trim();
+  if (explicit && explicit.toLowerCase() !== "none") return explicit;
+  const skipped = Array.isArray(payload.mcpSkipped) ? payload.mcpSkipped.map((v) => String(v || "").trim()).filter(Boolean) : [];
+  if (skipped.length > 0) {
+    const first = skipped[0];
+    return `SKIPPED:${first.slice(0, 80)}`;
+  }
+  const lastStatus = String(payload.mcpLastStatus || "").trim();
+  const suffix = lastStatus ? `:${lastStatus}` : "";
+  return `NO_TOOL_CALLED${suffix}`;
 }
 
 export function buildDebugPrefixJson(payload: DebugPayload) {

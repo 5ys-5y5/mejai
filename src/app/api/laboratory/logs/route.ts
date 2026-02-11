@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 
+const TRANSCRIPT_SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
+
 async function fetchAllRows<T>(
   fetchPage: (from: number, to: number) => Promise<{ data: T[] | null; error: { message?: string } | null }>,
   limit: number
@@ -71,6 +73,7 @@ export async function GET(req: NextRequest) {
           .from("F_audit_events")
           .select("id, event_type, payload, created_at, session_id, turn_id")
           .eq("session_id", sessionId)
+          .neq("event_type", TRANSCRIPT_SNAPSHOT_EVENT_TYPE)
           .order("created_at", { ascending: false })
           .range(from, to),
       limit

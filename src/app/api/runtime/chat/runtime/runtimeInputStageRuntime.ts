@@ -6,6 +6,7 @@ import {
   handleInputForcedResponse,
   reconcileIntentFromInputGate,
 } from "./policyInputRuntime";
+import { buildIntentScopePrompt, evaluateIntentScopeGate } from "./intentScopeGateRuntime";
 
 type ContextResolutionResult = {
   contaminationSummaries: string[];
@@ -27,6 +28,7 @@ export async function runInputStageRuntime(input: {
   derivedPhone: string | null;
   derivedZipcode: string | null;
   derivedAddress: string | null;
+  prevBotContext: Record<string, unknown>;
   context: any;
   sessionId: string;
   latestTurnId: string | null;
@@ -56,6 +58,7 @@ export async function runInputStageRuntime(input: {
     derivedPhone,
     derivedZipcode,
     derivedAddress,
+    prevBotContext,
     context,
     sessionId,
     latestTurnId,
@@ -142,6 +145,14 @@ export async function runInputStageRuntime(input: {
     policyContext,
     activePolicyConflicts,
   });
+  const gate = evaluateIntentScopeGate({
+    resolvedIntent,
+    message,
+    effectiveMessageForIntent,
+    policyEntity: (policyContext.entity || {}) as Record<string, unknown>,
+    prevBotContext,
+    expectedInput,
+  });
   await emitSlotExtracted({
     insertEvent,
     context,
@@ -158,7 +169,193 @@ export async function runInputStageRuntime(input: {
     resolvedOrderId,
     policyContext,
     maskPhone,
+    resolvedSlots: gate.resolved_slots,
+    missingSlots: gate.missing_slots,
   });
+
+  await insertEvent(
+    context,
+    sessionId,
+    latestTurnId,
+    "INTENT_SCOPE_GATE_REVIEW_STARTED",
+    {
+      intent: resolvedIntent,
+      expected_input: expectedInput || null,
+      query_source:
+        effectiveMessageForIntent !== message
+          ? "intent_disambiguation_source_text"
+          : "current_message",
+    },
+    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+  );
+  if (gate.enabled) {
+    if (gate.missing_slots.length > 0 && gate.spec) {
+      const conversation =
+        policyContext.conversation && typeof policyContext.conversation === "object"
+          ? (policyContext.conversation as Record<string, unknown>)
+          : {};
+      const flags =
+        conversation.flags && typeof conversation.flags === "object"
+          ? (conversation.flags as Record<string, unknown>)
+          : {};
+      policyContext = {
+        ...policyContext,
+        conversation: {
+          ...conversation,
+          flags: {
+            ...flags,
+            intent_scope_gate_blocked: true,
+            intent_scope_missing_slots: gate.missing_slots,
+            intent_scope_resolved_slots: gate.resolved_slots,
+          },
+        },
+      };
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_DECISION",
+        {
+          stage: "input",
+          action: "INTENT_SCOPE_GATE_BLOCKED",
+          intent: resolvedIntent,
+          required_slots: gate.spec.required_slots,
+          resolved_slots: gate.resolved_slots,
+          missing_slots: gate.missing_slots,
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+      );
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_DECISION",
+        {
+          stage: "input",
+          action: "ASK_SCOPE_SLOT",
+          intent: resolvedIntent,
+          ask_action: gate.spec.ask_action,
+          prompt_template_key: gate.spec.slot_prompt_template_key,
+          expected_input: gate.spec.expected_input,
+          missing_slots: gate.missing_slots,
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+      );
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "PRE_MCP_DECISION",
+        {
+          intent: resolvedIntent,
+          query_source:
+            effectiveMessageForIntent !== message
+              ? "intent_disambiguation_source_text"
+              : "current_message",
+          query_text:
+            effectiveMessageForIntent !== message
+              ? effectiveMessageForIntent
+              : message,
+          forced_calls: [],
+          final_calls: [],
+          blocked_by_missing_slots: true,
+          resolved_slots: gate.resolved_slots,
+          missing_slots: gate.missing_slots,
+          entity: {
+            order_id: resolvedOrderId || null,
+            phone_masked:
+              typeof policyContext.entity?.phone === "string" ? maskPhone(policyContext.entity.phone) : "-",
+            has_address: Boolean(policyContext.entity?.address),
+          },
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+      );
+      const prompt = buildIntentScopePrompt({
+        spec: gate.spec,
+      });
+      const reply = makeReply(prompt);
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: policyContext.entity,
+          intent_scope_pending: true,
+          intent_scope_missing_slots: gate.missing_slots,
+          expected_input: gate.spec.expected_input,
+          mcp_actions: mcpActions,
+        },
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "INTENT_SCOPE_GATE_REVIEW_COMPLETED",
+        {
+          intent: resolvedIntent,
+          blocked: true,
+          required_slots: gate.spec.required_slots,
+          resolved_slots: gate.resolved_slots,
+          missing_slots: gate.missing_slots,
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+      );
+      return {
+        response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
+      };
+    }
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "POLICY_DECISION",
+      {
+        stage: "input",
+        action: "SCOPE_READY",
+        intent: resolvedIntent,
+        required_slots: gate.spec?.required_slots || [],
+        resolved_slots: gate.resolved_slots,
+      },
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+    );
+    const conversation =
+      policyContext.conversation && typeof policyContext.conversation === "object"
+        ? (policyContext.conversation as Record<string, unknown>)
+        : {};
+    const flags =
+      conversation.flags && typeof conversation.flags === "object"
+        ? (conversation.flags as Record<string, unknown>)
+        : {};
+    policyContext = {
+      ...policyContext,
+      conversation: {
+        ...conversation,
+        flags: {
+          ...flags,
+          intent_scope_gate_blocked: false,
+          intent_scope_missing_slots: gate.missing_slots,
+          intent_scope_resolved_slots: gate.resolved_slots,
+        },
+      },
+    };
+  }
+  await insertEvent(
+    context,
+    sessionId,
+    latestTurnId,
+    "INTENT_SCOPE_GATE_REVIEW_COMPLETED",
+    {
+      intent: resolvedIntent,
+      blocked: false,
+      required_slots: gate.spec?.required_slots || [],
+      resolved_slots: gate.resolved_slots,
+      missing_slots: gate.missing_slots,
+    },
+    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+  );
 
   const forcedInputResponse = await handleInputForcedResponse({
     forcedResponse: inputGate.actions.forcedResponse,

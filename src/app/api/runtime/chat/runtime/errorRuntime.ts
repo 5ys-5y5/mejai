@@ -65,7 +65,7 @@ export async function handleRuntimeError(input: Record<string, any>) {
           llmModel: null,
           mcpTools: [],
           mcpProviders: [],
-          mcpLastFunction: "none",
+          mcpLastFunction: "NO_TOOL_CALLED:ERROR_PATH",
           mcpLastStatus: "error",
           mcpLastError: errorMessage || "INTERNAL_ERROR",
           mcpLastCount: null,

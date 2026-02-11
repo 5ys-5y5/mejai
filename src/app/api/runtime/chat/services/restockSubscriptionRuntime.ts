@@ -188,12 +188,57 @@ export async function saveRestockSubscriptionLite(context: any, input: RestockSu
   }
 
   const ids = Array.isArray(data) ? data.map((row) => String((row as any)?.id || "").trim()).filter(Boolean) : [];
+  const nowIso = new Date().toISOString();
+  const runtimeTurnId = String((context as any)?.runtimeTurnId || "").trim() || null;
+  const insertDispatchAuditEvent = async (eventType: string, payload: Record<string, unknown>) => {
+    try {
+      await context.supabase.from("F_audit_events").insert({
+        session_id: sessionId,
+        turn_id: runtimeTurnId,
+        event_type: eventType,
+        payload,
+        created_at: new Date().toISOString(),
+        bot_context: { intent_name: input.intentName || "restock_subscribe" },
+      });
+    } catch {
+      // Audit write should never break subscribe flow.
+    }
+  };
+  const insertDeliveryOutcomeEvent = async (
+    eventType: "RESTOCK_SMS_SENT" | "RESTOCK_SMS_SCHEDULED" | "RESTOCK_SMS_FAILED" | "RESTOCK_SMS_SCHEDULE_FAILED",
+    payload: Record<string, unknown>
+  ) => {
+    try {
+      await context.supabase.from("F_audit_events").insert({
+        session_id: sessionId,
+        turn_id: runtimeTurnId,
+        event_type: eventType,
+        payload,
+        created_at: new Date().toISOString(),
+        bot_context: { intent_name: input.intentName || "restock_subscribe" },
+      });
+    } catch {
+      // Outcome audit write should not break flow.
+    }
+  };
+  await insertDispatchAuditEvent("RESTOCK_SUBSCRIBE_DISPATCH_STARTED", {
+    notification_ids: ids,
+    scheduled_count: rows.length,
+    channel,
+    external_action_name: "restock_sms_dispatch",
+    external_provider: "solapi",
+    external_ack_required: true,
+    bypass_enabled: String(process.env.SOLAPI_BYPASS || "").trim().toLowerCase(),
+  });
 
   // Immediately send or schedule via Solapi when possible.
   const bypass = String(process.env.SOLAPI_BYPASS || "").trim().toLowerCase();
   const bypassEnabled = bypass === "1" || bypass === "true" || bypass === "y" || bypass === "yes";
   const from = readEnvValue("SOLAPI_FROM");
-  const nowIso = new Date().toISOString();
+  let sentCount = 0;
+  let scheduledCount = 0;
+  let failedCount = 0;
+  const outcomes: Array<{ id: string; status: string; reason: string | null }> = [];
 
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
@@ -226,10 +271,11 @@ export async function saveRestockSubscriptionLite(context: any, input: RestockSu
       }
     }
     if (sendOk) {
+      const scheduledStatus = scheduledAt ? "scheduled" : "sent";
       await context.supabase
         .from("E_ops_notification_messages")
         .update({
-          status: scheduledAt ? "scheduled" : "sent",
+          status: scheduledStatus,
           attempts: 1,
           sent_at: scheduledAt ? null : nowIso,
           last_error: bypassEnabled ? sendError : null,
@@ -239,6 +285,25 @@ export async function saveRestockSubscriptionLite(context: any, input: RestockSu
           updated_at: nowIso,
         })
         .eq("id", id);
+      if (scheduledAt) scheduledCount += 1;
+      else sentCount += 1;
+      outcomes.push({ id, status: scheduledStatus, reason: bypassEnabled ? sendError : null });
+      await insertDeliveryOutcomeEvent(scheduledAt ? "RESTOCK_SMS_SCHEDULED" : "RESTOCK_SMS_SENT", {
+        message_id: id,
+        notification_id: id,
+        channel: row.channel,
+        external_action_name: "restock_sms_dispatch",
+        external_provider: "solapi",
+        external_ack_required: true,
+        external_ack_received: Boolean(solapiMessageId) && !bypassEnabled,
+        external_ack_id: solapiMessageId,
+        provider_response_received: Boolean(solapiMessageId) && !bypassEnabled,
+        phone_masked: row.phone ? `${String(row.phone).slice(0, 3)}****${String(row.phone).slice(-4)}` : null,
+        scheduled_for: row.scheduled_for || null,
+        bypass: bypassEnabled,
+        bypass_reason: bypassEnabled ? sendError : null,
+        solapi_message_id: solapiMessageId,
+      });
     } else if (sendError) {
       await context.supabase
         .from("E_ops_notification_messages")
@@ -251,8 +316,39 @@ export async function saveRestockSubscriptionLite(context: any, input: RestockSu
           updated_at: nowIso,
         })
         .eq("id", id);
+      failedCount += 1;
+      outcomes.push({ id, status: "failed", reason: sendError });
+      await insertDeliveryOutcomeEvent(
+        row.scheduled_for && Date.parse(String(row.scheduled_for)) > Date.now()
+          ? "RESTOCK_SMS_SCHEDULE_FAILED"
+          : "RESTOCK_SMS_FAILED",
+        {
+          message_id: id,
+          notification_id: id,
+          channel: row.channel,
+          external_action_name: "restock_sms_dispatch",
+          external_provider: "solapi",
+          external_ack_required: true,
+          external_ack_received: false,
+          external_ack_id: null,
+          provider_response_received: false,
+          phone_masked: row.phone ? `${String(row.phone).slice(0, 3)}****${String(row.phone).slice(-4)}` : null,
+          scheduled_for: row.scheduled_for || null,
+          error: sendError,
+        }
+      );
     }
   }
+  await insertDispatchAuditEvent("RESTOCK_SUBSCRIBE_DISPATCH_COMPLETED", {
+    notification_ids: ids,
+    sent_count: sentCount,
+    scheduled_count: scheduledCount,
+    failed_count: failedCount,
+    external_action_name: "restock_sms_dispatch",
+    external_provider: "solapi",
+    external_ack_required: true,
+    outcomes,
+  });
 
   return {
     ok: true,

@@ -1,4 +1,4 @@
-﻿export default function EvalPage() {
+export default function EvalPage() {
   return (
     <div className="px-5 md:px-8 py-6">
       <div className="mx-auto w-full max-w-6xl">

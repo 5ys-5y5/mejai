@@ -170,6 +170,8 @@ type NormalizedDebugTranscriptOptions = {
   };
 };
 
+const TRANSCRIPT_SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
+
 function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): NormalizedDebugTranscriptOptions {
   const input = options || {};
   const outputMode = input.outputMode === "summary" ? "summary" : "full";
@@ -385,6 +387,26 @@ function extractDebugText(content: string) {
   return [prefixText, answerText].filter(Boolean).join("\n");
 }
 
+function makeStableJsonKey(value: unknown) {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "__SERIALIZE_FAILED__";
+  }
+}
+
+function dedupeLogsByIdentity<T>(logs: T[], makeIdentity: (log: T) => string) {
+  const seen = new Set<string>();
+  const next: T[] = [];
+  logs.forEach((log) => {
+    const key = makeIdentity(log);
+    if (seen.has(key)) return;
+    seen.add(key);
+    next.push(log);
+  });
+  return next;
+}
+
 function extractCallToolNames(input: unknown) {
   if (!Array.isArray(input)) return [] as string[];
   return input
@@ -479,6 +501,51 @@ function buildIssueSummary(bundle?: LogBundle, turnId?: string | null) {
 
 function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | undefined, options: NormalizedDebugTranscriptOptions) {
   if (!bundle) return "";
+  const debugLogs = dedupeLogsByIdentity(
+    turnId ? (bundle.debug_logs || []).filter((log) => log.turn_id === turnId) : (bundle.debug_logs || []),
+    (log) =>
+      [
+        String(log.id || ""),
+        String(log.turn_id || ""),
+        String(log.created_at || ""),
+        String(log.seq ?? ""),
+        makeStableJsonKey(log.prefix_json || {}),
+      ].join("|")
+  );
+  const mcpLogs = dedupeLogsByIdentity(
+    (bundle.mcp_logs || []).filter((log) => {
+      const isSuccess = String(log.status || "").toLowerCase() === "success" && !readErrorPayload(log.response_payload);
+      if (isSuccess && !options.logs.mcp.includeSuccess) return false;
+      if (!isSuccess && !options.logs.mcp.includeError) return false;
+      return true;
+    }),
+    (log) =>
+      [
+        String(log.id || ""),
+        String(log.turn_id || ""),
+        String(log.created_at || ""),
+        String(log.tool_name || ""),
+        String(log.status || ""),
+        makeStableJsonKey(log.request_payload || {}),
+        makeStableJsonKey(log.response_payload || log.policy_decision || {}),
+      ].join("|")
+  );
+  const allowedEvents = new Set(options.logs.event.allowlist || []);
+  const eventLogs = dedupeLogsByIdentity(
+    (bundle.event_logs || []).filter((log) => {
+      if (String(log.event_type || "").toUpperCase() === TRANSCRIPT_SNAPSHOT_EVENT_TYPE) return false;
+      if (allowedEvents.size === 0) return true;
+      return allowedEvents.has(String(log.event_type || "").toUpperCase());
+    }),
+    (log) =>
+      [
+        String(log.id || ""),
+        String(log.turn_id || ""),
+        String(log.created_at || ""),
+        String(log.event_type || ""),
+        makeStableJsonKey(log.payload || {}),
+      ].join("|")
+  );
   if (options.outputMode === "summary") {
     const lines: string[] = [];
     if (bundle.logsError) lines.push(`MCP 로그 오류: ${bundle.logsError}`);
@@ -491,9 +558,6 @@ function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | 
       lines.push("- 명시적 오류 신호 없음");
     }
 
-    const debugLogs = turnId
-      ? (bundle.debug_logs || []).filter((log) => log.turn_id === turnId)
-      : (bundle.debug_logs || []);
     if (options.logs.debug.enabled && debugLogs.length > 0) {
       lines.push("DEBUG 로그(요약):");
       debugLogs.forEach((log) => {
@@ -505,12 +569,6 @@ function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | 
       });
     }
 
-    const mcpLogs = (bundle.mcp_logs || []).filter((log) => {
-      const isSuccess = String(log.status || "").toLowerCase() === "success" && !readErrorPayload(log.response_payload);
-      if (isSuccess && !options.logs.mcp.includeSuccess) return false;
-      if (!isSuccess && !options.logs.mcp.includeError) return false;
-      return true;
-    });
     if (options.logs.mcp.enabled && mcpLogs.length > 0) {
       lines.push("MCP 로그(요약):");
       mcpLogs.forEach((log) => {
@@ -519,11 +577,6 @@ function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | 
       });
     }
 
-    const allowedEvents = new Set(options.logs.event.allowlist || []);
-    const eventLogs = (bundle.event_logs || []).filter((log) => {
-      if (allowedEvents.size === 0) return true;
-      return allowedEvents.has(String(log.event_type || "").toUpperCase());
-    });
     if (options.logs.event.enabled && eventLogs.length > 0) {
       lines.push("이벤트 로그(요약):");
       eventLogs.forEach((log) => {
@@ -540,9 +593,6 @@ function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | 
   if (bundle.logsError) {
     lines.push(`MCP 로그 오류: ${bundle.logsError}`);
   }
-  const debugLogs = turnId
-    ? (bundle.debug_logs || []).filter((log) => log.turn_id === turnId)
-    : (bundle.debug_logs || []);
   if (options.logs.debug.enabled && debugLogs.length > 0) {
     lines.push("DEBUG 로그:");
     debugLogs.forEach((log) => {
@@ -558,12 +608,6 @@ function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | 
     lines.push("문제 요약:");
     summary.forEach((item) => lines.push(`- ${item}`));
   }
-  const mcpLogs = (bundle.mcp_logs || []).filter((log) => {
-    const isSuccess = String(log.status || "").toLowerCase() === "success" && !readErrorPayload(log.response_payload);
-    if (isSuccess && !options.logs.mcp.includeSuccess) return false;
-    if (!isSuccess && !options.logs.mcp.includeError) return false;
-    return true;
-  });
   if (options.logs.mcp.enabled && mcpLogs.length > 0) {
     lines.push("MCP 로그:");
     mcpLogs.forEach((log) => {
@@ -581,11 +625,6 @@ function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | 
       }
     });
   }
-  const allowedEvents = new Set(options.logs.event.allowlist || []);
-  const eventLogs = (bundle.event_logs || []).filter((log) => {
-    if (allowedEvents.size === 0) return true;
-    return allowedEvents.has(String(log.event_type || "").toUpperCase());
-  });
   if (options.logs.event.enabled && eventLogs.length > 0) {
     lines.push("이벤트 로그:");
     eventLogs.forEach((log) => {
@@ -637,8 +676,12 @@ function formatIssueBundle(bundle?: LogBundle, turnId?: string | null) {
     });
   }
   if ((bundle.event_logs || []).length > 0) {
+    const eventLogs = (bundle.event_logs || []).filter(
+      (log) => String(log.event_type || "").toUpperCase() !== TRANSCRIPT_SNAPSHOT_EVENT_TYPE
+    );
+    if (eventLogs.length === 0) return lines.join("\n");
     lines.push("이벤트 로그:");
-    (bundle.event_logs || []).forEach((log) => {
+    eventLogs.forEach((log) => {
       const turnLabel = log.turn_id || turnId || "-";
       const safePayload = sanitizeEventPayloadForDisplay(log.event_type, log.payload || {});
       lines.push(`- ${log.id || "-"} ${log.event_type} (${log.created_at || "-"}) (turn_id=${turnLabel})`);
@@ -1043,12 +1086,7 @@ export function buildDebugTranscript(input: {
     ].join("\n\n");
     const tokenUsedPrefix = normalized.turn.tokenUsed ? "[TOKEN_USED]\n\n" : "";
     const unusedLines = normalized.turn.enabled && normalized.turn.tokenUnused ? ["[TOKEN_UNUSED]"].join("\n") : "";
-    const logText =
-      normalized.outputMode === "summary"
-        ? formatLogBundle(input.messageLogs[msg.id], msg.turnId, normalized)
-        : normalized.logs.enabled
-          ? formatLogBundle(input.messageLogs[msg.id], msg.turnId, normalized)
-          : "";
+    const logText = normalized.logs.enabled ? formatLogBundle(input.messageLogs[msg.id], msg.turnId, normalized) : "";
     const turnId = normalized.turn.enabled && normalized.turn.turnId ? (msg.turnId ? `TURN_ID: ${msg.turnId}` : "TURN_ID: -") : "";
     const tail = logText ? `\n${logText}` : "";
     const bodyCore = `${tokenUsedPrefix}${turnBody}`;

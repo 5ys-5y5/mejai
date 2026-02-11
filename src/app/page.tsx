@@ -1,5 +1,6 @@
-﻿"use client";
+"use client";
 
+import { Loader2 } from "lucide-react";
 import { Features } from "@/components/landing/features";
 import { Process } from "@/components/landing/process";
 import { Comparison } from "@/components/landing/comparison";
@@ -9,7 +10,7 @@ import { CTA } from "@/components/landing/cta";
 import { Footer } from "@/components/landing/footer";
 import { MatrixRainBackground } from "@/components/landing/matrix-rain-background";
 import {
-  assembleConversationModelLegos,
+  createConversationModelLegos,
   ConversationModelChatColumnLego,
   ConversationModelSetupColumnLego,
 } from "@/components/design-system";
@@ -84,25 +85,30 @@ function LandingConversationAssembly() {
         <div className="px-5 md:px-8 py-6">
           <div className="mx-auto w-full max-w-6xl">
             <div className="mt-6 space-y-6" data-lego="ConversationModelColumns">
-              {ctrl.loading ? <div className="text-sm text-slate-500">데이터를 불러오는 중...</div> : null}
+              {ctrl.loading ? (
+                <div className="flex items-center justify-center gap-3 text-sm text-slate-600">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <span>로딩 중: {ctrl.loadingHints.join(", ")}</span>
+                </div>
+              ) : null}
               {ctrl.error ? <div className="text-sm text-rose-600">{ctrl.error}</div> : null}
               {!ctrl.loading && !ctrl.error
-                  ? ctrl.models.map((model, index) => {
-                    const assembled = assembleConversationModelLegos(createModelProps(model, index));
+                ? ctrl.models.map((model, index) => {
+                  const assembled = createConversationModelLegos(createModelProps(model, index));
 
-                    return (
-                      <div key={`model-${model.id}`} className="container mx-auto w-full max-w-6xl px-6">
-                        <div className="grid grid-cols-1 gap-[30px] lg:grid-cols-2">
-                          <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden rounded-xl border bg-white">
-                            <ConversationModelSetupColumnLego {...assembled.setupLegoProps} />
-                          </div>
-                          <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden rounded-xl border bg-white">
-                            <ConversationModelChatColumnLego {...assembled.chatLegoProps} />
-                          </div>
+                  return (
+                    <div key={`model-${model.id}`} className="container mx-auto w-full max-w-6xl px-6">
+                      <div className="grid grid-cols-1 gap-[30px] lg:grid-cols-2">
+                        <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden rounded-xl border border-zinc-300 bg-white">
+                          <ConversationModelSetupColumnLego {...assembled.setupLegoProps} />
+                        </div>
+                        <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden rounded-xl border border-zinc-300 bg-white">
+                          <ConversationModelChatColumnLego {...assembled.chatLegoProps} />
                         </div>
                       </div>
-                    );
-                  })
+                    </div>
+                  );
+                })
                 : null}
             </div>
           </div>

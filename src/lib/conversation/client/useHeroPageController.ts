@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { useConversationMcpCatalog } from "@/lib/conversation/client/useConversationMcpCatalog";
 import { useConversationController } from "@/lib/conversation/client/useConversationController";
 import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
+import { isEnabledByGate } from "@/lib/conversation/pageFeaturePolicy";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import {
   appendInlineKbSample,
@@ -52,7 +53,19 @@ export function useHeroPageController() {
       })),
     [mcpTools]
   );
-  const selectedLlm = selectedLlmOverride ?? pageFeatures.setup.defaultLlm;
+  const llmOptions: SelectOption[] = useMemo(
+    () =>
+      ([
+        { id: "chatgpt", label: "ChatGPT" },
+        { id: "gemini", label: "Gemini" },
+      ] as const).filter((option) => isEnabledByGate(option.id, pageFeatures.setup.llms)),
+    [pageFeatures.setup.llms]
+  );
+  const defaultVisibleLlm = (llmOptions[0]?.id as "chatgpt" | "gemini" | undefined) || "chatgpt";
+  const selectedLlm =
+    selectedLlmOverride && llmOptions.some((option) => option.id === selectedLlmOverride)
+      ? selectedLlmOverride
+      : defaultVisibleLlm;
   const effectiveProviderKeys = useMemo(
     () => selectedProviderKeys.filter((key) => providerOptions.some((option) => option.id === key)),
     [providerOptions, selectedProviderKeys]
@@ -116,10 +129,6 @@ export function useHeroPageController() {
     };
   }, [loadPlan.loadInlineKbSamples]);
 
-  const llmOptions: SelectOption[] = [
-    { id: "chatgpt", label: "ChatGPT" },
-    { id: "gemini", label: "Gemini" },
-  ];
   const filteredActionOptions = actionOptions.filter((option) => {
     if (effectiveProviderKeys.length === 0) return false;
     return effectiveProviderKeys.includes(option.group || "");
@@ -171,7 +180,10 @@ export function useHeroPageController() {
     selectedLlm,
     setupUi,
     llmOptions,
-    setSelectedLlm: (value: "chatgpt" | "gemini") => setSelectedLlmOverride(value),
+    setSelectedLlm: (value: "chatgpt" | "gemini") => {
+      if (!llmOptions.some((option) => option.id === value)) return;
+      setSelectedLlmOverride(value);
+    },
     userKb,
     setUserKb,
     inlineKbSamples,

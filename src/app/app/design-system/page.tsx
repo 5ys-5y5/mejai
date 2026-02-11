@@ -23,13 +23,17 @@ import {
   SelectPopover,
   Skeleton,
   StateBanner,
-  ConversationGrid,
-  ConversationQuickReplyButton,
-  ConversationConfirmButton,
-  ConversationProductCard,
   ConversationAdminMenu,
-  ConversationSplitLayout,
+  ConversationModelChatColumnLego,
+  ConversationModelComposedLego,
+  ConversationModelSetupColumnLego,
+  ConversationReplySelectors,
+  ConversationSessionHeader,
+  ConversationSetupBox,
+  ConversationSetupFields,
   ConversationThread,
+  ConversationWorkbenchTopBar,
+  createConversationModelLegos,
   OverlayShell,
   PageActionBarShell,
   SidebarNavigationShell,
@@ -37,6 +41,10 @@ import {
   TypographyScaleShell,
   type SelectOption,
 } from "@/components/design-system";
+import {
+  ConversationExistingSetup,
+  ConversationNewModelControls,
+} from "@/components/design-system/conversation/ConversationUI.parts";
 import * as LucideIcons from "lucide-react";
 import {
   Bot,
@@ -44,7 +52,6 @@ import {
   CheckCircle2,
   Info,
   Layers3,
-  Plus,
   Search,
   Send,
   SlidersHorizontal,
@@ -58,6 +65,16 @@ import {
   RUNTIME_UI_TYPE_HIERARCHY,
   buildIntentDisambiguationTableHtmlFromText,
 } from "@/components/design-system/conversation/runtimeUiCatalog";
+import {
+  getDefaultConversationPageFeatures,
+  resolveConversationSetupUi,
+} from "@/lib/conversation/pageFeaturePolicy";
+import {
+  createDefaultModel,
+  type ChatMessage,
+  type ModelState,
+} from "@/lib/conversation/client/laboratoryPageState";
+import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
 
 type CategoryKey =
   | "all"
@@ -129,11 +146,74 @@ const followupByAgent = new Map<string, number>([
   ["a_restock", 5],
 ]);
 
-type ConversationSampleMessage = {
+const demoAgentGroupOptions: SelectOption[] = [{ id: "grp_restock", label: "재입고 그룹" }];
+const demoLlmOptions: SelectOption[] = [
+  { id: "chatgpt", label: "chatgpt" },
+  { id: "gemini", label: "gemini" },
+];
+const demoKbOptions: SelectOption[] = [
+  { id: "restock", label: "재입고", description: "재입고 문의 응답 KB" },
+  { id: "shipping", label: "배송", description: "배송 정책 KB" },
+];
+const demoAdminKbOptions: SelectOption[] = [
+  { id: "mk2", label: "mk2", description: "운영 관리자 KB" },
+  { id: "mk2_hotfix", label: "mk2_hotfix", description: "긴급 핫픽스 KB" },
+];
+const demoProviderOptions: SelectOption[] = [
+  { id: "cafe24", label: "Cafe24" },
+  { id: "runtime", label: "Runtime" },
+];
+const demoRouteOptions: SelectOption[] = [
+  { id: "core_runtime", label: "Core Runtime" },
+  { id: "laboratory_runtime", label: "Laboratory Runtime" },
+];
+const demoToolOptions: SelectOption[] = [
+  { id: "list_orders", label: "list_orders", description: "주문 목록 조회" },
+  { id: "restock_lite", label: "restock_lite", description: "재입고 런타임 액션" },
+];
+const demoTools = [
+  { id: "list_orders", provider: "cafe24", name: "list_orders", description: "주문 목록 조회" },
+  { id: "restock_lite", provider: "runtime", name: "restock_lite", description: "재입고 런타임 액션" },
+];
+const demoToolById = new Map(demoTools.map((tool) => [tool.id, tool]));
+const demoProviderByKey = new Map<string, { title: string }>([
+  ["cafe24", { title: "Cafe24" }],
+  ["runtime", { title: "Runtime" }],
+]);
+const demoAgentVersionsByGroup = new Map([
+  [
+    "grp_restock",
+    [
+      { id: "agent_v1", name: "재입고 상담 에이전트", version: "v1.2.0", is_active: true },
+      { id: "agent_v0", name: "재입고 상담 에이전트", version: "v1.1.4", is_active: false },
+    ],
+  ],
+]);
+const demoInlineKbSamples: InlineKbSampleItem[] = [
+  { id: "policy-tone", title: "톤앤매너", content: "고객 응대는 공손한 존댓말을 사용합니다." },
+  { id: "policy-return", title: "반품 정책", content: "상품 수령 후 7일 이내 반품 접수가 가능합니다." },
+];
+const demoKbItems = [
+  { id: "restock", title: "재입고", content: "재입고 관련 QA", applies_to_user: true },
+  { id: "mk2", title: "mk2", content: "관리자 전용 지식", applies_to_user: false, is_admin: true },
+];
+
+type ConversationReplyDemoMessage = {
   id: string;
   role: "user" | "bot";
-  content: string;
-  richHtml?: string;
+  quickReplies?: Array<{ label: string; value: string }>;
+  productCards?: Array<{ id: string; value: string; title: string; subtitle?: string; imageUrl?: string }>;
+  renderPlan?: {
+    view: "choice" | "cards" | "text";
+    enable_quick_replies?: boolean;
+    enable_cards?: boolean;
+    selection_mode?: "single" | "multi";
+    interaction_scope?: "latest_only" | "any";
+    grid_columns?: { quick_replies?: number; cards?: number };
+    min_select?: number;
+    max_select?: number;
+    submit_format?: "single" | "csv";
+  };
 };
 
 type DemoSection = {
@@ -141,6 +221,106 @@ type DemoSection = {
   category: Exclude<CategoryKey, "all">;
   node: ReactNode;
 };
+
+type DefinitionCatalogItem = {
+  name: string;
+  sourceLine: number;
+  note: string;
+};
+
+const CONVERSATION_PARTS_FILE = "src/components/design-system/conversation/ConversationUI.parts.tsx";
+const COVERAGE_HIDDEN_NAMES = new Set<string>([
+  "ConversationWorkbenchTopBar",
+  "ConversationSessionHeader",
+  "ConversationSetupBox",
+  "ConversationAdminMenu",
+  "ConversationThread",
+  "ConversationReplySelectors",
+  "ConversationSetupFields",
+  "ConversationExistingSetup",
+  "ConversationNewModelControls",
+  "createConversationModelLegos",
+  "ConversationModelSetupColumnLego",
+  "ConversationModelChatColumnLego",
+  "ConversationModelComposedLego",
+]);
+
+const conversationDefinitionGroups: Array<{ label: string; items: DefinitionCatalogItem[] }> = [
+  {
+    label: "기본 메시지 / 스레드 관련",
+    items: [
+      { name: "BaseMessage", sourceLine: 263, note: "스레드 메시지 최소 타입" },
+      { name: "AvatarSelectionStyle", sourceLine: 265, note: "avatar 표시/선택 스타일 타입" },
+      { name: "ThreadProps", sourceLine: 267, note: "ConversationThread props 계약" },
+    ],
+  },
+  {
+    label: "어드민 메뉴",
+    items: [{ name: "AdminMenuProps", sourceLine: 164, note: "ConversationAdminMenu props 계약" }],
+  },
+  {
+    label: "Reply / Interaction 관련",
+    items: [
+      { name: "QuickReply", sourceLine: 610, note: "quick reply item 타입" },
+      { name: "ProductCard", sourceLine: 611, note: "product card item 타입" },
+      { name: "RenderPlan", sourceLine: 612, note: "응답 렌더 계획 타입(view/selection/grid)" },
+      { name: "ReplyMessageShape", sourceLine: 625, note: "ConversationReplySelectors 메시지 계약" },
+      { name: "ReplyProps", sourceLine: 633, note: "ConversationReplySelectors props 계약" },
+    ],
+  },
+  {
+    label: "Setup(설정) 관련",
+    items: [
+      { name: "SetupFieldsProps", sourceLine: 361, note: "ConversationSetupFields props 계약" },
+      { name: "ConversationExistingMode", sourceLine: 805, note: "existing 모드 타입(history/edit/new)" },
+      { name: "ConversationSetupMode", sourceLine: 806, note: "setup 모드 타입(existing/new)" },
+      { name: "ConversationExistingSetupProps", sourceLine: 808, note: "ConversationExistingSetup props 계약" },
+      { name: "ConversationNewModelControlsProps", sourceLine: 1081, note: "ConversationNewModelControls props 계약" },
+    ],
+  },
+  {
+    label: "Model / Card / Lego 관련",
+    items: [
+      { name: "ConversationModelMode", sourceLine: 1473, note: "Model 대화 모드 타입" },
+      { name: "ConversationModelKbItem", sourceLine: 1474, note: "KB 아이템 타입" },
+      { name: "ConversationModelToolShape", sourceLine: 1483, note: "MCP 도구 타입" },
+      { name: "ConversationModelAgentVersionItem", sourceLine: 1530, note: "에이전트 버전 타입" },
+      { name: "ConversationModelStateLike", sourceLine: 1490, note: "ModelCard 상태 계약" },
+      { name: "ConversationModelCardProps", sourceLine: 1537, note: "ConversationModelCard props 계약" },
+      { name: "ConversationModelSetupColumnLegoProps", sourceLine: 1592, note: "좌측 Setup Lego props 계약" },
+      { name: "ConversationModelChatColumnLegoProps", sourceLine: 1808, note: "우측 Chat Lego props 계약" },
+      { name: "ConversationModelLegoAssembly", sourceLine: 1909, note: "조립 결과 타입(setup/chat/visibleMessages)" },
+    ],
+  },
+  {
+    label: "조립 / 헬퍼 함수",
+    items: [
+      { name: "createConversationModelLegos", sourceLine: 1916, note: "모델 레고용 props/파생 데이터 조립 함수" },
+      { name: "parseLeadDayValue", sourceLine: 647, note: "D-1 같은 값에서 숫자 리드데이 추출" },
+    ],
+  },
+  {
+    label: "내부 전용 컴포넌트",
+    items: [{ name: "AdminBadge", sourceLine: 411, note: "ADMIN 뱃지(ConversationSetupFields 내부 사용)" }],
+  },
+  {
+    label: "UI 컴포넌트",
+    items: [
+      { name: "ConversationSetupBox", sourceLine: 30, note: "설정 패널 래퍼 컴포넌트" },
+      { name: "ConversationSetupFields", sourceLine: 419, note: "설정 필드 조립(LLM/MCP/인라인KB)" },
+      { name: "ConversationExistingSetup", sourceLine: 842, note: "기존 모델 설정 블록" },
+      { name: "ConversationNewModelControls", sourceLine: 1114, note: "신규 모델 설정 블록" },
+      { name: "ConversationModelSetupColumnLego", sourceLine: 1637, note: "모델 좌측 설정 레고" },
+      { name: "ConversationAdminMenu", sourceLine: 181, note: "로그/선택/복사 어드민 메뉴" },
+      { name: "ConversationThread", sourceLine: 283, note: "메시지 스레드 렌더러" },
+      { name: "ConversationReplySelectors", sourceLine: 654, note: "quick reply / cards 선택 및 confirm" },
+      { name: "ConversationModelChatColumnLego", sourceLine: 1843, note: "모델 우측 채팅 레고(단일 채팅 UI 포함)" },
+      { name: "ConversationModelComposedLego", sourceLine: 1893, note: "좌/우 레고 조합 레이아웃" },
+      { name: "ConversationSessionHeader", sourceLine: 96, note: "세션 헤더(세션 ID/삭제/새탭)" },
+      { name: "ConversationWorkbenchTopBar", sourceLine: 48, note: "워크벤치 상태/액션 상단 바" },
+    ],
+  },
+];
 
 function UsedInPages({ pages }: { pages: string[] }) {
   return (
@@ -155,6 +335,285 @@ function UsedInPages({ pages }: { pages: string[] }) {
       </div>
     </div>
   );
+}
+
+function DependencyMeta({
+  type,
+  name,
+  depends,
+  role,
+  returns,
+  definedAt,
+}: {
+  type: string;
+  name: string;
+  depends?: string;
+  role?: string;
+  returns?: string;
+  definedAt?: string;
+}) {
+  return (
+    <div className="mb-2 rounded-lg border border-slate-200 bg-white p-2 text-[11px] text-slate-700">
+      <div>
+        <span className="font-semibold text-slate-900">type:</span> {type}
+      </div>
+      <div>
+        <span className="font-semibold text-slate-900">name:</span> {name}
+      </div>
+      <div>
+        <span className="font-semibold text-slate-900">depends:</span> {depends && depends.trim().length > 0 ? depends : "none"}
+      </div>
+      {returns ? (
+        <div>
+          <span className="font-semibold text-slate-900">returns:</span> {returns}
+        </div>
+      ) : null}
+      {definedAt ? (
+        <div>
+          <span className="font-semibold text-slate-900">defined at:</span> <code>{definedAt}</code>
+        </div>
+      ) : null}
+      {role ? (
+        <div>
+          <span className="font-semibold text-slate-900">role:</span> {role}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function getDefinitionMeta(item: DefinitionCatalogItem, groupLabel: string): {
+  type: string;
+  depends: string;
+  returns?: string;
+} {
+  const byName: Record<string, { type: string; depends: string; returns?: string }> = {
+    ConversationSetupBox: { type: "UI Component", depends: "ConversationSetupPanel" },
+    ConversationWorkbenchTopBar: { type: "UI Component", depends: "none" },
+    ConversationSessionHeader: { type: "UI Component", depends: "none" },
+    ConversationAdminMenu: { type: "UI Component", depends: "AdminMenuProps" },
+    ConversationThread: { type: "UI Component", depends: "BaseMessage, AvatarSelectionStyle, ThreadProps" },
+    ConversationSetupFields: { type: "UI Component", depends: "SetupFieldsProps, AdminBadge" },
+    ConversationReplySelectors: { type: "UI Component", depends: "QuickReply, ProductCard, RenderPlan, ReplyMessageShape, ReplyProps, parseLeadDayValue" },
+    ConversationExistingSetup: { type: "UI Component", depends: "ConversationExistingMode, ConversationSetupMode, ConversationExistingSetupProps" },
+    ConversationNewModelControls: { type: "UI Component", depends: "ConversationNewModelControlsProps" },
+    ConversationModelSetupColumnLego: { type: "UI Component", depends: "ConversationModelSetupColumnLegoProps" },
+    ConversationModelChatColumnLego: { type: "UI Component", depends: "ConversationModelChatColumnLegoProps, ConversationAdminMenu, ConversationThread, ConversationReplySelectors" },
+    ConversationModelComposedLego: { type: "UI Component", depends: "ConversationModelSetupColumnLego, ConversationModelChatColumnLego" },
+    createConversationModelLegos: {
+      type: "Helper Function",
+      depends: "ConversationModelCardProps, model state, feature flags, handler callbacks",
+      returns: "ConversationModelLegoAssembly",
+    },
+    parseLeadDayValue: { type: "Helper Function", depends: "string input format parser", returns: "number | null" },
+    AdminBadge: { type: "Internal Component", depends: "ConversationSetupFields" },
+    BaseMessage: { type: "Type Alias", depends: "ConversationThread" },
+    AvatarSelectionStyle: { type: "Type Alias", depends: "ConversationThread" },
+    ThreadProps: { type: "Type Alias", depends: "ConversationThread" },
+    AdminMenuProps: { type: "Type Alias", depends: "ConversationAdminMenu" },
+    SetupFieldsProps: { type: "Type Alias", depends: "ConversationSetupFields" },
+    ConversationExistingMode: { type: "Type Alias", depends: "ConversationExistingSetup" },
+    ConversationSetupMode: { type: "Type Alias", depends: "ConversationExistingSetup" },
+    ConversationExistingSetupProps: { type: "Type Alias", depends: "ConversationExistingSetup" },
+    ConversationNewModelControlsProps: { type: "Type Alias", depends: "ConversationNewModelControls" },
+    QuickReply: { type: "Type Alias", depends: "ConversationReplySelectors" },
+    ProductCard: { type: "Type Alias", depends: "ConversationReplySelectors" },
+    RenderPlan: { type: "Type Alias", depends: "ConversationReplySelectors" },
+    ReplyMessageShape: { type: "Type Alias", depends: "ConversationReplySelectors" },
+    ReplyProps: { type: "Type Alias", depends: "ConversationReplySelectors" },
+    ConversationModelMode: { type: "Type Alias", depends: "ConversationModelCardProps" },
+    ConversationModelKbItem: { type: "Type Alias", depends: "ConversationModelCardProps" },
+    ConversationModelToolShape: { type: "Type Alias", depends: "ConversationModelCardProps" },
+    ConversationModelStateLike: { type: "Type Alias", depends: "ConversationModelCardProps, createConversationModelLegos" },
+    ConversationModelAgentVersionItem: { type: "Type Alias", depends: "ConversationModelCardProps" },
+    ConversationModelCardProps: { type: "Type Alias", depends: "createConversationModelLegos" },
+    ConversationModelSetupColumnLegoProps: { type: "Type Alias", depends: "ConversationModelSetupColumnLego" },
+    ConversationModelChatColumnLegoProps: { type: "Type Alias", depends: "ConversationModelChatColumnLego" },
+    ConversationModelLegoAssembly: { type: "Type Alias", depends: "createConversationModelLegos" },
+  };
+
+  const found = byName[item.name];
+  if (found) return found;
+  return { type: groupLabel, depends: "none" };
+}
+
+function findConversationDefinition(name: string): { groupLabel: string; item: DefinitionCatalogItem } | null {
+  for (const group of conversationDefinitionGroups) {
+    const item = group.items.find((entry) => entry.name === name);
+    if (item) return { groupLabel: group.label, item };
+  }
+  return null;
+}
+
+function getConversationDepends(name: string): string {
+  const found = findConversationDefinition(name);
+  if (!found) return "";
+  const meta = getDefinitionMeta(found.item, found.groupLabel);
+  return meta.depends || "";
+}
+
+function sortConversationEntries<T extends { name: string }>(items: T[]): T[] {
+  const indexByName = new Map(items.map((item, idx) => [item.name, idx]));
+  const dependsByName = new Map(
+    items.map((item) => [
+      item.name,
+      getConversationDepends(item.name)
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0),
+    ])
+  );
+  const inDegree = new Map<string, number>();
+  const edges = new Map<string, Set<string>>();
+
+  items.forEach((item) => {
+    inDegree.set(item.name, 0);
+    edges.set(item.name, new Set());
+  });
+
+  items.forEach((item) => {
+    const deps = dependsByName.get(item.name) || [];
+    deps.forEach((dep) => {
+      if (!indexByName.has(dep)) return;
+      edges.get(dep)?.add(item.name);
+      inDegree.set(item.name, (inDegree.get(item.name) || 0) + 1);
+    });
+  });
+
+  const queue = items
+    .map((item) => item.name)
+    .filter((name) => (inDegree.get(name) || 0) === 0)
+    .sort((a, b) => (indexByName.get(a) || 0) - (indexByName.get(b) || 0));
+
+  const ordered: string[] = [];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    ordered.push(current);
+    const nextSet = edges.get(current);
+    if (!nextSet) continue;
+    nextSet.forEach((next) => {
+      inDegree.set(next, (inDegree.get(next) || 0) - 1);
+      if ((inDegree.get(next) || 0) === 0) {
+        queue.push(next);
+        queue.sort((a, b) => (indexByName.get(a) || 0) - (indexByName.get(b) || 0));
+      }
+    });
+  }
+
+  if (ordered.length !== items.length) {
+    return items.slice();
+  }
+
+  const byName = new Map(items.map((item) => [item.name, item]));
+  return ordered.map((name) => byName.get(name)!).filter(Boolean);
+}
+
+function renderConversationDefinitionMeta(name: string) {
+  const found = findConversationDefinition(name);
+  if (!found) return <DependencyMeta type="Unknown" name={name} depends="none" />;
+  const meta = getDefinitionMeta(found.item, found.groupLabel);
+  return (
+    <DependencyMeta
+      type={meta.type}
+      name={found.item.name}
+      depends={meta.depends}
+      returns={meta.returns}
+      role={found.item.note}
+      definedAt={`${CONVERSATION_PARTS_FILE}:${found.item.sourceLine}`}
+    />
+  );
+}
+
+
+function formatDemoKstDateTime(value?: string | null) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("ko-KR", { hour12: false, timeZone: "Asia/Seoul" });
+}
+
+function createDemoModelState(): ModelState {
+  const base = createDefaultModel();
+  const historyMessages: ChatMessage[] = [
+    {
+      id: "h1",
+      role: "user",
+      content: "코트 재입고 일정 알려줘",
+    },
+    {
+      id: "h2",
+      role: "bot",
+      content: "옵션을 선택해 주세요.",
+      quickReplies: [
+        { label: "3일 이내", value: "3" },
+        { label: "7일 이내", value: "7" },
+      ],
+      renderPlan: {
+        view: "choice",
+        enable_quick_replies: true,
+        enable_cards: false,
+        interaction_scope: "any",
+        quick_reply_source: { type: "explicit" },
+        selection_mode: "single",
+        min_select: 1,
+        max_select: 1,
+        submit_format: "single",
+        grid_columns: { quick_replies: 2, cards: 2 },
+        prompt_kind: "lead_day",
+      },
+    },
+  ];
+  const messages: ChatMessage[] = [
+    {
+      id: "n1",
+      role: "bot",
+      content: "추천 상품입니다.",
+      productCards: [
+        { id: "p1", value: "1", title: "샘플 상품 A", subtitle: "03/21 입고 예정" },
+        { id: "p2", value: "2", title: "샘플 상품 B", subtitle: "02/28 입고 예정" },
+      ],
+      renderPlan: {
+        view: "cards",
+        enable_quick_replies: false,
+        enable_cards: true,
+        interaction_scope: "any",
+        quick_reply_source: { type: "none" },
+        selection_mode: "single",
+        min_select: 1,
+        max_select: 1,
+        submit_format: "single",
+        grid_columns: { quick_replies: 2, cards: 2 },
+        prompt_kind: "restock_product_choice",
+      },
+    },
+  ];
+  return {
+    ...base,
+    id: "demo-model-1",
+    config: {
+      ...base.config,
+      llm: "chatgpt",
+      kbId: "restock",
+      adminKbIds: ["mk2"],
+      mcpProviderKeys: ["cafe24", "runtime"],
+      mcpToolIds: ["list_orders", "restock_lite"],
+      route: "core_runtime",
+      inlineKb: "고객 톤 가이드를 우선 적용합니다.",
+    },
+    setupMode: "new",
+    selectedAgentGroupId: "grp_restock",
+    selectedAgentId: "agent_v1",
+    sessions: [{ id: "s1", session_code: "sess-demo-001", started_at: "2026-02-11T09:00:00.000Z", agent_id: "agent_v1" }],
+    selectedSessionId: "s1",
+    sessionId: "s1",
+    historyMessages,
+    messages,
+    conversationMode: "new",
+    input: "",
+    adminLogControlsOpen: true,
+    showAdminLogs: true,
+    chatSelectionEnabled: false,
+  };
 }
 
 export default function DesignSystemPage() {
@@ -172,6 +631,8 @@ export default function DesignSystemPage() {
   const [conversationSelectionEnabled, setConversationSelectionEnabled] = useState(false);
   const [conversationShowLogs, setConversationShowLogs] = useState(false);
   const [conversationSelectedMessageIds, setConversationSelectedMessageIds] = useState<string[]>([]);
+  const [conversationQuickReplyDrafts, setConversationQuickReplyDrafts] = useState<Record<string, string[]>>({});
+  const [conversationLockedReplySelections, setConversationLockedReplySelections] = useState<Record<string, string[]>>({});
   const [conversationInput, setConversationInput] = useState("");
   const [conversationLlm, setConversationLlm] = useState("chatgpt");
   const [conversationKb, setConversationKb] = useState("restock");
@@ -179,6 +640,27 @@ export default function DesignSystemPage() {
   const [conversationRuntime, setConversationRuntime] = useState("core_runtime");
   const [conversationProviders, setConversationProviders] = useState<string[]>(["cafe24", "solapi", "juso", "runtime"]);
   const [conversationActions, setConversationActions] = useState<string[]>(["admin_request", "send_otp", "search_address"]);
+
+  const [workbenchWsStatus, setWorkbenchWsStatus] = useState<"CONNECTED" | "DISCONNECTED">("CONNECTED");
+  const [sessionHeaderSessionId, setSessionHeaderSessionId] = useState<string | null>("sess-demo-001");
+  const [demoSetupFieldLlm, setDemoSetupFieldLlm] = useState("chatgpt");
+  const [demoSetupFieldProviders, setDemoSetupFieldProviders] = useState<string[]>(["cafe24", "runtime"]);
+  const [demoSetupFieldActions, setDemoSetupFieldActions] = useState<string[]>(["list_orders"]);
+  const [demoSetupFieldInlineKb, setDemoSetupFieldInlineKb] = useState("고객 응대는 존댓말로 진행");
+  const [demoSetupExistingMode, setDemoSetupExistingMode] = useState<"existing" | "new">("existing");
+  const [demoConversationMode, setDemoConversationMode] = useState<"history" | "edit" | "new">("history");
+  const [demoSelectedAgentGroupId, setDemoSelectedAgentGroupId] = useState("grp_restock");
+  const [demoSelectedAgentId, setDemoSelectedAgentId] = useState("agent_v1");
+  const [demoSelectedSessionId, setDemoSelectedSessionId] = useState<string | null>("s1");
+  const [demoNewModelKb, setDemoNewModelKb] = useState("restock");
+  const [demoNewModelAdminKb, setDemoNewModelAdminKb] = useState<string[]>(["mk2"]);
+  const [demoNewModelRoute, setDemoNewModelRoute] = useState("core_runtime");
+  const [demoKbInfoOpen, setDemoKbInfoOpen] = useState(false);
+  const [demoAdminKbInfoOpen, setDemoAdminKbInfoOpen] = useState(false);
+  const [demoRouteInfoOpen, setDemoRouteInfoOpen] = useState(false);
+  const [demoModel, setDemoModel] = useState<ModelState>(() => createDemoModelState());
+  const [demoQuickReplyDrafts, setDemoQuickReplyDrafts] = useState<Record<string, string[]>>({});
+  const [demoLockedReplySelections, setDemoLockedReplySelections] = useState<Record<string, string[]>>({});
 
   const [iconSearch, setIconSearch] = useState("");
   const [iconPage, setIconPage] = useState(1);
@@ -211,24 +693,6 @@ export default function DesignSystemPage() {
   const safeIconPage = Math.min(iconPage, iconTotalPages);
   const iconPageEntries = filteredIconEntries.slice((safeIconPage - 1) * iconPageSize, safeIconPage * iconPageSize);
 
-  const conversationSampleMessages: ConversationSampleMessage[] = [
-    { id: "m1", role: "user", content: "코트 재입고 문의" },
-    {
-      id: "m2",
-      role: "bot",
-      content: "",
-      richHtml:
-        "<div style='display:block;margin:0;padding:0;color:inherit;font:inherit;line-height:inherit;'><div style='margin:0;padding:0;color:inherit;font:inherit;line-height:inherit;'>요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)</div><div style='margin-top:4px;overflow:hidden;border:1px solid #e2e8f0;border-radius:8px;background:rgba(255,255,255,0.55);'><table style='width:100%;border-collapse:collapse;table-layout:fixed;color:inherit;font:inherit;margin:0;'><thead><tr><th style='padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:center;width:42px;'>번호</th><th style='padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:left;'>항목명</th><th style='padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:left;width:110px;'>일정</th></tr></thead><tbody><tr><td style='padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#0f172a;font-size:11px;font-weight:700;white-space:nowrap;'>1</td><td style='padding:4px 6px;border-bottom:1px solid #e2e8f0;color:inherit;font-size:12px;line-height:1.35;'>재입고 일정 안내</td><td style='padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;line-height:1.35;white-space:nowrap;'>-</td></tr><tr><td style='padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#0f172a;font-size:11px;font-weight:700;white-space:nowrap;'>2</td><td style='padding:4px 6px;border-bottom:1px solid #e2e8f0;color:inherit;font-size:12px;line-height:1.35;'>일반 문의</td><td style='padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;line-height:1.35;white-space:nowrap;'>-</td></tr></tbody></table></div><div style='margin-top:8px;color:inherit;'><strong>입력 예시</strong>: 1,2</div></div>",
-    },
-    { id: "m3", role: "user", content: "1" },
-    {
-      id: "m4",
-      role: "bot",
-      content:
-        "죄송하지만 요청하신 코트는 현재 재입고 예정이 없습니다. 대신 다른 상품 확인해 드려도 될까요?\n맞으면 '네', 아니면 '아니오'를 입력해 주세요.",
-    },
-  ];
-
   const intentDisambiguationHtml = useMemo(
     () =>
       buildIntentDisambiguationTableHtmlFromText(
@@ -236,6 +700,483 @@ export default function DesignSystemPage() {
       ) || "",
     []
   );
+
+  const conversationChoiceLegoMessage: ConversationReplyDemoMessage = {
+    id: "catalog-choice-lego",
+    role: "bot",
+    quickReplies: [
+      { label: "예시 1", value: "1" },
+      { label: "예시 2", value: "2" },
+      { label: "예시 3", value: "3" },
+    ],
+    renderPlan: {
+      view: "choice",
+      enable_quick_replies: true,
+      selection_mode: "single",
+      interaction_scope: "any",
+      grid_columns: { quick_replies: 3 },
+      submit_format: "single",
+    },
+  };
+  const conversationChoiceGenericMessage: ConversationReplyDemoMessage = {
+    id: "catalog-choice-generic",
+    role: "bot",
+    quickReplies: [
+      { label: "네", value: "yes" },
+      { label: "아니오", value: "no" },
+      { label: "상담원 연결", value: "handoff" },
+    ],
+    renderPlan: {
+      view: "choice",
+      enable_quick_replies: true,
+      selection_mode: "single",
+      interaction_scope: "any",
+      grid_columns: { quick_replies: RENDER_POLICY.grid_max_columns.quick_replies },
+      submit_format: "single",
+    },
+  };
+  const conversationLeadDayMessage: ConversationReplyDemoMessage = {
+    id: "catalog-choice-lead-day",
+    role: "bot",
+    quickReplies: ["D-1", "D-2", "D-3", "D-7", "D-14"].map((value) => ({ label: value, value })),
+    renderPlan: {
+      view: "choice",
+      enable_quick_replies: true,
+      selection_mode: "single",
+      interaction_scope: "any",
+      grid_columns: { quick_replies: RENDER_POLICY.grid_max_columns.quick_replies },
+      submit_format: "single",
+    },
+  };
+  const conversationCardsLegoMessage: ConversationReplyDemoMessage = {
+    id: "catalog-cards-lego",
+    role: "bot",
+    productCards: [
+      {
+        id: "p1",
+        value: "1",
+        title: "아드헬린 린넨 플레어 원피스 그레이",
+        subtitle: "03/21 입고 예정",
+        imageUrl: "https://sungjy2020.cafe24.com/web/product/tiny/202509/6eb884b4e0fc90d8c8135d93eb8e7fda.jpg",
+      },
+      {
+        id: "p2",
+        value: "2",
+        title: "아드헬린 린넨 롱 원피스 그레이",
+        subtitle: "02/28 입고 예정",
+        imageUrl: "https://sungjy2020.cafe24.com/web/product/tiny/202509/025624c6ca8efcbd5487d14795bf601c.jpg",
+      },
+    ],
+    renderPlan: {
+      view: "cards",
+      enable_cards: true,
+      selection_mode: "single",
+      interaction_scope: "any",
+      grid_columns: { cards: 3 },
+      submit_format: "single",
+    },
+  };
+  const conversationCardsRestockMessage: ConversationReplyDemoMessage = {
+    id: "catalog-cards-restock",
+    role: "bot",
+    productCards: [
+      { id: "r1", value: "1", title: "샘플 상품 A", subtitle: "03/21 입고 예정" },
+      { id: "r2", value: "2", title: "샘플 상품 B", subtitle: "02/28 입고 예정" },
+    ],
+    renderPlan: {
+      view: "cards",
+      enable_cards: true,
+      selection_mode: "single",
+      interaction_scope: "any",
+      grid_columns: { cards: RENDER_POLICY.grid_max_columns.cards },
+      submit_format: "single",
+    },
+  };
+
+  const parseLeadDayValueExamples = ["D-1", "D-14", "lead_7days", "x", ""].map((value) => {
+    const m = String(value || "").match(/\d+/);
+    const parsed = m ? Number(m[0]) : null;
+    const normalized = Number.isFinite(parsed) && Number(parsed) > 0 ? Number(parsed) : null;
+    return { value, parsed: normalized };
+  });
+
+  const demoPageFeatures = useMemo(() => getDefaultConversationPageFeatures("/app/laboratory"), []);
+  const demoSetupUi = useMemo(() => resolveConversationSetupUi("/app/laboratory"), []);
+  const demoVersionOptions = useMemo(() => {
+    return (demoAgentVersionsByGroup.get(demoSelectedAgentGroupId) || []).map((item) => ({
+      id: item.id,
+      label: `${item.is_active ? "🟢 " : "⚪ "}${item.version || "-"} (${item.name || item.id})`,
+    }));
+  }, [demoSelectedAgentGroupId]);
+  const demoSessionOptions = useMemo(
+    () =>
+      demoModel.sessions.map((session) => ({
+        id: session.id,
+        label: session.session_code || session.id,
+        description: formatDemoKstDateTime(session.started_at),
+      })),
+    [demoModel.sessions]
+  );
+  const updateDemoModel = (updater: (prev: ModelState) => ModelState) => {
+    setDemoModel((prev) => updater(prev));
+  };
+
+  const demoAssemblyProps: Parameters<typeof createConversationModelLegos>[0] = {
+    index: 0,
+    modelCount: 1,
+    model: demoModel,
+    pageFeatures: demoPageFeatures,
+    setupUi: demoSetupUi,
+    isAdminUser: true,
+    latestAdminKbId: "mk2",
+    tools: demoTools,
+    toolOptions: demoToolOptions,
+    toolById: demoToolById,
+    providerByKey: demoProviderByKey,
+    agentVersionsByGroup: demoAgentVersionsByGroup,
+    formatKstDateTime: formatDemoKstDateTime,
+    agentGroupOptions: demoAgentGroupOptions,
+    llmOptions: demoLlmOptions,
+    kbOptions: demoKbOptions,
+    adminKbOptions: demoAdminKbOptions,
+    providerOptions: demoProviderOptions,
+    routeOptions: demoRouteOptions,
+    kbItems: demoKbItems,
+    inlineKbSamples: demoInlineKbSamples,
+    quickReplyDrafts: demoQuickReplyDrafts,
+    lockedReplySelections: demoLockedReplySelections,
+    setQuickReplyDrafts: setDemoQuickReplyDrafts,
+    setLockedReplySelections: setDemoLockedReplySelections,
+    onRemoveModel: () => undefined,
+    onCopySessionId: (sessionId) => {
+      setSessionHeaderSessionId(sessionId);
+    },
+    onOpenSessionInNewTab: () => undefined,
+    onDeleteSession: () => {
+      updateDemoModel((prev) => ({ ...prev, selectedSessionId: null, sessionId: null }));
+    },
+    onUpdateModel: (_id, updater) => {
+      updateDemoModel((prev) => updater(prev));
+    },
+    onResetModel: () => undefined,
+    onSelectAgentGroup: (_id, groupId) => {
+      updateDemoModel((prev) => ({ ...prev, selectedAgentGroupId: groupId }));
+    },
+    onSelectAgentVersion: (_id, agentId) => {
+      updateDemoModel((prev) => ({ ...prev, selectedAgentId: agentId }));
+    },
+    onSelectSession: (_id, sessionId) => {
+      updateDemoModel((prev) => ({ ...prev, selectedSessionId: sessionId, sessionId }));
+    },
+    onSearchSessionById: (_id, sessionId) => {
+      updateDemoModel((prev) => ({ ...prev, selectedSessionId: sessionId, sessionId }));
+    },
+    onChangeConversationMode: (_id, mode) => {
+      updateDemoModel((prev) => ({ ...prev, conversationMode: mode }));
+    },
+    onCopyConversation: () => undefined,
+    onCopyIssue: () => undefined,
+    onToggleMessageSelection: (_id, messageId) => {
+      updateDemoModel((prev) => ({
+        ...prev,
+        selectedMessageIds: prev.selectedMessageIds.includes(messageId)
+          ? prev.selectedMessageIds.filter((id) => id !== messageId)
+          : [...prev.selectedMessageIds, messageId],
+      }));
+    },
+    onSubmitMessage: (_id, text) => {
+      if (!text.trim()) return;
+      updateDemoModel((prev) => ({
+        ...prev,
+        input: "",
+        messages: [
+          ...prev.messages,
+          { id: `u-${Date.now()}`, role: "user", content: text },
+          { id: `b-${Date.now()}`, role: "bot", content: "샘플 응답입니다." },
+        ],
+      }));
+    },
+    onExpand: () => {
+      updateDemoModel((prev) => ({ ...prev, layoutExpanded: true }));
+    },
+    onCollapse: () => {
+      updateDemoModel((prev) => ({ ...prev, layoutExpanded: false }));
+    },
+    onInputChange: (_id, value) => {
+      updateDemoModel((prev) => ({ ...prev, input: value }));
+    },
+    setLeftPaneRef: () => undefined,
+    setChatScrollRef: () => undefined,
+    describeLlm: (llm) => `LLM(${llm}) 샘플 설명`,
+    describeRoute: (route) => `Route(${route}) 샘플 설명`,
+  };
+  const demoAssembly = createConversationModelLegos(demoAssemblyProps);
+
+  const conversationDemoEntries: Array<{ name: string; node: ReactNode }> = [
+    {
+      name: "ConversationSetupBox",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationSetupBox")}
+          <ConversationSetupBox contentClassName="p-3">
+            <div className="text-xs text-slate-700">설정 영역 래퍼가 `ConversationSetupPanel`로 구성됩니다.</div>
+          </ConversationSetupBox>
+        </div>
+      ),
+    },
+    {
+      name: "ConversationSetupFields",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationSetupFields")}
+          <ConversationSetupBox contentClassName="p-3">
+            <ConversationSetupFields
+              showInlineUserKbInput
+              inlineKbAdminOnly
+              inlineKbValue={demoSetupFieldInlineKb}
+              onInlineKbChange={setDemoSetupFieldInlineKb}
+              showLlmSelector
+              llmAdminOnly
+              llmValue={demoSetupFieldLlm}
+              onLlmChange={setDemoSetupFieldLlm}
+              llmOptions={demoLlmOptions}
+              showMcpProviderSelector
+              mcpProviderAdminOnly
+              providerValues={demoSetupFieldProviders}
+              onProviderChange={setDemoSetupFieldProviders}
+              providerOptions={demoProviderOptions}
+              showMcpActionSelector
+              mcpActionAdminOnly
+              actionValues={demoSetupFieldActions}
+              onActionChange={setDemoSetupFieldActions}
+              actionOptions={demoToolOptions}
+            />
+          </ConversationSetupBox>
+        </div>
+      ),
+    },
+    {
+      name: "ConversationExistingSetup",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationExistingSetup")}
+          <ConversationSetupBox contentClassName="p-3">
+            <ConversationExistingSetup
+              showModelSelector
+              showAgentSelector
+              showModeExisting
+              showSessionIdSearch
+              showModeNew
+              setupMode={demoSetupExistingMode}
+              onSelectExisting={() => setDemoSetupExistingMode("existing")}
+              onSelectNew={() => setDemoSetupExistingMode("new")}
+              selectedAgentGroupId={demoSelectedAgentGroupId}
+              selectedAgentId={demoSelectedAgentId}
+              selectedSessionId={demoSelectedSessionId}
+              sessionsLength={demoModel.sessions.length}
+              sessionsLoading={false}
+              sessionsError={null}
+              conversationMode={demoConversationMode}
+              agentGroupOptions={demoAgentGroupOptions}
+              versionOptions={demoVersionOptions}
+              sessionOptions={demoSessionOptions}
+              onSelectAgentGroup={setDemoSelectedAgentGroupId}
+              onSelectAgentVersion={setDemoSelectedAgentId}
+              onSelectSession={(value) => setDemoSelectedSessionId(value)}
+              onSearchSessionById={(value) => setDemoSelectedSessionId(value)}
+              onChangeConversationMode={setDemoConversationMode}
+            />
+          </ConversationSetupBox>
+        </div>
+      ),
+    },
+    {
+      name: "ConversationNewModelControls",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationNewModelControls")}
+          <ConversationSetupBox contentClassName="p-3">
+            <ConversationNewModelControls
+              showKbSelector
+              kbValue={demoNewModelKb}
+              kbOptions={demoKbOptions}
+              onKbChange={setDemoNewModelKb}
+              kbInfoOpen={demoKbInfoOpen}
+              onToggleKbInfo={() => setDemoKbInfoOpen((prev) => !prev)}
+              kbInfoText="선택된 KB에 대한 샘플 설명"
+              showAdminKbSelector
+              adminKbValues={demoNewModelAdminKb}
+              adminKbOptions={demoAdminKbOptions}
+              onAdminKbChange={setDemoNewModelAdminKb}
+              adminKbInfoOpen={demoAdminKbInfoOpen}
+              onToggleAdminKbInfo={() => setDemoAdminKbInfoOpen((prev) => !prev)}
+              adminKbInfoText="관리자 KB 샘플 설명"
+              showRouteSelector
+              routeValue={demoNewModelRoute}
+              routeOptions={demoRouteOptions}
+              onRouteChange={setDemoNewModelRoute}
+              routeInfoOpen={demoRouteInfoOpen}
+              onToggleRouteInfo={() => setDemoRouteInfoOpen((prev) => !prev)}
+              routeInfoText="런타임 라우트 샘플 설명"
+            />
+          </ConversationSetupBox>
+        </div>
+      ),
+    },
+    {
+      name: "createConversationModelLegos",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("createConversationModelLegos")}
+          <div className="rounded-lg border border-slate-200 bg-white p-2 text-[11px] text-slate-600">
+            <div>activeSessionId: <code>{demoAssembly.activeSessionId || "-"}</code></div>
+            <div>visibleMessages: <code>{demoAssembly.visibleMessages.length}</code></div>
+            <div>setupLegoProps.model.id: <code>{demoAssembly.setupLegoProps.model.id}</code></div>
+            <div>chatLegoProps.model.id: <code>{demoAssembly.chatLegoProps.model.id}</code></div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: "ConversationModelSetupColumnLego",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationModelSetupColumnLego")}
+          <div className="h-auto overflow-visible">
+            <ConversationModelSetupColumnLego {...demoAssembly.setupLegoProps} />
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: "ConversationAdminMenu",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationAdminMenu")}
+          <div className="relative min-h-[56px] rounded-lg border border-slate-200 bg-white p-3">
+            <ConversationAdminMenu
+              className=""
+              open={conversationAdminOpen}
+              onToggleOpen={() => setConversationAdminOpen((prev) => !prev)}
+              selectionEnabled={conversationSelectionEnabled}
+              onToggleSelection={() => setConversationSelectionEnabled((prev) => !prev)}
+              showLogs={conversationShowLogs}
+              onToggleLogs={() => setConversationShowLogs((prev) => !prev)}
+              onCopyConversation={() => undefined}
+              onCopyIssue={() => undefined}
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: "ConversationThread",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationThread")}
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <ConversationThread
+              messages={[
+                { id: "t1", role: "user", content: "안내 부탁해" },
+                { id: "t2", role: "bot", content: "원하시는 옵션을 선택해 주세요." },
+              ]}
+              selectedMessageIds={[]}
+              selectionEnabled={false}
+              onToggleSelection={() => undefined}
+              avatarSelectionStyle="both"
+              renderContent={(msg) => msg.content}
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: "ConversationReplySelectors",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationReplySelectors")}
+          <div className="rounded-lg border border-slate-200 bg-white p-3">
+            <ConversationReplySelectors
+              modelId="ui-demo"
+              message={conversationLeadDayMessage}
+              isLatest
+              sending={false}
+              quickReplyDrafts={conversationQuickReplyDrafts}
+              lockedReplySelections={conversationLockedReplySelections}
+              setQuickReplyDrafts={setConversationQuickReplyDrafts}
+              setLockedReplySelections={setConversationLockedReplySelections}
+              onSubmit={() => undefined}
+            />
+            <div className="mt-2 rounded border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-600">
+              {parseLeadDayValueExamples.map((sample) => (
+                <div key={`lead-day-${sample.value || "empty"}`}>
+                  <code>{sample.value || "(empty)"}</code> -&gt; <code>{sample.parsed === null ? "null" : sample.parsed}</code>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: "ConversationModelChatColumnLego",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationModelChatColumnLego")}
+          <div className="h-auto overflow-hidden">
+            <ConversationModelChatColumnLego {...demoAssembly.chatLegoProps} />
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: "ConversationModelComposedLego",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationModelComposedLego")}
+          <ConversationModelComposedLego
+            className="lg:grid-cols-1"
+            leftLego={<ConversationModelSetupColumnLego {...demoAssembly.setupLegoProps} />}
+            rightLego={<ConversationModelChatColumnLego {...demoAssembly.chatLegoProps} />}
+          />
+        </div>
+      ),
+    },
+    {
+      name: "ConversationSessionHeader",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationSessionHeader")}
+          <ConversationSessionHeader
+            modelIndex={1}
+            canRemove
+            onRemove={() => undefined}
+            activeSessionId={sessionHeaderSessionId}
+            onCopySessionId={(sessionId) => setSessionHeaderSessionId(sessionId)}
+            onOpenSessionInNewTab={() => undefined}
+            onDeleteSession={() => setSessionHeaderSessionId(null)}
+            disableDelete={!sessionHeaderSessionId}
+          />
+        </div>
+      ),
+    },
+    {
+      name: "ConversationWorkbenchTopBar",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderConversationDefinitionMeta("ConversationWorkbenchTopBar")}
+          <ConversationWorkbenchTopBar
+            wsStatusDot={workbenchWsStatus === "CONNECTED" ? "bg-emerald-500" : "bg-rose-500"}
+            wsStatus={workbenchWsStatus}
+            onRefreshWs={() => setWorkbenchWsStatus((prev) => (prev === "CONNECTED" ? "DISCONNECTED" : "CONNECTED"))}
+            onResetAll={() => setDemoModel(createDemoModelState())}
+            onAddModel={() => undefined}
+            addModelDisabled={false}
+          />
+        </div>
+      ),
+    },
+  ];
 
   const sections: DemoSection[] = [
     {
@@ -264,7 +1205,7 @@ export default function DesignSystemPage() {
                 <Badge variant="red">red</Badge>
                 <Badge variant="slate">slate</Badge>
               </div>
-              <UsedInPages pages={["src/components/HelpPanel.tsx", "src/components/design-system/conversation/ConversationUI.tsx"]} />
+              <UsedInPages pages={["src/components/HelpPanel.tsx", "src/components/design-system/conversation/ConversationUI.parts.tsx"]} />
             </Card>
 
             <PanelCard className="p-4">
@@ -299,7 +1240,7 @@ export default function DesignSystemPage() {
                 <Button variant="ghost">고스트</Button>
                 <Button variant="destructive">삭제</Button>
               </div>
-              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.tsx", "src/components/settings/ChatSettingsPanel.tsx"]} />
+              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/settings/ChatSettingsPanel.tsx"]} />
             </Card>
 
             <Card className="p-4">
@@ -370,7 +1311,7 @@ export default function DesignSystemPage() {
               </div>
               <SelectPopover value={singleValue} onChange={setSingleValue} options={singleOptions} className="w-full" />
               <div className="mt-2 text-xs text-slate-500">선택값: {singleValue}</div>
-              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.tsx", "src/app/app/agents/[id]/page.tsx"]} />
+              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/app/app/agents/[id]/page.tsx"]} />
             </Card>
 
             <Card className="p-4">
@@ -386,7 +1327,7 @@ export default function DesignSystemPage() {
                 className="w-full"
               />
               <div className="mt-2 text-xs text-slate-500">선택값: {searchSingleValue}</div>
-              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.tsx", "src/components/design-system/conversation/ConversationUI.tsx"]} />
+              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/design-system/conversation/ConversationUI.parts.tsx"]} />
             </Card>
 
             <Card className="p-4">
@@ -403,7 +1344,7 @@ export default function DesignSystemPage() {
                 className="w-full"
               />
               <div className="mt-2 text-xs text-slate-500">선택값: {selectedMultiLabel}</div>
-              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.tsx", "src/components/design-system/conversation/ConversationUI.tsx"]} />
+              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/design-system/conversation/ConversationUI.parts.tsx"]} />
             </Card>
 
             <Card className="p-4">
@@ -457,522 +1398,65 @@ export default function DesignSystemPage() {
       node: (
         <SectionBlock
           id="conversation"
-          title="Conversation"
-          description="대화 기능의 공통 UI 패턴과 런타임 응답 스키마 기준"
+          title="Conversation Dependency View"
+          description="각 항목을 type / name / depends 기준으로 보여주는 페이지"
         >
           <div className="grid grid-cols-1 gap-4">
             <Card className="p-4">
-              <div className="mb-2 text-sm font-semibold text-slate-900">Runtime Response Schema / Render Plan (정책 기준)</div>
-              <pre className="overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-700">
-                {`// CASE A: 이미지 카드가 있으면 카드만 노출
-{
-  "response_schema": {
-    "message": "유사한 상품이 여러 개입니다. 번호를 선택해 주세요.",
-    "ui_hints": { "view": "cards", "choice_mode": "single" },
-    "quick_replies": [{ "label": "1번", "value": "1" }, { "label": "2번", "value": "2" }],
-    "quick_reply_config": { "selection_mode": "single", "submit_format": "single" },
-    "cards": [{ "id": "p1", "title": "원피스", "image_url": "..." }]
-  },
-  "render_plan": {
-    "view": "cards",
-    "enable_quick_replies": false,
-    "enable_cards": true
-  }
-}
-
-// CASE B: 이미지 카드가 없으면 텍스트 선택지만 노출
-{
-  "response_schema": {
-    "message": "가능한 일정을 선택해 주세요.",
-    "ui_hints": { "view": "choice", "choice_mode": "multi" },
-    "quick_replies": [{ "label": "내일", "value": "1" }, { "label": "3일 후", "value": "2" }],
-    "quick_reply_config": { "selection_mode": "multi", "submit_format": "csv" },
-    "cards": []
-  },
-  "render_plan": {
-    "view": "choice",
-    "enable_quick_replies": true,
-    "enable_cards": false
-  }
-}`}
-              </pre>
-              <div className="mt-2 text-xs text-slate-500">
-                기준: <code>renderPolicy.ts</code>에서 노출 모드를 단일 판단(이미지 카드 존재 여부)으로 결정합니다.
+              <div className="mb-2 text-sm font-semibold text-slate-900">ChatSettingsPanel 기반 Conversation UI 구현 샘플</div>
+              <div className="grid grid-cols-1 gap-3">
+                {sortConversationEntries(conversationDemoEntries).map((entry) => (
+                  <div key={entry.name}>{entry.node}</div>
+                ))}
               </div>
-              <UsedInPages
-                pages={[
-                  "src/app/api/runtime/chat/policies/renderPolicy.ts",
-                  "src/app/api/runtime/chat/presentation/runtimeResponseSchema.ts",
-                  "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
-                  "src/app/api/runtime/chat/presentation/ui-runtimeResponseRuntime.ts",
-                ]}
-              />
             </Card>
 
             <Card className="p-4">
-              <div className="mb-2 text-sm font-semibold text-slate-900">Runtime UI Type Catalog (Import Source)</div>
-              <div className="space-y-3">
-                <div className="rounded-xl border border-slate-300 bg-slate-50 p-3">
-                  <div className="text-xs font-semibold text-slate-900">상위 유형: `text` (일반 텍스트 응답)</div>
-                  <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
-                    <div className="text-[11px] font-semibold text-slate-700">하위 유형: `text.default`</div>
-                    <div className="mt-2 rounded-2xl border border-slate-200 bg-slate-100 px-4 py-2 text-sm text-slate-700">
-                      주문 확인되었습니다. 추가로 필요한 항목이 있으면 말씀해 주세요.
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-300 bg-slate-50 p-3">
-                  <div className="text-xs font-semibold text-slate-900">상위 유형: `choice` (텍스트 선택형)</div>
-                  <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
-                    <div className="text-[11px] font-semibold text-slate-700">하위 레고(원자 UI): quick reply / grid / confirm</div>
-                    <div className="mt-[5px]">
-                      <ConversationGrid columns={3}>
-                        <ConversationQuickReplyButton label="예시 1" />
-                        <ConversationQuickReplyButton label="예시 2" picked />
-                        <ConversationQuickReplyButton label="예시 3" />
-                      </ConversationGrid>
-                    </div>
-                    <div className="mt-[5px] flex justify-end">
-                      <ConversationConfirmButton enabled={false} disabled />
-                    </div>
-                  </div>
-                  <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
-                    <div className="text-[11px] font-semibold text-slate-700">하위 유형 C: `choice.generic` (일반 선택)</div>
-                    <div className="mt-[5px]">
-                      <ConversationGrid columns={RENDER_POLICY.grid_max_columns.quick_replies}>
-                      {["네", "아니오", "상담원 연결"].map((label) => (
-                        <ConversationQuickReplyButton key={label} label={label} />
-                      ))}
-                      </ConversationGrid>
-                    </div>
-                  </div>
-                  <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
-                    <div className="text-[11px] font-semibold text-slate-700">하위 유형 A: `intent_disambiguation` (표 + 선택)</div>
-                    <div
-                      className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-sm text-slate-700"
-                      dangerouslySetInnerHTML={{ __html: intentDisambiguationHtml }}
-                    />
-                  </div>
-                  <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
-                    <div className="text-[11px] font-semibold text-slate-700">
-                      하위 유형 B: `lead_day` (`D-1`, `D-2`...) / grid {RENDER_POLICY.grid_max_columns.quick_replies}
-                    </div>
-                    <div className="mt-[5px]">
-                      <ConversationGrid columns={RENDER_POLICY.grid_max_columns.quick_replies}>
-                      {["D-1", "D-2", "D-3", "D-7", "D-14"].map((label) => (
-                        <ConversationQuickReplyButton key={label} label={label} />
-                      ))}
-                      </ConversationGrid>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-slate-300 bg-slate-50 p-3">
-                  <div className="text-xs font-semibold text-slate-900">상위 유형: `cards` (이미지 카드 선택형)</div>
-                  <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
-                    <div className="text-[11px] font-semibold text-slate-700">하위 레고(원자 UI): product card</div>
-                    <div className="mt-[5px]">
-                      <ConversationGrid columns={3}>
-                        <ConversationProductCard
-                          item={{
-                            value: "1",
-                            title: "아드헬린 린넨 플레어 원피스 그레이",
-                            subtitle: "03/21 입고 예정",
-                            imageUrl:
-                              "https://sungjy2020.cafe24.com/web/product/tiny/202509/6eb884b4e0fc90d8c8135d93eb8e7fda.jpg",
-                          }}
-                        />
-                        <ConversationProductCard
-                          picked
-                          item={{
-                            value: "2",
-                            title: "아드헬린 린넨 롱 원피스 그레이",
-                            subtitle: "02/28 입고 예정",
-                            imageUrl:
-                              "https://sungjy2020.cafe24.com/web/product/tiny/202509/025624c6ca8efcbd5487d14795bf601c.jpg",
-                          }}
-                        />
-                      </ConversationGrid>
-                    </div>
-                  </div>
-                  <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2">
-                    <div className="text-[11px] font-semibold text-slate-700">
-                      하위 유형: `restock_product_choice` / grid {RENDER_POLICY.grid_max_columns.cards}
-                    </div>
-                    <div className="mt-[5px]">
-                      <ConversationGrid columns={RENDER_POLICY.grid_max_columns.cards}>
-                        <ConversationProductCard
-                          item={{
-                            value: "1",
-                            title: "샘플 상품 A",
-                            subtitle: "03/21 입고 예정",
-                          }}
-                        />
-                        <ConversationProductCard
-                          picked
-                          item={{
-                            value: "2",
-                            title: "샘플 상품 B",
-                            subtitle: "02/28 입고 예정",
-                          }}
-                        />
-                      </ConversationGrid>
-                    </div>
-                  </div>
-                </div>
+              <div className="mb-2 text-sm font-semibold text-slate-900">ChatSettingsPanel Conversation Definition Coverage</div>
+              <div className="mb-3 text-xs text-slate-500">
+                각 항목은 type / name / depends / role 키로 정리됩니다.
               </div>
-              <div className="mt-3 text-xs text-slate-500">
-                Prompt rule source: <code>{RUNTIME_UI_PROMPT_RULES.leadDayPromptKeyword}</code>,{" "}
-                <code>{RUNTIME_UI_PROMPT_RULES.intentDisambiguationKeywords.join(", ")}</code>
-              </div>
-              <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-600">
-                <div className="mb-1 font-semibold text-slate-700">`render_plan.ui_type_id` 계층</div>
-                {RUNTIME_UI_TYPE_HIERARCHY.map((entry) => (
-                  <div key={entry.parent} className="mb-1">
-                    <code>{entry.parent}</code>: {entry.children.map((child) => <code key={child} className="mr-1">{child}</code>)}
+              <div className="space-y-4">
+                {conversationDefinitionGroups.map((group) => (
+                  <div key={group.label}>
+                    <div className="mb-2 text-xs font-semibold text-slate-700">{group.label}</div>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      {sortConversationEntries(group.items)
+                        .filter((item) => !COVERAGE_HIDDEN_NAMES.has(item.name))
+                        .map((item) => (
+                          <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            {(() => {
+                              const meta = getDefinitionMeta(item, group.label);
+                              return (
+                                <DependencyMeta
+                                  type={meta.type}
+                                  name={item.name}
+                                  depends={meta.depends}
+                                  returns={meta.returns}
+                                  role={item.note}
+                                  definedAt={`${CONVERSATION_PARTS_FILE}:${item.sourceLine}`}
+                                />
+                              );
+                            })()}
+                            {item.name === "parseLeadDayValue" ? (
+                              <div className="mt-2 rounded border border-slate-200 bg-white p-2 text-[11px] text-slate-600">
+                                {parseLeadDayValueExamples.map((sample) => (
+                                  <div key={`${item.name}-${sample.value || "empty"}`}>
+                                    <code>{sample.value || "(empty)"}</code> -&gt; <code>{sample.parsed === null ? "null" : sample.parsed}</code>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ))}
+                    </div>
                   </div>
                 ))}
               </div>
               <UsedInPages
                 pages={[
-                  "src/components/design-system/conversation/runtimeUiCatalog.ts",
-                  "src/app/api/runtime/chat/policies/renderPolicy.ts",
-                  "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
-                ]}
-              />
-            </Card>
-
-            <Card className="p-4">
-              <div className="mb-2 text-sm font-semibold text-slate-900">Integration (Import-Only)</div>
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                <div className="font-semibold text-slate-900">`/app/laboratory` 기준 최소 import</div>
-                <pre className="mt-2 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-[11px] leading-relaxed">{`import { LaboratoryPage } from "@/components/design-system/conversation/LaboratoryPage";
-
-export default function Page() {
-  return <LaboratoryPage />;
-}`}</pre>
-                <div className="mt-3 text-[11px] text-slate-600">
-                  페이지 컴포넌트 자체에는 하드코딩이 거의 없고, 컨테이너/컨트롤러 import로 동작합니다.
-                </div>
-                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 p-2 text-[11px] text-amber-800">
-                  현재 남아있는 최소 정책 등록 지점:
-                  <br />
-                  <code>src/lib/conversation/pageFeaturePolicy.ts</code>에 페이지 키 기본 정책
-                  <br />
-                  <code>/app/settings?tab=chat</code>에서 페이지별 override 관리
-                </div>
-              </div>
-              <UsedInPages
-                pages={[
-                  "src/app/app/laboratory/page.tsx",
-                  "src/app/app/laboratory/page.tsx",
-                  "src/lib/conversation/client/useLaboratoryPageController.ts",
-                  "src/lib/conversation/pageFeaturePolicy.ts",
                   "src/components/settings/ChatSettingsPanel.tsx",
-                ]}
-              />
-            </Card>
-
-            <Card className="p-4">
-              <div className="mb-2 text-sm font-semibold text-slate-900">Independent Panel Imports</div>
-              <div className="grid grid-cols-1 gap-3">
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                  <div className="font-semibold text-slate-900">설정 박스만 import</div>
-                  <pre className="mt-2 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-[11px] leading-relaxed">{`import { ConversationSetupPanel, ConversationSetupFields } from "@/components/design-system";
-
-export default function SetupOnly() {
-  return (
-    <ConversationSetupPanel contentClassName="p-4">
-      <ConversationSetupFields {...props} />
-    </ConversationSetupPanel>
-  );
-}`}</pre>
-                </div>
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                  <div className="font-semibold text-slate-900">대화 박스만 import</div>
-                  <pre className="mt-2 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-[11px] leading-relaxed">{`import { ConversationChatPanel, ConversationThread, ConversationReplySelectors } from "@/components/design-system";
-
-export default function ChatOnly() {
-  return (
-    <ConversationChatPanel className="border border-slate-200 bg-white p-4">
-      <ConversationThread {...props} />
-      <ConversationReplySelectors {...props} />
-    </ConversationChatPanel>
-  );
-}`}</pre>
-                </div>
-              </div>
-              <UsedInPages
-                pages={[
-                  "src/components/design-system/conversation/panels.tsx",
-                  "src/components/design-system/conversation/ConversationUI.tsx",
-                  "src/components/design-system/conversation/ConversationUI.tsx",
-                  "src/components/design-system/conversation/ConversationUI.tsx",
-                ]}
-              />
-            </Card>
-
-            <Card className="p-4">
-              <div className="mb-2 text-sm font-semibold text-slate-900">Conversation 2-Panel Layout + Thread (실험실형)</div>
-              <div className="mb-2 text-xs text-slate-500">1행: 설정 div 박스</div>
-              <ConversationSplitLayout
-                className="gap-3 grid-cols-1 lg:grid-cols-1"
-                leftClassName="rounded-xl border border-zinc-200 bg-white"
-                rightClassName="h-full"
-                leftPanel={
-                  <div className="p-4">
-                    <div className="space-y-3">
-                      <div className="border-b border-slate-200 bg-white pb-3">
-                        <div className="grid w-full grid-cols-2 gap-2">
-                          <button
-                            type="button"
-                            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50"
-                          >
-                            기존 모델
-                          </button>
-                          <button
-                            type="button"
-                            className="w-full rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800"
-                          >
-                            신규 모델
-                          </button>
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        <div>
-                          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                            <span>LLM 선택</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <SelectPopover
-                              value={conversationLlm}
-                              onChange={setConversationLlm}
-                              options={singleOptions}
-                              className="flex-1 min-w-0"
-                            />
-                            <button
-                              type="button"
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-                              aria-label="LLM 정보"
-                            >
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                            <span>KB 선택</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <SelectPopover
-                              value={conversationKb}
-                              onChange={setConversationKb}
-                              options={[
-                                { id: "restock", label: "재입고" },
-                                { id: "faq", label: "FAQ" },
-                                { id: "shipping", label: "배송" },
-                              ]}
-                              className="flex-1 min-w-0"
-                            />
-                            <button
-                              type="button"
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-                              aria-label="KB 정보"
-                            >
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                            <span>관리자 KB 선택</span>
-                            <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
-                              ADMIN
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <SelectPopover
-                              value={conversationAdminKb}
-                              onChange={setConversationAdminKb}
-                              options={[
-                                { id: "mk2", label: "mk2" },
-                                { id: "mk2_hotfix", label: "mk2_hotfix" },
-                              ]}
-                              className="flex-1 min-w-0"
-                            />
-                            <button
-                              type="button"
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-                              aria-label="관리자 KB 정보"
-                            >
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                            <span>Runtime 선택</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <SelectPopover
-                              value={conversationRuntime}
-                              onChange={setConversationRuntime}
-                              options={[
-                                { id: "core_runtime", label: "Core Runtime" },
-                                { id: "laboratory_runtime", label: "Laboratory Runtime" },
-                              ]}
-                              className="flex-1 min-w-0"
-                            />
-                            <button
-                              type="button"
-                              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-                              aria-label="Route 정보"
-                            >
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                        <div>
-                          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                            <span>MCP 프로바이더 선택</span>
-                          </div>
-                          <MultiSelectPopover
-                            values={conversationProviders}
-                            onChange={setConversationProviders}
-                            options={multiToolOptions}
-                            displayMode="count"
-                            showBulkActions
-                            className="w-full"
-                          />
-                        </div>
-                        <div>
-                          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                            <span>MCP 액션 선택</span>
-                          </div>
-                          <MultiSelectPopover
-                            values={conversationActions}
-                            onChange={setConversationActions}
-                            options={groupedToolOptions}
-                            displayMode="count"
-                            showBulkActions
-                            className="w-full"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                }
-                rightPanel={
-                  <div>
-                    <div className="mb-2 text-xs text-slate-500">2행: 대화 div 박스</div>
-                  <div className="rounded-xl border border-slate-200 bg-white">
-                  <div className="relative h-full p-4 flex flex-col overflow-visible">
-                    <div className="relative flex-1 min-h-0 overflow-hidden">
-                      <ConversationAdminMenu
-                        className="right-2 top-2"
-                        open={conversationAdminOpen}
-                        onToggleOpen={() => setConversationAdminOpen((prev) => !prev)}
-                        selectionEnabled={conversationSelectionEnabled}
-                        onToggleSelection={() => {
-                          setConversationSelectionEnabled((prev) => !prev);
-                          if (conversationSelectionEnabled) setConversationSelectedMessageIds([]);
-                        }}
-                        showLogs={conversationShowLogs}
-                        onToggleLogs={() => setConversationShowLogs((prev) => !prev)}
-                        onCopyConversation={() => undefined}
-                        onCopyIssue={() => undefined}
-                      />
-                      <div className="relative z-0 h-full overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-t-xl rounded-b-none pt-10">
-                        <ConversationThread
-                          messages={conversationSampleMessages}
-                          selectedMessageIds={conversationSelectedMessageIds}
-                          selectionEnabled={conversationSelectionEnabled}
-                          onToggleSelection={(messageId) => {
-                            setConversationSelectedMessageIds((prev) =>
-                              prev.includes(messageId)
-                                ? prev.filter((id) => id !== messageId)
-                                : [...prev, messageId]
-                            );
-                          }}
-                          avatarSelectionStyle="both"
-                          renderContent={(msg) =>
-                            msg.richHtml ? (
-                              <span style={{ whiteSpace: "normal" }} dangerouslySetInnerHTML={{ __html: msg.richHtml }} />
-                            ) : (
-                              msg.content
-                            )
-                          }
-                          renderMeta={(msg) =>
-                            conversationShowLogs ? (
-                              <div className="mt-1 text-[10px] text-slate-500">
-                                role={msg.role} id={msg.id}
-                              </div>
-                            ) : null
-                          }
-                          renderAfterBubble={(msg) =>
-                            msg.id === "m2" ? (
-                              <div className="mt-[5px]">
-                                <ConversationGrid columns={2}>
-                                  <ConversationQuickReplyButton label="1번 | 재입고 일정 안내" picked disabled />
-                                  <ConversationQuickReplyButton label="2번 | 일반 문의" disabled />
-                                </ConversationGrid>
-                              </div>
-                            ) : msg.id === "m4" ? (
-                              <>
-                                <div className="mt-[5px]">
-                                  <ConversationGrid columns={2}>
-                                    <ConversationQuickReplyButton label="네" />
-                                    <ConversationQuickReplyButton label="아니오" />
-                                  </ConversationGrid>
-                                </div>
-                                <div className="mt-[5px] flex justify-end">
-                                  <ConversationConfirmButton enabled={false} disabled />
-                                </div>
-                              </>
-                            ) : null
-                          }
-                        />
-                      </div>
-                      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-gradient-to-t from-white to-transparent" />
-                    </div>
-                    <div className="pointer-events-none absolute left-1/2 bottom-0 z-20 -translate-x-1/2 translate-y-1/2">
-                      <button
-                        type="button"
-                        className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-400 bg-white text-slate-600 hover:bg-slate-50"
-                        aria-label="채팅 높이 늘리기"
-                      >
-                        <Plus className="h-5 w-5" />
-                      </button>
-                    </div>
-                    <form
-                      className="relative z-20 flex gap-2 bg-white"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                      }}
-                    >
-                      <Input
-                        value={conversationInput}
-                        onChange={(event) => setConversationInput(event.target.value)}
-                        placeholder="신규 대화 질문을 입력하세요"
-                        className="flex-1"
-                      />
-                      <Button type="submit" className="h-9 px-4" disabled={!conversationInput.trim()}>
-                        <Send className="mr-2 h-4 w-4" />
-                        전송
-                      </Button>
-                    </form>
-                  </div>
-                  </div>
-                  </div>
-                }
-              />
-              <UsedInPages
-                pages={[
-                  "src/components/design-system/conversation/panels.tsx",
-                  "src/components/design-system/conversation/ConversationUI.tsx",
-                  "src/components/design-system/conversation/ConversationUI.tsx",
-                  "src/components/design-system/conversation/ConversationUI.tsx",
+                  "src/components/design-system/conversation/ConversationUI.parts.tsx",
                 ]}
               />
             </Card>
@@ -1096,7 +1580,7 @@ export default function ChatOnly() {
                 </button>
               </div>
               <div className="mt-3 text-xs text-slate-500">실험실/설정 페이지에서 반복되는 세그먼트 선택 UI</div>
-              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.tsx", "src/components/settings/ChatSettingsPanel.tsx"]} />
+              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/settings/ChatSettingsPanel.tsx"]} />
             </Card>
 
             <Card className="p-4">
@@ -1193,52 +1677,28 @@ export default function ChatOnly() {
           </p>
         </div>
 
-        <div className="sticky top-0 z-20 rounded-2xl border border-slate-200 bg-white p-3">
-          <div className="flex flex-wrap gap-2">
-            {categoryLabels.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setActiveCategory(item.key)}
-                className={cn(
-                  "rounded-xl border px-3 py-1.5 text-xs font-semibold",
-                  activeCategory === item.key
-                    ? "border-slate-300 bg-slate-100 text-slate-900"
-                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
+        <div className="sticky top-0 z-20 flex flex-wrap rounded-3xl border border-slate-200 gap-2 bg-white/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
+          {categoryLabels.map((category) => (
+            <button
+              key={category.key}
+              type="button"
+              onClick={() => setActiveCategory(category.key)}
+              className={cn(
+                "rounded-full border px-3 py-1.5 text-xs font-semibold",
+                activeCategory === category.key
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              {category.label}
+            </button>
+          ))}
         </div>
 
         <div className="space-y-4">{visibleSections.map((section) => <div key={section.key}>{section.node}</div>)}</div>
-
-        <Card className="p-4">
-          <div className="text-sm font-semibold text-slate-900">정리 원칙</div>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-600">
-            <li>컴포넌트 신규 추가/변경은 design-system 모듈 중심으로 진행</li>
-            <li>페이지에서는 가능하면 직접 class 조합보다 design-system 조합 사용</li>
-            <li>전역 반영이 필요한 UI는 먼저 이 페이지에 샘플로 등록 후 적용</li>
-          </ul>
-          <div className="mt-3 inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            기준점 페이지 구축 완료
-          </div>
-        </Card>
       </div>
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
 
 

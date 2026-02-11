@@ -67,6 +67,17 @@ type ProposalListResponse = {
       expectedPrompt?: string;
       expectedEvents?: string[];
     }>;
+    ruleCatalog?: Array<{
+      id?: string;
+      principleKey?: string;
+      violationKey?: string;
+      summary?: string;
+      severityDefault?: string;
+      scope?: string;
+      domains?: string[];
+      triggerSignals?: Array<{ name?: string; description?: string }>;
+      evidenceFields?: string[];
+    }>;
   };
   error?: string;
 };
@@ -100,6 +111,45 @@ async function parseJsonBody<T>(res: Response): Promise<T | null> {
 
 function prettyJson(value: unknown) {
   return JSON.stringify(value ?? {}, null, 2);
+}
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  const v = String(value ?? "").trim();
+  return v.length > 0 ? v : null;
+}
+
+function hasAnyObjectKeys(value: unknown) {
+  return Boolean(asObject(value) && Object.keys(value as Record<string, unknown>).length > 0);
+}
+
+function toMissingMarker(reason: string) {
+  return `UNAVAILABLE:${reason}`;
+}
+
+function firstNonEmptyObject(candidates: unknown[]): Record<string, unknown> | null {
+  for (const candidate of candidates) {
+    const obj = asObject(candidate);
+    if (obj && Object.keys(obj).length > 0) return obj;
+  }
+  return null;
+}
+
+function firstNonEmptyString(candidates: unknown[]): string | null {
+  for (const candidate of candidates) {
+    const v = asNonEmptyString(candidate);
+    if (v) return v;
+  }
+  return null;
+}
+
+function firstEventPayload(events: ProposalItem["event_history"], eventType: string): Record<string, unknown> | null {
+  const hit = [...(events || [])].reverse().find((evt) => String(evt.event_type || "").trim() === eventType);
+  return asObject(hit?.payload);
 }
 
 function extractDecisionCodePaths(events: ProposalItem["event_history"]) {
@@ -141,15 +191,59 @@ function extractDecisionCodePaths(events: ProposalItem["event_history"]) {
 
 function deriveRootCauseEvidence(proposal: ProposalItem) {
   const evidence = (proposal.violation?.evidence || {}) as Record<string, unknown>;
+  const preMcpPayload = firstEventPayload(proposal.event_history || [], "PRE_MCP_DECISION") || {};
+  const finalPayload = firstEventPayload(proposal.event_history || [], "FINAL_ANSWER_READY") || {};
+  const completionPayload = firstEventPayload(proposal.event_history || [], "RESTOCK_SUBSCRIBE_DISPATCH_COMPLETED") || {};
+  const violationSummary = String(proposal.violation?.summary || "").trim().toLowerCase();
+  const finalCalls = Array.isArray(preMcpPayload.final_calls) ? preMcpPayload.final_calls : [];
+  const forcedCalls = Array.isArray(preMcpPayload.forced_calls) ? preMcpPayload.forced_calls : [];
+  const candidateCalls = [...finalCalls, ...forcedCalls].map((item) => asObject(item)).filter(Boolean) as Record<
+    string,
+    unknown
+  >[];
+  const callNames = candidateCalls.map((call) => firstNonEmptyString([call.function, call.tool, call.name])).filter(Boolean);
+  const inferredToolName = firstNonEmptyString([
+    evidence.tool_name,
+    ...(callNames.length > 0 ? [callNames.join(", ")] : []),
+    asNonEmptyString(completionPayload.external_action_name),
+    violationSummary.includes("delivery") || violationSummary.includes("dispatch") ? "restock_sms_dispatch" : null,
+  ]);
+  const inferredMismatch = firstNonEmptyString([
+    evidence.mismatch_type,
+    evidence.loop_detected ? "slot_state_regression_loop" : null,
+    evidence.repeated_slot ? "repeated_scope_slot_ask" : null,
+    evidence.external_ack_missing_count ? "external_response_not_received" : null,
+    violationSummary.includes("without deterministic delivery")
+      ? "external_response_not_received"
+      : null,
+  ]);
+  const inferredPolicyReason = firstNonEmptyString([
+    evidence.policy_decision_reason,
+    asObject(finalPayload.quick_reply_config)?.criteria,
+    preMcpPayload.blocked_by_missing_slots ? "blocked_by_missing_slots" : null,
+  ]);
+  const inferredSkipReason = firstNonEmptyString([
+    evidence.mcp_skipped_reason,
+    preMcpPayload.blocked_by_missing_slots ? "MCP_BLOCKED_BY_MISSING_SLOTS" : null,
+    preMcpPayload.final_calls && Array.isArray(preMcpPayload.final_calls) && preMcpPayload.final_calls.length === 0
+      ? "NO_FINAL_CALLS"
+      : null,
+  ]);
+  const inferredForcedTemplate = firstNonEmptyString([
+    evidence.final_response_forced_template_applied,
+    asObject(finalPayload.quick_reply_config)?.criteria,
+  ]);
   const mismatchType = String(evidence.mismatch_type || "").trim();
   const policyReason = String(evidence.policy_decision_reason || "").trim();
   const skipReason = String(evidence.mcp_skipped_reason || "").trim();
   const forcedTemplate = String(evidence.final_response_forced_template_applied || "").trim();
   return {
-    mismatch_type: mismatchType || null,
-    policy_decision_reason: policyReason || null,
-    mcp_skipped_reason: skipReason || null,
-    final_response_forced_template_applied: forcedTemplate || null,
+    mismatch_type: mismatchType || inferredMismatch || toMissingMarker("evidence.mismatch_type"),
+    policy_decision_reason: policyReason || inferredPolicyReason || toMissingMarker("evidence.policy_decision_reason"),
+    mcp_skipped_reason: skipReason || inferredSkipReason || toMissingMarker("evidence.mcp_skipped_reason"),
+    final_response_forced_template_applied:
+      forcedTemplate || inferredForcedTemplate || toMissingMarker("evidence.final_response_forced_template_applied"),
+    tool_name: firstNonEmptyString([evidence.tool_name, inferredToolName]) || toMissingMarker("evidence.tool_name"),
   };
 }
 
@@ -209,6 +303,57 @@ function hasObjectKeys(value: unknown) {
   return Boolean(value && typeof value === "object" && Object.keys(value as Record<string, unknown>).length > 0);
 }
 
+function deriveEvidenceEnvelope(
+  proposal: ProposalItem,
+  beforeAfter: {
+    before: { resolved_fields: unknown; request_fields: unknown; previous_answer: unknown };
+    after: { response_fields: unknown; final_answer: unknown; repeated_answer: unknown };
+  },
+  fallbackContractExpectation: string
+) {
+  const events = proposal.event_history || [];
+  const evidence = (proposal.violation?.evidence || {}) as Record<string, unknown>;
+  const preMcpPayload = firstEventPayload(events, "PRE_MCP_DECISION") || {};
+  const finalAnswerPayload = firstEventPayload(events, "FINAL_ANSWER_READY") || {};
+  const violationPayload = firstEventPayload(events, "PRINCIPLE_VIOLATION_DETECTED") || {};
+  const changeAudit = asObject(finalAnswerPayload.change_audit) || {};
+  const inferredRequestFields = firstNonEmptyObject([
+    evidence.request_fields,
+    beforeAfter.before.request_fields,
+    changeAudit.request,
+    asObject(preMcpPayload.resolved_slots),
+    asObject(preMcpPayload.entity),
+  ]);
+  const inferredResponseFields = firstNonEmptyObject([
+    evidence.response_fields,
+    beforeAfter.after.response_fields,
+    changeAudit.after,
+    asObject(finalAnswerPayload.response_fields),
+    {
+      answer: finalAnswerPayload.answer ?? beforeAfter.after.final_answer ?? null,
+      model: finalAnswerPayload.model ?? null,
+      quick_reply_config: finalAnswerPayload.quick_reply_config ?? null,
+    },
+  ]);
+  const inferredBeforeSnapshot = firstNonEmptyObject([
+    asObject(beforeAfter.before.resolved_fields),
+    asObject(changeAudit.before),
+    asObject(violationPayload.evidence),
+    asObject(preMcpPayload.resolved_slots),
+  ]);
+  const contractExpectation = firstNonEmptyString([
+    evidence.contract_expectation,
+    asNonEmptyString(fallbackContractExpectation),
+  ]);
+  return {
+    request_fields: inferredRequestFields || { __missing__: toMissingMarker("evidence.request_fields") },
+    response_fields: inferredResponseFields || { __missing__: toMissingMarker("evidence.response_fields") },
+    contract_expectation: contractExpectation || toMissingMarker("evidence.contract_expectation"),
+    before_snapshot: inferredBeforeSnapshot || { __missing__: toMissingMarker("before_snapshot") },
+    final_answer_ready_present: Boolean(finalAnswerPayload && Object.keys(finalAnswerPayload).length > 0),
+  };
+}
+
 function summarizeKeyEvents(events: ProposalItem["event_history"]) {
   const lines: string[] = [];
   const collectDecisionNodes = (value: unknown, out: Record<string, unknown>[], seen: Set<unknown>) => {
@@ -264,6 +409,13 @@ function deriveReadinessReport(
   beforeAfter: {
     before: { resolved_fields: unknown; request_fields: unknown; previous_answer: unknown };
     after: { response_fields: unknown; final_answer: unknown; repeated_answer: unknown };
+  },
+  envelope: {
+    request_fields: Record<string, unknown>;
+    response_fields: Record<string, unknown>;
+    contract_expectation: string;
+    before_snapshot: Record<string, unknown>;
+    final_answer_ready_present: boolean;
   }
 ) {
   const events = proposal.event_history || [];
@@ -279,11 +431,17 @@ function deriveReadinessReport(
     has_violation_evidence: hasObjectKeys(evidence),
     has_tool_name: Boolean(String(evidence.tool_name || "").trim()),
     has_mismatch_type: Boolean(String(evidence.mismatch_type || "").trim()),
-    has_request_fields: hasObjectKeys(evidence.request_fields),
-    has_response_fields: hasObjectKeys(evidence.response_fields),
-    has_contract_expectation: Boolean(String(evidence.contract_expectation || "").trim()),
+    has_request_fields: hasAnyObjectKeys(envelope.request_fields) && !String(envelope.request_fields.__missing__ || "").startsWith("UNAVAILABLE:"),
+    has_response_fields:
+      hasAnyObjectKeys(envelope.response_fields) && !String(envelope.response_fields.__missing__ || "").startsWith("UNAVAILABLE:"),
+    has_contract_expectation:
+      Boolean(String(envelope.contract_expectation || "").trim()) &&
+      !String(envelope.contract_expectation || "").startsWith("UNAVAILABLE:"),
     has_decision_code_paths: codePaths.length > 0,
-    has_before_snapshot: hasObjectKeys(beforeAfter.before.resolved_fields) || hasObjectKeys(beforeAfter.before.request_fields),
+    has_before_snapshot:
+      (hasAnyObjectKeys(envelope.before_snapshot) && !String(envelope.before_snapshot.__missing__ || "").startsWith("UNAVAILABLE:")) ||
+      hasObjectKeys(beforeAfter.before.resolved_fields) ||
+      hasObjectKeys(beforeAfter.before.request_fields),
     has_after_snapshot: hasObjectKeys(beforeAfter.after.response_fields) || Boolean(beforeAfter.after.final_answer),
     required_events_present: mustEvents.filter((eventType) => eventSet.has(eventType)),
     required_events_missing: mustEvents.filter((eventType) => !eventSet.has(eventType)),
@@ -301,7 +459,24 @@ function deriveReadinessReport(
   for (const eventType of report.required_events_missing) {
     missingFactors.push(`event:${eventType}`);
   }
-  return { report, missingFactors };
+  const missingReasons: Record<string, string> = {};
+  for (const factor of missingFactors) {
+    if (factor.startsWith("event:")) {
+      const eventType = factor.slice("event:".length);
+      missingReasons[factor] = `event_history에 ${eventType}가 없습니다.`;
+      continue;
+    }
+    if (factor === "violation.evidence.tool_name") {
+      missingReasons[factor] = "violation evidence 및 PRE_MCP_DECISION(final_calls/forced_calls)에서 tool 식별 불가";
+      continue;
+    }
+    if (factor === "before_snapshot") {
+      missingReasons[factor] = "change_audit.before / resolved snapshot 근거가 없습니다.";
+      continue;
+    }
+    missingReasons[factor] = "핵심 증거 필드가 기록되지 않았습니다.";
+  }
+  return { report, missingFactors, missingReasons };
 }
 
 function badgeClass(status: ProposalStatus) {
@@ -433,6 +608,7 @@ export function ProposalSettingsPanel({ authToken }: Props) {
   );
   const eventRows = useMemo(() => Object.values(selfHealMap?.event || {}).filter(Boolean), [selfHealMap]);
   const scenarioRows = useMemo(() => selfHealMap?.scenarioMatrix || [], [selfHealMap]);
+  const ruleRows = useMemo(() => selfHealMap?.ruleCatalog || [], [selfHealMap]);
 
   const principleSummaryByKey = useMemo(() => {
     const map = new Map<string, string>();
@@ -505,19 +681,25 @@ export function ProposalSettingsPanel({ authToken }: Props) {
         : (proposal.target_files || [])
             .filter(Boolean)
             .map((file) => `[inferred] ${file}`);
-    const rootCauseEvidence = deriveRootCauseEvidence(proposal);
     const beforeAfter = deriveBeforeAfterEvidence(proposal);
     const evidence = (proposal.violation?.evidence || {}) as Record<string, unknown>;
     const failingInvariant =
       String(evidence.contract_expectation || "").trim() ||
       "deterministic runtime invariant required (slot->request->response semantic consistency)";
+    const envelope = deriveEvidenceEnvelope(proposal, beforeAfter, failingInvariant);
+    const rootCauseEvidence = {
+      ...deriveRootCauseEvidence(proposal),
+      contract_expectation: envelope.contract_expectation,
+      request_fields: envelope.request_fields,
+      response_fields: envelope.response_fields,
+    };
     const validationChecklist = [
       "1) 동일 입력 재현 시 violation_id가 동일 원인군으로 생성되는지 확인",
       "2) 실패 경계 직전/직후 이벤트(PRE_MCP_DECISION, MCP/FINAL_ANSWER_READY)가 모두 저장되는지 확인",
       "3) 변경 전/후 값(before/request/after/diff)이 payload에 남는지 확인",
       "4) 적용 후 동일 시나리오 재실행 시 PRINCIPLE_VIOLATION_DETECTED가 0인지 확인",
     ];
-    const readiness = deriveReadinessReport(proposal, codePaths, beforeAfter);
+    const readiness = deriveReadinessReport(proposal, codePaths, beforeAfter, envelope);
     const eventTimeline = summarizeKeyEvents(proposal.event_history || []);
     const criticalEventPayloads = buildCriticalEventPayloadDump(proposal.event_history || []);
     const lines: string[] = [
@@ -544,6 +726,9 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       "[Self-Heal Readiness]",
       prettyJson(readiness.report),
       `[Missing Critical Factors] ${readiness.missingFactors.length > 0 ? readiness.missingFactors.join(", ") : "-"}`,
+      `[Missing Critical Factor Reasons] ${
+        Object.keys(readiness.missingReasons).length > 0 ? prettyJson(readiness.missingReasons) : "-"
+      }`,
       "",
       "[Why Failed]",
       proposal.why_failed || "-",
@@ -560,7 +745,17 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       `[Violation Evidence] ${JSON.stringify(proposal.violation?.evidence || {}, null, 2)}`,
       "",
       "[Before/After Snapshot]",
-      prettyJson(beforeAfter),
+      prettyJson({
+        before: {
+          ...beforeAfter.before,
+          envelope_before_snapshot: envelope.before_snapshot,
+        },
+        after: {
+          ...beforeAfter.after,
+          envelope_response_fields: envelope.response_fields,
+          final_answer_ready_present: envelope.final_answer_ready_present,
+        },
+      }),
       "",
       "[Implementation Checklist]",
       ...validationChecklist,
@@ -773,7 +968,7 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       </div>
 
       {selfHealMap ? (
-        <details className="rounded-xl border border-slate-200 bg-white" open>
+        <details className="rounded-xl border border-slate-200 bg-white">
           <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-900">
             자가 회복 기준 맵
           </summary>
@@ -820,13 +1015,39 @@ export function ProposalSettingsPanel({ authToken }: Props) {
                   ))}
                 </div>
                 <div className="mt-3 text-[11px] text-slate-600">
-                  address evidence:{" "}
-                  {(selfHealMap.evidenceContract?.requiredAddressEvidence || []).join(", ") || "-"}
+                  이벤트 기반 공통 근거는 아래 <span className="font-semibold">Rule Triggers (Auto)</span>에서 규칙별로 확인합니다.
                 </div>
-                <div className="mt-1 text-[11px] text-slate-600">
-                  memory evidence:{" "}
-                  {(selfHealMap.evidenceContract?.requiredMemoryEvidence || []).join(", ") || "-"}
-                </div>
+              </div>
+            </div>
+            <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-semibold text-slate-700">Rule Triggers (Auto)</div>
+              <div className="mt-2 space-y-2">
+                {ruleRows.length === 0 ? (
+                  <div className="text-[11px] text-slate-500">-</div>
+                ) : (
+                  ruleRows.map((row, idx) => (
+                    <div key={`${row.id || "rule"}_${idx}`} className="rounded border border-slate-200 bg-white p-2">
+                      <div className="text-[11px] font-mono text-slate-800">{row.id || "-"}</div>
+                      <div className="mt-1 text-[11px] text-slate-600">
+                        principle: <span className="font-mono">{row.principleKey || "-"}</span> / violation:{" "}
+                        <span className="font-mono">{row.violationKey || "-"}</span> / scope:{" "}
+                        <span className="font-mono">{row.scope || "-"}</span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-600">{row.summary || "-"}</div>
+                      <div className="mt-1 text-[10px] text-slate-500">
+                        domains: {(row.domains || []).join(", ") || "-"} / evidence:{" "}
+                        {(row.evidenceFields || []).join(", ") || "-"}
+                      </div>
+                      <div className="mt-1 space-y-1">
+                        {(row.triggerSignals || []).map((signal, signalIdx) => (
+                          <div key={`${row.id || "rule"}_signal_${signalIdx}`} className="text-[10px] text-slate-600">
+                            <span className="font-mono">{signal.name || "-"}</span>: {signal.description || "-"}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">

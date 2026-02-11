@@ -5,11 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { type SelectOption } from "@/components/SelectPopover";
 import { apiFetch } from "@/lib/apiClient";
 import { fetchSessionLogs, fetchTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
-import { isProviderEnabled, isToolEnabled, type ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
+import { isEnabledByGate, isProviderEnabled, isToolEnabled, type ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
 import { useConversationMcpCatalog } from "@/lib/conversation/client/useConversationMcpCatalog";
 import { useLaboratoryConversationActions } from "@/lib/conversation/client/useLaboratoryConversationActions";
 import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
-import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
+import { buildCopyPayload, resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
 import { isAdminKbValue } from "@/lib/kbType";
 import {
@@ -34,6 +34,59 @@ import {
 } from "@/lib/conversation/client/laboratoryPageState";
 import { formatKstDateTime } from "@/lib/kst";
 import { toast } from "sonner";
+import { saveTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
+
+function resolveActiveSessionId(model: ModelState) {
+  if (model.conversationMode === "history") return model.selectedSessionId || null;
+  if (model.conversationMode === "edit") return model.editSessionId || model.sessionId || null;
+  return model.sessionId || null;
+}
+
+function resolveVisibleMessages(model: ModelState) {
+  if (model.conversationMode === "history") return model.historyMessages;
+  if (model.conversationMode === "edit") return [...model.historyMessages, ...model.messages];
+  return model.messages;
+}
+
+function resolveSnapshotTurnId(messages: ChatMessage[], selectedMessageIds: string[]) {
+  const selected = new Set((selectedMessageIds || []).filter(Boolean));
+  const fromSelected = [...messages]
+    .reverse()
+    .find((msg) => msg.role === "bot" && selected.has(msg.id) && String(msg.turnId || "").trim().length > 0);
+  if (fromSelected?.turnId) return String(fromSelected.turnId).trim();
+  const fromAll = [...messages]
+    .reverse()
+    .find((msg) => msg.role === "bot" && String(msg.turnId || "").trim().length > 0);
+  return fromAll?.turnId ? String(fromAll.turnId).trim() : null;
+}
+
+function buildMessageLogsForMessages(
+  messages: ChatMessage[],
+  logs: {
+    mcp_logs: NonNullable<ModelState["messageLogs"][string]["mcp_logs"]>;
+    event_logs: NonNullable<ModelState["messageLogs"][string]["event_logs"]>;
+    debug_logs: NonNullable<ModelState["messageLogs"][string]["debug_logs"]>;
+  }
+) {
+  const mapped: ModelState["messageLogs"] = {};
+  messages.forEach((msg) => {
+    if (msg.role !== "bot") return;
+    const turnId = String(msg.turnId || "").trim();
+    if (!turnId) return;
+    const mcpLogs = (logs.mcp_logs || []).filter((log) => String(log.turn_id || "") === turnId);
+    const eventLogs = (logs.event_logs || []).filter((log) => String(log.turn_id || "") === turnId);
+    const debugLogs = (logs.debug_logs || []).filter((log) => String(log.turn_id || "") === turnId);
+    if (mcpLogs.length === 0 && eventLogs.length === 0 && debugLogs.length === 0) return;
+    mapped[msg.id] = {
+      mcp_logs: mcpLogs,
+      event_logs: eventLogs,
+      debug_logs: debugLogs,
+      logsError: null,
+      logsLoading: false,
+    };
+  });
+  return mapped;
+}
 
 export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app/laboratory") {
   const { isAdminUser, pageFeatures, providerValue, loadPlan, setupUi } = useConversationPageRuntimeConfig(pageKey);
@@ -46,6 +99,15 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
   const [inlineKbSamples, setInlineKbSamples] = useState<InlineKbSampleItem[]>([]);
   const [wsStatus, setWsStatus] = useState("연결 대기");
   const wsRef = useRef<WebSocket | null>(null);
+  const loadingHints = useMemo(() => {
+    const hints: string[] = [];
+    if (loadPlan.loadKb) hints.push("KB");
+    if (loadPlan.loadAgents) hints.push("에이전트/세션");
+    if (loadPlan.loadInlineKbSamples) hints.push("인라인 KB 샘플");
+    if (loadPlan.loadMcp) hints.push("MCP 목록");
+    if (hints.length === 0) hints.push("대화 설정");
+    return hints;
+  }, [loadPlan]);
 
   const [models, setModels] = useState<ModelState[]>(() => [createDefaultModel()]);
   const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
@@ -56,6 +118,14 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
   const prevMessageSignatureRefs = useRef<Record<string, string>>({});
   const [leftPaneHeights, setLeftPaneHeights] = useState<Record<string, number>>({});
   const [viewportTick, setViewportTick] = useState(0);
+  const visibleLlmIds = useMemo<Array<"chatgpt" | "gemini">>(
+    () =>
+      (["chatgpt", "gemini"] as const).filter((id) =>
+        isEnabledByGate(id, pageFeatures.setup.llms)
+      ) as Array<"chatgpt" | "gemini">,
+    [pageFeatures.setup.llms]
+  );
+  const effectiveDefaultLlm = visibleLlmIds[0] || "chatgpt";
 
   useEffect(() => {
     setModels((prev) =>
@@ -81,7 +151,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
             ...model,
             setupMode: resolvedMode,
             conversationMode: resolvedMode === "existing" ? "history" : "new",
-            config: { ...model.config, llm: pageFeatures.setup.defaultLlm },
+            config: { ...model.config, llm: effectiveDefaultLlm },
           };
         }
         if (model.messages.length === 0 && model.historyMessages.length === 0) {
@@ -90,7 +160,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
             ...model,
             setupMode: nextSetupMode,
             conversationMode: nextSetupMode === "existing" ? "history" : "new",
-            config: { ...model.config, llm: pageFeatures.setup.defaultLlm },
+            config: { ...model.config, llm: effectiveDefaultLlm },
           };
         }
         return model;
@@ -100,8 +170,18 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     pageFeatures.setup.modeExisting,
     pageFeatures.setup.modeNew,
     pageFeatures.setup.defaultSetupMode,
-    pageFeatures.setup.defaultLlm,
+    effectiveDefaultLlm,
   ]);
+
+  useEffect(() => {
+    setModels((prev) =>
+      prev.map((model) =>
+        visibleLlmIds.includes(model.config.llm as "chatgpt" | "gemini")
+          ? model
+          : { ...model, config: { ...model.config, llm: effectiveDefaultLlm } }
+      )
+    );
+  }, [effectiveDefaultLlm, visibleLlmIds]);
 
   useEffect(() => {
     if (pageFeatures.setup.inlineUserKbInput) return;
@@ -187,15 +267,16 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
 
   useEffect(() => {
     if (!kbItems.length) return;
-    const userKbs = kbItems.filter((kb) => !isAdminKbValue(kb.is_admin));
-    const firstUserKb = userKbs[0]?.id;
+    const firstUserKb = kbItems.find(
+      (kb) => !isAdminKbValue(kb.is_admin) && isEnabledByGate(kb.id, pageFeatures.setup.kbIds)
+    )?.id;
     setModels((prev) =>
       prev.map((model) => ({
         ...model,
         config: { ...model.config, kbId: model.config.kbId || firstUserKb || "" },
       }))
     );
-  }, [kbItems]);
+  }, [kbItems, pageFeatures.setup.kbIds]);
 
   useEffect(() => {
     if (!pageFeatures.mcp.actionSelector) {
@@ -300,30 +381,41 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
   }, [models, viewportTick]);
 
   const kbOptions = useMemo<SelectOption[]>(() => {
-    return kbItems.filter((kb) => !isAdminKbValue(kb.is_admin)).map((kb) => ({
-      id: kb.id,
-      label: kb.title,
-      description: makeSnippet(kb.content),
-    }));
-  }, [kbItems]);
+    return kbItems
+      .filter((kb) => !isAdminKbValue(kb.is_admin))
+      .filter((kb) => isEnabledByGate(kb.id, pageFeatures.setup.kbIds))
+      .map((kb) => ({
+        id: kb.id,
+        label: kb.title,
+        description: makeSnippet(kb.content),
+      }));
+  }, [kbItems, pageFeatures.setup.kbIds]);
 
   const adminKbOptions = useMemo<SelectOption[]>(() => {
-    return kbItems.filter((kb) => isAdminKbValue(kb.is_admin)).map((kb) => ({
-      id: kb.id,
-      label: kb.title,
-      description: `${kb.applies_to_user ? "적용됨" : "미적용"} · ${makeSnippet(kb.content)}`,
-    }));
-  }, [kbItems]);
+    return kbItems
+      .filter((kb) => isAdminKbValue(kb.is_admin))
+      .filter((kb) => isEnabledByGate(kb.id, pageFeatures.setup.adminKbIds))
+      .map((kb) => ({
+        id: kb.id,
+        label: kb.title,
+        description: `${kb.applies_to_user ? "적용됨" : "미적용"} · ${makeSnippet(kb.content)}`,
+      }));
+  }, [kbItems, pageFeatures.setup.adminKbIds]);
   const adminKbIdSet = useMemo(
     () => new Set(kbItems.filter((kb) => isAdminKbValue(kb.is_admin)).map((kb) => kb.id)),
     [kbItems]
   );
   const latestAdminKbId = useMemo(
     () =>
-      kbItems.find((kb) => isAdminKbValue(kb.is_admin) && kb.applies_to_user !== false)?.id ||
-      kbItems.find((kb) => isAdminKbValue(kb.is_admin))?.id ||
+      kbItems.find(
+        (kb) =>
+          isAdminKbValue(kb.is_admin) &&
+          isEnabledByGate(kb.id, pageFeatures.setup.adminKbIds) &&
+          kb.applies_to_user !== false
+      )?.id ||
+      kbItems.find((kb) => isAdminKbValue(kb.is_admin) && isEnabledByGate(kb.id, pageFeatures.setup.adminKbIds))?.id ||
       "",
-    [kbItems]
+    [kbItems, pageFeatures.setup.adminKbIds]
   );
 
   const providerOptions = useMemo<SelectOption[]>(() => {
@@ -371,19 +463,55 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
   }, [mcpProviders]);
 
   const llmOptions = useMemo<SelectOption[]>(
-    () => [
-      { id: "chatgpt", label: "ChatGPT" },
-      { id: "gemini", label: "Gemini" },
-    ],
-    []
+    () =>
+      visibleLlmIds.map((id) => ({
+        id,
+        label: id === "chatgpt" ? "ChatGPT" : "Gemini",
+      })),
+    [visibleLlmIds]
   );
 
   const routeOptions = useMemo<SelectOption[]>(
-    () => [
-      { id: "shipping", label: "Core Runtime", description: "/api/runtime/chat" },
-    ],
-    []
+    () =>
+      [{ id: "shipping", label: "Core Runtime", description: "/api/runtime/chat" }].filter((route) =>
+        isEnabledByGate(route.id, pageFeatures.setup.routes)
+      ),
+    [pageFeatures.setup.routes]
   );
+
+  useEffect(() => {
+    const allowedKbIds = new Set(kbOptions.map((option) => option.id));
+    const fallbackKbId = kbOptions[0]?.id || "";
+    const allowedRouteIds = new Set(routeOptions.map((option) => option.id));
+    const fallbackRouteId = routeOptions[0]?.id || "shipping";
+    const allowedAdminKbIds = new Set(adminKbOptions.map((option) => option.id));
+    setModels((prev) => {
+      let changed = false;
+      const next = prev.map((model) => {
+        const nextKbId = allowedKbIds.has(model.config.kbId) ? model.config.kbId : fallbackKbId;
+        const nextRoute = allowedRouteIds.has(model.config.route) ? model.config.route : fallbackRouteId;
+        const nextAdminKbIds = model.config.adminKbIds.filter((id) => allowedAdminKbIds.has(id));
+        if (
+          nextKbId === model.config.kbId &&
+          nextRoute === model.config.route &&
+          nextAdminKbIds.length === model.config.adminKbIds.length
+        ) {
+          return model;
+        }
+        changed = true;
+        return {
+          ...model,
+          config: {
+            ...model.config,
+            kbId: nextKbId,
+            route: nextRoute,
+            adminKbIds: nextAdminKbIds,
+          },
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [adminKbOptions, kbOptions, routeOptions]);
 
   const toolById = useMemo(() => {
     const map = new Map<string, MpcTool>();
@@ -488,7 +616,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
         next.setupMode = pageFeatures.setup.modeExisting ? "existing" : "new";
       }
       next.conversationMode = next.setupMode === "existing" ? "history" : "new";
-      next.config.llm = pageFeatures.setup.defaultLlm;
+      next.config.llm = effectiveDefaultLlm;
       return [...prev, next];
     });
   };
@@ -812,6 +940,114 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     isAdminUser,
     pageKey,
   });
+  const conversationDebugOptions = useMemo(
+    () => resolvePageConversationDebugOptions(pageKey, providerValue),
+    [pageKey, providerValue]
+  );
+  const snapshotSyncSignatureRef = useRef<Record<string, string>>({});
+
+  useEffect(() => {
+    let active = true;
+    const signatureByModel = snapshotSyncSignatureRef.current;
+    models.forEach((model) => {
+      const activeSessionId = resolveActiveSessionId(model);
+      if (!activeSessionId) return;
+      const visible = resolveVisibleMessages(model);
+      const latestBotTurnId =
+        [...visible].reverse().find((item) => item.role === "bot" && String(item.turnId || "").trim().length > 0)?.turnId ||
+        "-";
+      const selectedSignature = (model.selectedMessageIds || []).join(",");
+      const syncSignature = [
+        activeSessionId,
+        model.conversationMode,
+        String(latestBotTurnId || "-"),
+        String(visible.length),
+        selectedSignature,
+        pageFeatures.adminPanel.copyConversation ? "1" : "0",
+        pageFeatures.adminPanel.copyIssue ? "1" : "0",
+        JSON.stringify(conversationDebugOptions),
+      ].join("|");
+      if (signatureByModel[model.id] === syncSignature) return;
+      signatureByModel[model.id] = syncSignature;
+
+      void (async () => {
+        try {
+          const [turns, logs] = await Promise.all([
+            apiFetch<TurnRow[]>(`/api/sessions/${activeSessionId}/turns`),
+            fetchSessionLogs(activeSessionId, 500),
+          ]);
+          if (!active) return;
+          const dbMessages = buildHistoryMessages(turns || []);
+          const dbMessageLogs = buildMessageLogsForMessages(dbMessages, logs);
+          const selectedIds = (model.selectedMessageIds || []).filter((id) =>
+            dbMessages.some((msg) => msg.id === id)
+          );
+
+          const conversationPayload = buildCopyPayload({
+            page: pageKey,
+            kind: "conversation",
+            messages: dbMessages,
+            selectedMessageIds: selectedIds,
+            messageLogs: dbMessageLogs,
+            enabledOverride: pageFeatures.adminPanel.copyConversation,
+            conversationDebugOptionsOverride: conversationDebugOptions,
+          });
+          const issuePayload = buildCopyPayload({
+            page: pageKey,
+            kind: "issue",
+            messages: dbMessages,
+            selectedMessageIds: selectedIds,
+            messageLogs: dbMessageLogs,
+            enabledOverride: pageFeatures.adminPanel.copyIssue,
+          });
+          const turnId = resolveSnapshotTurnId(dbMessages, selectedIds);
+
+          updateModel(model.id, (prev) => ({
+            ...prev,
+            messageLogs: Object.keys(dbMessageLogs).length > 0 ? dbMessageLogs : prev.messageLogs,
+            conversationSnapshotText:
+              conversationPayload.allowed && conversationPayload.text.trim()
+                ? conversationPayload.text
+                : prev.conversationSnapshotText,
+            issueSnapshotText:
+              issuePayload.allowed && issuePayload.text.trim() ? issuePayload.text : prev.issueSnapshotText,
+          }));
+
+          if (conversationPayload.allowed && conversationPayload.text.trim()) {
+            await saveTranscriptSnapshot({
+              sessionId: activeSessionId,
+              page: pageKey,
+              kind: "conversation",
+              transcriptText: conversationPayload.text,
+              turnId,
+            }).catch(() => null);
+          }
+          if (issuePayload.allowed && issuePayload.text.trim()) {
+            await saveTranscriptSnapshot({
+              sessionId: activeSessionId,
+              page: pageKey,
+              kind: "issue",
+              transcriptText: issuePayload.text,
+              turnId,
+            }).catch(() => null);
+          }
+        } catch {
+          // Keep last snapshots when DB sync fails.
+        }
+      })();
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    conversationDebugOptions,
+    models,
+    pageFeatures.adminPanel.copyConversation,
+    pageFeatures.adminPanel.copyIssue,
+    pageKey,
+    updateModel,
+  ]);
 
   const toggleMessageSelection = (modelId: string, messageId: string) => {
     if (!pageFeatures.adminPanel.messageSelection) return;
@@ -831,7 +1067,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     await labActions.copyConversation(
       id,
       pageFeatures.adminPanel.copyConversation,
-      resolvePageConversationDebugOptions(pageKey, providerValue)
+      conversationDebugOptions
     );
   };
 
@@ -908,6 +1144,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     inlineKbSamples,
     wsStatus,
     wsStatusDot,
+    loadingHints,
     models,
     leftPaneHeights,
     pageFeatures,

@@ -8,6 +8,15 @@ export type PrincipleBaseline = {
     reusePriority: string;
     entityReuseOrder: readonly string[];
   };
+  dialogue: {
+    enforceIntentScopedSlotGate: boolean;
+    blockFinalAnswerUntilRequiredSlotsResolved: boolean;
+    requireFollowupQuestionForMissingRequiredSlots: boolean;
+    requireScopeStateTransitionLogging: boolean;
+  };
+  audit: {
+    requireMcpLastFunctionAlwaysRecorded: boolean;
+  };
 };
 
 export function getPrincipleBaseline(): PrincipleBaseline {
@@ -19,6 +28,18 @@ export function getPrincipleBaseline(): PrincipleBaseline {
       reusePriority: String(CHAT_PRINCIPLES.memory.reusePriority || "highest"),
       entityReuseOrder: CHAT_PRINCIPLES.memory.entityReuseOrder,
     },
+    dialogue: {
+      enforceIntentScopedSlotGate: Boolean(CHAT_PRINCIPLES.dialogue.enforceIntentScopedSlotGate),
+      blockFinalAnswerUntilRequiredSlotsResolved: Boolean(
+        CHAT_PRINCIPLES.dialogue.blockFinalAnswerUntilRequiredSlotsResolved
+      ),
+      requireFollowupQuestionForMissingRequiredSlots: Boolean(
+        CHAT_PRINCIPLES.dialogue.requireFollowupQuestionForMissingRequiredSlots
+      ),
+      requireScopeStateTransitionLogging: Boolean(CHAT_PRINCIPLES.dialogue.requireScopeStateTransitionLogging),
+    },
+    audit: {
+      requireMcpLastFunctionAlwaysRecorded: Boolean(CHAT_PRINCIPLES.audit.requireMcpLastFunctionAlwaysRecorded),
+    },
   };
 }
-

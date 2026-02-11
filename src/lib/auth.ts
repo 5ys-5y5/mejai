@@ -1,4 +1,4 @@
-﻿const AUTH_KEY = "mejai_auth_v1";
+const AUTH_KEY = "mejai_auth_v1";
 
 interface AuthData {
   email: string;

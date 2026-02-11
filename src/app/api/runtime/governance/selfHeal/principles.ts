@@ -46,6 +46,47 @@ export const SELF_HEAL_PRINCIPLES = {
         baseline: "src/app/api/runtime/chat/policies/principles.ts",
       },
     },
+    intentScopedSlotGate: {
+      key: "dialogue.enforceIntentScopedSlotGate",
+      summary:
+        "Enforce intent-scoped required-slot gate before intent execution/final answer progression.",
+      ownerModules: {
+        detector: "src/app/api/runtime/governance/_lib/detector.ts",
+        proposer: "src/app/api/runtime/governance/_lib/proposer.ts",
+        baseline: "src/app/api/runtime/chat/policies/principles.ts",
+      },
+    },
+    notificationDeliveryAudit: {
+      key: "notification.enforceDeliveryOutcomeAudit",
+      summary:
+        "Require started/completed delivery audit evidence for notification subscription outcomes.",
+      ownerModules: {
+        detector: "src/app/api/runtime/governance/_lib/detector.ts",
+        proposer: "src/app/api/runtime/governance/_lib/proposer.ts",
+        runtimeFlow: "src/app/api/runtime/chat/services/restockSubscriptionRuntime.ts",
+        dispatchFlow: "src/app/api/runtime/restock/dispatch/route.ts",
+      },
+    },
+    actionLifecycleAudit: {
+      key: "action.enforceLifecycleOutcomeAudit",
+      summary:
+        "Require generic STARTED/COMPLETED and terminal outcome evidence for external action completion claims.",
+      ownerModules: {
+        detector: "src/app/api/runtime/governance/_lib/detector.ts",
+        proposer: "src/app/api/runtime/governance/_lib/proposer.ts",
+        runtimeReviewWriter: "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
+      },
+    },
+    mcpLastFunctionAudit: {
+      key: "audit.requireMcpLastFunctionAlwaysRecorded",
+      summary:
+        "MCP.last.function must never be none/blank; record explicit NO_TOOL_CALLED or SKIPPED:<reason>.",
+      ownerModules: {
+        detector: "src/app/api/runtime/governance/_lib/detector.ts",
+        proposer: "src/app/api/runtime/governance/_lib/proposer.ts",
+        runtimeDebug: "src/app/api/runtime/chat/runtime/runtimeSupport.ts",
+      },
+    },
   },
   event: {
     violationDetected: "PRINCIPLE_VIOLATION_DETECTED",
@@ -110,6 +151,35 @@ export const SELF_HEAL_PRINCIPLES = {
         "Proposal relies on one-case field hotfix as primary fix instead of generalized intent-contract runtime guard.",
       severityDefault: "high",
     },
+    intentScopeRequiredSlotMissingProgressed: {
+      key: "dialogue.intent_scope_required_slot_missing_progressed",
+      summary:
+        "Intent progressed to execution/final-answer branch while required intent-scoped slots were unresolved.",
+      severityDefault: "high",
+    },
+    notificationDeliveryAuditMissing: {
+      key: "notification.delivery_outcome_audit_missing",
+      summary:
+        "Notification subscribe flow completed without deterministic delivery audit lifecycle/evidence.",
+      severityDefault: "high",
+    },
+    actionLifecycleOutcomeMissing: {
+      key: "action.lifecycle_outcome_missing",
+      summary:
+        "External action completion-like answer was produced without deterministic action STARTED/COMPLETED/outcome evidence.",
+      severityDefault: "high",
+    },
+    dialogueRepeatedScopeSlotAskLoop: {
+      key: "dialogue.repeated_scope_slot_ask_loop",
+      summary:
+        "Same required scope slot ask repeated after recent resolution/progression, indicating slot-state regression loop.",
+      severityDefault: "high",
+    },
+    mcpLastFunctionMissingReason: {
+      key: "audit.mcp_last_function_missing_reason",
+      summary: "Debug prefix kept MCP.last.function as none/blank instead of explicit reasoned value.",
+      severityDefault: "medium",
+    },
   },
   evidenceContract: {
     // Evidence fields detector/proposer rely on for cause-oriented proposals.
@@ -170,6 +240,38 @@ export const SELF_HEAL_PRINCIPLES = {
       "slot_request_mapping_strategy",
       "response_projection_strategy",
       "pre_post_invariant_strategy",
+    ] as const,
+    requiredIntentScopeGateEvidence: [
+      "intent_name",
+      "required_slots",
+      "resolved_slots",
+      "missing_slots",
+      "policy_actions",
+      "pre_mcp_blocked_by_missing_slots",
+      "final_answer_allowed",
+    ] as const,
+    requiredNotificationDeliveryEvidence: [
+      "intent_name",
+      "notification_ids",
+      "delivery_started_event_present",
+      "delivery_completed_event_present",
+      "delivery_outcome_event_types",
+      "final_answer",
+    ] as const,
+    requiredActionLifecycleEvidence: [
+      "intent_name",
+      "final_answer",
+      "started_event_types",
+      "missing_completed_for_started",
+      "outcome_event_types",
+      "completion_claimed",
+    ] as const,
+    requiredMcpLastFunctionEvidence: [
+      "mcp_last_function",
+      "mcp_last_status",
+      "turn_id",
+      "debug_created_at",
+      "mcp_skipped",
     ] as const,
   },
   scenarioMatrix: [
@@ -257,6 +359,45 @@ export const SELF_HEAL_PRINCIPLES = {
       expectedPrompt: "특정 케이스 대응 대신 범용 계약 기반 설계를 우선 적용",
       expectedEvents: ["PRINCIPLE_VIOLATION_DETECTED", "RUNTIME_PATCH_PROPOSAL_CREATED"],
     },
+    {
+      key: "dialogue.intent_scope_slot_gate",
+      when:
+        "의도 확정 이후 required_slots 중 missing_slots가 존재하지만 실행/최종응답 단계로 진행함",
+      expectedAction: "INTENT_SCOPE_GATE_BLOCKED -> ASK_SCOPE_SLOT -> SCOPE_READY 순서 강제",
+      expectedPrompt: "누락 슬롯 확인 질문을 먼저 제공하고, 슬롯 해결 전 최종답변 차단",
+      expectedEvents: ["POLICY_DECISION", "SLOT_EXTRACTED", "PRE_MCP_DECISION", "FINAL_ANSWER_READY"],
+    },
+    {
+      key: "notification.delivery.audit_missing",
+      when:
+        "알림 신청 완료 응답이 있으나 DELIVERY_STARTED/COMPLETED 또는 RESTOCK_SMS_* 결과 근거가 없음",
+      expectedAction: "알림 발송 경로에 STARTED/COMPLETED 감사 이벤트와 결과 증거를 기록",
+      expectedPrompt: "완료 안내 전에 발송/예약/실패 근거를 결정론적으로 검증",
+      expectedEvents: ["POLICY_DECISION", "FINAL_ANSWER_READY", "RESTOCK_SMS_SENT"],
+    },
+    {
+      key: "action.lifecycle.outcome_missing",
+      when:
+        "외부 액션 STARTED는 있으나 COMPLETED/결과 이벤트 근거 없이 완료형 답변을 출력함",
+      expectedAction: "외부 액션별 STARTED/COMPLETED 및 결과 이벤트를 공통 계약으로 강제",
+      expectedPrompt: "완료 안내 전에 액션 완료 신호를 결정론적으로 검증",
+      expectedEvents: ["POLICY_DECISION", "PRE_MCP_DECISION", "FINAL_ANSWER_READY"],
+    },
+    {
+      key: "dialogue.repeated_scope_slot.ask_loop",
+      when:
+        "의도 스코프 슬롯이 직전 N턴에서 해소/진행되었는데 같은 슬롯 질문이 다시 반복됨",
+      expectedAction: "슬롯 해소값 회귀를 감지하고 반복 질문 루프를 self-heal 제안으로 승격",
+      expectedPrompt: "동일 슬롯 재질문 대신 회귀 원인/대체 경로를 우선 안내",
+      expectedEvents: ["POLICY_DECISION", "SLOT_EXTRACTED", "PRE_MCP_DECISION", "FINAL_ANSWER_READY"],
+    },
+    {
+      key: "audit.mcp_last_function.reasoned",
+      when: "prefix_json.mcp.last.function 값이 none 또는 공백으로 기록됨",
+      expectedAction: "NO_TOOL_CALLED 또는 SKIPPED:<reason> 형식으로 항상 채움",
+      expectedPrompt: "실패 지점 전/후 추적 가능한 함수 상태를 보장",
+      expectedEvents: ["RUNTIME_SELF_UPDATE_REVIEW_STARTED", "RUNTIME_SELF_UPDATE_REVIEW_COMPLETED"],
+    },
   ] as const,
 } as const;
 
@@ -265,6 +406,10 @@ export const SELF_HEAL_PRINCIPLE_KEYS = {
   addressResolveZipcode: SELF_HEAL_PRINCIPLES.principle.addressResolveZipcode.key,
   apiContractAlignment: SELF_HEAL_PRINCIPLES.principle.apiContractAlignment.key,
   contractFirstRuntimeDesign: SELF_HEAL_PRINCIPLES.principle.contractFirstRuntimeDesign.key,
+  intentScopedSlotGate: SELF_HEAL_PRINCIPLES.principle.intentScopedSlotGate.key,
+  notificationDeliveryAudit: SELF_HEAL_PRINCIPLES.principle.notificationDeliveryAudit.key,
+  actionLifecycleAudit: SELF_HEAL_PRINCIPLES.principle.actionLifecycleAudit.key,
+  mcpLastFunctionAudit: SELF_HEAL_PRINCIPLES.principle.mcpLastFunctionAudit.key,
 } as const;
 
 export const SELF_HEAL_EVENT_TYPES = {
@@ -291,6 +436,16 @@ export const SELF_HEAL_VIOLATION_KEYS = {
     SELF_HEAL_PRINCIPLES.violation.apiConversationToolContractMismatch.key,
   caseSpecificHardcodingPrimaryFix:
     SELF_HEAL_PRINCIPLES.violation.caseSpecificHardcodingPrimaryFix.key,
+  intentScopeRequiredSlotMissingProgressed:
+    SELF_HEAL_PRINCIPLES.violation.intentScopeRequiredSlotMissingProgressed.key,
+  notificationDeliveryAuditMissing:
+    SELF_HEAL_PRINCIPLES.violation.notificationDeliveryAuditMissing.key,
+  actionLifecycleOutcomeMissing:
+    SELF_HEAL_PRINCIPLES.violation.actionLifecycleOutcomeMissing.key,
+  dialogueRepeatedScopeSlotAskLoop:
+    SELF_HEAL_PRINCIPLES.violation.dialogueRepeatedScopeSlotAskLoop.key,
+  mcpLastFunctionMissingReason:
+    SELF_HEAL_PRINCIPLES.violation.mcpLastFunctionMissingReason.key,
 } as const;
 
 export function isAddressSelfHealPrinciple(principleKey: unknown) {
@@ -307,4 +462,20 @@ export function isApiContractSelfHealPrinciple(principleKey: unknown) {
 
 export function isContractFirstRuntimeDesignPrinciple(principleKey: unknown) {
   return String(principleKey || "") === SELF_HEAL_PRINCIPLE_KEYS.contractFirstRuntimeDesign;
+}
+
+export function isIntentScopedSlotGatePrinciple(principleKey: unknown) {
+  return String(principleKey || "") === SELF_HEAL_PRINCIPLE_KEYS.intentScopedSlotGate;
+}
+
+export function isNotificationDeliveryAuditPrinciple(principleKey: unknown) {
+  return String(principleKey || "") === SELF_HEAL_PRINCIPLE_KEYS.notificationDeliveryAudit;
+}
+
+export function isActionLifecycleAuditPrinciple(principleKey: unknown) {
+  return String(principleKey || "") === SELF_HEAL_PRINCIPLE_KEYS.actionLifecycleAudit;
+}
+
+export function isMcpLastFunctionAuditPrinciple(principleKey: unknown) {
+  return String(principleKey || "") === SELF_HEAL_PRINCIPLE_KEYS.mcpLastFunctionAudit;
 }

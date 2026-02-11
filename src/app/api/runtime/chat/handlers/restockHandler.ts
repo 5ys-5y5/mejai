@@ -65,11 +65,23 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     const b = normalizeNameKey(right || "");
     return Boolean(a && b && a === b);
   };
+  const isSchedulableEntry = (month: number, day: number) => {
+    const due = toRestockDueText(Number(month || 0), Number(day || 0));
+    return Number.isFinite(due.diffDays) && due.diffDays >= 0;
+  };
+  const filterSchedulableEntries = (items: Array<Record<string, unknown>>) =>
+    (Array.isArray(items) ? items : []).filter((item) => isSchedulableEntry(Number(item.month || 0), Number(item.day || 0)));
+  const reindexCandidateRows = (rows: Array<Record<string, unknown>>) =>
+    rows.map((row, idx) => ({ ...row, index: idx + 1 }));
+  const noSchedulableScheduleReply = "안내 가능한 재입고 일정이 없습니다. 미래 입고 예정 상품만 안내할 수 있습니다.";
 
   // Handle pending restock product choice even if current turn intent is misclassified (e.g. "1" -> general).
-  const prevRestockCandidatesForAnyIntent = Array.isArray((prevBotContext as any).restock_candidates)
+  const prevRestockCandidatesForAnyIntentRaw = Array.isArray((prevBotContext as any).restock_candidates)
     ? ((prevBotContext as any).restock_candidates as Array<Record<string, unknown>>)
     : [];
+  const prevRestockCandidatesForAnyIntent = reindexCandidateRows(
+    filterSchedulableEntries(prevRestockCandidatesForAnyIntentRaw)
+  );
   const pickedIndexForAnyIntent = parseIndexedChoice(message);
   const pickedFromPrevForAnyIntent =
     prevBotContext.restock_pending &&
@@ -145,15 +157,16 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
   }
 
   if (resolvedIntent === "restock_inquiry" || resolvedIntent === "restock_subscribe") {
-    const restockKbEntries = [
+    const restockKbEntriesRaw = [
       ...parseRestockEntriesFromContent(String(kb.content || ""), `kb:${kb.id}`),
       ...adminKbs.flatMap((item) =>
         parseRestockEntriesFromContent(String(item.content || ""), `admin_kb:${item.id}`)
       ),
     ];
-    const prevRestockCandidates = Array.isArray((prevBotContext as any).restock_candidates)
+    const prevRestockCandidatesRaw = Array.isArray((prevBotContext as any).restock_candidates)
       ? ((prevBotContext as any).restock_candidates as Array<Record<string, unknown>>)
       : [];
+    const prevRestockCandidates = reindexCandidateRows(filterSchedulableEntries(prevRestockCandidatesRaw));
     const pickedIndex = parseIndexedChoice(message);
     const pickedFromPrev =
       pickedIndex && prevRestockCandidates.length >= pickedIndex
@@ -237,24 +250,28 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       pendingProductId ||
       "";
     const restockChannel = extractRestockChannel(message) || pendingChannel || "sms";
-    const rankedFromMessage = rankRestockEntries(restockQueryText, restockKbEntries);
+    const rankedFromMessage = rankRestockEntries(restockQueryText, restockKbEntriesRaw);
+    const rankedFromMessageSchedulable = rankedFromMessage.filter((row) =>
+      isSchedulableEntry(Number((row as any)?.entry?.month || 0), Number((row as any)?.entry?.day || 0))
+    );
     const queryCoreNoSpace = normalizeKoreanQueryToken(stripRestockNoise(restockQueryText)).replace(/\s+/g, "");
-    const kbMatchFromQuery = rankedFromMessage.length > 0 ? rankedFromMessage[0].entry : null;
+    const kbMatchFromQuery = rankedFromMessageSchedulable.length > 0 ? rankedFromMessageSchedulable[0].entry : null;
     const broadCandidates =
       queryCoreNoSpace.length > 0
-        ? restockKbEntries
+        ? filterSchedulableEntries(
+          restockKbEntriesRaw
           .filter((item) =>
             normalizeKoreanMatchText(item.product_name).replace(/\s+/g, "").includes(queryCoreNoSpace)
           )
-          .slice(0, CHAT_PRINCIPLES.response.choicePreviewMax)
+        ).slice(0, CHAT_PRINCIPLES.response.choicePreviewMax)
         : [];
 
     // Restock inquiry should stay strictly within KB schedule targets.
     // If query doesn't map to KB restock items, do not expose non-target products via MCP fuzzy match.
     if (
       resolvedIntent === "restock_inquiry" &&
-      restockKbEntries.length > 0 &&
-      rankedFromMessage.length === 0 &&
+      restockKbEntriesRaw.length > 0 &&
+      rankedFromMessageSchedulable.length === 0 &&
       !lockIntentToRestockSubscribe &&
       !restockSubscribeAcceptedThisTurn &&
       !pendingProductId
@@ -315,7 +332,9 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         );
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions, product_cards: [] });
       }
-        const candidateRows = restockKbEntries.slice(0, CHAT_PRINCIPLES.response.choicePreviewMax).map((item, idx) => ({
+        const candidateRows = filterSchedulableEntries(restockKbEntriesRaw)
+          .slice(0, CHAT_PRINCIPLES.response.choicePreviewMax)
+          .map((item, idx) => ({
           index: idx + 1,
           product_name: item.product_name,
           month: item.month,
@@ -324,6 +343,39 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           product_id: null as string | null,
           thumbnail_url: null as string | null,
         }));
+        if (candidateRows.length === 0) {
+          const reply = makeReply(noSchedulableScheduleReply);
+          await insertTurn({
+            session_id: sessionId,
+            seq: nextSeq,
+            transcript_text: message,
+            answer_text: reply,
+            final_answer: reply,
+            bot_context: {
+              intent_name: resolvedIntent,
+              entity: policyContext.entity,
+              customer_verification_token: customerVerificationToken || null,
+              mcp_actions: mcpActions,
+            },
+          });
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "POLICY_DECISION",
+            { stage: "tool", action: "RESTOCK_NO_SCHEDULABLE_CANDIDATES" },
+            { intent_name: resolvedIntent }
+          );
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "FINAL_ANSWER_READY",
+            { answer: reply, model: "deterministic_restock_kb" },
+            { intent_name: resolvedIntent }
+          );
+          return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+        }
         if (
           canUseTool("resolve_product") &&
           hasAllowedToolName("resolve_product") &&
@@ -548,8 +600,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         });
       }
 
-    if (hasChoiceAnswerCandidates(rankedFromMessage.length)) {
-      const candidateRows = rankedFromMessage.map((row, idx) => ({
+    if (hasChoiceAnswerCandidates(rankedFromMessageSchedulable.length)) {
+      const candidateRows = rankedFromMessageSchedulable.map((row, idx) => ({
         index: idx + 1,
         product_name: row.entry.product_name,
         month: row.entry.month,
@@ -656,7 +708,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         sessionId,
         latestTurnId,
         "POLICY_DECISION",
-        { stage: "tool", action: "ASK_RESTOCK_PRODUCT_CHOICE", candidate_count: rankedFromMessage.length },
+        { stage: "tool", action: "ASK_RESTOCK_PRODUCT_CHOICE", candidate_count: rankedFromMessageSchedulable.length },
         { intent_name: resolvedIntent }
       );
       return respond({
@@ -761,9 +813,12 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     }
 
     if (!restockProductId && !pendingProductName) {
-      const ranked = rankRestockEntries(restockQueryText, restockKbEntries);
-      if (hasUniqueAnswerCandidate(ranked.length)) {
-        const item = ranked[0].entry;
+      const ranked = rankRestockEntries(restockQueryText, restockKbEntriesRaw);
+      const rankedSchedulable = ranked.filter((row) =>
+        isSchedulableEntry(Number((row as any)?.entry?.month || 0), Number((row as any)?.entry?.day || 0))
+      );
+      if (hasUniqueAnswerCandidate(rankedSchedulable.length)) {
+        const item = rankedSchedulable[0].entry;
         const due = toRestockDueText(item.month, item.day);
         const reply = makeReply(buildRestockFinalAnswerWithChoices(item.product_name, due));
         await insertTurn({
@@ -822,8 +877,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           product_cards: [],
         });
       }
-      if (hasChoiceAnswerCandidates(ranked.length)) {
-        const candidateRows = ranked.map((row, idx) => ({
+      if (hasChoiceAnswerCandidates(rankedSchedulable.length)) {
+        const candidateRows = rankedSchedulable.map((row, idx) => ({
           index: idx + 1,
           product_name: row.entry.product_name,
           month: row.entry.month,
@@ -930,7 +985,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           sessionId,
           latestTurnId,
           "POLICY_DECISION",
-          { stage: "tool", action: "ASK_RESTOCK_PRODUCT_CHOICE", candidate_count: ranked.length },
+          { stage: "tool", action: "ASK_RESTOCK_PRODUCT_CHOICE", candidate_count: rankedSchedulable.length },
           { intent_name: resolvedIntent }
         );
         return respond({
@@ -940,6 +995,39 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           mcp_actions: mcpActions,
           product_cards: productCards,
         });
+      }
+      if (ranked.length > 0 && rankedSchedulable.length === 0) {
+        const reply = makeReply(noSchedulableScheduleReply);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            customer_verification_token: customerVerificationToken || null,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          { stage: "tool", action: "RESTOCK_MATCHED_ONLY_PAST_SCHEDULES" },
+          { intent_name: resolvedIntent }
+        );
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          { answer: reply, model: "deterministic_restock_kb" },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
       }
       const reply = makeReply("확인할 상품명을 먼저 알려주세요. (예: 아드헬린 린넨 플레어 원피스)");
       await insertTurn({
@@ -1062,13 +1150,13 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     }
     const scheduleEntry = findBestRestockEntryByProductName(
       productView.productName || pendingProductName || String(restockProductId),
-      restockKbEntries
+      restockKbEntriesRaw
     );
+    const scheduleDueForEntry = scheduleEntry ? toRestockDueText(scheduleEntry.month, scheduleEntry.day) : null;
     const restockDisplayName = String(productView.productName || pendingProductName || restockProductId || "").trim();
     const scheduleLine = scheduleEntry
       ? (() => {
-        const due = toRestockDueText(scheduleEntry.month, scheduleEntry.day);
-        return `입고 예정: ${scheduleEntry.raw_date} (${due.dday})`;
+        return `입고 예정: ${scheduleEntry.raw_date} (${scheduleDueForEntry?.dday || "-"})`;
       })()
       : "입고 예정: 확인된 일정 정보 없음";
     const policyAnswerability = String(productDecisionRes.decision?.answerability || "UNKNOWN");
@@ -1086,6 +1174,47 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         }`;
 
     if (resolvedIntent === "restock_subscribe") {
+      if (scheduleDueForEntry && scheduleDueForEntry.diffDays < 0) {
+        const reply = makeReply(
+          `선택하신 상품의 입고 예정일(${scheduleDueForEntry.targetText})은 이미 지난 일정이라 예약 알림을 신청할 수 없습니다. 다른 상품의 입고 일정을 확인해 주세요.`
+        );
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            customer_verification_token: customerVerificationToken || null,
+            mcp_actions: mcpActions,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "POLICY_DECISION",
+          {
+            stage: "tool",
+            action: "BLOCK_RESTOCK_SUBSCRIBE_PAST_SCHEDULE",
+            product_id: restockProductId || null,
+            restock_at: scheduleDueForEntry.targetText,
+            diff_days: scheduleDueForEntry.diffDays,
+          },
+          { intent_name: resolvedIntent }
+        );
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          { answer: reply, model: "deterministic_restock_subscribe_past_schedule_guard" },
+          { intent_name: resolvedIntent }
+        );
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
+      }
       if (!restockSubscribeAcceptedThisTurn) {
         const reply = makeReply(
           buildYesNoConfirmationPrompt(
@@ -1127,7 +1256,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       const pendingLeadDaysFromContext = Array.isArray((prevBotContext as any).pending_lead_days)
         ? ((prevBotContext as any).pending_lead_days as number[]).map((n) => Number(n)).filter((n) => Number.isFinite(n))
         : [];
-      const scheduleDue = scheduleEntry ? toRestockDueText(scheduleEntry.month, scheduleEntry.day) : null;
+      const scheduleDue = scheduleDueForEntry;
       const availableLeadDays = scheduleDue ? availableRestockLeadDays(scheduleDue.diffDays) : [];
       const minLeadDays = 1;
 

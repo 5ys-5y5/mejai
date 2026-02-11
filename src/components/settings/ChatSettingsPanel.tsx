@@ -245,6 +245,7 @@ type GroupToggleFieldProps = {
   expanded?: boolean;
   onToggleExpanded?: () => void;
   neutralStyle?: boolean;
+  hideToggle?: boolean;
 };
 
 function GroupToggleField({
@@ -255,6 +256,7 @@ function GroupToggleField({
   expanded = false,
   onToggleExpanded,
   neutralStyle = false,
+  hideToggle = false,
 }: GroupToggleFieldProps) {
   const displayLabel = (label || "").trim() || "group.unknown";
   return (
@@ -287,19 +289,21 @@ function GroupToggleField({
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
       ) : null}
-      <span className="state-controls flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => onChange(!checked)}
-          className={
-            checked
-              ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white"
-              : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 px-2 py-1 text-[11px] font-bold text-white"
-          }
-        >
-          {checked ? "ON" : "OFF"}
-        </button>
-      </span>
+      {!hideToggle ? (
+        <span className="state-controls flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onChange(!checked)}
+            className={
+              checked
+                ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white"
+                : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 px-2 py-1 text-[11px] font-bold text-white"
+            }
+          >
+            {checked ? "ON" : "OFF"}
+          </button>
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -1151,46 +1155,51 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           if (!isHeader) return;
                           setExpandAll(setDebugHeaderDetailsOpenByPage, !debugHeaderDetailsOpenByPage["/"]);
                         }}
+                        hideToggle={isHeader}
                       />
                       {showDebugHeaderDetails ? (
                         <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>대원칙</span>
-                        <button
-                          type="button"
-                          disabled={!(debugHeader?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                header: { ...prev.sections?.header, principle: !(debugHeader?.principle ?? true) },
-                              },
-                            }))
-                          }
-                          className={(debugHeader?.enabled ?? true) && (debugHeader?.principle ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugHeader?.enabled ?? true) ? ((debugHeader?.principle ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugHeader?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  header: { ...prev.sections?.header, principle: !(debugHeader?.principle ?? true) },
+                                },
+                              }))
+                            }
+                            className={(debugHeader?.enabled ?? true) && (debugHeader?.principle ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugHeader?.enabled ?? true) ? ((debugHeader?.principle ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>기대 목록</span>
-                        <button
-                          type="button"
-                          disabled={!(debugHeader?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                header: { ...prev.sections?.header, expectedLists: !(debugHeader?.expectedLists ?? true) },
-                              },
-                            }))
-                          }
-                          className={(debugHeader?.enabled ?? true) && (debugHeader?.expectedLists ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugHeader?.enabled ?? true) ? ((debugHeader?.expectedLists ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugHeader?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  header: { ...prev.sections?.header, expectedLists: !(debugHeader?.expectedLists ?? true) },
+                                },
+                              }))
+                            }
+                            className={(debugHeader?.enabled ?? true) && (debugHeader?.expectedLists ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugHeader?.enabled ?? true) ? ((debugHeader?.expectedLists ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span className="inline-flex items-center">
@@ -1199,22 +1208,24 @@ export function ChatSettingsPanel({ authToken }: Props) {
                             debug.prefix_json.execution.call_chain[0].module_path: {pickExample(["debug.prefix_json.execution.call_chain[0].module_path"]) || "-"}
                           </InlineHelpPopup>
                         </span>
-                        <button
-                          type="button"
-                          disabled={!(debugHeader?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                header: { ...prev.sections?.header, runtimeModules: !(debugHeader?.runtimeModules ?? true) },
-                              },
-                            }))
-                          }
-                          className={(debugHeader?.enabled ?? true) && (debugHeader?.runtimeModules ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugHeader?.enabled ?? true) ? ((debugHeader?.runtimeModules ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugHeader?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  header: { ...prev.sections?.header, runtimeModules: !(debugHeader?.runtimeModules ?? true) },
+                                },
+                              }))
+                            }
+                            className={(debugHeader?.enabled ?? true) && (debugHeader?.runtimeModules ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugHeader?.enabled ?? true) ? ((debugHeader?.runtimeModules ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span className="inline-flex items-center">
@@ -1223,22 +1234,24 @@ export function ChatSettingsPanel({ authToken }: Props) {
                             MCP: {debugFieldMcpTools[0] || "-"} / Event: {debugFieldEventTypes[0] || "-"}
                           </InlineHelpPopup>
                         </span>
-                        <button
-                          type="button"
-                          disabled={!(debugHeader?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                header: { ...prev.sections?.header, auditStatus: !(debugHeader?.auditStatus ?? true) },
-                              },
-                            }))
-                          }
-                          className={(debugHeader?.enabled ?? true) && (debugHeader?.auditStatus ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugHeader?.enabled ?? true) ? ((debugHeader?.auditStatus ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugHeader?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  header: { ...prev.sections?.header, auditStatus: !(debugHeader?.auditStatus ?? true) },
+                                },
+                              }))
+                            }
+                            className={(debugHeader?.enabled ?? true) && (debugHeader?.auditStatus ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugHeader?.enabled ?? true) ? ((debugHeader?.auditStatus ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                         </div>
                       ) : null}
@@ -1261,142 +1274,159 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           if (!isHeader) return;
                           setExpandAll(setDebugTurnDetailsOpenByPage, !debugTurnDetailsOpenByPage["/"]);
                         }}
+                        hideToggle={isHeader}
                       />
                       {showDebugTurnDetails ? (
                         <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>TURN_ID</span>
-                        <button
-                          type="button"
-                          disabled={!(debugTurn?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, turnId: !(debugTurn?.turnId ?? true) } },
-                            }))
-                          }
-                          className={(debugTurn?.enabled ?? true) && (debugTurn?.turnId ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.turnId ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugTurn?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, turnId: !(debugTurn?.turnId ?? true) } },
+                              }))
+                            }
+                            className={(debugTurn?.enabled ?? true) && (debugTurn?.turnId ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.turnId ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>TOKEN_USED</span>
-                        <button
-                          type="button"
-                          disabled={!(debugTurn?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, tokenUsed: !(debugTurn?.tokenUsed ?? true) } },
-                            }))
-                          }
-                          className={(debugTurn?.enabled ?? true) && (debugTurn?.tokenUsed ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.tokenUsed ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugTurn?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, tokenUsed: !(debugTurn?.tokenUsed ?? true) } },
+                              }))
+                            }
+                            className={(debugTurn?.enabled ?? true) && (debugTurn?.tokenUsed ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.tokenUsed ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>TOKEN_UNUSED</span>
-                        <button
-                          type="button"
-                          disabled={!(debugTurn?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, tokenUnused: !(debugTurn?.tokenUnused ?? true) } },
-                            }))
-                          }
-                          className={(debugTurn?.enabled ?? true) && (debugTurn?.tokenUnused ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.tokenUnused ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugTurn?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, tokenUnused: !(debugTurn?.tokenUnused ?? true) } },
+                              }))
+                            }
+                            className={(debugTurn?.enabled ?? true) && (debugTurn?.tokenUnused ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.tokenUnused ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>RESPONSE_SCHEMA(요약)</span>
-                        <button
-                          type="button"
-                          disabled={!(debugTurn?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                turn: { ...prev.sections?.turn, responseSchemaSummary: !(debugTurn?.responseSchemaSummary ?? true) },
-                              },
-                            }))
-                          }
-                          className={(debugTurn?.enabled ?? true) && (debugTurn?.responseSchemaSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.responseSchemaSummary ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugTurn?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  turn: { ...prev.sections?.turn, responseSchemaSummary: !(debugTurn?.responseSchemaSummary ?? true) },
+                                },
+                              }))
+                            }
+                            className={(debugTurn?.enabled ?? true) && (debugTurn?.responseSchemaSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.responseSchemaSummary ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>RESPONSE_SCHEMA(상세)</span>
-                        <button
-                          type="button"
-                          disabled={!(debugTurn?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                turn: { ...prev.sections?.turn, responseSchemaDetail: !(debugTurn?.responseSchemaDetail ?? true) },
-                              },
-                            }))
-                          }
-                          className={(debugTurn?.enabled ?? true) && (debugTurn?.responseSchemaDetail ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.responseSchemaDetail ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugTurn?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  turn: { ...prev.sections?.turn, responseSchemaDetail: !(debugTurn?.responseSchemaDetail ?? true) },
+                                },
+                              }))
+                            }
+                            className={(debugTurn?.enabled ?? true) && (debugTurn?.responseSchemaDetail ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.responseSchemaDetail ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>RENDER_PLAN(요약)</span>
-                        <button
-                          type="button"
-                          disabled={!(debugTurn?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, renderPlanSummary: !(debugTurn?.renderPlanSummary ?? true) } },
-                            }))
-                          }
-                          className={(debugTurn?.enabled ?? true) && (debugTurn?.renderPlanSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanSummary ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugTurn?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, renderPlanSummary: !(debugTurn?.renderPlanSummary ?? true) } },
+                              }))
+                            }
+                            className={(debugTurn?.enabled ?? true) && (debugTurn?.renderPlanSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanSummary ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>RENDER_PLAN(상세)</span>
-                        <button
-                          type="button"
-                          disabled={!(debugTurn?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, renderPlanDetail: !(debugTurn?.renderPlanDetail ?? true) } },
-                            }))
-                          }
-                          className={(debugTurn?.enabled ?? true) && (debugTurn?.renderPlanDetail ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanDetail ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugTurn?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, renderPlanDetail: !(debugTurn?.renderPlanDetail ?? true) } },
+                              }))
+                            }
+                            className={(debugTurn?.enabled ?? true) && (debugTurn?.renderPlanDetail ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanDetail ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>QUICK_REPLY_RULE</span>
-                        <button
-                          type="button"
-                          disabled={!(debugTurn?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, turn: { ...prev.sections?.turn, quickReplyRule: !(debugTurn?.quickReplyRule ?? true) } },
-                            }))
-                          }
-                          className={(debugTurn?.enabled ?? true) && (debugTurn?.quickReplyRule ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugTurn?.enabled ?? true) ? ((debugTurn?.quickReplyRule ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugTurn?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, quickReplyRule: !(debugTurn?.quickReplyRule ?? true) } },
+                              }))
+                            }
+                            className={(debugTurn?.enabled ?? true) && (debugTurn?.quickReplyRule ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.quickReplyRule ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                         </div>
                       ) : null}
@@ -1419,40 +1449,45 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           if (!isHeader) return;
                           setExpandAll(setDebugLogsDetailsOpenByPage, !debugLogsDetailsOpenByPage["/"]);
                         }}
+                        hideToggle={isHeader}
                       />
                       {showDebugLogsDetails ? (
                         <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>문제 요약</span>
-                        <button
-                          type="button"
-                          disabled={!(debugLogs?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, issueSummary: !(debugLogs?.issueSummary ?? true) } },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) && (debugLogs?.issueSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugLogs?.enabled ?? true) ? ((debugLogs?.issueSummary ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugLogs?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, issueSummary: !(debugLogs?.issueSummary ?? true) } },
+                              }))
+                            }
+                            className={(debugLogs?.enabled ?? true) && (debugLogs?.issueSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugLogs?.enabled ?? true) ? ((debugLogs?.issueSummary ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>DEBUG 로그</span>
-                        <button
-                          type="button"
-                          disabled={!(debugLogs?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, debug: { ...prev.sections?.logs?.debug, enabled: !(debugLogDebug?.enabled ?? true) } } },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) && (debugLogDebug?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugLogs?.enabled ?? true) ? ((debugLogDebug?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugLogs?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, debug: { ...prev.sections?.logs?.debug, enabled: !(debugLogDebug?.enabled ?? true) } } },
+                              }))
+                            }
+                            className={(debugLogs?.enabled ?? true) && (debugLogDebug?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugLogs?.enabled ?? true) ? ((debugLogDebug?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span className="inline-flex items-center">
@@ -1461,35 +1496,39 @@ export function ChatSettingsPanel({ authToken }: Props) {
                             {pickExample(["debug.prefix_json.mcp.last.function", "debug.prefix_json.decision.function_name"]) || "-"}
                           </InlineHelpPopup>
                         </span>
-                        <button
-                          type="button"
-                          disabled={!(debugLogs?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, debug: { ...prev.sections?.logs?.debug, prefixJson: !(debugLogDebug?.prefixJson ?? true) } } },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) && (debugLogDebug?.prefixJson ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugLogs?.enabled ?? true) ? ((debugLogDebug?.prefixJson ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugLogs?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, debug: { ...prev.sections?.logs?.debug, prefixJson: !(debugLogDebug?.prefixJson ?? true) } } },
+                              }))
+                            }
+                            className={(debugLogs?.enabled ?? true) && (debugLogDebug?.prefixJson ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugLogs?.enabled ?? true) ? ((debugLogDebug?.prefixJson ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>MCP 로그</span>
-                        <button
-                          type="button"
-                          disabled={!(debugLogs?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, enabled: !(debugLogMcp?.enabled ?? true) } } },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugLogs?.enabled ?? true) ? ((debugLogMcp?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugLogs?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, enabled: !(debugLogMcp?.enabled ?? true) } } },
+                              }))
+                            }
+                            className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugLogs?.enabled ?? true) ? ((debugLogMcp?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span className="inline-flex items-center">
@@ -1498,22 +1537,24 @@ export function ChatSettingsPanel({ authToken }: Props) {
                             {pickExample(["mcp.request_payload.path", "mcp.request_payload.method"]) || "-"}
                           </InlineHelpPopup>
                         </span>
-                        <button
-                          type="button"
-                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, request: !(debugLogMcp?.request ?? true) } },
-                              },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.request ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.request ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, request: !(debugLogMcp?.request ?? true) } },
+                                },
+                              }))
+                            }
+                            className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.request ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.request ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span className="inline-flex items-center">
@@ -1522,61 +1563,69 @@ export function ChatSettingsPanel({ authToken }: Props) {
                             {pickExample(["mcp.response_payload.error.code", "mcp.response_payload.verified"]) || "-"}
                           </InlineHelpPopup>
                         </span>
-                        <button
-                          type="button"
-                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: {
-                                ...prev.sections,
-                                logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, response: !(debugLogMcp?.response ?? true) } },
-                              },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.response ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.response ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, response: !(debugLogMcp?.response ?? true) } },
+                                },
+                              }))
+                            }
+                            className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.response ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.response ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>MCP success 포함</span>
-                        <button
-                          type="button"
-                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, includeSuccess: !(debugLogMcp?.includeSuccess ?? true) } } },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.includeSuccess ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.includeSuccess ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, includeSuccess: !(debugLogMcp?.includeSuccess ?? true) } } },
+                              }))
+                            }
+                            className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.includeSuccess ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.includeSuccess ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>MCP error 포함</span>
-                        <button
-                          type="button"
-                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
-                          onClick={() =>
-                            updateDebugCopyOptions(page, (prev) => ({
-                              ...prev,
-                              sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, includeError: !(debugLogMcp?.includeError ?? true) } } },
-                            }))
-                          }
-                          className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.includeError ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                        >
-                          {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.includeError ?? true) ? "ON" : "OFF") : "OFF"}
-                        </button>
+                        {!isHeader ? (
+                          <button
+                            type="button"
+                            disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                            onClick={() =>
+                              updateDebugCopyOptions(page, (prev) => ({
+                                ...prev,
+                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, includeError: !(debugLogMcp?.includeError ?? true) } } },
+                              }))
+                            }
+                            className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.includeError ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                          >
+                            {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.includeError ?? true) ? "ON" : "OFF") : "OFF"}
+                          </button>
+                        ) : null}
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>Event 로그</span>
                         <span className="flex items-center gap-1">
-                          <span className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700">
-                            {showDebugEventDetails ? "▼" : "▶"}
-                          </span>
+                          {!isHeader ? (
+                            <span className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700">
+                              {showDebugEventDetails ? "▼" : "▶"}
+                            </span>
+                          ) : null}
                           {isHeader ? (
                             <button
                               type="button"
@@ -1587,19 +1636,21 @@ export function ChatSettingsPanel({ authToken }: Props) {
                               {showDebugEventDetails ? "▼" : "▶"}
                             </button>
                           ) : null}
-                          <button
-                            type="button"
-                            disabled={!(debugLogs?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, enabled: !(debugLogEvent?.enabled ?? true) } } },
-                              }))
-                            }
-                            className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugLogs?.enabled ?? true) ? ((debugLogEvent?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
+                          {!isHeader ? (
+                            <button
+                              type="button"
+                              disabled={!(debugLogs?.enabled ?? true)}
+                              onClick={() =>
+                                updateDebugCopyOptions(page, (prev) => ({
+                                  ...prev,
+                                  sections: { ...prev.sections, logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, enabled: !(debugLogEvent?.enabled ?? true) } } },
+                                }))
+                              }
+                              className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                            >
+                              {(debugLogs?.enabled ?? true) ? ((debugLogEvent?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
+                            </button>
+                          ) : null}
                         </span>
                       </div>
                       {showDebugEventDetails ? (
@@ -1611,22 +1662,24 @@ export function ChatSettingsPanel({ authToken }: Props) {
                                     {pickExample(["event.payload.intent", "event.payload.error", "event.payload.tool"]) || "-"}
                                   </InlineHelpPopup>
                                 </span>
-                                <button
-                                  type="button"
-                                  disabled={!(debugLogs?.enabled ?? true) || !(debugLogEvent?.enabled ?? true)}
-                                  onClick={() =>
-                                    updateDebugCopyOptions(page, (prev) => ({
-                                      ...prev,
-                                      sections: {
-                                        ...prev.sections,
-                                        logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, payload: !(debugLogEvent?.payload ?? true) } },
-                                      },
-                                    }))
-                                  }
-                                  className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) && (debugLogEvent?.payload ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                                >
-                                  {(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? ((debugLogEvent?.payload ?? true) ? "ON" : "OFF") : "OFF"}
-                                </button>
+                                {!isHeader ? (
+                                  <button
+                                    type="button"
+                                    disabled={!(debugLogs?.enabled ?? true) || !(debugLogEvent?.enabled ?? true)}
+                                    onClick={() =>
+                                      updateDebugCopyOptions(page, (prev) => ({
+                                        ...prev,
+                                        sections: {
+                                          ...prev.sections,
+                                          logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, payload: !(debugLogEvent?.payload ?? true) } },
+                                        },
+                                      }))
+                                    }
+                                    className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) && (debugLogEvent?.payload ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                                  >
+                                    {(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? ((debugLogEvent?.payload ?? true) ? "ON" : "OFF") : "OFF"}
+                                  </button>
+                                ) : null}
                               </div>
                               <label className="mt-2 block">
                                 <div className="mb-1 text-[11px] font-semibold text-slate-600">Event allowlist (CSV)</div>

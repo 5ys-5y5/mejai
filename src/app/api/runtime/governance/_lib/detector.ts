@@ -3,6 +3,7 @@ import {
   SELF_HEAL_PRINCIPLE_KEYS,
   SELF_HEAL_VIOLATION_KEYS,
 } from "../selfHeal/principles";
+import { getSelfHealRuleById } from "../selfHeal/ruleCatalog";
 
 export type RuntimeTurn = {
   id: string;
@@ -35,6 +36,15 @@ export type RuntimeMcpAudit = {
   created_at: string | null;
 };
 
+export type RuntimeDebugAudit = {
+  id: string;
+  session_id: string | null;
+  turn_id: string | null;
+  seq: number | null;
+  prefix_json: Record<string, unknown> | null;
+  created_at: string | null;
+};
+
 export type PrincipleViolation = {
   violation_id: string;
   principle_key: string;
@@ -51,6 +61,13 @@ const ASK_PHONE_REGEX = /(휴대폰 번호|전화번호).*(알려|입력|적어)
 const ASK_ADDRESS_REGEX = /(주소|배송지).*(알려|입력|적어)/;
 const ASK_ZIPCODE_REGEX = /(우편번호).*(알려|입력|적어)/;
 const KOREAN_ADDRESS_REGEX = /(서울|경기|인천|부산|대구|광주|대전|울산|세종|제주|강원|충북|충남|전북|전남|경북|경남).*(구|군|시|동|읍|면|로|길)/;
+const COMPLETION_LIKE_ANSWER_REGEX =
+  /(완료되었|완료됐|완료되었습니다|성공적으로|처리되었|처리되었습니다|신청이 완료|등록되었|전송되었|발송되었|done|completed|successful)/i;
+const OUTCOME_EVENT_REGEX = /_(SENT|FAILED|SUCCESS|ERROR|TIMEOUT|CANCELLED|SCHEDULED)$/i;
+const INTERNAL_LIFECYCLE_STEM_EXCLUDE = new Set([
+  "RUNTIME_SELF_UPDATE_REVIEW",
+  "INTENT_SCOPE_GATE_REVIEW",
+]);
 
 function normalizeDigits(value: string) {
   return String(value || "").replace(/[^\d]/g, "");
@@ -58,6 +75,126 @@ function normalizeDigits(value: string) {
 
 function unique<T>(items: T[]) {
   return Array.from(new Set(items));
+}
+
+function firstNonEmptyString(values: Array<unknown>) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
+}
+
+function isCompletionLikeAnswer(value: string) {
+  return COMPLETION_LIKE_ANSWER_REGEX.test(String(value || "").trim());
+}
+
+function parseLifecycleStem(eventType: string, suffix: "_STARTED" | "_COMPLETED") {
+  const upper = String(eventType || "").trim().toUpperCase();
+  if (!upper.endsWith(suffix)) return "";
+  const stem = upper.slice(0, -suffix.length);
+  if (!stem) return "";
+  if (INTERNAL_LIFECYCLE_STEM_EXCLUDE.has(stem)) return "";
+  return stem;
+}
+
+function isOutcomeEventType(eventType: string) {
+  return OUTCOME_EVENT_REGEX.test(String(eventType || "").trim().toUpperCase());
+}
+
+function parseBooleanFlag(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  const text = String(value ?? "").trim().toLowerCase();
+  if (!text) return null;
+  if (text === "true" || text === "1" || text === "yes" || text === "y") return true;
+  if (text === "false" || text === "0" || text === "no" || text === "n") return false;
+  return null;
+}
+
+function readExternalAckSignal(payload: Record<string, unknown> | null | undefined) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const ackRequired = parseBooleanFlag(
+    (source as Record<string, unknown>).external_ack_required ??
+      (source as Record<string, unknown>).provider_ack_required ??
+      (source as Record<string, unknown>).response_required
+  );
+  const ackReceived = parseBooleanFlag(
+    (source as Record<string, unknown>).external_ack_received ??
+      (source as Record<string, unknown>).provider_response_received ??
+      (source as Record<string, unknown>).response_received
+  );
+  const ackId = String(
+    (source as Record<string, unknown>).external_ack_id ??
+      (source as Record<string, unknown>).provider_ack_id ??
+      (source as Record<string, unknown>).solapi_message_id ??
+      ""
+  ).trim();
+  const externalActionName = String(
+    (source as Record<string, unknown>).external_action_name ??
+      (source as Record<string, unknown>).action_name ??
+      (source as Record<string, unknown>).tool_name ??
+      ""
+  ).trim();
+  return {
+    ackRequired,
+    ackReceived,
+    ackId: ackId || null,
+    externalActionName: externalActionName || null,
+  };
+}
+
+function extractEventLinkedIds(payload: Record<string, unknown> | null | undefined) {
+  const ids: string[] = [];
+  if (!payload || typeof payload !== "object") return ids;
+  for (const [key, value] of Object.entries(payload)) {
+    if (!/id$/i.test(key) && !/_id/i.test(key) && !/ids$/i.test(key)) continue;
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (text) ids.push(text);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const text = String(item || "").trim();
+        if (text) ids.push(text);
+      }
+    }
+  }
+  return unique(ids);
+}
+
+function extractContextActionIds(context: Record<string, unknown>) {
+  const ids: string[] = [];
+  for (const [key, value] of Object.entries(context || {})) {
+    if (!/id/i.test(key)) continue;
+    if (typeof value === "string") {
+      const text = value.trim();
+      if (text) ids.push(text);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const text = String(item || "").trim();
+        if (text) ids.push(text);
+      }
+    }
+  }
+  return unique(ids);
+}
+
+function readStringMap(input: unknown) {
+  if (!input || typeof input !== "object") return {} as Record<string, string | null>;
+  const out: Record<string, string | null> = {};
+  for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
+    const text = String(value || "").trim();
+    out[key] = text ? text : null;
+  }
+  return out;
+}
+
+function readStringList(input: unknown) {
+  if (!Array.isArray(input)) return [] as string[];
+  return input.map((item) => String(item || "").trim()).filter(Boolean);
 }
 
 function looksLikeAddressText(value: string) {
@@ -103,14 +240,42 @@ function createViolationId(sessionId: string, turnId: string, principleKey: stri
   return `pv_${sessionId}_${turnId}_${principleKey}`.replace(/[^a-zA-Z0-9_\-]/g, "").slice(0, 128);
 }
 
+function createRuleViolation(input: {
+  sessionId: string;
+  turnId: string;
+  runtimeScope: string;
+  ruleId: string;
+  fallbackPrincipleKey: string;
+  fallbackViolationKey: string;
+  fallbackSummary: string;
+  severity: "medium" | "high";
+  evidence: Record<string, unknown>;
+}) {
+  const rule = getSelfHealRuleById(input.ruleId);
+  const principleKey = String(rule?.principleKey || input.fallbackPrincipleKey);
+  const violationKey = String(rule?.violationKey || input.fallbackViolationKey);
+  const summary = String(rule?.summary || input.fallbackSummary);
+  return {
+    violation_id: createViolationId(input.sessionId, input.turnId, violationKey),
+    principle_key: principleKey,
+    runtime_scope: input.runtimeScope,
+    session_id: input.sessionId,
+    turn_id: input.turnId,
+    severity: input.severity,
+    summary,
+    evidence: input.evidence,
+  } as PrincipleViolation;
+}
+
 export function detectPrincipleViolations(input: {
   turns: RuntimeTurn[];
   eventsByTurnId: Map<string, RuntimeEvent[]>;
   mcpByTurnId?: Map<string, RuntimeMcpAudit[]>;
+  debugByTurnId?: Map<string, RuntimeDebugAudit[]>;
+  sessionEvents?: RuntimeEvent[];
   baseline: PrincipleBaseline;
 }): PrincipleViolation[] {
-  const { turns, eventsByTurnId, mcpByTurnId, baseline } = input;
-  if (!baseline.memory.enforceNoRepeatQuestions) return [];
+  const { turns, eventsByTurnId, mcpByTurnId, debugByTurnId, sessionEvents, baseline } = input;
   const out: PrincipleViolation[] = [];
   const sorted = [...turns].sort((a, b) => Number(a.seq || 0) - Number(b.seq || 0));
 
@@ -118,7 +283,9 @@ export function detectPrincipleViolations(input: {
   let knownAddresses: string[] = [];
   let userProvidedAddresses: string[] = [];
   let previousAnswer = "";
-  for (const turn of sorted) {
+  const recentResolvedScopeSlot = new Map<string, { turnId: string; turnSeq: number; value: string }>();
+  for (let turnIndex = 0; turnIndex < sorted.length; turnIndex += 1) {
+    const turn = sorted[turnIndex];
     const userText = String(turn.transcript_text || "");
     const phoneInUser = (userText.match(PHONE_REGEX) || []).map((v) => normalizeDigits(v)).filter(Boolean);
     if (phoneInUser.length > 0) knownPhones = unique([...knownPhones, ...phoneInUser]);
@@ -142,6 +309,7 @@ export function detectPrincipleViolations(input: {
       (ASK_ZIPCODE_REGEX.test(answer) || ASK_ADDRESS_REGEX.test(answer));
     const turnEvents = eventsByTurnId.get(turn.id) || [];
     const turnMcpLogs = mcpByTurnId?.get(turn.id) || [];
+    const turnDebugLogs = debugByTurnId?.get(turn.id) || [];
     const slotExtracted = turnEvents.find((event) => String(event.event_type || "").toUpperCase() === "SLOT_EXTRACTED");
     const slotPayload = ((slotExtracted?.payload || {}) as Record<string, unknown>) || {};
     const slotResolved =
@@ -159,7 +327,7 @@ export function detectPrincipleViolations(input: {
     const mcpFailurePayload = (mcpFailed?.payload || {}) as Record<string, unknown>;
     const mcpError = String(mcpFailurePayload.error || "");
 
-    if (knownPhones.length > 0 && ASK_PHONE_REGEX.test(answer)) {
+    if (baseline.memory.enforceNoRepeatQuestions && knownPhones.length > 0 && ASK_PHONE_REGEX.test(answer)) {
       const violationId = createViolationId(turn.session_id, turn.id, "memory.no_repeat_phone_question");
       out.push({
         violation_id: violationId,
@@ -216,6 +384,7 @@ export function detectPrincipleViolations(input: {
     const suppressAddressRepeatDuringOtp =
       expectedInput === "otp_code" && !slotResolvedAddress && !finalResponseDebug.resolvedAddress;
     if (
+      baseline.memory.enforceNoRepeatQuestions &&
       userProvidedAddresses.length > 0 &&
       ASK_ADDRESS_REGEX.test(answer) &&
       !suppressMemoryAddressRepeatViolation &&
@@ -308,6 +477,348 @@ export function detectPrincipleViolations(input: {
       slotResolvedZipcode.length > 0 &&
       mcpSkippedTool === "update_order_shipping_address" &&
       mcpSkippedReason === "DEFERRED_TO_DETERMINISTIC_UPDATE";
+
+    if (baseline.dialogue.enforceIntentScopedSlotGate) {
+      const resolvedSlots = readStringMap(slotPayload.resolved_slots);
+      const missingSlots = unique(
+        readStringList(slotPayload.missing_slots).concat(readStringList(preMcpPayload.missing_slots))
+      );
+      const policyEntries = policyDecisions.map((evt) => ((evt.payload || {}) as Record<string, unknown>) || {});
+      const policyActions = unique(
+        policyEntries.map((payload) => String(payload.action || "").trim()).filter(Boolean)
+      );
+      const askSignals = policyEntries
+        .filter((payload) => String(payload.action || "").trim() === "ASK_SCOPE_SLOT")
+        .map((payload) => {
+          const askAction = String(payload.ask_action || "").trim();
+          const expectedSlot = String(payload.expected_input || "").trim();
+          const firstMissing = readStringList(payload.missing_slots)[0] || null;
+          const slotKey = expectedSlot || firstMissing || null;
+          return {
+            ask_action: askAction || null,
+            slot_key: slotKey,
+          };
+        })
+        .filter((entry) => Boolean(entry.slot_key));
+      const progressedAction =
+        policyEntries
+          .map((payload) => {
+            const stage = String(payload.stage || "").trim();
+            const action = String(payload.action || "").trim();
+            if (!stage || !action) return "";
+            if (action === "ASK_SCOPE_SLOT" || action === "INTENT_SCOPE_GATE_BLOCKED") return "";
+            if (stage === "tool" || stage === "final") return action;
+            return "";
+          })
+          .find(Boolean) || null;
+      const finalAnswerEvent = turnEvents.find(
+        (event) => String(event.event_type || "").toUpperCase() === "FINAL_ANSWER_READY"
+      );
+      const blockedByMissingSlots = Boolean((preMcpPayload as Record<string, unknown>).blocked_by_missing_slots);
+      const hasExplicitSlotAsk = askSignals.length > 0;
+      const progressedWithoutRequiredSlots =
+        missingSlots.length > 0 &&
+        !blockedByMissingSlots &&
+        (Boolean(progressedAction) || Boolean(finalAnswerEvent) || finalCalls.length > 0 || forcedCalls.length > 0) &&
+        !hasExplicitSlotAsk;
+      if (
+        progressedWithoutRequiredSlots &&
+        baseline.dialogue.blockFinalAnswerUntilRequiredSlotsResolved &&
+        baseline.dialogue.requireFollowupQuestionForMissingRequiredSlots
+      ) {
+        out.push(
+          createRuleViolation({
+            sessionId: sessionIdFor(turn),
+            turnId: turn.id,
+            runtimeScope: inferRuntimeScope(turn),
+            ruleId: "dialogue.intent_scope_required_slot_missing_progressed",
+            fallbackPrincipleKey: SELF_HEAL_PRINCIPLE_KEYS.intentScopedSlotGate,
+            fallbackViolationKey: SELF_HEAL_VIOLATION_KEYS.intentScopeRequiredSlotMissingProgressed,
+            fallbackSummary:
+              "Intent execution/final-answer path progressed even though required intent-scoped slots were unresolved.",
+            severity: "high",
+            evidence: {
+              intent_name: intentName || null,
+              required_slots: unique([...Object.keys(resolvedSlots), ...missingSlots]),
+              resolved_slots: resolvedSlots,
+              missing_slots: missingSlots,
+              policy_actions: policyActions,
+              progressed_action: progressedAction,
+              ask_actions: askSignals.map((entry) => entry.ask_action).filter(Boolean),
+              ask_slots: askSignals.map((entry) => entry.slot_key).filter(Boolean),
+              pre_mcp_blocked_by_missing_slots: blockedByMissingSlots,
+              final_answer_allowed: Boolean(finalAnswerEvent),
+              pre_mcp_final_calls_count: finalCalls.length,
+              pre_mcp_forced_calls_count: forcedCalls.length,
+              query_text: String(preMcpPayload.query_text || "").trim() || null,
+              query_source: String(preMcpPayload.query_source || "").trim() || null,
+              answer,
+            },
+          })
+        );
+      }
+
+      const currentSeq = Number(turn.seq || turnIndex + 1);
+      const repeatedSlots = askSignals
+        .map((entry) => String(entry.slot_key || "").trim())
+        .filter(Boolean)
+        .filter((slotKey) => {
+          const memoryKey = `${intentName}:${slotKey}`;
+          const previous = recentResolvedScopeSlot.get(memoryKey);
+          if (!previous) return false;
+          const seqDistance = Math.max(0, currentSeq - previous.turnSeq);
+          return seqDistance > 0 && seqDistance <= 4;
+        });
+      const repeatedScopeSlotAskLoop =
+        baseline.dialogue.requireFollowupQuestionForMissingRequiredSlots &&
+        hasExplicitSlotAsk &&
+        repeatedSlots.length > 0 &&
+        !progressedAction;
+      if (repeatedScopeSlotAskLoop) {
+        out.push(
+          createRuleViolation({
+            sessionId: sessionIdFor(turn),
+            turnId: turn.id,
+            runtimeScope: inferRuntimeScope(turn),
+            ruleId: "dialogue.repeated_scope_slot_ask_loop",
+            fallbackPrincipleKey: SELF_HEAL_PRINCIPLE_KEYS.intentScopedSlotGate,
+            fallbackViolationKey: SELF_HEAL_VIOLATION_KEYS.dialogueRepeatedScopeSlotAskLoop,
+            fallbackSummary:
+              "Scope slot ask loop detected: required slot was recently resolved/progressed, but the same slot ask was repeated.",
+            severity: "high",
+            evidence: {
+              intent_name: intentName || null,
+              missing_slots: missingSlots,
+              repeated_slots: unique(repeatedSlots),
+              repeated_slot: unique(repeatedSlots)[0] || null,
+              policy_actions: policyActions,
+              ask_actions: askSignals.map((entry) => entry.ask_action).filter(Boolean),
+              ask_slots: askSignals.map((entry) => entry.slot_key).filter(Boolean),
+              resolved_slots: resolvedSlots,
+              loop_detected: true,
+              answer,
+            },
+          })
+        );
+      }
+
+      for (const [slotKey, slotValue] of Object.entries(resolvedSlots)) {
+        if (!slotKey || !slotValue) continue;
+        recentResolvedScopeSlot.set(`${intentName}:${slotKey}`, {
+          turnId: turn.id,
+          turnSeq: currentSeq,
+          value: slotValue,
+        });
+      }
+    }
+
+    if (baseline.audit.requireMcpLastFunctionAlwaysRecorded && turnDebugLogs.length > 0) {
+      for (const debug of turnDebugLogs) {
+        const prefix = ((debug.prefix_json || {}) as Record<string, unknown>) || {};
+        const mcpNode = ((prefix.mcp || {}) as Record<string, unknown>) || {};
+        const lastNode = ((mcpNode.last || {}) as Record<string, unknown>) || {};
+        const fn = String(lastNode.function || "").trim();
+        if (fn && fn !== "none") continue;
+        out.push({
+          violation_id: createViolationId(
+            sessionIdFor(turn),
+            turn.id,
+            `${SELF_HEAL_VIOLATION_KEYS.mcpLastFunctionMissingReason}_${String(debug.id || "").slice(-8)}`
+          ),
+          principle_key: SELF_HEAL_PRINCIPLE_KEYS.mcpLastFunctionAudit,
+          runtime_scope: inferRuntimeScope(turn),
+          session_id: turn.session_id,
+          turn_id: turn.id,
+          severity: "medium",
+          summary: "MCP.last.function was recorded as none/blank without explicit no-call/skip reason.",
+          evidence: {
+            mcp_last_function: fn || null,
+            mcp_last_status: String(lastNode.status || "").trim() || null,
+            mcp_last_error: lastNode.error ?? null,
+            turn_id: turn.id,
+            debug_created_at: debug.created_at || null,
+            mcp_skipped: Array.isArray(mcpNode.skipped) ? mcpNode.skipped : [],
+          },
+        });
+      }
+    }
+
+    if (
+      intentName === "restock_subscribe" &&
+      baseline.dialogue.requireScopeStateTransitionLogging &&
+      baseline.dialogue.blockFinalAnswerUntilRequiredSlotsResolved
+    ) {
+      const notificationIds = Array.isArray((turnContext as Record<string, unknown>).restock_lite_notification_ids)
+        ? ((turnContext as Record<string, unknown>).restock_lite_notification_ids as unknown[])
+            .map((value) => String(value || "").trim())
+            .filter(Boolean)
+        : [];
+      const completionLikeAnswer =
+        /신청이 완료|알림 신청이 완료|재입고 알림 신청이 완료/.test(answer) ||
+        /restock.*subscribe.*completed/i.test(answer);
+      if (notificationIds.length > 0 && completionLikeAnswer) {
+        const deliveryStartedEventPresent = turnEvents.some((event) => {
+          const type = String(event.event_type || "").toUpperCase();
+          return type === "RESTOCK_SUBSCRIBE_DISPATCH_STARTED";
+        });
+        const deliveryCompletedEventPresent = turnEvents.some((event) => {
+          const type = String(event.event_type || "").toUpperCase();
+          return type === "RESTOCK_SUBSCRIBE_DISPATCH_COMPLETED";
+        });
+        const sessionDeliveryEvents = (sessionEvents || []).filter((event) => {
+          const type = String(event.event_type || "").toUpperCase();
+          if (!type.startsWith("RESTOCK_SMS_")) return false;
+          const payload = ((event.payload || {}) as Record<string, unknown>) || {};
+          const messageId = String(payload.message_id || "").trim();
+          return messageId.length > 0 && notificationIds.includes(messageId);
+        });
+        const deliveryOutcomeEventTypes = Array.from(
+          new Set(sessionDeliveryEvents.map((event) => String(event.event_type || "").toUpperCase()).filter(Boolean))
+        );
+        const outcomeAckSignals = sessionDeliveryEvents.map((event) =>
+          readExternalAckSignal((event.payload || {}) as Record<string, unknown>)
+        );
+        const missingExternalAcks = outcomeAckSignals.filter(
+          (signal) => signal.ackRequired === true && signal.ackReceived !== true
+        );
+        const externalAckReceivedCount = outcomeAckSignals.filter((signal) => signal.ackReceived === true).length;
+        const toolNameHint = firstNonEmptyString([
+          ...(outcomeAckSignals.map((signal) => signal.externalActionName).filter(Boolean) as string[]),
+          "restock_sms_dispatch",
+        ]);
+        if (
+          !deliveryStartedEventPresent ||
+          !deliveryCompletedEventPresent ||
+          deliveryOutcomeEventTypes.length === 0 ||
+          missingExternalAcks.length > 0
+        ) {
+          out.push(
+            createRuleViolation({
+              sessionId: sessionIdFor(turn),
+              turnId: turn.id,
+              runtimeScope: inferRuntimeScope(turn),
+              ruleId: "notification.delivery_outcome_audit_missing",
+              fallbackPrincipleKey: SELF_HEAL_PRINCIPLE_KEYS.notificationDeliveryAudit,
+              fallbackViolationKey: SELF_HEAL_VIOLATION_KEYS.notificationDeliveryAuditMissing,
+              fallbackSummary:
+                "Notification subscribe completion was returned without deterministic delivery lifecycle/outcome audit evidence.",
+              severity: "high",
+              evidence: {
+                intent_name: intentName,
+                tool_name: toolNameHint,
+                mismatch_type:
+                  missingExternalAcks.length > 0
+                    ? "external_response_not_received"
+                    : "delivery_lifecycle_outcome_gap",
+                notification_ids: notificationIds,
+                delivery_started_event_present: deliveryStartedEventPresent,
+                delivery_completed_event_present: deliveryCompletedEventPresent,
+                delivery_outcome_event_types: deliveryOutcomeEventTypes,
+                external_ack_received_count: externalAckReceivedCount,
+                external_ack_missing_count: missingExternalAcks.length,
+                external_ack_missing_ids: missingExternalAcks
+                  .map((signal) => signal.ackId)
+                  .filter(Boolean)
+                  .slice(0, 20),
+                final_answer: answer,
+              },
+            })
+          );
+        }
+      }
+    }
+
+    if (baseline.dialogue.requireScopeStateTransitionLogging && isCompletionLikeAnswer(answer)) {
+      const startedStems = unique(
+        turnEvents
+          .map((event) => parseLifecycleStem(String(event.event_type || ""), "_STARTED"))
+          .filter(Boolean)
+      );
+      const completedStems = new Set(
+        turnEvents
+          .map((event) => parseLifecycleStem(String(event.event_type || ""), "_COMPLETED"))
+          .filter(Boolean)
+      );
+      const missingCompletedForStarted = startedStems.filter((stem) => !completedStems.has(stem));
+      const contextActionIds = extractContextActionIds(turnContext);
+      const outcomeEventTypes = unique(
+        (sessionEvents || [])
+          .filter((event) => {
+            const type = String(event.event_type || "").toUpperCase();
+            if (!isOutcomeEventType(type)) return false;
+            if (String(event.turn_id || "") === String(turn.id || "")) return true;
+            if (contextActionIds.length === 0) return false;
+            const linkedIds = extractEventLinkedIds((event.payload || {}) as Record<string, unknown>);
+            return linkedIds.some((id) => contextActionIds.includes(id));
+          })
+          .map((event) => String(event.event_type || "").toUpperCase())
+      );
+      const relatedOutcomeEvents = (sessionEvents || []).filter((event) => {
+        const type = String(event.event_type || "").toUpperCase();
+        if (!isOutcomeEventType(type)) return false;
+        if (String(event.turn_id || "") === String(turn.id || "")) return true;
+        if (contextActionIds.length === 0) return false;
+        const linkedIds = extractEventLinkedIds((event.payload || {}) as Record<string, unknown>);
+        return linkedIds.some((id) => contextActionIds.includes(id));
+      });
+      const outcomeAckSignals = relatedOutcomeEvents.map((event) =>
+        readExternalAckSignal((event.payload || {}) as Record<string, unknown>)
+      );
+      const missingExternalAcks = outcomeAckSignals.filter(
+        (signal) => signal.ackRequired === true && signal.ackReceived !== true
+      );
+      const hasExplicitAckContract = outcomeAckSignals.some((signal) => signal.ackRequired !== null);
+      const hasTerminalMcpOutcome = turnMcpLogs.some((row) => {
+        const status = String(row.status || "").trim().toLowerCase();
+        return status === "success" || status === "failed" || status === "error";
+      });
+      const hasActionEvidence = startedStems.length > 0 || contextActionIds.length > 0;
+      const lifecycleIncomplete =
+        hasActionEvidence &&
+        (missingCompletedForStarted.length > 0 ||
+          (!hasTerminalMcpOutcome && outcomeEventTypes.length === 0) ||
+          missingExternalAcks.length > 0 ||
+          (hasExplicitAckContract && outcomeEventTypes.length > 0 && outcomeAckSignals.every((signal) => signal.ackReceived !== true)));
+      if (lifecycleIncomplete) {
+        const toolNameHint = firstNonEmptyString([
+          ...(outcomeAckSignals.map((signal) => signal.externalActionName).filter(Boolean) as string[]),
+          startedStems.length > 0 ? `${startedStems[0].toLowerCase()}_action` : "",
+        ]);
+        out.push(
+          createRuleViolation({
+            sessionId: sessionIdFor(turn),
+            turnId: turn.id,
+            runtimeScope: inferRuntimeScope(turn),
+            ruleId: "action.lifecycle_outcome_missing",
+            fallbackPrincipleKey: SELF_HEAL_PRINCIPLE_KEYS.actionLifecycleAudit,
+            fallbackViolationKey: SELF_HEAL_VIOLATION_KEYS.actionLifecycleOutcomeMissing,
+            fallbackSummary:
+              "Completion-like answer was returned without deterministic external action lifecycle completion evidence.",
+            severity: "high",
+            evidence: {
+              intent_name: intentName || null,
+              tool_name: toolNameHint || null,
+              mismatch_type:
+                missingExternalAcks.length > 0
+                  ? "external_response_not_received"
+                  : "action_lifecycle_outcome_gap",
+              final_answer: answer,
+              completion_claimed: true,
+              started_event_types: startedStems.map((stem) => `${stem}_STARTED`),
+              missing_completed_for_started: missingCompletedForStarted,
+              outcome_event_types: outcomeEventTypes,
+              external_ack_missing_count: missingExternalAcks.length,
+              external_ack_missing_ids: missingExternalAcks
+                .map((signal) => signal.ackId)
+                .filter(Boolean)
+                .slice(0, 20),
+              context_action_ids: contextActionIds.slice(0, 20),
+              mcp_terminal_outcome_present: hasTerminalMcpOutcome,
+            },
+          })
+        );
+      }
+    }
     if (runtimePathMissingAfterDefer || confirmedZipcodeNotApplied) {
       const violationKey = confirmedZipcodeNotApplied
         ? SELF_HEAL_VIOLATION_KEYS.addressConfirmedZipcodeNotApplied

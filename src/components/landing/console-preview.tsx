@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { motion } from "framer-motion";
 import { LayoutDashboard, Phone, BarChart2, Book, ShieldCheck } from "lucide-react";

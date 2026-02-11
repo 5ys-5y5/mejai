@@ -11,17 +11,16 @@ import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
 import { isToolEnabled } from "@/lib/conversation/pageFeaturePolicy";
 import type { SetupFieldKey } from "@/lib/conversation/pageFeaturePolicy";
 import { type RuntimeUiTypeId } from "@/components/design-system/conversation/runtimeUiCatalog";
-import { ConversationChatPanel, ConversationSetupPanel, ConversationSplitLayout } from "@/components/design-system/conversation/panels";
+import { ConversationSetupPanel, ConversationSplitLayout } from "@/components/design-system/conversation/panels";
 import {
   ConversationConfirmButton,
   ConversationGrid,
   ConversationProductCard,
   ConversationQuickReplyButton,
 } from "@/components/design-system/conversation/ui";
-import { Card } from "@/components/ui/Card";
 import { getDebugParts, renderBotContent } from "@/lib/conversation/messageRenderUtils";
 import type { ConversationPageFeatures, ConversationSetupUi, ExistingSetupFieldKey, ExistingSetupLabelKey } from "@/lib/conversation/pageFeaturePolicy";
-import type { ChatMessage, ConversationMode, ModelState, SetupMode } from "@/lib/conversation/client/laboratoryPageState";
+import type { ChatMessage, ModelState, SetupMode } from "@/lib/conversation/client/laboratoryPageState";
 import { appendInlineKbSample, hasConflictingInlineKbSamples } from "@/lib/conversation/inlineKbSamples";
 
 // ------------------------------------------------------------
@@ -46,71 +45,6 @@ export function ConversationSetupBox({
   );
 }
 
-export function ConversationChatBox({
-  className,
-  style,
-  onWheel,
-  adminMenu,
-  thread,
-  showBottomGradient = true,
-  bottomGradientClassName,
-  expandControl,
-  inputArea,
-}: {
-  className?: string;
-  style?: CSSProperties;
-  onWheel?: (event: WheelEvent<HTMLDivElement>) => void;
-  adminMenu?: ReactNode;
-  thread: ReactNode;
-  showBottomGradient?: boolean;
-  bottomGradientClassName?: string;
-  expandControl?: {
-    expanded: boolean;
-    canExpand: boolean;
-    onExpand: () => void;
-    onCollapse: () => void;
-  };
-  inputArea?: ReactNode;
-}) {
-  return (
-    <ConversationChatPanel className={className} style={style} onWheel={onWheel}>
-      {adminMenu || null}
-      <div className="relative flex-1 min-h-0 overflow-hidden">
-        {thread}
-        {showBottomGradient ? (
-          <div className={cn("pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-gradient-to-t from-white to-transparent", bottomGradientClassName)} />
-        ) : null}
-      </div>
-      {expandControl ? (
-        expandControl.expanded ? (
-          <div className="pointer-events-none absolute left-1/2 bottom-0 z-20 -translate-x-1/2 translate-y-1/2">
-            <button
-              type="button"
-              onClick={expandControl.onCollapse}
-              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-400 bg-white text-slate-600 hover:bg-slate-50"
-              aria-label="채팅 높이 줄이기"
-            >
-              <Minus className="h-5 w-5" />
-            </button>
-          </div>
-        ) : expandControl.canExpand ? (
-          <div className="pointer-events-none absolute left-1/2 bottom-0 z-20 -translate-x-1/2 translate-y-1/2">
-            <button
-              type="button"
-              onClick={expandControl.onExpand}
-              className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-400 bg-white text-slate-600 hover:bg-slate-50"
-              aria-label="채팅 높이 늘리기"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-          </div>
-        ) : null
-      ) : null}
-      {inputArea || null}
-    </ConversationChatPanel>
-  );
-}
-
 export function ConversationWorkbenchTopBar({
   wsStatusDot,
   wsStatus,
@@ -131,10 +65,10 @@ export function ConversationWorkbenchTopBar({
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-wrap items-start justify-between gap-3", className)} data-lego="ConversationWorkbenchTopBar">
+    <div className={cn("flex flex-wrap items-start justify-between gap-3", className)} parts-lego="ConversationWorkbenchTopBar">
       {leading || null}
       <div className="flex items-center gap-2">
-        <div className="max-w-full w-max flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700">
+        <div className="max-w-full w-max flex items-center gap-2 bg-white rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700">
           <span className={cn("h-2 w-2 rounded-full", wsStatusDot)} />
           <span>WS {wsStatus}</span>
           <button
@@ -261,7 +195,7 @@ export function ConversationAdminMenu({
   className,
 }: AdminMenuProps) {
   return (
-    <div className={cn("absolute right-0 top-0 z-20", className)}>
+    <div className={cn("z-20", className)}>
       <button
         type="button"
         onClick={onToggleOpen}
@@ -1209,200 +1143,123 @@ export function ConversationNewModelControls({
 }: ConversationNewModelControlsProps) {
   const sections: Record<"kbSelector" | "adminKbSelector" | "routeSelector", ReactNode> = {
     kbSelector: showKbSelector ? (
-        <div>
-          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-            <span>{kbLabel}</span>
-            {kbAdminOnly ? (
-              <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
-                ADMIN
-              </span>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-2">
-            <SelectPopover
-              value={kbValue}
-              onChange={onKbChange}
-              options={kbOptions}
-              searchable
-              className="flex-1 min-w-0"
-            />
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-              onClick={onToggleKbInfo}
-              aria-label="KB 정보"
-            >
-              <Info className="h-4 w-4" />
-            </button>
-          </div>
-          {kbInfoOpen ? (
-            <textarea
-              readOnly
-              value={kbInfoText}
-              className="mt-2 min-h-[50px] w-full resize-y rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap break-words"
-            />
+      <div>
+        <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+          <span>{kbLabel}</span>
+          {kbAdminOnly ? (
+            <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+              ADMIN
+            </span>
           ) : null}
         </div>
-      ) : null,
+        <div className="flex items-center gap-2">
+          <SelectPopover
+            value={kbValue}
+            onChange={onKbChange}
+            options={kbOptions}
+            searchable
+            className="flex-1 min-w-0"
+          />
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+            onClick={onToggleKbInfo}
+            aria-label="KB 정보"
+          >
+            <Info className="h-4 w-4" />
+          </button>
+        </div>
+        {kbInfoOpen ? (
+          <textarea
+            readOnly
+            value={kbInfoText}
+            className="mt-2 min-h-[50px] w-full resize-y rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap break-words"
+          />
+        ) : null}
+      </div>
+    ) : null,
     adminKbSelector: showAdminKbSelector ? (
-        <div>
-          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-            <span>{adminKbLabel}</span>
-            {adminKbAdminOnly ? (
-              <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
-                ADMIN
-              </span>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-2">
-            <MultiSelectPopover
-              values={adminKbValues}
-              onChange={onAdminKbChange}
-              options={adminKbOptions}
-              placeholder="관리자 KB 선택"
-              displayMode="count"
-              showBulkActions
-              className="flex-1 min-w-0"
-            />
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-              onClick={onToggleAdminKbInfo}
-              aria-label="관리자 KB 정보"
-            >
-              <Info className="h-4 w-4" />
-            </button>
-          </div>
-          {adminKbInfoOpen ? (
-            <textarea
-              readOnly
-              value={adminKbInfoText}
-              className="mt-2 min-h-[80px] w-full resize-y rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap break-words"
-            />
+      <div>
+        <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+          <span>{adminKbLabel}</span>
+          {adminKbAdminOnly ? (
+            <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+              ADMIN
+            </span>
           ) : null}
         </div>
-      ) : null,
+        <div className="flex items-center gap-2">
+          <MultiSelectPopover
+            values={adminKbValues}
+            onChange={onAdminKbChange}
+            options={adminKbOptions}
+            placeholder="관리자 KB 선택"
+            displayMode="count"
+            showBulkActions
+            className="flex-1 min-w-0"
+          />
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+            onClick={onToggleAdminKbInfo}
+            aria-label="관리자 KB 정보"
+          >
+            <Info className="h-4 w-4" />
+          </button>
+        </div>
+        {adminKbInfoOpen ? (
+          <textarea
+            readOnly
+            value={adminKbInfoText}
+            className="mt-2 min-h-[80px] w-full resize-y rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap break-words"
+          />
+        ) : null}
+      </div>
+    ) : null,
     routeSelector: showRouteSelector ? (
-        <div>
-          <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-            <span>{routeLabel}</span>
-            {routeAdminOnly ? (
-              <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
-                ADMIN
-              </span>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-2">
-            <SelectPopover value={routeValue} onChange={onRouteChange} options={routeOptions} className="flex-1 min-w-0" />
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-              onClick={onToggleRouteInfo}
-              aria-label="Route 정보"
-            >
-              <Info className="h-4 w-4" />
-            </button>
-          </div>
-          {routeInfoOpen ? (
-            <textarea
-              readOnly
-              value={routeInfoText}
-              className="mt-2 min-h-[50px] w-full resize-y rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap break-words"
-            />
+      <div>
+        <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+          <span>{routeLabel}</span>
+          {routeAdminOnly ? (
+            <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+              ADMIN
+            </span>
           ) : null}
         </div>
-      ) : null,
+        <div className="flex items-center gap-2">
+          <SelectPopover value={routeValue} onChange={onRouteChange} options={routeOptions} className="flex-1 min-w-0" />
+          <button
+            type="button"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+            onClick={onToggleRouteInfo}
+            aria-label="Route 정보"
+          >
+            <Info className="h-4 w-4" />
+          </button>
+        </div>
+        {routeInfoOpen ? (
+          <textarea
+            readOnly
+            value={routeInfoText}
+            className="mt-2 min-h-[50px] w-full resize-y rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap break-words"
+          />
+        ) : null}
+      </div>
+    ) : null,
   };
 
-  return <>{setupFieldOrder.map((key) => sections[key]).filter(Boolean)}</>;
+  return (
+    <>
+      {setupFieldOrder.map((key) => {
+        const section = sections[key];
+        if (!section) return null;
+        return <Fragment key={key}>{section}</Fragment>;
+      })}
+    </>
+  );
 }
 
-// ---- migrated: ConversationPane ----
-type ConversationPaneChatMessage = {
-  id: string;
-  role: "user" | "bot";
-  content: string;
-  richHtml?: string;
-  isLoading?: boolean;
-  loadingLogs?: string[];
-  quickReplies?: Array<{ label: string; value: string }>;
-  productCards?: Array<{
-    id: string;
-    title: string;
-    subtitle?: string;
-    description?: string;
-    imageUrl?: string;
-    value: string;
-  }>;
-  renderPlan?: {
-    view: "text" | "choice" | "cards";
-    enable_quick_replies: boolean;
-    enable_cards: boolean;
-    quick_reply_source: {
-      type: "explicit" | "config" | "fallback" | "none";
-      criteria?: string;
-      source_function?: string;
-      source_module?: string;
-    };
-    selection_mode: "single" | "multi";
-    min_select: number;
-    max_select: number;
-    submit_format: "single" | "csv";
-    grid_columns: { quick_replies: number; cards: number };
-  };
-};
-
-type ConversationPaneModelShape = {
-  id: string;
-  input: string;
-  sending: boolean;
-  setupMode: SetupMode;
-  conversationMode: ConversationMode;
-  selectedAgentId: string;
-  selectedSessionId: string | null;
-  layoutExpanded: boolean;
-  adminLogControlsOpen: boolean;
-  showAdminLogs: boolean;
-  chatSelectionEnabled: boolean;
-  selectedMessageIds: string[];
-  config: { kbId: string };
-};
-
-type ConversationPaneProps = {
-  model: ConversationPaneModelShape;
-  visibleMessages: ConversationPaneChatMessage[];
-  isAdminUser: boolean;
-  quickReplyDrafts: Record<string, string[]>;
-  lockedReplySelections: Record<string, string[]>;
-  setQuickReplyDrafts: Dispatch<SetStateAction<Record<string, string[]>>>;
-  setLockedReplySelections: Dispatch<SetStateAction<Record<string, string[]>>>;
-  adminFeatures: {
-    enabled: boolean;
-    selectionToggle: boolean;
-    logsToggle: boolean;
-    messageSelection: boolean;
-    copyConversation: boolean;
-    copyIssue: boolean;
-  };
-  interactionFeatures: {
-    quickReplies: boolean;
-    productCards: boolean;
-    inputSubmit: boolean;
-  };
-  onToggleAdminOpen: () => void;
-  onToggleSelectionMode: () => void;
-  onToggleLogs: () => void;
-  onCopyConversation: () => void;
-  onCopyIssue: () => void;
-  onToggleMessageSelection: (messageId: string) => void;
-  onSubmitMessage: (text: string) => void;
-  onExpand: () => void;
-  onCollapse: () => void;
-  onInputChange: (value: string) => void;
-  setChatScrollRef: (el: HTMLDivElement | null) => void;
-};
-
-export function ConversationPane({
+function ConversationModelChatColumnCore({
   model,
   visibleMessages,
   isAdminUser,
@@ -1419,15 +1276,30 @@ export function ConversationPane({
   onCopyIssue,
   onToggleMessageSelection,
   onSubmitMessage,
-  onExpand,
   onCollapse,
   onInputChange,
-  setChatScrollRef,
-}: ConversationPaneProps) {
+  onSetChatScrollRef,
+}: ConversationModelChatColumnLegoProps) {
+  const shouldRenderPrefillMessages = interactionFeatures.prefill && visibleMessages.length === 0;
+  const effectiveVisibleMessages: ChatMessage[] = shouldRenderPrefillMessages
+    ? [
+      {
+        id: `${model.id}-prefill-line-1`,
+        role: "bot",
+        content: "기록한대로 응대하는 AI 상담사를",
+      },
+      {
+        id: `${model.id}-prefill-line-2`,
+        role: "bot",
+        content: "압도적으로 저렴하게 사용해보세요",
+      },
+    ]
+    : visibleMessages;
+
   const chatScrollAreaRef = useRef<HTMLDivElement | null>(null);
   const handleSetChatScrollRef = (el: HTMLDivElement | null) => {
     chatScrollAreaRef.current = el;
-    setChatScrollRef(el);
+    onSetChatScrollRef(el);
   };
   const handlePaneWheel = (event: WheelEvent<HTMLDivElement>) => {
     const el = chatScrollAreaRef.current;
@@ -1449,43 +1321,38 @@ export function ConversationPane({
     (model.setupMode === "existing" && (!model.selectedAgentId || (model.conversationMode !== "new" && !model.selectedSessionId)));
 
   return (
-    <ConversationChatBox
-      className="bg-white p-4"
-      style={{ height: "100%" }}
-      onWheel={handlePaneWheel}
-      adminMenu={
-        isAdminUser && adminFeatures.enabled ? (
-          <ConversationAdminMenu
-            className="right-6 top-6"
-            open={model.adminLogControlsOpen}
-            onToggleOpen={onToggleAdminOpen}
-            selectionEnabled={adminFeatures.selectionToggle && model.chatSelectionEnabled}
-            onToggleSelection={() => {
-              if (!adminFeatures.selectionToggle) return;
-              onToggleSelectionMode();
-            }}
-            showLogs={adminFeatures.logsToggle && model.showAdminLogs}
-            onToggleLogs={() => {
-              if (!adminFeatures.logsToggle) return;
-              onToggleLogs();
-            }}
-            onCopyConversation={onCopyConversation}
-            onCopyIssue={onCopyIssue}
-            showSelectionToggle={adminFeatures.selectionToggle}
-            showLogsToggle={adminFeatures.logsToggle}
-            showConversationCopy={adminFeatures.copyConversation}
-            showIssueCopy={adminFeatures.copyIssue}
-            disableCopy={visibleMessages.length === 0}
-          />
-        ) : null
-      }
-      thread={
+    <div panel-lego="ConversationModelChatColumnLego.Panel" className="relative h-full min-h-0 flex flex-col overflow-hidden bg-white p-4" style={{ height: "100%" }} onWheel={handlePaneWheel}>
+      {isAdminUser && adminFeatures.enabled ? (
+        <ConversationAdminMenu
+          className="absolute right-6 top-6"
+          open={model.adminLogControlsOpen}
+          onToggleOpen={onToggleAdminOpen}
+          selectionEnabled={adminFeatures.selectionToggle && model.chatSelectionEnabled}
+          onToggleSelection={() => {
+            if (!adminFeatures.selectionToggle) return;
+            onToggleSelectionMode();
+          }}
+          showLogs={adminFeatures.logsToggle && model.showAdminLogs}
+          onToggleLogs={() => {
+            if (!adminFeatures.logsToggle) return;
+            onToggleLogs();
+          }}
+          onCopyConversation={onCopyConversation}
+          onCopyIssue={onCopyIssue}
+          showSelectionToggle={adminFeatures.selectionToggle}
+          showLogsToggle={adminFeatures.logsToggle}
+          showConversationCopy={adminFeatures.copyConversation}
+          showIssueCopy={adminFeatures.copyIssue}
+          disableCopy={effectiveVisibleMessages.length === 0}
+        />
+      ) : null}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
         <div
           ref={handleSetChatScrollRef}
           className={`relative z-0 h-full overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-xl ${isAdminUser ? "pt-10" : "pt-2"}`}
         >
           <ConversationThread
-            messages={visibleMessages}
+            messages={effectiveVisibleMessages}
             selectedMessageIds={model.selectedMessageIds}
             selectionEnabled={adminFeatures.messageSelection && model.chatSelectionEnabled}
             onToggleSelection={(messageId) => {
@@ -1521,11 +1388,11 @@ export function ConversationPane({
                     msg.content
                   )}
                   {msg.role === "bot" &&
-                  isAdminUser &&
-                  adminFeatures.logsToggle &&
-                  model.showAdminLogs &&
-                  msg.loadingLogs &&
-                  msg.loadingLogs.length > 0 ? (
+                    isAdminUser &&
+                    adminFeatures.logsToggle &&
+                    model.showAdminLogs &&
+                    msg.loadingLogs &&
+                    msg.loadingLogs.length > 0 ? (
                     <div className="mt-2 rounded-md border border-slate-200 bg-white/70 px-2 py-1.5">
                       <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-500">
                         <span>진행 로그</span>
@@ -1558,42 +1425,47 @@ export function ConversationPane({
             )}
           />
         </div>
-      }
-      expandControl={{
-        expanded: model.layoutExpanded,
-        canExpand: false,
-        onExpand,
-        onCollapse,
-      }}
-      inputArea={
-        interactionFeatures.inputSubmit ? (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              onSubmitMessage(model.input.trim());
-            }}
-            className="relative z-20 flex gap-2 bg-white"
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-4 bg-gradient-to-t from-white to-transparent" />
+      </div>
+      {interactionFeatures.inputSubmit ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmitMessage(model.input.trim());
+          }}
+          className="relative z-20 flex gap-2 bg-white"
+        >
+          <Input
+            value={model.input}
+            onChange={(e) => onInputChange(e.target.value)}
+            placeholder={
+              model.setupMode === "existing" && model.conversationMode === "history"
+                ? "히스토리 모드에서는 전송할 수 없습니다."
+                : model.setupMode === "existing" && model.conversationMode === "edit"
+                  ? "수정할 내용을 입력하세요 (새 메시지로 복제되어 이어집니다.)"
+                  : "새로운 대화 질문을 입력하세요."
+            }
+            className="flex-1"
+          />
+          <Button type="submit" disabled={submitDisabled}>
+            <Send className="mr-2 h-4 w-4" />
+            {model.sending ? "전송 중" : "전송"}
+          </Button>
+        </form>
+      ) : null}
+      {model.layoutExpanded ? (
+        <div className="pointer-events-none absolute left-1/2 bottom-0 z-20 -translate-x-1/2 translate-y-1/2">
+          <button
+            type="button"
+            onClick={onCollapse}
+            className="pointer-events-auto inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-400 bg-white text-slate-600 hover:bg-slate-50"
+            aria-label="채팅 높이 줄이기"
           >
-            <Input
-              value={model.input}
-              onChange={(e) => onInputChange(e.target.value)}
-              placeholder={
-                model.setupMode === "existing" && model.conversationMode === "history"
-                  ? "히스토리 모드에서는 전송할 수 없습니다."
-                  : model.setupMode === "existing" && model.conversationMode === "edit"
-                    ? "수정할 내용을 입력하세요 (새 메시지로 복제되어 이어집니다.)"
-                    : "새로운 대화 질문을 입력하세요."
-              }
-              className="flex-1"
-            />
-            <Button type="submit" disabled={submitDisabled}>
-              <Send className="mr-2 h-4 w-4" />
-              {model.sending ? "전송 중" : "전송"}
-            </Button>
-          </form>
-        ) : null
-      }
-    />
+            <Minus className="h-5 w-5" />
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -1809,124 +1681,124 @@ export function ConversationModelSetupColumnLego({
   const showModeSelector = pageFeatures.setup.modeExisting && pageFeatures.setup.modeNew;
   const forceExistingSetupControls = pageFeatures.setup.modeExisting && !pageFeatures.setup.modeNew;
   return (
-    <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden" data-lego="ConversationModelSetupColumnLego">
+    <div className="h-full min-h-0 overflow-hidden" parts-lego="ConversationModelSetupColumnLego">
       <ConversationSetupBox
         className="h-full rounded-none border-0"
-        contentClassName="p-4"
+        contentClassName="h-full min-h-0 overflow-auto p-4"
       >
         <div ref={onSetLeftPaneRef} className="space-y-3">
-        <ConversationExistingSetup
-          showModelSelector={showModeSelector}
-          modelSelectorAdminOnly={pageFeatures.visibility.setup.modelSelector === "admin"}
-          showAgentSelector={pageFeatures.setup.agentSelector || forceExistingSetupControls}
-          showModeExisting={pageFeatures.setup.modeExisting}
-          modeExistingAdminOnly={pageFeatures.visibility.setup.modeExisting === "admin"}
-          showSessionIdSearch={pageFeatures.setup.sessionIdSearch || forceExistingSetupControls}
-          showModeNew={pageFeatures.setup.modeNew}
-          modeNewAdminOnly={pageFeatures.visibility.setup.modeNew === "admin"}
-          setupMode={model.setupMode}
-          onSelectExisting={onSelectExisting}
-          onSelectNew={onSelectNew}
-          selectedAgentGroupId={model.selectedAgentGroupId}
-          selectedAgentId={model.selectedAgentId}
-          selectedSessionId={model.selectedSessionId}
-          sessionsLength={model.sessions.length}
-          sessionsLoading={model.sessionsLoading}
-          sessionsError={model.sessionsError}
-          conversationMode={model.conversationMode}
-          agentGroupOptions={agentGroupOptions}
-          versionOptions={versionOptions}
-          sessionOptions={sessionOptions}
-          onSelectAgentGroup={onSelectAgentGroup}
-          onSelectAgentVersion={(value) => {
-            void onSelectAgentVersion(value);
-          }}
-          onSelectSession={(value) => {
-            void onSelectSession(value);
-          }}
-          onSearchSessionById={(value) => {
-            void onSearchSessionById(value);
-          }}
-          onChangeConversationMode={onChangeConversationMode}
-          existingFieldOrder={setupUi.existingOrder}
-          existingLabels={setupUi.existingLabels}
-        />
-        {model.setupMode === "new" ? (
-          <div className="space-y-3">
-            <ConversationSetupFields
-              showInlineUserKbInput={pageFeatures.setup.inlineUserKbInput}
-              inlineKbAdminOnly={pageFeatures.visibility.setup.inlineUserKbInput === "admin"}
-              inlineKbValue={model.config.inlineKb}
-              inlineKbLabel={setupUi.labels.inlineUserKbInput}
-              onInlineKbChange={onInlineKbChange}
-              inlineKbSamples={inlineKbSamples}
-              inlineKbSampleSelectionOrder={model.config.inlineKbSampleSelectionOrder}
-              onInlineKbSampleApply={onInlineKbSampleApply}
-              inlineKbSampleConflict={inlineKbSampleConflict}
-              showLlmSelector={pageFeatures.setup.llmSelector}
-              llmLabel={setupUi.labels.llmSelector}
-              llmAdminOnly={pageFeatures.visibility.setup.llmSelector === "admin"}
-              llmValue={model.config.llm}
-              onLlmChange={onLlmChange}
-              llmOptions={llmOptions}
-              showLlmInfoButton
-              onToggleLlmInfo={onToggleLlmInfo}
-              llmInfoOpen={model.detailsOpen.llm}
-              llmInfoText={describeLlm(model.config.llm)}
-              middleContent={
-                <ConversationNewModelControls
-                  showKbSelector={pageFeatures.setup.kbSelector}
-                  kbLabel={setupUi.labels.kbSelector}
-                  kbAdminOnly={pageFeatures.visibility.setup.kbSelector === "admin"}
-                  kbValue={model.config.kbId}
-                  kbOptions={kbOptions}
-                  onKbChange={onKbChange}
-                  kbInfoOpen={model.detailsOpen.kb}
-                  onToggleKbInfo={onToggleKbInfo}
-                  kbInfoText={kbInfoText}
-                  showAdminKbSelector={isAdminUser && pageFeatures.setup.adminKbSelector}
-                  adminKbLabel={setupUi.labels.adminKbSelector}
-                  adminKbAdminOnly={pageFeatures.visibility.setup.adminKbSelector === "admin"}
-                  adminKbValues={model.config.adminKbIds}
-                  adminKbOptions={adminKbOptions}
-                  onAdminKbChange={onAdminKbChange}
-                  adminKbInfoOpen={model.detailsOpen.adminKb}
-                  onToggleAdminKbInfo={onToggleAdminKbInfo}
-                  adminKbInfoText={adminKbInfoText}
-                  showRouteSelector={pageFeatures.setup.routeSelector}
-                  routeLabel={setupUi.labels.routeSelector}
-                  routeAdminOnly={pageFeatures.visibility.setup.routeSelector === "admin"}
-                  routeValue={model.config.route}
-                  routeOptions={routeOptions}
-                  onRouteChange={onRouteChange}
-                  routeInfoOpen={model.detailsOpen.route}
-                  onToggleRouteInfo={onToggleRouteInfo}
-                  routeInfoText={describeRoute(model.config.route)}
-                  setupFieldOrder={newModelControlOrder}
-                />
-              }
-              showMcpProviderSelector={pageFeatures.mcp.providerSelector}
-              mcpProviderLabel={setupUi.labels.mcpProviderSelector}
-              mcpProviderAdminOnly={pageFeatures.visibility.mcp.providerSelector === "admin"}
-              providerValues={model.config.mcpProviderKeys}
-              onProviderChange={onProviderChange}
-              providerOptions={providerOptions}
-              providerPlaceholder="MCP 프로바이더 선택"
-              showMcpInfoButton
-              onToggleMcpInfo={onToggleMcpInfo}
-              mcpInfoOpen={model.detailsOpen.mcp}
-              mcpInfoText={mcpInfoText}
-              showMcpActionSelector={pageFeatures.mcp.actionSelector}
-              mcpActionLabel={setupUi.labels.mcpActionSelector}
-              mcpActionAdminOnly={pageFeatures.visibility.mcp.actionSelector === "admin"}
-              actionValues={model.config.mcpToolIds}
-              onActionChange={onActionChange}
-              actionOptions={filteredToolOptions}
-              actionPlaceholder="MCP 액션 선택"
-              setupFieldOrder={setupUi.order}
-            />
-          </div>
-        ) : null}
+          <ConversationExistingSetup
+            showModelSelector={showModeSelector}
+            modelSelectorAdminOnly={pageFeatures.visibility.setup.modelSelector === "admin"}
+            showAgentSelector={pageFeatures.setup.agentSelector || forceExistingSetupControls}
+            showModeExisting={pageFeatures.setup.modeExisting}
+            modeExistingAdminOnly={pageFeatures.visibility.setup.modeExisting === "admin"}
+            showSessionIdSearch={pageFeatures.setup.sessionIdSearch || forceExistingSetupControls}
+            showModeNew={pageFeatures.setup.modeNew}
+            modeNewAdminOnly={pageFeatures.visibility.setup.modeNew === "admin"}
+            setupMode={model.setupMode}
+            onSelectExisting={onSelectExisting}
+            onSelectNew={onSelectNew}
+            selectedAgentGroupId={model.selectedAgentGroupId}
+            selectedAgentId={model.selectedAgentId}
+            selectedSessionId={model.selectedSessionId}
+            sessionsLength={model.sessions.length}
+            sessionsLoading={model.sessionsLoading}
+            sessionsError={model.sessionsError}
+            conversationMode={model.conversationMode}
+            agentGroupOptions={agentGroupOptions}
+            versionOptions={versionOptions}
+            sessionOptions={sessionOptions}
+            onSelectAgentGroup={onSelectAgentGroup}
+            onSelectAgentVersion={(value) => {
+              void onSelectAgentVersion(value);
+            }}
+            onSelectSession={(value) => {
+              void onSelectSession(value);
+            }}
+            onSearchSessionById={(value) => {
+              void onSearchSessionById(value);
+            }}
+            onChangeConversationMode={onChangeConversationMode}
+            existingFieldOrder={setupUi.existingOrder}
+            existingLabels={setupUi.existingLabels}
+          />
+          {model.setupMode === "new" ? (
+            <div className="space-y-3">
+              <ConversationSetupFields
+                showInlineUserKbInput={pageFeatures.setup.inlineUserKbInput}
+                inlineKbAdminOnly={pageFeatures.visibility.setup.inlineUserKbInput === "admin"}
+                inlineKbValue={model.config.inlineKb}
+                inlineKbLabel={setupUi.labels.inlineUserKbInput}
+                onInlineKbChange={onInlineKbChange}
+                inlineKbSamples={inlineKbSamples}
+                inlineKbSampleSelectionOrder={model.config.inlineKbSampleSelectionOrder}
+                onInlineKbSampleApply={onInlineKbSampleApply}
+                inlineKbSampleConflict={inlineKbSampleConflict}
+                showLlmSelector={pageFeatures.setup.llmSelector}
+                llmLabel={setupUi.labels.llmSelector}
+                llmAdminOnly={pageFeatures.visibility.setup.llmSelector === "admin"}
+                llmValue={model.config.llm}
+                onLlmChange={onLlmChange}
+                llmOptions={llmOptions}
+                showLlmInfoButton
+                onToggleLlmInfo={onToggleLlmInfo}
+                llmInfoOpen={model.detailsOpen.llm}
+                llmInfoText={describeLlm(model.config.llm)}
+                middleContent={
+                  <ConversationNewModelControls
+                    showKbSelector={pageFeatures.setup.kbSelector}
+                    kbLabel={setupUi.labels.kbSelector}
+                    kbAdminOnly={pageFeatures.visibility.setup.kbSelector === "admin"}
+                    kbValue={model.config.kbId}
+                    kbOptions={kbOptions}
+                    onKbChange={onKbChange}
+                    kbInfoOpen={model.detailsOpen.kb}
+                    onToggleKbInfo={onToggleKbInfo}
+                    kbInfoText={kbInfoText}
+                    showAdminKbSelector={isAdminUser && pageFeatures.setup.adminKbSelector}
+                    adminKbLabel={setupUi.labels.adminKbSelector}
+                    adminKbAdminOnly={pageFeatures.visibility.setup.adminKbSelector === "admin"}
+                    adminKbValues={model.config.adminKbIds}
+                    adminKbOptions={adminKbOptions}
+                    onAdminKbChange={onAdminKbChange}
+                    adminKbInfoOpen={model.detailsOpen.adminKb}
+                    onToggleAdminKbInfo={onToggleAdminKbInfo}
+                    adminKbInfoText={adminKbInfoText}
+                    showRouteSelector={pageFeatures.setup.routeSelector}
+                    routeLabel={setupUi.labels.routeSelector}
+                    routeAdminOnly={pageFeatures.visibility.setup.routeSelector === "admin"}
+                    routeValue={model.config.route}
+                    routeOptions={routeOptions}
+                    onRouteChange={onRouteChange}
+                    routeInfoOpen={model.detailsOpen.route}
+                    onToggleRouteInfo={onToggleRouteInfo}
+                    routeInfoText={describeRoute(model.config.route)}
+                    setupFieldOrder={newModelControlOrder}
+                  />
+                }
+                showMcpProviderSelector={pageFeatures.mcp.providerSelector}
+                mcpProviderLabel={setupUi.labels.mcpProviderSelector}
+                mcpProviderAdminOnly={pageFeatures.visibility.mcp.providerSelector === "admin"}
+                providerValues={model.config.mcpProviderKeys}
+                onProviderChange={onProviderChange}
+                providerOptions={providerOptions}
+                providerPlaceholder="MCP 프로바이더 선택"
+                showMcpInfoButton
+                onToggleMcpInfo={onToggleMcpInfo}
+                mcpInfoOpen={model.detailsOpen.mcp}
+                mcpInfoText={mcpInfoText}
+                showMcpActionSelector={pageFeatures.mcp.actionSelector}
+                mcpActionLabel={setupUi.labels.mcpActionSelector}
+                mcpActionAdminOnly={pageFeatures.visibility.mcp.actionSelector === "admin"}
+                actionValues={model.config.mcpToolIds}
+                onActionChange={onActionChange}
+                actionOptions={filteredToolOptions}
+                actionPlaceholder="MCP 액션 선택"
+                setupFieldOrder={setupUi.order}
+              />
+            </div>
+          ) : null}
         </div>
       </ConversationSetupBox>
     </div>
@@ -1952,6 +1824,7 @@ export type ConversationModelChatColumnLegoProps = {
   interactionFeatures: {
     quickReplies: boolean;
     productCards: boolean;
+    prefill: boolean;
     inputSubmit: boolean;
   };
   onToggleAdminOpen: () => void;
@@ -1990,8 +1863,8 @@ export function ConversationModelChatColumnLego({
   onSetChatScrollRef,
 }: ConversationModelChatColumnLegoProps) {
   return (
-    <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden" data-lego="ConversationModelChatColumnLego">
-      <ConversationPane
+    <div className="h-full overflow-hidden" parts-lego="ConversationModelChatColumnLego">
+      <ConversationModelChatColumnCore
         model={model}
         visibleMessages={visibleMessages}
         isAdminUser={isAdminUser}
@@ -2011,7 +1884,7 @@ export function ConversationModelChatColumnLego({
         onExpand={onExpand}
         onCollapse={onCollapse}
         onInputChange={onInputChange}
-        setChatScrollRef={onSetChatScrollRef}
+        onSetChatScrollRef={onSetChatScrollRef}
       />
     </div>
   );
@@ -2027,8 +1900,8 @@ export function ConversationModelComposedLego({
   className?: string;
 }) {
   return (
-    <div data-lego="ConversationModelComposedLego">
-      <ConversationSplitLayout className={className || "bg-slate-200 lg:grid-cols-[0.5fr_1fr] lg:gap-px"} leftPanel={leftLego} rightPanel={rightLego} />
+    <div className="h-full min-h-0" parts-lego="ConversationModelComposedLego">
+      <ConversationSplitLayout className={className || "h-full min-h-0 bg-slate-200 lg:grid-cols-[0.5fr_1fr] lg:gap-px"} leftPanel={leftLego} rightPanel={rightLego} />
     </div>
   );
 }
@@ -2040,7 +1913,7 @@ export type ConversationModelLegoAssembly = {
   activeSessionId: string | null;
 };
 
-export function assembleConversationModelLegos(props: ConversationModelCardProps): ConversationModelLegoAssembly {
+export function createConversationModelLegos(props: ConversationModelCardProps): ConversationModelLegoAssembly {
   const {
     model,
     pageFeatures,
@@ -2132,32 +2005,31 @@ export function assembleConversationModelLegos(props: ConversationModelCardProps
     model.config.adminKbIds.length === 0
       ? "선택된 관리자 KB 없음"
       : model.config.adminKbIds
-          .map((id) => {
-            const kb = kbItemById.get(id);
-            if (!kb) return null;
-            const status = kb.applies_to_user ? "적용됨" : "미적용";
-            return `• ${kb.title} (${status})\n${kb.content || "내용 없음"}`;
-          })
-          .filter(Boolean)
-          .join("\n\n");
+        .map((id) => {
+          const kb = kbItemById.get(id);
+          if (!kb) return null;
+          const status = kb.applies_to_user ? "적용됨" : "미적용";
+          return `• ${kb.title} (${status})\n${kb.content || "내용 없음"}`;
+        })
+        .filter(Boolean)
+        .join("\n\n");
   const mcpInfoText = [
-    `선택된 프로바이더: ${
-      model.config.mcpProviderKeys.length === 0
-        ? "없음"
-        : model.config.mcpProviderKeys.map((key) => providerByKey.get(key)?.title || key).join(", ")
+    `선택된 프로바이더: ${model.config.mcpProviderKeys.length === 0
+      ? "없음"
+      : model.config.mcpProviderKeys.map((key) => providerByKey.get(key)?.title || key).join(", ")
     }`,
     "",
     model.config.mcpToolIds.length === 0
       ? "선택된 액션 없음"
       : model.config.mcpToolIds
-          .map((id) => {
-            const tool = toolById.get(id);
-            if (!tool) return null;
-            const desc = tool.description ? tool.description : "설명 없음";
-            return `• ${tool.name}: ${desc}`;
-          })
-          .filter(Boolean)
-          .join("\n"),
+        .map((id) => {
+          const tool = toolById.get(id);
+          if (!tool) return null;
+          const desc = tool.description ? tool.description : "설명 없음";
+          return `• ${tool.name}: ${desc}`;
+        })
+        .filter(Boolean)
+        .join("\n"),
   ].join("\n");
   const updateModel = (updater: (m: ModelState) => ModelState) => onUpdateModel(model.id, updater);
   const setConfigValue = <K extends keyof ModelState["config"]>(key: K, value: ModelState["config"][K], reset = false) => {
@@ -2244,6 +2116,7 @@ export function assembleConversationModelLegos(props: ConversationModelCardProps
   const interactionFeaturesForPane = {
     quickReplies: pageFeatures.interaction.quickReplies,
     productCards: pageFeatures.interaction.productCards,
+    prefill: pageFeatures.interaction.prefill,
     inputSubmit: pageFeatures.interaction.inputSubmit,
   };
 
@@ -2331,147 +2204,3 @@ export function assembleConversationModelLegos(props: ConversationModelCardProps
   return { setupLegoProps, chatLegoProps, visibleMessages, activeSessionId };
 }
 
-export function ConversationModelCard({
-  index,
-  modelCount,
-  model,
-  pageFeatures,
-  setupUi,
-  isAdminUser,
-  latestAdminKbId,
-  tools,
-  toolOptions,
-  toolById,
-  providerByKey,
-  agentVersionsByGroup,
-  formatKstDateTime,
-  agentGroupOptions,
-  llmOptions,
-  kbOptions,
-  adminKbOptions,
-  providerOptions,
-  routeOptions,
-  kbItems,
-  inlineKbSamples,
-  quickReplyDrafts,
-  lockedReplySelections,
-  setQuickReplyDrafts,
-  setLockedReplySelections,
-  onRemoveModel,
-  onCopySessionId,
-  onOpenSessionInNewTab,
-  onDeleteSession,
-  onUpdateModel,
-  onResetModel,
-  onSelectAgentGroup,
-  onSelectAgentVersion,
-  onSelectSession,
-  onSearchSessionById,
-  onChangeConversationMode,
-  onCopyConversation,
-  onCopyIssue,
-  onToggleMessageSelection,
-  onSubmitMessage,
-  onExpand,
-  onCollapse,
-  onInputChange,
-  setLeftPaneRef,
-  setChatScrollRef,
-  describeLlm,
-  describeRoute,
-  layoutMode = "full",
-}: ConversationModelCardProps) {
-  const { setupLegoProps, chatLegoProps, visibleMessages, activeSessionId } = assembleConversationModelLegos({
-    index,
-    modelCount,
-    model,
-    pageFeatures,
-    setupUi,
-    isAdminUser,
-    latestAdminKbId,
-    tools,
-    toolOptions,
-    toolById,
-    providerByKey,
-    agentVersionsByGroup,
-    formatKstDateTime,
-    agentGroupOptions,
-    llmOptions,
-    kbOptions,
-    adminKbOptions,
-    providerOptions,
-    routeOptions,
-    kbItems,
-    inlineKbSamples,
-    quickReplyDrafts,
-    lockedReplySelections,
-    setQuickReplyDrafts,
-    setLockedReplySelections,
-    onRemoveModel,
-    onCopySessionId,
-    onOpenSessionInNewTab,
-    onDeleteSession,
-    onUpdateModel,
-    onResetModel,
-    onSelectAgentGroup,
-    onSelectAgentVersion,
-    onSelectSession,
-    onSearchSessionById,
-    onChangeConversationMode,
-    onCopyConversation,
-    onCopyIssue,
-    onToggleMessageSelection,
-    onSubmitMessage,
-    onExpand,
-    onCollapse,
-    onInputChange,
-    setLeftPaneRef,
-    setChatScrollRef,
-    describeLlm,
-    describeRoute,
-    layoutMode,
-  });
-
-  if (layoutMode === "columnsOnly") {
-    return (
-      <ConversationSplitLayout
-        className="lg:grid-cols-[0.5fr_1fr]"
-        leftPanel={<ConversationModelSetupColumnLego {...setupLegoProps} />}
-        rightPanel={<ConversationModelChatColumnLego {...chatLegoProps} />}
-      />
-    );
-  }
-
-  if (layoutMode === "separateBoxes") {
-    return (
-      <div className="space-y-[50px]">
-        <div>
-          <ConversationModelSetupColumnLego {...setupLegoProps} />
-        </div>
-        <div>
-          <ConversationModelChatColumnLego {...chatLegoProps} />
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <Card key={`model-${model.id}`} className="h-full overflow-visible p-0">
-      <ConversationSessionHeader
-        modelIndex={index + 1}
-        canRemove={modelCount > 1}
-        onRemove={() => onRemoveModel(model.id)}
-        activeSessionId={activeSessionId}
-        onCopySessionId={onCopySessionId}
-        onOpenSessionInNewTab={onOpenSessionInNewTab}
-        onDeleteSession={() => onDeleteSession(model.id)}
-        disableDelete={!activeSessionId && visibleMessages.length === 0}
-      />
-      <ConversationModelComposedLego
-        className="lg:grid-cols-[0.5fr_1fr]"
-        leftLego={<ConversationModelSetupColumnLego {...setupLegoProps} />}
-        rightLego={<ConversationModelChatColumnLego {...chatLegoProps} />}
-      />
-    </Card>
-  );
-}

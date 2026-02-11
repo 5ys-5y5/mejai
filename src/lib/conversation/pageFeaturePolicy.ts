@@ -89,6 +89,8 @@ export type ConversationPageFeatures = {
     quickReplies: boolean;
     /** product card 선택 UI 활성화 */
     productCards: boolean;
+    /** 초기 안내 prefill 메시지 출력 */
+    prefill: boolean;
     /** 입력창/전송 버튼 활성화 */
     inputSubmit: boolean;
   };
@@ -99,10 +101,16 @@ export type ConversationPageFeatures = {
     agentSelector: boolean;
     /** LLM 선택 UI 노출 */
     llmSelector: boolean;
+    /** LLM 선택 UI 하위 항목 허용/차단 (llm id) */
+    llms: IdGate;
     /** KB 선택 UI 노출 */
     kbSelector: boolean;
+    /** KB 선택 UI 하위 항목 허용/차단 (KB id) */
+    kbIds: IdGate;
     /** 관리자 KB 선택 UI 노출 */
     adminKbSelector: boolean;
+    /** 관리자 KB 선택 UI 하위 항목 허용/차단 (KB id) */
+    adminKbIds: IdGate;
     /** existing 모드 버튼/동작 허용 */
     modeExisting: boolean;
     /** existing 모드에서 세션 ID 직접 검색 UI 노출 */
@@ -111,6 +119,8 @@ export type ConversationPageFeatures = {
     modeNew: boolean;
     /** runtime(route) 선택 UI 노출 */
     routeSelector: boolean;
+    /** runtime(route) 선택 UI 하위 항목 허용/차단 (route id) */
+    routes: IdGate;
     /** 인라인 사용자 KB 입력 textarea 노출 */
     inlineUserKbInput: boolean;
     /** 기본 모드 */
@@ -300,18 +310,23 @@ export function mergeConversationPageFeatures(
     interaction: {
       quickReplies: override.interaction?.quickReplies ?? base.interaction.quickReplies,
       productCards: override.interaction?.productCards ?? base.interaction.productCards,
+      prefill: override.interaction?.prefill ?? base.interaction.prefill,
       inputSubmit: override.interaction?.inputSubmit ?? base.interaction.inputSubmit,
     },
     setup: {
       modelSelector: override.setup?.modelSelector ?? base.setup.modelSelector,
       agentSelector: override.setup?.agentSelector ?? base.setup.agentSelector,
       llmSelector: override.setup?.llmSelector ?? base.setup.llmSelector,
+      llms: mergeIdGate(base.setup.llms, override.setup?.llms),
       kbSelector: override.setup?.kbSelector ?? base.setup.kbSelector,
+      kbIds: mergeIdGate(base.setup.kbIds, override.setup?.kbIds),
       adminKbSelector: override.setup?.adminKbSelector ?? base.setup.adminKbSelector,
+      adminKbIds: mergeIdGate(base.setup.adminKbIds, override.setup?.adminKbIds),
       modeExisting: override.setup?.modeExisting ?? base.setup.modeExisting,
       sessionIdSearch: override.setup?.sessionIdSearch ?? base.setup.sessionIdSearch,
       modeNew: override.setup?.modeNew ?? base.setup.modeNew,
       routeSelector: override.setup?.routeSelector ?? base.setup.routeSelector,
+      routes: mergeIdGate(base.setup.routes, override.setup?.routes),
       inlineUserKbInput: override.setup?.inlineUserKbInput ?? base.setup.inlineUserKbInput,
       defaultSetupMode: override.setup?.defaultSetupMode ?? base.setup.defaultSetupMode,
       defaultLlm: override.setup?.defaultLlm ?? base.setup.defaultLlm,
@@ -334,6 +349,7 @@ export function mergeConversationPageFeatures(
       interaction: {
         quickReplies: override.visibility?.interaction?.quickReplies ?? base.visibility.interaction.quickReplies,
         productCards: override.visibility?.interaction?.productCards ?? base.visibility.interaction.productCards,
+        prefill: override.visibility?.interaction?.prefill ?? base.visibility.interaction.prefill,
         inputSubmit: override.visibility?.interaction?.inputSubmit ?? base.visibility.interaction.inputSubmit,
       },
       setup: {
@@ -434,6 +450,7 @@ export function applyConversationFeatureVisibility(
         features.visibility.interaction.productCards,
         isAdminUser
       ),
+      prefill: withVisibilityFlag(features.interaction.prefill, features.visibility.interaction.prefill, isAdminUser),
       inputSubmit: withVisibilityFlag(features.interaction.inputSubmit, features.visibility.interaction.inputSubmit, isAdminUser),
     },
     setup: {
@@ -498,18 +515,23 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     interaction: {
       quickReplies: true,
       productCards: true,
+      prefill: true,
       inputSubmit: true,
     },
     setup: {
       modelSelector: false,
       agentSelector: false,
       llmSelector: true,
+      llms: {},
       kbSelector: false,
+      kbIds: {},
       adminKbSelector: false,
+      adminKbIds: {},
       modeExisting: false,
       sessionIdSearch: false,
       modeNew: true,
       routeSelector: false,
+      routes: {},
       inlineUserKbInput: true,
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
@@ -531,6 +553,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       interaction: {
         quickReplies: "user",
         productCards: "user",
+        prefill: "user",
         inputSubmit: "user",
       },
       setup: {
@@ -567,18 +590,23 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     interaction: {
       quickReplies: true,
       productCards: true,
+      prefill: true,
       inputSubmit: true,
     },
     setup: {
       modelSelector: true,
       agentSelector: true,
       llmSelector: true,
+      llms: {},
       kbSelector: true,
+      kbIds: {},
       adminKbSelector: true,
+      adminKbIds: {},
       modeExisting: true,
       sessionIdSearch: true,
       modeNew: true,
       routeSelector: true,
+      routes: {},
       inlineUserKbInput: false,
       defaultSetupMode: "existing",
       defaultLlm: "chatgpt",
@@ -600,6 +628,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       interaction: {
         quickReplies: "user",
         productCards: "user",
+        prefill: "user",
         inputSubmit: "user",
       },
       setup: {

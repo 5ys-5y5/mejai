@@ -1,6 +1,13 @@
-﻿"use client";
+"use client";
 
-import { ConversationModelCard, ConversationWorkbenchTopBar } from "@/components/design-system";
+import { Loader2 } from "lucide-react";
+import {
+  ConversationModelChatColumnLego,
+  ConversationModelSetupColumnLego,
+  ConversationSessionHeader,
+  ConversationWorkbenchTopBar,
+  createConversationModelLegos,
+} from "@/components/design-system";
 import { useConversationPageController } from "@/lib/conversation/client/useConversationPageController";
 
 export default function LaboratoryPage() {
@@ -77,8 +84,13 @@ export default function LaboratoryPage() {
           }
         />
 
-        <div className="mt-6 space-y-6" data-lego="ConversationModelCard">
-          {ctrl.loading ? <div className="text-sm text-slate-500">데이터를 불러오는 중...</div> : null}
+        <div className="mt-6 space-y-6">
+          {ctrl.loading ? (
+            <div className="flex items-center justify-center gap-3 text-sm text-slate-600">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span>로딩 중: {ctrl.loadingHints.join(", ")}</span>
+            </div>
+          ) : null}
           {ctrl.error ? <div className="text-sm text-rose-600">{ctrl.error}</div> : null}
           {!ctrl.loading && !ctrl.error && ctrl.kbItems.length === 0 ? (
             <div className="text-sm text-slate-500">
@@ -86,12 +98,31 @@ export default function LaboratoryPage() {
             </div>
           ) : null}
           {!ctrl.loading && !ctrl.error
-            ? ctrl.models.map((model, index) => (
-                <ConversationModelCard
-                  key={`model-${model.id}`}
-                  {...createModelProps(model, index)}
-                />
-              ))
+            ? ctrl.models.map((model, index) => {
+              const assembled = createConversationModelLegos(createModelProps(model, index));
+              return (
+                <div key={`model-${model.id}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+                  <ConversationSessionHeader
+                    modelIndex={index + 1}
+                    canRemove={ctrl.models.length > 1}
+                    onRemove={() => ctrl.handleRemoveModel(model.id)}
+                    activeSessionId={assembled.activeSessionId}
+                    onCopySessionId={ctrl.handleCopySessionId}
+                    onOpenSessionInNewTab={ctrl.openSessionInNewTab}
+                    onDeleteSession={() => ctrl.handleDeleteSession(model.id)}
+                    disableDelete={!assembled.activeSessionId && assembled.visibleMessages.length === 0}
+                  />
+                  <div className="grid grid-cols-1 lg:grid-cols-[0.5fr_1fr] overflow-hidden">
+                    <div className="min-h-[380px] max-h-[550px] h-full overflow-hidden">
+                      <ConversationModelSetupColumnLego {...assembled.setupLegoProps} />
+                    </div>
+                    <div className="min-h-[380px] max-h-[550px] h-full overflow-hidden">
+                      <ConversationModelChatColumnLego {...assembled.chatLegoProps} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })
             : null}
         </div>
       </div>

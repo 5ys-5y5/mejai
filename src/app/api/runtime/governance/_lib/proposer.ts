@@ -2,6 +2,10 @@ import OpenAI from "openai";
 import type { PrincipleBaseline } from "./principleBaseline";
 import type { PrincipleViolation, RuntimeEvent, RuntimeTurn } from "./detector";
 import {
+  isActionLifecycleAuditPrinciple,
+  isIntentScopedSlotGatePrinciple,
+  isMcpLastFunctionAuditPrinciple,
+  isNotificationDeliveryAuditPrinciple,
   isAddressSelfHealPrinciple,
   isApiContractSelfHealPrinciple,
   isContractFirstRuntimeDesignPrinciple,
@@ -231,6 +235,117 @@ function qualityGateProposal(input: {
         "If search_address returns 0 candidates, force awaiting_address_retry and forbid zipcode-direct prompt.",
         "If search_address returns >=2 candidates, force awaiting_zipcode_choice with indexed candidate quick replies.",
         "Persist candidate list in bot_context and require user selection before zipcode confirmation.",
+      ],
+    };
+  }
+  if (isIntentScopedSlotGatePrinciple(input.violation.principle_key)) {
+    const evidence = (input.violation.evidence || {}) as Record<string, unknown>;
+    const intentName = String(evidence.intent_name || "").trim();
+    const missingSlots = Array.isArray(evidence.missing_slots) ? evidence.missing_slots : [];
+    const requiredSlots = Array.isArray(evidence.required_slots) ? evidence.required_slots : [];
+    const loopDetected = Boolean(evidence.loop_detected);
+    const repeatedSlot = String(evidence.repeated_slot || "").trim();
+    return {
+      ...input.proposal,
+      title: loopDetected ? "Intent scope slot-loop regression proposal" : "Intent-scoped required-slot gate proposal",
+      why_failed: loopDetected
+        ? "Runtime asked the same required scope slot again after recent scope-ready progression, indicating slot-state regression."
+        : "Intent progressed to execution/final-answer without satisfying required intent-scoped slots.",
+      how_to_improve:
+        "Introduce intent_scope_spec registry and enforce common gate engine: missing_slots => ASK_SCOPE_SLOT and stop progression.",
+      rationale: loopDetected
+        ? `Prevent scope-slot regression loop (intent=${intentName || "-"}, repeated_slot=${repeatedSlot || "-"}, missing_slots=${missingSlots.join(",") || "-"})`
+        : `Contract-first gate required (intent=${intentName || "-"}, missing_slots=${missingSlots.join(",") || "-"}, required_slots=${requiredSlots.join(",") || "-"})`,
+      target_files: [
+        "src/app/api/runtime/chat/policies/principles.ts",
+        "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
+        "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts",
+        "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+        "src/app/api/runtime/governance/_lib/detector.ts",
+      ],
+      change_plan: [
+        "Define intent_scope_spec registry (required_slots, slot_extractors, prompt_template_key, ready_condition) without case-branch hardcoding.",
+        "Emit POLICY_DECISION actions: INTENT_SCOPE_GATE_BLOCKED, ASK_SCOPE_SLOT, SCOPE_READY at deterministic boundaries.",
+        "Persist missing_slots/resolved_slots in SLOT_EXTRACTED and blocked_by_missing_slots in PRE_MCP_DECISION.",
+        "Block FINAL_ANSWER_READY whenever missing_slots is non-empty.",
+        "If recently resolved required slot becomes missing again, emit explicit regression evidence and route to recovery prompt instead of same-slot re-ask loop.",
+      ],
+    };
+  }
+  if (isNotificationDeliveryAuditPrinciple(input.violation.principle_key)) {
+    const evidence = (input.violation.evidence || {}) as Record<string, unknown>;
+    const notificationIds = Array.isArray(evidence.notification_ids) ? evidence.notification_ids : [];
+    const outcomeTypes = Array.isArray(evidence.delivery_outcome_event_types)
+      ? evidence.delivery_outcome_event_types
+      : [];
+    return {
+      ...input.proposal,
+      title: "Notification delivery outcome audit proposal",
+      why_failed:
+        "Subscribe completion was returned without deterministic delivery STARTED/COMPLETED boundary evidence and/or outcome events.",
+      how_to_improve:
+        "Write delivery lifecycle audit pair and outcome evidence in runtime path and dispatch path before/after final completion guidance.",
+      rationale: `Delivery audit gap (notification_ids=${notificationIds.length}, outcomes=${outcomeTypes.join(",") || "-"})`,
+      target_files: [
+        "src/app/api/runtime/chat/services/restockSubscriptionRuntime.ts",
+        "src/app/api/runtime/restock/dispatch/route.ts",
+        "src/app/api/runtime/chat/handlers/restockHandler.ts",
+        "src/app/api/runtime/governance/_lib/detector.ts",
+      ],
+      change_plan: [
+        "Emit RESTOCK_SUBSCRIBE_DISPATCH_STARTED before Solapi send/register and RESTOCK_SUBSCRIBE_DISPATCH_COMPLETED after persistence.",
+        "Persist message_id -> delivery outcome (RESTOCK_SMS_SENT/SCHEDULED/FAILED) linkage for each notification id.",
+        "Surface deterministic failure reason in audit payload when completion message is generated.",
+      ],
+    };
+  }
+  if (isActionLifecycleAuditPrinciple(input.violation.principle_key)) {
+    const evidence = (input.violation.evidence || {}) as Record<string, unknown>;
+    const missingCompleted = Array.isArray(evidence.missing_completed_for_started)
+      ? evidence.missing_completed_for_started
+      : [];
+    const outcomeTypes = Array.isArray(evidence.outcome_event_types) ? evidence.outcome_event_types : [];
+    return {
+      ...input.proposal,
+      title: "External action lifecycle outcome audit proposal",
+      why_failed:
+        "Completion-like user answer was emitted while external action lifecycle evidence was incomplete (STARTED/COMPLETED/outcome mismatch).",
+      how_to_improve:
+        "Enforce generic action lifecycle contract: STARTED -> COMPLETED and terminal outcome event before completion-like response.",
+      rationale: `Lifecycle evidence gap (missing_completed=${missingCompleted.join(",") || "-"}, outcomes=${outcomeTypes.join(",") || "-"})`,
+      target_files: [
+        "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts",
+        "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
+        "src/app/api/runtime/governance/_lib/detector.ts",
+        "src/app/api/runtime/governance/selfHeal/principles.ts",
+      ],
+      change_plan: [
+        "Define a shared action lifecycle registry with event stem, start/completion events, and terminal outcomes.",
+        "At completion-like final response branch, verify lifecycle evidence deterministically before rendering completion text.",
+        "Emit normalized ACTION_* lifecycle events for non-MCP external integrations, not only SMS.",
+      ],
+    };
+  }
+  if (isMcpLastFunctionAuditPrinciple(input.violation.principle_key)) {
+    const evidence = (input.violation.evidence || {}) as Record<string, unknown>;
+    const lastStatus = String(evidence.mcp_last_status || "").trim();
+    return {
+      ...input.proposal,
+      title: "MCP.last.function reasoned recording proposal",
+      why_failed:
+        "Debug prefix recorded MCP.last.function as none/blank, reducing root-cause traceability at failure boundaries.",
+      how_to_improve:
+        "Normalize debug writer to always emit reasoned function value: NO_TOOL_CALLED:<reason> or SKIPPED:<reason>.",
+      rationale: `Trace precision improvement (mcp_last_status=${lastStatus || "-"})`,
+      target_files: [
+        "src/app/api/runtime/chat/runtime/runtimeSupport.ts",
+        "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
+        "src/app/api/runtime/governance/_lib/detector.ts",
+      ],
+      change_plan: [
+        "Disallow literal none/blank in MCP.last.function serialization path.",
+        "Derive explicit reason from mcpSkipped queue or pipeline state when no tool execution occurred.",
+        "Keep before/after evidence around failure boundaries to satisfy audit determinism.",
       ],
     };
   }

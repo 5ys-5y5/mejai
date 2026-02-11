@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from "react";
+import type { ReactNode } from "react";
 
 export function renderBotContent(content: string): ReactNode {
   if (!content.includes("debug_prefix")) return content;
