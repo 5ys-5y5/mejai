@@ -13,7 +13,7 @@ export function readOtpState(lastTurn: unknown) {
 }
 
 
-export async function handlePreSensitiveOtpGuard(input: Record<string, unknown>): Promise<Response | null> {
+export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Promise<Response | null> {
   const {
     finalCalls,
     isOtpRequiredTool,
