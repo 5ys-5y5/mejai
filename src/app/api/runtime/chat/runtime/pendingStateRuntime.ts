@@ -35,7 +35,7 @@ type PendingStateParams = {
     sessionId: string,
     turnId: string | null,
     botContext: Record<string, any>
-  ) => Promise<{ status: string; data?: unknown; error?: string }>;
+  ) => Promise<{ status: string; data?: unknown; error?: unknown }>;
   extractZipcode: (text: string) => string | null;
   extractAddress: (
     text: string,
