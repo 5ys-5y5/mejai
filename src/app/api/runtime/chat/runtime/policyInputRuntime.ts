@@ -94,6 +94,7 @@ export async function emitSlotExtracted(input: {
     resolvedSlots,
     missingSlots,
   } = input;
+  const policyEntity = (policyContext.entity ?? {}) as Record<string, any>;
   await insertEvent(
     context,
     sessionId,
@@ -115,11 +116,11 @@ export async function emitSlotExtracted(input: {
       resolved: {
         intent: resolvedIntent,
         order_id: resolvedOrderId || null,
-        phone: typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null,
+        phone: typeof policyEntity.phone === "string" ? policyEntity.phone : null,
         phone_masked:
-          typeof policyContext.entity?.phone === "string" ? maskPhone(policyContext.entity.phone) : "-",
-        zipcode: typeof policyContext.entity?.zipcode === "string" ? policyContext.entity.zipcode : null,
-        address: typeof policyContext.entity?.address === "string" ? policyContext.entity.address : null,
+          typeof policyEntity.phone === "string" ? maskPhone(policyEntity.phone) : "-",
+        zipcode: typeof policyEntity.zipcode === "string" ? policyEntity.zipcode : null,
+        address: typeof policyEntity.address === "string" ? policyEntity.address : null,
       },
       resolved_slots: resolvedSlots || {},
       missing_slots: Array.isArray(missingSlots) ? missingSlots : [],
