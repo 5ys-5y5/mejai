@@ -66,6 +66,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
   };
   const parseIndexedChoiceSafe = parseIndexedChoice as (text: string) => number | null;
   const messageText = typeof message === "string" ? message : String(message ?? "");
+  const prevBotContextRecord = (prevBotContext || {}) as Record<string, unknown>;
   const normalizeNameKey = (value: string) => normalizeKoreanMatch(value).replace(/\s+/g, "");
   const isNameMatch = (left: string, right: string) => {
     const a = normalizeNameKey(left || "");
@@ -83,18 +84,16 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
   const noSchedulableScheduleReply = "안내 가능한 재입고 일정이 없습니다. 미래 입고 예정 상품만 안내할 수 있습니다.";
 
   // Handle pending restock product choice even if current turn intent is misclassified (e.g. "1" -> general).
-  const prevRestockCandidatesForAnyIntentRaw = Array.isArray(
-    (prevBotContext as Record<string, unknown>).restock_candidates
-  )
-    ? ((prevBotContext as Record<string, unknown>).restock_candidates as Array<Record<string, unknown>>)
+  const prevRestockCandidatesForAnyIntentRaw = Array.isArray(prevBotContextRecord.restock_candidates)
+    ? (prevBotContextRecord.restock_candidates as Array<Record<string, unknown>>)
     : [];
   const prevRestockCandidatesForAnyIntent = reindexCandidateRows(
     filterSchedulableEntries(prevRestockCandidatesForAnyIntentRaw)
   );
   const pickedIndexForAnyIntent = parseIndexedChoiceSafe(messageText);
   const pickedFromPrevForAnyIntent =
-    prevBotContext.restock_pending &&
-      prevBotContext.restock_stage === "awaiting_product_choice" &&
+    Boolean(prevBotContextRecord.restock_pending) &&
+      prevBotContextRecord.restock_stage === "awaiting_product_choice" &&
       pickedIndexForAnyIntent &&
       prevRestockCandidatesForAnyIntent.length >= pickedIndexForAnyIntent
       ? prevRestockCandidatesForAnyIntent[pickedIndexForAnyIntent - 1]
@@ -172,10 +171,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         parseRestockEntriesFromContent(String(item.content || ""), `admin_kb:${item.id}`)
       ),
     ];
-    const prevRestockCandidatesRaw = Array.isArray(
-      (prevBotContext as Record<string, unknown>).restock_candidates
-    )
-      ? ((prevBotContext as Record<string, unknown>).restock_candidates as Array<Record<string, unknown>>)
+    const prevRestockCandidatesRaw = Array.isArray(prevBotContextRecord.restock_candidates)
+      ? (prevBotContextRecord.restock_candidates as Array<Record<string, unknown>>)
       : [];
     const prevRestockCandidates = reindexCandidateRows(filterSchedulableEntries(prevRestockCandidatesRaw));
     const pickedIndex = parseIndexedChoiceSafe(messageText);
@@ -249,9 +246,9 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       }
     }
 
-    const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
-    const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
-    const pendingChannel = String(prevBotContext.pending_channel || "").trim();
+    const pendingProductId = String(prevBotContextRecord.pending_product_id || "").trim();
+    const pendingProductName = String(prevBotContextRecord.pending_product_name || "").trim();
+    const pendingChannel = String(prevBotContextRecord.pending_channel || "").trim();
     const restockQueryText =
       resolvedIntent === "restock_inquiry" || resolvedIntent === "restock_subscribe"
         ? effectiveMessageForIntent
@@ -1271,10 +1268,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
 
       const subscribePhone =
         typeof policyContext.entity?.phone === "string" ? normalizePhoneDigits(policyContext.entity.phone) : "";
-      const pendingLeadDaysFromContext = Array.isArray(
-        (prevBotContext as Record<string, unknown>).pending_lead_days
-      )
-        ? ((prevBotContext as Record<string, unknown>).pending_lead_days as number[])
+    const pendingLeadDaysFromContext = Array.isArray(prevBotContextRecord.pending_lead_days)
+        ? (prevBotContextRecord.pending_lead_days as number[])
             .map((n) => Number(n))
             .filter((n) => Number.isFinite(n))
         : [];
