@@ -620,7 +620,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       }
 
     if (hasChoiceAnswerCandidates(rankedFromMessageSchedulable.length)) {
-      const candidateRows = rankedFromMessageSchedulable.map((row: { entry: RestockCandidateRow }, idx) => ({
+      const candidateRows = rankedFromMessageSchedulable.map((row: { entry: RestockCandidateRow }, idx: number) => ({
         index: idx + 1,
         product_name: row.entry.product_name,
         month: row.entry.month,
