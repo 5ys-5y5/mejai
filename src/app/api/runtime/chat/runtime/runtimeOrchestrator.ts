@@ -421,7 +421,7 @@ export async function POST(req: NextRequest) {
       message,
       expectedInput,
       resolvedIntent,
-      agentLlm: agent.llm,
+      agentLlm: (agent.llm ?? null) as "chatgpt" | "gemini" | null,
       timingStages,
       pushRuntimeTimingStage,
       derivedOrderId,
