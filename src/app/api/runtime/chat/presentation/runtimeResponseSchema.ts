@@ -24,14 +24,14 @@ export type RuntimeResponseSchema = {
   cards: RuntimeCard[];
 };
 
-export type RuntimeResponderPayload = Record<string, unknown> & {
+export type RuntimeResponderPayload = Record<string, any> & {
   message?: unknown;
   quick_replies?: RuntimeQuickReply[];
   quick_reply_config?: RuntimeQuickReplyConfig | null;
   product_cards?: RuntimeCard[];
 };
 
-export function extractRuntimeCards(payload: Record<string, unknown>) {
+export function extractRuntimeCards(payload: Record<string, any>) {
   const productCardsRaw = payload["product_cards"];
   const productCards = Array.isArray(productCardsRaw) ? (productCardsRaw as RuntimeCard[]) : [];
   return productCards;
@@ -80,3 +80,4 @@ export function validateRuntimeResponseSchema(schema: RuntimeResponseSchema) {
   }
   return { ok: issues.length === 0, issues };
 }
+

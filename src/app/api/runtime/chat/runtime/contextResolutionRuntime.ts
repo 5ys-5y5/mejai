@@ -2,7 +2,7 @@ import type { PolicyEvalContext } from "@/lib/policyEngine";
 import { resolveAddressWithReuse, resolvePhoneWithReuse } from "./memoryReuseRuntime";
 
 type ContextResolutionParams = {
-  context: unknown;
+  context: any;
   sessionId: string;
   latestTurnId: string | null;
   message: string;
@@ -32,7 +32,7 @@ type ContextResolutionParams = {
   isYesText: (text: string) => boolean;
   isNoText: (text: string) => boolean;
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -381,4 +381,5 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     contaminationSummaries,
   };
 }
+
 

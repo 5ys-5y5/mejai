@@ -2,7 +2,7 @@ import { resolveQuickReplyConfig, type RuntimeQuickReplyConfig } from "./quickRe
 import { resolveRuntimeTemplate } from "./promptTemplateRuntime";
 
 type DisambiguationParams = {
-  context: unknown;
+  context: any;
   sessionId: string;
   nextSeq: number;
   message: string;
@@ -20,7 +20,7 @@ type DisambiguationParams = {
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -302,4 +302,5 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
     response: null,
   };
 }
+
 

@@ -15,7 +15,7 @@ import {
 } from "../shared/addressCandidateUtils";
 
 type PendingStateParams = {
-  context: unknown;
+  context: any;
   prevBotContext: Record<string, any>;
   resolvedIntent: string;
   prevEntity: Record<string, any>;
@@ -30,7 +30,7 @@ type PendingStateParams = {
   updateConfirmAcceptedThisTurn: boolean;
   refundConfirmAcceptedThisTurn: boolean;
   callAddressSearchWithAudit: (
-    context: unknown,
+    context: any,
     rawKeyword: string,
     sessionId: string,
     turnId: string | null,
@@ -52,7 +52,7 @@ type PendingStateParams = {
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -903,4 +903,5 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
     refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
   };
 }
+
 

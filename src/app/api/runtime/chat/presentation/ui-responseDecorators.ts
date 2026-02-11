@@ -82,7 +82,7 @@ export function deriveQuickReplyConfig(
 
 export function deriveQuickRepliesFromConfig(config: unknown): RuntimeQuickReply[] {
   if (!config || typeof config !== "object") return [];
-  const criteria = String((config as Record<string, unknown>).criteria || "").toLowerCase();
+  const criteria = String((config as Record<string, any>).criteria || "").toLowerCase();
   if (criteria.includes("yes_no") || criteria.includes("yes/no")) {
     return [...YES_NO_QUICK_REPLIES];
   }
@@ -92,3 +92,4 @@ export function deriveQuickRepliesFromConfig(config: unknown): RuntimeQuickReply
 export function deriveRichMessageHtml(message: unknown) {
   return buildIntentDisambiguationTableHtmlFromText(message);
 }
+

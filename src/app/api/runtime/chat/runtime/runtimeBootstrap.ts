@@ -34,7 +34,7 @@ type SupabaseQueryLike = any;
 
 type SupabaseClientLike = any;
 
-type RuntimeContext = any;
+type RuntimeContextAny = any;
 
 type AgentShape = {
   id: string | null;
@@ -58,8 +58,8 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   | {
       response: null;
       state: {
-        context: RuntimeContext;
-        authContext: RuntimeContext;
+        context: RuntimeContextAny;
+        authContext: RuntimeContextAny;
         body: Body | null;
         agent: AgentShape;
         message: string;
@@ -416,4 +416,5 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     },
   };
 }
+
 

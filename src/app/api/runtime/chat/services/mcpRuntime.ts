@@ -2,18 +2,18 @@ type SupabaseQuery = {
   select: (...args: unknown[]) => SupabaseQuery;
   eq: (...args: unknown[]) => SupabaseQuery;
   insert: (...args: unknown[]) => Promise<unknown>;
-  maybeSingle: () => Promise<{ data?: Record<string, unknown> | null }>;
+  maybeSingle: () => Promise<{ data?: Record<string, any> | null }>;
 };
 
-type RuntimeContext = any;
+type RuntimeContextAny = any;
 
 export async function callMcpTool(
   context: any,
   tool: string,
-  params: Record<string, unknown>,
+  params: Record<string, any>,
   sessionId: string,
   turnId: string | null,
-  botContext: Record<string, unknown>,
+  botContext: Record<string, any>,
   allowedTools:
     | {
       keys: Set<string>;
@@ -25,20 +25,20 @@ export async function callMcpTool(
   const tracedBotContext =
     botContext && typeof botContext === "object"
       ? ({
-          ...(botContext as Record<string, unknown>),
+          ...(botContext as Record<string, any>),
           ...(traceId && !Object.prototype.hasOwnProperty.call(botContext, "trace_id")
             ? { trace_id: traceId }
             : {}),
-        } as Record<string, unknown>)
+        } as Record<string, any>)
       : traceId
-        ? ({ trace_id: traceId } as Record<string, unknown>)
+        ? ({ trace_id: traceId } as Record<string, any>)
         : {};
   const auditBlocked = async (
     status: string,
     reason: string,
     toolId?: string | null,
     toolVersion?: string | null,
-    responsePayload?: Record<string, unknown> | null
+    responsePayload?: Record<string, any> | null
   ) => {
     try {
       await context.supabase.from("F_audit_mcp_tools").insert({
@@ -99,11 +99,11 @@ export async function callMcpTool(
     await auditBlocked("blocked", "TOOL_NOT_FOUND");
     return { ok: false, error: "TOOL_NOT_FOUND" };
   }
-  const toolRecord = toolRow as Record<string, unknown>;
+  const toolRecord = toolRow as Record<string, any>;
   const { callAdapter } = await import("@/lib/mcpAdapters");
   const { applyMasking, checkPolicyConditions, validateToolParams } = await import("@/lib/mcpPolicy");
 
-  const resolvedParams: Record<string, unknown> = { ...params };
+  const resolvedParams: Record<string, any> = { ...params };
   if (toolRecord.endpoint_path && resolvedParams.path === undefined) {
     resolvedParams.path = toolRecord.endpoint_path as string;
   }
@@ -115,7 +115,7 @@ export async function callMcpTool(
   }
 
   const schema = toolRecord.schema_json || {};
-  const validation = validateToolParams(schema as Record<string, unknown>, resolvedParams);
+  const validation = validateToolParams(schema as Record<string, any>, resolvedParams);
   if (!validation.ok) {
     await auditBlocked("invalid_params", "INVALID_PARAMS", toolRow.id as string, (toolRecord.version as string) || null, {
       error: validation.error || "INVALID_PARAMS",
@@ -135,7 +135,7 @@ export async function callMcpTool(
   }
 
   const start = Date.now();
-  let result: { status: string; data?: Record<string, unknown>; error?: unknown };
+  let result: { status: string; data?: Record<string, any>; error?: unknown };
   let latency = 0;
   try {
     result = await callAdapter(
@@ -182,7 +182,7 @@ export async function callMcpTool(
 
   const responsePayloadWithError =
     result.status === "error"
-      ? { ...(masked.masked as Record<string, unknown>), error: result.error || null }
+      ? { ...(masked.masked as Record<string, any>), error: result.error || null }
       : masked.masked;
   try {
     await context.supabase.from("F_audit_mcp_tools").insert({
@@ -252,24 +252,24 @@ export async function callAddressSearchWithAudit(
   keyword: string,
   sessionId: string,
   turnId: string | null,
-  botContext: Record<string, unknown>
+  botContext: Record<string, any>
 ) {
   const traceId = String(context?.runtimeTraceId || "").trim();
   const tracedBotContext =
     botContext && typeof botContext === "object"
       ? ({
-          ...(botContext as Record<string, unknown>),
+          ...(botContext as Record<string, any>),
           ...(traceId && !Object.prototype.hasOwnProperty.call(botContext, "trace_id")
             ? { trace_id: traceId }
             : {}),
-        } as Record<string, unknown>)
+        } as Record<string, any>)
       : traceId
-        ? ({ trace_id: traceId } as Record<string, unknown>)
+        ? ({ trace_id: traceId } as Record<string, any>)
         : {};
   const { callAdapter } = await import("@/lib/mcpAdapters");
   const start = Date.now();
   const keywords = buildAddressSearchKeywords(keyword);
-  let result: { status: string; data?: Record<string, unknown>; error?: unknown } = {
+  let result: { status: string; data?: Record<string, any>; error?: unknown } = {
     status: "error",
     error: { code: "INVALID_INPUT", message: "keyword is required" },
     data: {},
@@ -283,8 +283,8 @@ export async function callAddressSearchWithAudit(
           "search_address",
           { keyword: kw },
           { supabase: context.supabase, orgId: context.orgId, userId: context.user.id }
-        )) as { status?: string; data?: Record<string, unknown>; error?: unknown };
-        const currentData = (current?.data || {}) as Record<string, unknown>;
+        )) as { status?: string; data?: Record<string, any>; error?: unknown };
+        const currentData = (current?.data || {}) as Record<string, any>;
         const currentError = current?.error;
         attempts.push({
           keyword: kw,
@@ -323,7 +323,7 @@ export async function callAddressSearchWithAudit(
   latency = Date.now() - start;
   if (result?.data && typeof result.data === "object") {
     result.data = {
-      ...(result.data as Record<string, unknown>),
+      ...(result.data as Record<string, any>),
       _search_attempts: attempts,
       _search_keywords: keywords,
     };
@@ -350,4 +350,6 @@ export async function callAddressSearchWithAudit(
   }
   return result;
 }
+
+
 

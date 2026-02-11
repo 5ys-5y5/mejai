@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
   const runtimeTurnId =
     String(req.headers.get("x-runtime-turn-id") || "").trim() || crypto.randomUUID();
   const timingStages: RuntimeTimingStage[] = [];
-  let runtimeContext: Record<string, any> | null = null;
+  let RuntimeContextAny: Record<string, any> | null = null;
   let currentSessionId: string | null = null;
   let firstTurnInSession = false;
   let latestTurnId: string | null = null;
@@ -158,7 +158,7 @@ export async function POST(req: NextRequest) {
     requestStartedAt,
     timingStages,
     quickReplyMax: CHAT_PRINCIPLES.response.quickReplyMax,
-    getRuntimeContext: () => runtimeContext,
+    getRuntimeContextAny: () => RuntimeContextAny,
     getCurrentSessionId: () => currentSessionId,
     getLatestTurnId: () => latestTurnId,
     getFirstTurnInSession: () => firstTurnInSession,
@@ -214,7 +214,7 @@ export async function POST(req: NextRequest) {
       (prevBotContext || {}) as Record<string, any>,
       runtimeTemplateOverrides
     );
-    runtimeContext = context;
+    RuntimeContextAny = context;
     currentSessionId = sessionId;
     firstTurnInSession = firstInSession;
     latestTurnId = runtimeTurnId;
@@ -1006,7 +1006,7 @@ export async function POST(req: NextRequest) {
       auditIntent,
       auditEntity,
       auditConversationMode,
-      runtimeContext,
+      RuntimeContextAny,
       currentSessionId,
       latestTurnId,
       insertEvent,
@@ -1021,4 +1021,5 @@ export async function POST(req: NextRequest) {
     return runtimeError.response;
   }
 }
+
 

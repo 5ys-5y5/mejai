@@ -15,12 +15,12 @@ type RestockSubscriptionInput = {
   topicKey?: string | null;
   topicLabel?: string | null;
   intentName?: string | null;
-  metadata?: Record<string, unknown> | null;
+  metadata?: Record<string, any> | null;
   mallId?: string | null;
 };
 
 type RestockSubscriptionResult =
-  | { ok: true; data: { notification_ids: string[]; scheduled_count: number } & Record<string, unknown> }
+  | { ok: true; data: { notification_ids: string[]; scheduled_count: number } & Record<string, any> }
   | { ok: false; error: string };
 
 type SupabaseLike = {
@@ -31,7 +31,7 @@ type SupabaseLike = {
   };
 };
 
-type RuntimeContext = any;
+type RuntimeContextAny = any;
 
 function normalizeLeadDays(values?: number[]) {
   if (!Array.isArray(values)) return [];
@@ -117,10 +117,10 @@ async function sendSolapiMessageNow(params: { to: string; text: string; from: st
   }
 }
 
-function extractSolapiMessageId(payload: Record<string, unknown>) {
+function extractSolapiMessageId(payload: Record<string, any>) {
   const direct = payload.messageId || payload.message_id;
   if (direct) return String(direct);
-  const list = (payload as Record<string, unknown>).messageList;
+  const list = (payload as Record<string, any>).messageList;
   if (Array.isArray(list) && list.length > 0) {
     const msgId = list[0]?.messageId || list[0]?.message_id;
     if (msgId) return String(msgId);
@@ -202,11 +202,11 @@ export async function saveRestockSubscriptionLite(
   }
 
   const ids = Array.isArray(data)
-    ? data.map((row) => String((row as Record<string, unknown>)?.id || "").trim()).filter(Boolean)
+    ? data.map((row) => String((row as Record<string, any>)?.id || "").trim()).filter(Boolean)
     : [];
   const nowIso = new Date().toISOString();
   const runtimeTurnId = String((context as { runtimeTurnId?: unknown })?.runtimeTurnId || "").trim() || null;
-  const insertDispatchAuditEvent = async (eventType: string, payload: Record<string, unknown>) => {
+  const insertDispatchAuditEvent = async (eventType: string, payload: Record<string, any>) => {
     try {
       await context.supabase.from("F_audit_events").insert({
         session_id: sessionId,
@@ -222,7 +222,7 @@ export async function saveRestockSubscriptionLite(
   };
   const insertDeliveryOutcomeEvent = async (
     eventType: "RESTOCK_SMS_SENT" | "RESTOCK_SMS_SCHEDULED" | "RESTOCK_SMS_FAILED" | "RESTOCK_SMS_SCHEDULE_FAILED",
-    payload: Record<string, unknown>
+    payload: Record<string, any>
   ) => {
     try {
       await context.supabase.from("F_audit_events").insert({
@@ -283,7 +283,7 @@ export async function saveRestockSubscriptionLite(
         sendError = sent.error;
       } else {
         sendOk = true;
-        solapiMessageId = extractSolapiMessageId((sent.data || {}) as Record<string, unknown>);
+        solapiMessageId = extractSolapiMessageId((sent.data || {}) as Record<string, any>);
       }
     }
     if (sendOk) {
@@ -374,4 +374,6 @@ export async function saveRestockSubscriptionLite(
     },
   };
 }
+
+
 

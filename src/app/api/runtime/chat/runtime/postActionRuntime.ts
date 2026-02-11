@@ -9,10 +9,10 @@ type SupabaseLike = {
   };
 };
 
-type RuntimeContext = { supabase: SupabaseLike };
+type RuntimeContextAny = any;
 
 type PostActionRuntimeParams = {
-  context: RuntimeContext;
+  context: RuntimeContextAny;
   prevBotContext: Record<string, any>;
   resolvedIntent: string;
   prevEntity: Record<string, any>;
@@ -300,4 +300,6 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
 
   return { response: null };
 }
+
+
 

@@ -1,11 +1,11 @@
 type SupabaseLike = {
   from: (table: string) => {
-    insert: (...args: unknown[]) => { select: (...args: unknown[]) => { single: () => Promise<{ data?: Record<string, unknown>; error?: { message?: string } }> } };
+    insert: (...args: unknown[]) => { select: (...args: unknown[]) => { single: () => Promise<{ data?: Record<string, any>; error?: { message?: string } }> } };
     upsert: (...args: unknown[]) => Promise<unknown>;
   };
 };
 
-type RuntimeContext = any;
+type RuntimeContextAny = any;
 
 function nowIso() {
   return new Date().toISOString();
@@ -66,9 +66,9 @@ function parseStackFrame(line: string) {
   };
 }
 
-function inferDecisionFallback(eventType: string, payload: Record<string, unknown>) {
+function inferDecisionFallback(eventType: string, payload: Record<string, any>) {
   const type = String(eventType || "").toUpperCase();
-  const payloadRecord = payload as Record<string, unknown>;
+  const payloadRecord = payload as Record<string, any>;
   const stage = String(payloadRecord?.stage || "").toLowerCase();
   const action = String(payloadRecord?.action || "").toUpperCase();
   const model = String(payloadRecord?.model || "").toLowerCase();
@@ -190,7 +190,7 @@ function inferDecisionFallback(eventType: string, payload: Record<string, unknow
   return null;
 }
 
-function captureDecisionTrace(eventType: string, payload: Record<string, unknown>) {
+function captureDecisionTrace(eventType: string, payload: Record<string, any>) {
   const stack = new Error().stack || "";
   const frames = stack.split("\n").slice(1);
   const chain = frames
@@ -213,12 +213,12 @@ function captureDecisionTrace(eventType: string, payload: Record<string, unknown
   const fallbackChain = fallback
     ? [
         {
-          module_path: String((fallback as Record<string, unknown>).module_path || "unknown"),
+          module_path: String((fallback as Record<string, any>).module_path || "unknown"),
           function_name: sanitizeDecisionText(
-            String((fallback as Record<string, unknown>).function_name || "unknown")
+            String((fallback as Record<string, any>).function_name || "unknown")
           ),
-          line: Number((fallback as Record<string, unknown>).line || 0),
-          column: Number((fallback as Record<string, unknown>).column || 0),
+          line: Number((fallback as Record<string, any>).line || 0),
+          column: Number((fallback as Record<string, any>).column || 0),
         },
       ]
     : [];
@@ -243,10 +243,10 @@ export async function insertEvent(
   sessionId: string,
   turnId: string | null,
   eventType: string,
-  payload: Record<string, unknown>,
-  botContext: Record<string, unknown>
+  payload: Record<string, any>,
+  botContext: Record<string, any>
 ) {
-  const traceId = String((context as RuntimeContext)?.runtimeTraceId || "").trim();
+  const traceId = String((context as RuntimeContextAny)?.runtimeTraceId || "").trim();
   const decisionRaw = captureDecisionTrace(eventType, payload || {});
   const fallback = inferDecisionFallback(eventType, payload || {});
   const decision =
@@ -254,29 +254,29 @@ export async function insertEvent(
       ? { ...decisionRaw, ...fallback }
       : decisionRaw;
   if (
-    (!Array.isArray((decision as Record<string, unknown>).call_chain) ||
-      (decision as Record<string, unknown>).call_chain.length === 0) &&
+    (!Array.isArray((decision as Record<string, any>).call_chain) ||
+      (decision as Record<string, any>).call_chain.length === 0) &&
     fallback
   ) {
-    (decision as Record<string, unknown>).call_chain = [
+    (decision as Record<string, any>).call_chain = [
       {
-        module_path: String((fallback as Record<string, unknown>).module_path || "unknown"),
+        module_path: String((fallback as Record<string, any>).module_path || "unknown"),
         function_name: sanitizeDecisionText(
-          String((fallback as Record<string, unknown>).function_name || "unknown")
+          String((fallback as Record<string, any>).function_name || "unknown")
         ),
-        line: Number((fallback as Record<string, unknown>).line || 0),
-        column: Number((fallback as Record<string, unknown>).column || 0),
+        line: Number((fallback as Record<string, any>).line || 0),
+        column: Number((fallback as Record<string, any>).column || 0),
       },
     ];
   }
   const safePayload =
     payload && typeof payload === "object"
-      ? ({ ...(payload as Record<string, unknown>), _decision: decision } as Record<string, unknown>)
-      : ({ _decision: decision } as Record<string, unknown>);
+      ? ({ ...(payload as Record<string, any>), _decision: decision } as Record<string, any>)
+      : ({ _decision: decision } as Record<string, any>);
   const safeBotContext =
     botContext && typeof botContext === "object"
-      ? ({ ...(botContext as Record<string, unknown>), _decision: decision } as Record<string, unknown>)
-      : ({ _decision: decision } as Record<string, unknown>);
+      ? ({ ...(botContext as Record<string, any>), _decision: decision } as Record<string, any>)
+      : ({ _decision: decision } as Record<string, any>);
   if (traceId && !Object.prototype.hasOwnProperty.call(safeBotContext, "trace_id")) {
     safeBotContext.trace_id = traceId;
   }
@@ -301,7 +301,7 @@ export async function insertEvent(
 
 export async function upsertDebugLog(
   context: any,
-  payload: { sessionId: string; turnId: string; seq?: number | null; prefixJson: Record<string, unknown> | null }
+  payload: { sessionId: string; turnId: string; seq?: number | null; prefixJson: Record<string, any> | null }
 ) {
   if (!payload.prefixJson) return;
   try {
@@ -326,14 +326,14 @@ export async function upsertDebugLog(
 
 export async function insertFinalTurn(
   context: any,
-  payload: Record<string, unknown>,
-  prefixJson: Record<string, unknown> | null
+  payload: Record<string, any>,
+  prefixJson: Record<string, any> | null
 ) {
   const turnDecision = captureDecisionTrace("TURN_WRITE", {});
   const nextPayload = {
     ...payload,
     bot_context: {
-      ...((payload.bot_context || {}) as Record<string, unknown>),
+      ...((payload.bot_context || {}) as Record<string, any>),
       _decision_turn: turnDecision,
     },
   };
@@ -341,7 +341,7 @@ export async function insertFinalTurn(
     ? ({
         ...prefixJson,
         decision: turnDecision,
-      } as Record<string, unknown>)
+      } as Record<string, any>)
     : null;
   const { data, error } = await context.supabase.from("D_conv_turns").insert(nextPayload).select("*").single();
   if (!error && data?.id && data?.session_id) {
@@ -354,4 +354,6 @@ export async function insertFinalTurn(
   }
   return { data, error };
 }
+
+
 

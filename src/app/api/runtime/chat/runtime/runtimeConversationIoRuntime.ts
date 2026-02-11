@@ -39,9 +39,9 @@ type RuntimeStateSnapshot = {
 };
 
 export function createRuntimeConversationIo(input: {
-  context: unknown;
+  context: any;
   insertFinalTurn: (
-    context: unknown,
+    context: any,
     payload: Record<string, any>,
     debugPrefixJson: Record<string, any>
   ) => Promise<Record<string, any>>;
@@ -107,4 +107,5 @@ export function createRuntimeConversationIo(input: {
 
   return { makeReply, insertTurn };
 }
+
 

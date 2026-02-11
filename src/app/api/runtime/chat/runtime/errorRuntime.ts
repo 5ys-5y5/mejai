@@ -6,7 +6,7 @@ export async function handleRuntimeError(input: Record<string, any>) {
     auditIntent,
     auditEntity,
     auditConversationMode,
-    runtimeContext,
+    RuntimeContextAny,
     currentSessionId,
     latestTurnId,
     insertEvent,
@@ -34,14 +34,14 @@ export async function handleRuntimeError(input: Record<string, any>) {
 
   let nextLatestTurnId = latestTurnId;
 
-  if (runtimeContext && currentSessionId) {
+  if (RuntimeContextAny && currentSessionId) {
     const errorBotContext = {
       intent_name: auditIntent || "general",
       entity: auditEntity || {},
       mode: auditConversationMode || "mk2",
     };
     await insertEvent(
-      runtimeContext,
+      RuntimeContextAny,
       currentSessionId,
       nextLatestTurnId,
       "UNHANDLED_ERROR_CAUGHT",
@@ -56,7 +56,7 @@ export async function handleRuntimeError(input: Record<string, any>) {
 
     let fallbackTurnId: string | null = nextLatestTurnId;
     try {
-      const recentRes = await getRecentTurns(runtimeContext, currentSessionId, 1);
+      const recentRes = await getRecentTurns(RuntimeContextAny, currentSessionId, 1);
       const recentTurns = (recentRes.data || []) as Array<{ seq?: number }>;
       const fallbackSeq = (recentTurns[0]?.seq ? Number(recentTurns[0].seq) : 0) + 1;
       const fallbackPrefixJson =
@@ -74,7 +74,7 @@ export async function handleRuntimeError(input: Record<string, any>) {
           conversationMode: auditConversationMode || "mk2",
         });
       const fallbackTurnRes = await insertFinalTurn(
-        runtimeContext,
+        RuntimeContextAny,
         {
           session_id: currentSessionId,
           seq: fallbackSeq,
@@ -105,7 +105,7 @@ export async function handleRuntimeError(input: Record<string, any>) {
     }
 
     await insertEvent(
-      runtimeContext,
+      RuntimeContextAny,
       currentSessionId,
       fallbackTurnId,
       "FINAL_ANSWER_READY",
@@ -126,3 +126,4 @@ export async function handleRuntimeError(input: Record<string, any>) {
     latestTurnId: nextLatestTurnId,
   };
 }
+

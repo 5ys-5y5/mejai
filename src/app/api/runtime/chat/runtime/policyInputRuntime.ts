@@ -19,14 +19,14 @@ export function reconcileIntentFromInputGate(input: {
 
 export async function emitPolicyStaticConflict(input: {
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, any>,
     botContext: Record<string, any>
   ) => Promise<unknown>;
-  context: unknown;
+  context: any;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
@@ -51,14 +51,14 @@ export async function emitPolicyStaticConflict(input: {
 
 export async function emitSlotExtracted(input: {
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, any>,
     botContext: Record<string, any>
   ) => Promise<unknown>;
-  context: unknown;
+  context: any;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
@@ -141,14 +141,14 @@ export async function handleInputForcedResponse(input: {
   policyContext: Record<string, any>;
   resolvedOrderId: string | null;
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, any>,
     botContext: Record<string, any>
   ) => Promise<unknown>;
-  context: unknown;
+  context: any;
   latestTurnId: string | null;
   respond: (payload: Record<string, any>, init?: ResponseInit) => Response;
 }): Promise<Response | null> {
@@ -186,4 +186,5 @@ export async function handleInputForcedResponse(input: {
   await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "input" }, { intent_name: resolvedIntent });
   return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
 }
+
 

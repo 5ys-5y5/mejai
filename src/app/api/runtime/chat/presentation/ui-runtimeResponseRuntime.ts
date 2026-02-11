@@ -15,10 +15,10 @@ import {
 } from "./runtimeResponseSchema";
 import { buildRenderPlan } from "../policies/renderPolicy";
 
-type RuntimeContextLike = {
+type RuntimeContextAnyLike = {
   supabase: {
     from: (table: string) => {
-      insert: (value: Record<string, unknown>) => Promise<unknown>;
+      insert: (value: Record<string, any>) => Promise<unknown>;
     };
   };
 };
@@ -28,7 +28,7 @@ export function createRuntimeResponder(input: {
   requestStartedAt: number;
   timingStages: RuntimeTimingStage[];
   quickReplyMax: number;
-  getRuntimeContext: () => RuntimeContextLike | null;
+  getRuntimeContextAny: () => RuntimeContextAnyLike | null;
   getCurrentSessionId: () => string | null;
   getLatestTurnId: () => string | null;
   getFirstTurnInSession: () => boolean;
@@ -38,7 +38,7 @@ export function createRuntimeResponder(input: {
     requestStartedAt,
     timingStages,
     quickReplyMax,
-    getRuntimeContext,
+    getRuntimeContextAny,
     getCurrentSessionId,
     getLatestTurnId,
     getFirstTurnInSession,
@@ -53,7 +53,7 @@ export function createRuntimeResponder(input: {
       const currentSessionId = getCurrentSessionId();
       const latestTurnId = getLatestTurnId();
       const firstTurnInSession = getFirstTurnInSession();
-      const runtimeContext = getRuntimeContext();
+      const RuntimeContextAny = getRuntimeContextAny();
       console.info("[runtime/chat/mk2][timing]", {
         trace_id: runtimeTraceId,
         status: responseStatus,
@@ -65,10 +65,10 @@ export function createRuntimeResponder(input: {
         stage_count: timingStages.length,
         stages: timingStages,
       });
-      if (runtimeContext && currentSessionId) {
+      if (RuntimeContextAny && currentSessionId) {
         void (async () => {
           try {
-            await runtimeContext.supabase.from("F_audit_events").insert({
+            await RuntimeContextAny.supabase.from("F_audit_events").insert({
               session_id: currentSessionId,
               turn_id: latestTurnId,
               event_type: "RUNTIME_TIMING",
@@ -127,13 +127,13 @@ export function createRuntimeResponder(input: {
               source_module: derivedQuickReplies.derivation?.source_module,
             }
             : { type: "none" as const };
-    const runtimeContext = getRuntimeContext();
+    const RuntimeContextAny = getRuntimeContextAny();
     const currentSessionId = getCurrentSessionId();
     const currentTurnId = getLatestTurnId();
-    if (resolvedQuickReplyConfig && runtimeContext && currentSessionId) {
+    if (resolvedQuickReplyConfig && RuntimeContextAny && currentSessionId) {
       void (async () => {
         try {
-          await runtimeContext.supabase.from("F_audit_events").insert({
+          await RuntimeContextAny.supabase.from("F_audit_events").insert({
             session_id: currentSessionId,
             turn_id: currentTurnId,
             event_type: "QUICK_REPLY_RULE_DECISION",
@@ -193,3 +193,5 @@ export function createRuntimeResponder(input: {
     );
   };
 }
+
+

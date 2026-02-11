@@ -59,11 +59,7 @@ type MakeReplyParams = {
   currentDebugPrefixJson: Record<string, any> | null;
 };
 
-type RuntimeContext = {
-  supabase: SupabaseClient;
-  runtimeRequestStartedAt?: string | null;
-  runtimeTurnId?: string | null;
-};
+type RuntimeContextAny = any;
 
 type InsertFinalTurnResult = {
   data?: { id?: string | null; session_id?: string | null };
@@ -140,11 +136,11 @@ type InsertTurnParams = {
   buildDebugPrefixJson: (payload: Record<string, any>) => Record<string, any>;
   pendingIntentQueue: string[];
   insertFinalTurn: (
-    context: RuntimeContext,
+    context: RuntimeContextAny,
     payload: Record<string, any>,
     debugPrefixJson: Record<string, any>
   ) => Promise<InsertFinalTurnResult>;
-  context: RuntimeContext;
+  context: RuntimeContextAny;
   orgId?: string | null;
 };
 
@@ -305,7 +301,7 @@ function collapseViolationsForTurn(
   return out;
 }
 
-async function insertAuditEvent(context: RuntimeContext, input: {
+async function insertAuditEvent(context: RuntimeContextAny, input: {
   sessionId: string;
   turnId: string;
   eventType: string;
@@ -323,7 +319,7 @@ async function insertAuditEvent(context: RuntimeContext, input: {
 }
 
 async function backfillTurnIdForRuntimeTrace(input: {
-  context: RuntimeContext;
+  context: RuntimeContextAny;
   sessionId: string;
   turnId: string;
 }) {
@@ -367,7 +363,7 @@ async function backfillTurnIdForRuntimeTrace(input: {
 }
 
 async function runRuntimeSelfUpdateReview(params: {
-  context: RuntimeContext;
+  context: RuntimeContextAny;
   orgId: string;
   sessionId: string;
   turnId: string;
@@ -623,4 +619,6 @@ export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
   }
   return { result, lastDebugPrefixJson: nextDebugPrefixJson, latestTurnId };
 }
+
+
 

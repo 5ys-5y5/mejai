@@ -8,7 +8,7 @@ import { generateAlternativeRestockConsentQuestion } from "../policies/restockRe
 import { buildNumberedChoicePrompt, buildRestockLeadDaysPrompt, buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
 
 type RestockPendingParams = {
-  context: unknown;
+  context: any;
   prevBotContext: Record<string, any>;
   resolvedIntent: string;
   prevEntity: Record<string, any>;
@@ -31,7 +31,7 @@ type RestockPendingParams = {
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -667,4 +667,5 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     lockIntentToRestockSubscribe: nextLocked,
   };
 }
+
 

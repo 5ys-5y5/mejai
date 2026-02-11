@@ -1,7 +1,7 @@
 import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "../runtime/quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "../runtime/promptTemplateRuntime";
 
-type RefundToolResult = { name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown };
+type RefundToolResult = { name: string; ok: boolean; data?: Record<string, any>; error?: unknown };
 
 type HandleRefundRequestInput = {
   resolvedIntent: string;
@@ -10,22 +10,22 @@ type HandleRefundRequestInput = {
   createTicketSuccess: RefundToolResult | undefined;
   createTicketFailure: RefundToolResult | undefined;
   makeReply: (text: string) => string;
-  insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => Response;
-  context: unknown;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => Response;
+  context: any;
   sessionId: string;
   nextSeq: number;
   message: string;
   latestTurnId: string | null;
-  policyContextEntity: Record<string, unknown>;
+  policyContextEntity: Record<string, any>;
   customerVerificationToken: string | null;
   mcpActions: string[];
 };
@@ -121,7 +121,7 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
   }
 
   if (createTicketSuccess) {
-    const ticketData = (createTicketSuccess.data ?? {}) as Record<string, unknown>;
+    const ticketData = (createTicketSuccess.data ?? {}) as Record<string, any>;
     const ticketId = String(ticketData.ticket_id ?? ticketData.id ?? "").trim() || "-";
     const reply = makeReply(
       `요약: 취소/환불 요청이 접수되었습니다.\n상세: 주문번호 ${resolvedOrderId} 기준으로 요청이 등록되었습니다. (접수번호: ${ticketId})\n다음 액션: 처리 결과를 확인해드릴까요?`
@@ -183,3 +183,4 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
 
   return null;
 }
+

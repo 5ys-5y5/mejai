@@ -3,7 +3,7 @@ import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
 import { readPendingPhoneReuse } from "./memoryReuseRuntime";
 
 type PreTurnGuardParams = {
-  context: unknown;
+  context: any;
   prevBotContext: Record<string, any>;
   resolvedIntent: string;
   prevEntity: Record<string, any>;
@@ -21,7 +21,7 @@ type PreTurnGuardParams = {
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -177,4 +177,5 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
     expectedInput: nextExpectedInput,
   };
 }
+
 

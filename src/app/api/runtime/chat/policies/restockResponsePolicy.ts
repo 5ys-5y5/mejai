@@ -170,15 +170,15 @@ export function buildRestockFinalAnswerWithChoices(
 }
 
 export function readProductShape(raw: unknown) {
-  const root = (raw || {}) as Record<string, unknown>;
-  const fromProduct = (root.product || {}) as Record<string, unknown>;
+  const root = (raw || {}) as Record<string, any>;
+  const fromProduct = (root.product || {}) as Record<string, any>;
   const fromProducts =
     Array.isArray((root as { products?: unknown }).products) &&
     ((root as { products?: unknown }).products as Array<unknown>).length > 0
-      ? (((root as { products?: unknown }).products as Array<unknown>)[0] as Record<string, unknown>)
+      ? (((root as { products?: unknown }).products as Array<unknown>)[0] as Record<string, any>)
       : null;
   const product = (Object.keys(fromProduct).length > 0 ? fromProduct : fromProducts) || root;
-  const productRecord = product as Record<string, unknown>;
+  const productRecord = product as Record<string, any>;
   const productName = String(
     productRecord.product_name ||
       productRecord.product_name_default ||
@@ -291,3 +291,4 @@ Output Schema: { "order_id": string | null, "phone": string | null, "address": s
     return null;
   }
 }
+

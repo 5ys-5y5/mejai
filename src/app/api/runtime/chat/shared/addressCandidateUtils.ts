@@ -11,9 +11,9 @@ function toText(value: unknown) {
 }
 
 export function extractAddressCandidatesFromSearchData(searchData: unknown, max = 5): AddressCandidate[] {
-  const data = (searchData as Record<string, unknown>) || {};
+  const data = (searchData as Record<string, any>) || {};
   const rows = Array.isArray(data.results)
-    ? (data.results as Array<Record<string, unknown>>)
+    ? (data.results as Array<Record<string, any>>)
     : [];
   const out: AddressCandidate[] = [];
   for (const row of rows) {
@@ -81,3 +81,4 @@ export function buildAddressCandidateChoicePrompt(input: { candidates: AddressCa
   lines.push("원하는 번호를 입력해 주세요. (예: 1)");
   return lines.join("\n");
 }
+

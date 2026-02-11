@@ -3,11 +3,11 @@ import type { AgentRow, KbRow, ProductAliasRow, ProductDecision, ProductRuleRow 
 
 type SupabaseQuery = any;
 
-type RuntimeContext = any;
+type RuntimeContextAny = any;
 
 export function matchesAdminGroup(
   applyGroups: Array<{ path: string; values: string[] }> | null | undefined,
-  group: Record<string, unknown> | null,
+  group: Record<string, any> | null,
   mode: "all" | "any" | null | undefined
 ) {
   if (!applyGroups || applyGroups.length === 0) return true;
@@ -19,11 +19,11 @@ export function matchesAdminGroup(
   });
 }
 
-function readGroupValue(group: Record<string, unknown> | null, path: string) {
+function readGroupValue(group: Record<string, any> | null, path: string) {
   if (!group) return null;
   return path.split(".").reduce((acc: unknown, key) => {
     if (!acc || typeof acc !== "object") return null;
-    return (acc as Record<string, unknown>)[key];
+    return (acc as Record<string, any>)[key];
   }, group as unknown);
 }
 
@@ -140,5 +140,7 @@ export async function getRecentTurns(context: any, sessionId: string, limit = 5)
   if (error) return { error: error.message };
   return { data: data || [] };
 }
+
+
 
 

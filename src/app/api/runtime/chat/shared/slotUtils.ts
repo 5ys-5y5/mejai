@@ -235,7 +235,7 @@ export function splitAddressForUpdate(
 }
 
 export function buildLookupOrderArgs(orderId: string, customerVerificationToken: string | null) {
-  const args: Record<string, unknown> = { order_id: orderId };
+  const args: Record<string, any> = { order_id: orderId };
   if (customerVerificationToken) {
     args.customer_verification_token = customerVerificationToken;
   }
@@ -245,7 +245,7 @@ export function buildLookupOrderArgs(orderId: string, customerVerificationToken:
 export function readLookupOrderView(payload: unknown) {
   const order =
     payload && typeof payload === "object"
-      ? ((payload as Record<string, unknown>).order || {})
+      ? ((payload as Record<string, any>).order || {})
       : {};
   const core = order?.core && typeof order.core === "object" ? order.core : order;
   const summary =
@@ -288,9 +288,9 @@ export function extractChoiceIndex(text: string, max: number) {
   return idx;
 }
 
-export function findRecentEntity(turns: Array<Record<string, unknown>>) {
+export function findRecentEntity(turns: Array<Record<string, any>>) {
   for (const turn of turns) {
-    const botContext = (turn.bot_context || {}) as Record<string, unknown>;
+    const botContext = (turn.bot_context || {}) as Record<string, any>;
     const selectedOrderId =
       typeof botContext.selected_order_id === "string" ? botContext.selected_order_id : null;
     const transcript = typeof turn.transcript_text === "string" ? turn.transcript_text : "";
@@ -309,3 +309,4 @@ export function findRecentEntity(turns: Array<Record<string, unknown>>) {
   }
   return null;
 }
+

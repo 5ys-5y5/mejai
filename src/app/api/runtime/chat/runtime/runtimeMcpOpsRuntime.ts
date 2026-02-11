@@ -26,14 +26,14 @@ export function createRuntimeMcpOps(input: {
     lastMcpCount: number | null;
   }) => void;
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, any>,
     botContext: Record<string, any>
   ) => Promise<unknown>;
-  context: unknown;
+  context: any;
   sessionId: string;
   getLatestTurnId: () => string | null;
   allowedToolIdByName: Map<string, string>;
@@ -101,5 +101,6 @@ export function createRuntimeMcpOps(input: {
 
   return { noteMcp, noteMcpSkip, flushMcpSkipLogs };
 }
+
 
 

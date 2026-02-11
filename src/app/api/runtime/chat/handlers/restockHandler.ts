@@ -75,7 +75,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
   };
   const parseIndexedChoiceSafe = parseIndexedChoice as (text: string) => number | null;
   const messageText = typeof message === "string" ? message : String(message ?? "");
-  const prevBotContextRecord = (prevBotContext || {}) as Record<string, unknown>;
+  const prevBotContextRecord = (prevBotContext || {}) as Record<string, any>;
   const normalizeNameKey = (value: unknown) => normalizeKoreanMatch(String(value ?? "")).replace(/\s+/g, "");
   const isNameMatch = (left: unknown, right: unknown) => {
     const a = normalizeNameKey(left);
@@ -407,19 +407,19 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
               { query: candidate.product_name },
               sessionId,
               latestTurnId,
-              { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+              { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
               allowedTools
             );
             noteMcp("resolve_product", resolvedCandidate);
             toolResults.push({
               name: "resolve_product",
               ok: resolvedCandidate.ok,
-              data: resolvedCandidate.ok ? (resolvedCandidate.data as Record<string, unknown>) : undefined,
+              data: resolvedCandidate.ok ? (resolvedCandidate.data as Record<string, any>) : undefined,
               error: resolvedCandidate.ok ? undefined : resolvedCandidate.error,
             });
             mcpActions.push("resolve_product");
             if (!resolvedCandidate.ok) continue;
-            const resolvedData = (resolvedCandidate.data ?? {}) as Record<string, unknown>;
+            const resolvedData = (resolvedCandidate.data ?? {}) as Record<string, any>;
             const matched = Boolean(resolvedData.matched);
             const productId = String(resolvedData.product_id || "").trim();
             if (!matched || !productId) continue;
@@ -430,14 +430,14 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
               { product_no: productId },
               sessionId,
               latestTurnId,
-              { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+              { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
               allowedTools
             );
             noteMcp("read_product", readCandidate);
             toolResults.push({
               name: "read_product",
               ok: readCandidate.ok,
-              data: readCandidate.ok ? (readCandidate.data as Record<string, unknown>) : undefined,
+              data: readCandidate.ok ? (readCandidate.data as Record<string, any>) : undefined,
               error: readCandidate.ok ? undefined : readCandidate.error,
             });
             mcpActions.push("read_product");
@@ -643,19 +643,19 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             { query: candidate.product_name },
             sessionId,
             latestTurnId,
-            { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+            { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
             allowedTools
           );
           noteMcp("resolve_product", resolvedCandidate);
           toolResults.push({
             name: "resolve_product",
             ok: resolvedCandidate.ok,
-            data: resolvedCandidate.ok ? (resolvedCandidate.data as Record<string, unknown>) : undefined,
+            data: resolvedCandidate.ok ? (resolvedCandidate.data as Record<string, any>) : undefined,
             error: resolvedCandidate.ok ? undefined : resolvedCandidate.error,
           });
           mcpActions.push("resolve_product");
           if (!resolvedCandidate.ok) continue;
-          const resolvedData = (resolvedCandidate.data ?? {}) as Record<string, unknown>;
+          const resolvedData = (resolvedCandidate.data ?? {}) as Record<string, any>;
           const matched = Boolean(resolvedData.matched);
           const productId = String(resolvedData.product_id || "").trim();
           if (!matched || !productId) continue;
@@ -666,14 +666,14 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             { product_no: productId },
             sessionId,
             latestTurnId,
-            { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+            { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
             allowedTools
           );
           noteMcp("read_product", readCandidate);
           toolResults.push({
             name: "read_product",
             ok: readCandidate.ok,
-            data: readCandidate.ok ? (readCandidate.data as Record<string, unknown>) : undefined,
+            data: readCandidate.ok ? (readCandidate.data as Record<string, any>) : undefined,
             error: readCandidate.ok ? undefined : readCandidate.error,
           });
           mcpActions.push("read_product");
@@ -748,18 +748,18 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         { query: pendingProductName },
         sessionId,
         latestTurnId,
-        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
         allowedTools);
       noteMcp("resolve_product", resolvedPending);
       toolResults.push({
         name: "resolve_product",
         ok: resolvedPending.ok,
-        data: resolvedPending.ok ? (resolvedPending.data as Record<string, unknown>) : undefined,
+        data: resolvedPending.ok ? (resolvedPending.data as Record<string, any>) : undefined,
         error: resolvedPending.ok ? undefined : resolvedPending.error,
       });
       mcpActions.push("resolve_product");
       if (resolvedPending.ok) {
-        const resolvedData = (resolvedPending.data ?? {}) as Record<string, unknown>;
+        const resolvedData = (resolvedPending.data ?? {}) as Record<string, any>;
         const matched = Boolean(resolvedData.matched);
         const candidate = String(resolvedData.product_id || "").trim();
         if (matched && candidate) restockProductId = candidate;
@@ -773,18 +773,18 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         { query: restockQueryText },
         sessionId,
         latestTurnId,
-        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
         allowedTools);
       noteMcp("resolve_product", resolved);
       toolResults.push({
         name: "resolve_product",
         ok: resolved.ok,
-        data: resolved.ok ? (resolved.data as Record<string, unknown>) : undefined,
+        data: resolved.ok ? (resolved.data as Record<string, any>) : undefined,
         error: resolved.ok ? undefined : resolved.error,
       });
       mcpActions.push("resolve_product");
       if (resolved.ok) {
-        const resolvedData = (resolved.data ?? {}) as Record<string, unknown>;
+        const resolvedData = (resolved.data ?? {}) as Record<string, any>;
         const matched = Boolean(resolvedData.matched);
         const candidate = String(resolvedData.product_id || "").trim();
         if (matched && candidate) restockProductId = candidate;
@@ -925,19 +925,19 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
               { query: candidate.product_name },
               sessionId,
               latestTurnId,
-              { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+              { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
               allowedTools
             );
             noteMcp("resolve_product", resolvedCandidate);
             toolResults.push({
               name: "resolve_product",
               ok: resolvedCandidate.ok,
-              data: resolvedCandidate.ok ? (resolvedCandidate.data as Record<string, unknown>) : undefined,
+              data: resolvedCandidate.ok ? (resolvedCandidate.data as Record<string, any>) : undefined,
               error: resolvedCandidate.ok ? undefined : resolvedCandidate.error,
             });
             mcpActions.push("resolve_product");
             if (!resolvedCandidate.ok) continue;
-            const resolvedData = (resolvedCandidate.data ?? {}) as Record<string, unknown>;
+            const resolvedData = (resolvedCandidate.data ?? {}) as Record<string, any>;
             const matched = Boolean(resolvedData.matched);
             const productId = String(resolvedData.product_id || "").trim();
             if (!matched || !productId) continue;
@@ -948,14 +948,14 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
               { product_no: productId },
               sessionId,
               latestTurnId,
-              { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+              { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
               allowedTools
             );
             noteMcp("read_product", readCandidate);
             toolResults.push({
               name: "read_product",
               ok: readCandidate.ok,
-              data: readCandidate.ok ? (readCandidate.data as Record<string, unknown>) : undefined,
+              data: readCandidate.ok ? (readCandidate.data as Record<string, any>) : undefined,
               error: readCandidate.ok ? undefined : readCandidate.error,
             });
             mcpActions.push("read_product");
@@ -1083,7 +1083,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
     }
 
-    let readProductData: Record<string, unknown> | null = null;
+    let readProductData: Record<string, any> | null = null;
     if (restockProductId && canUseTool("read_product") && hasAllowedToolName("read_product")) {
       const readRes = await callMcpTool(
         context,
@@ -1091,17 +1091,17 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         { product_no: restockProductId },
         sessionId,
         latestTurnId,
-        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
         allowedTools);
       noteMcp("read_product", readRes);
       toolResults.push({
         name: "read_product",
         ok: readRes.ok,
-        data: readRes.ok ? (readRes.data as Record<string, unknown>) : undefined,
+        data: readRes.ok ? (readRes.data as Record<string, any>) : undefined,
         error: readRes.ok ? undefined : readRes.error,
       });
       mcpActions.push("read_product");
-      if (readRes.ok) readProductData = (readRes.data as Record<string, unknown>) || null;
+      if (readRes.ok) readProductData = (readRes.data as Record<string, any>) || null;
     }
 
     const productView = readProductShape(readProductData || {});
@@ -1417,13 +1417,13 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           },
           sessionId,
           latestTurnId,
-          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+          { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
           allowedTools);
         noteMcp("subscribe_restock", subscribeRes);
         toolResults.push({
           name: "subscribe_restock",
           ok: subscribeRes.ok,
-          data: subscribeRes.ok ? (subscribeRes.data as Record<string, unknown>) : undefined,
+          data: subscribeRes.ok ? (subscribeRes.data as Record<string, any>) : undefined,
           error: subscribeRes.ok ? undefined : subscribeRes.error,
         });
         mcpActions.push("subscribe_restock");
@@ -1657,3 +1657,4 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
 
   return null;
 }
+

@@ -52,7 +52,7 @@ function hasCompleteAddressTriple(input: {
   return Boolean(String(input.zipNo || "").trim() && String(input.roadAddr || "").trim() && String(input.jibunAddr || "").trim());
 }
 
-type OrderChangeToolResult = { name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown };
+type OrderChangeToolResult = { name: string; ok: boolean; data?: Record<string, any>; error?: unknown };
 
 type AddressSearchResult = { status: string; data?: unknown };
 
@@ -60,33 +60,33 @@ type HandleOrderChangePostToolsInput = {
   toolResults: OrderChangeToolResult[];
   resolvedIntent: string;
   callAddressSearchWithAudit: (
-    context: unknown,
+    context: any,
     keyword: string,
     sessionId: string,
     turnId: string | null,
-    botContext: Record<string, unknown>
+    botContext: Record<string, any>
   ) => Promise<AddressSearchResult>;
-  context: unknown;
+  context: any;
   currentAddress: string;
   sessionId: string;
   latestTurnId: string | null;
-  policyContextEntity: Record<string, unknown>;
+  policyContextEntity: Record<string, any>;
   resolvedOrderId: string | null;
   customerVerificationToken: string | null;
   mcpActions: string[];
   makeReply: (text: string) => string;
-  insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   nextSeq: number;
   message: string;
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => Response;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => Response;
   executionGuardRules: {
     updateAddress: {
       missingZipcodeCode: string;
@@ -99,33 +99,33 @@ type HandleOrderChangePostToolsInput = {
 type MissingZipcodeFlowInput = {
   resolvedIntent: string;
   callAddressSearchWithAudit: (
-    context: unknown,
+    context: any,
     keyword: string,
     sessionId: string,
     turnId: string | null,
-    botContext: Record<string, unknown>
+    botContext: Record<string, any>
   ) => Promise<AddressSearchResult>;
-  context: unknown;
+  context: any;
   currentAddress: string;
   sessionId: string;
   latestTurnId: string | null;
-  policyContextEntity: Record<string, unknown>;
+  policyContextEntity: Record<string, any>;
   resolvedOrderId: string | null;
   customerVerificationToken: string | null;
   mcpActions: string[];
   makeReply: (text: string) => string;
-  insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   nextSeq: number;
   message: string;
   insertEvent: (
-    context: unknown,
+    context: any,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => Response;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => Response;
   guardReason: string;
   guardTool: string;
   guardError: string;
@@ -213,7 +213,7 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
     currentAddress || "",
     sessionId,
     latestTurnId,
-    { intent_name: resolvedIntent, entity: policyContextEntity as Record<string, unknown> }
+    { intent_name: resolvedIntent, entity: policyContextEntity as Record<string, any> }
   );
   if (search.status === "success") {
     const candidates = extractAddressCandidatesFromSearchData(search.data, 5);
@@ -568,11 +568,11 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
       const beforeAddressFull = typeof policyContextEntity?.shipping_before_address_full === "string"
         ? String(policyContextEntity.shipping_before_address_full).trim()
         : "";
-      const updateData = (updateSuccess.data || {}) as Record<string, unknown>;
+      const updateData = (updateSuccess.data || {}) as Record<string, any>;
       const updateReceivers = Array.isArray((updateData as { receivers?: unknown }).receivers)
-        ? ((updateData as { receivers?: unknown }).receivers as Array<Record<string, unknown>>)
+        ? ((updateData as { receivers?: unknown }).receivers as Array<Record<string, any>>)
         : [];
-      const appliedReceiver = (updateReceivers[0] || {}) as Record<string, unknown>;
+      const appliedReceiver = (updateReceivers[0] || {}) as Record<string, any>;
       const appliedZip = String(appliedReceiver.zipcode || "").trim();
       const appliedAddress1 = String(appliedReceiver.address1 || "").trim();
       const appliedAddress2 = String(appliedReceiver.address2 || "").trim();
@@ -673,3 +673,4 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
 
   return null;
 }
+
