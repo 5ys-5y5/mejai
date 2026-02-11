@@ -64,6 +64,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     dday?: string;
     targetText?: string;
   };
+  const parseIndexedChoiceSafe = parseIndexedChoice as (text: string) => number | null;
   const normalizeNameKey = (value: string) => normalizeKoreanMatch(value).replace(/\s+/g, "");
   const isNameMatch = (left: string, right: string) => {
     const a = normalizeNameKey(left || "");
@@ -89,7 +90,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
   const prevRestockCandidatesForAnyIntent = reindexCandidateRows(
     filterSchedulableEntries(prevRestockCandidatesForAnyIntentRaw)
   );
-  const pickedIndexForAnyIntent = parseIndexedChoice(message);
+  const pickedIndexForAnyIntent = parseIndexedChoiceSafe(message);
   const pickedFromPrevForAnyIntent =
     prevBotContext.restock_pending &&
       prevBotContext.restock_stage === "awaiting_product_choice" &&
@@ -176,7 +177,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       ? ((prevBotContext as Record<string, unknown>).restock_candidates as Array<Record<string, unknown>>)
       : [];
     const prevRestockCandidates = reindexCandidateRows(filterSchedulableEntries(prevRestockCandidatesRaw));
-    const pickedIndex = parseIndexedChoice(message);
+    const pickedIndex = parseIndexedChoiceSafe(message);
     const pickedFromPrev =
       pickedIndex && prevRestockCandidates.length >= pickedIndex
         ? prevRestockCandidates[pickedIndex - 1]
