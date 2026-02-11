@@ -78,7 +78,7 @@ export async function runToolStagePipeline(input: Record<string, any>) {
     isOtpRequiredTool,
   } = input;
 
-  const toolGate = runPolicyStage(compiledPolicy, "tool", policyContext);
+  const toolGate = runPolicyStage(compiledPolicy as any, "tool", policyContext);
   const toolRuleIds = toolGate.matched.map((rule: { id?: string }) => rule.id).filter(Boolean) as string[];
   usedRuleIds.push(...toolRuleIds);
   usedTemplateIds.push(...extractTemplateIds(toolGate.matched as Array<Record<string, any>>));

@@ -163,7 +163,7 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
   });
   let finalAnswer = answerRes.text.trim();
 
-  const outputGate = runPolicyStage(compiledPolicy, "output", policyContext);
+  const outputGate = runPolicyStage(compiledPolicy as any, "output", policyContext);
   const matchedRules = outputGate.matched as Array<{ id?: string }>;
   usedRuleIds.push(...matchedRules.map((rule) => rule.id).filter((id): id is string => Boolean(id)));
   usedTemplateIds.push(

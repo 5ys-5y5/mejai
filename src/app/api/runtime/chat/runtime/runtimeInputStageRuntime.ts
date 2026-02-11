@@ -97,7 +97,7 @@ export async function runInputStageRuntime(input: {
   const resolvedOrderId = resolvedContext.resolvedOrderId;
   let policyContext: PolicyEvalContext = resolvedContext.policyContext;
 
-  const inputGate = runPolicyStage(compiledPolicy, "input", policyContext);
+  const inputGate = runPolicyStage(compiledPolicy as any, "input", policyContext);
   const matchedRuleIds = inputGate.matched.map((rule) => rule.id);
   const matchedTemplateIds = extractTemplateIds(inputGate.matched as Array<Record<string, any>>);
   let usedRuleIds = [...matchedRuleIds];
