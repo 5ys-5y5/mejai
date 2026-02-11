@@ -8,6 +8,15 @@ import {
   buildYesNoConfirmationPrompt,
 } from "../runtime/promptTemplateRuntime";
 type HandleRestockIntentInput = Record<string, unknown>;
+type RestockCandidateRow = {
+  index: number;
+  product_id?: string | null;
+  product_name?: string | null;
+  month?: number | string | null;
+  day?: number | string | null;
+  raw_date?: string | null;
+  thumbnail_url?: string | null;
+};
 
 export async function handleRestockIntent(input: HandleRestockIntentInput): Promise<Response | null> {
   const {
@@ -77,15 +86,15 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     const due = toRestockDue(Number(month || 0), Number(day || 0));
     return Number.isFinite(due.diffDays) && due.diffDays >= 0;
   };
-  const filterSchedulableEntries = (items: Array<Record<string, unknown>>) =>
+  const filterSchedulableEntries = (items: Array<RestockCandidateRow>) =>
     (Array.isArray(items) ? items : []).filter((item) => isSchedulableEntry(Number(item.month || 0), Number(item.day || 0)));
-  const reindexCandidateRows = (rows: Array<Record<string, unknown>>) =>
+  const reindexCandidateRows = (rows: Array<RestockCandidateRow>) =>
     rows.map((row, idx) => ({ ...row, index: idx + 1 }));
   const noSchedulableScheduleReply = "안내 가능한 재입고 일정이 없습니다. 미래 입고 예정 상품만 안내할 수 있습니다.";
 
   // Handle pending restock product choice even if current turn intent is misclassified (e.g. "1" -> general).
   const prevRestockCandidatesForAnyIntentRaw = Array.isArray(prevBotContextRecord.restock_candidates)
-    ? (prevBotContextRecord.restock_candidates as Array<Record<string, unknown>>)
+    ? (prevBotContextRecord.restock_candidates as Array<RestockCandidateRow>)
     : [];
   const prevRestockCandidatesForAnyIntent = reindexCandidateRows(
     filterSchedulableEntries(prevRestockCandidatesForAnyIntentRaw)
@@ -172,7 +181,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       ),
     ];
     const prevRestockCandidatesRaw = Array.isArray(prevBotContextRecord.restock_candidates)
-      ? (prevBotContextRecord.restock_candidates as Array<Record<string, unknown>>)
+      ? (prevBotContextRecord.restock_candidates as Array<RestockCandidateRow>)
       : [];
     const prevRestockCandidates = reindexCandidateRows(filterSchedulableEntries(prevRestockCandidatesRaw));
     const pickedIndex = parseIndexedChoiceSafe(messageText);
