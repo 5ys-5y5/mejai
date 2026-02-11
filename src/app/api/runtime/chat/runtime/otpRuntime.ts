@@ -1,12 +1,14 @@
 import { resolvePhoneWithReuse } from "./memoryReuseRuntime";
 
 export function readOtpState(lastTurn: unknown) {
-  const pending = Boolean(lastTurn?.bot_context?.otp_pending);
+  const lastTurnRecord = (lastTurn ?? {}) as Record<string, any>;
+  const botContext = (lastTurnRecord.bot_context ?? {}) as Record<string, any>;
+  const pending = Boolean(botContext.otp_pending);
   return {
     pending,
-    stage: String(lastTurn?.bot_context?.otp_stage || "awaiting_code"),
-    destination: String(lastTurn?.bot_context?.otp_destination || "").trim(),
-    otpRef: String(lastTurn?.bot_context?.otp_ref || "").trim(),
+    stage: String(botContext.otp_stage || "awaiting_code"),
+    destination: String(botContext.otp_destination || "").trim(),
+    otpRef: String(botContext.otp_ref || "").trim(),
   };
 }
 
