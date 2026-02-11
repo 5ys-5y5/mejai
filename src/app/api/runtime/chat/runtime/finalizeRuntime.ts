@@ -32,7 +32,7 @@ export function buildFinalLlmMessages(input: {
 }
 
 
-export async function handleGeneralNoPathGuard(input: Record<string, unknown>): Promise<Response | null> {
+export async function handleGeneralNoPathGuard(input: Record<string, any>): Promise<Response | null> {
   const {
     resolvedIntent,
     finalCalls,
@@ -118,7 +118,7 @@ export async function handleGeneralNoPathGuard(input: Record<string, unknown>): 
   });
 }
 
-export async function runFinalResponseFlow(input: Record<string, unknown>) {
+export async function runFinalResponseFlow(input: Record<string, any>) {
   const {
     runLlm,
     agentLlm,
