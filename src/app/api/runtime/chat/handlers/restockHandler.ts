@@ -59,6 +59,11 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
   } = input;
 
   const normalizeKoreanMatch = normalizeKoreanMatchText as (value: string) => string;
+  const toRestockDue = toRestockDueText as (month: number, day: number) => {
+    diffDays: number;
+    dday?: string;
+    targetText?: string;
+  };
   const normalizeNameKey = (value: string) => normalizeKoreanMatch(value).replace(/\s+/g, "");
   const isNameMatch = (left: string, right: string) => {
     const a = normalizeNameKey(left || "");
@@ -66,7 +71,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     return Boolean(a && b && a === b);
   };
   const isSchedulableEntry = (month: number, day: number) => {
-    const due = toRestockDueText(Number(month || 0), Number(day || 0));
+    const due = toRestockDue(Number(month || 0), Number(day || 0));
     return Number.isFinite(due.diffDays) && due.diffDays >= 0;
   };
   const filterSchedulableEntries = (items: Array<Record<string, unknown>>) =>
