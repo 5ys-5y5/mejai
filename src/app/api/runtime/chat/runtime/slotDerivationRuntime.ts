@@ -4,7 +4,7 @@ type SlotDerivationParams = {
   message: string;
   expectedInput: string | null;
   resolvedIntent: string;
-  agentLlm: "chatgpt" | "gemini";
+  agentLlm: "chatgpt" | "gemini" | null;
   timingStages: RuntimeTimingStage[];
   pushRuntimeTimingStage: (
     stages: RuntimeTimingStage[],
@@ -111,7 +111,7 @@ export async function deriveSlotsForTurn(params: SlotDerivationParams): Promise<
     }
   }
 
-  if (!nextOrderId && !nextPhone && message.length > 8 && !expectedInput) {
+  if (!nextOrderId && !nextPhone && message.length > 8 && !expectedInput && agentLlm) {
     const extractEntityLlmStartedAt = Date.now();
     const llmExt = await extractEntitiesWithLlm(message, agentLlm);
     pushRuntimeTimingStage(timingStages, "llm_extract_entities", extractEntityLlmStartedAt, {
