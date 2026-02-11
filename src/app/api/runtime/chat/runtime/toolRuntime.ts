@@ -687,7 +687,7 @@ export async function handleToolForcedResponse(input: Record<string, any>): Prom
       entity: policyContext.entity,
       selected_order_id: resolvedOrderId,
       product_decision: productDecisionRes.decision || null,
-      policy_matched: toolGate.matched.map((rule) => rule.id),
+      policy_matched: toolGate.matched.map((rule: { id?: string }) => rule.id),
       address_pending: isNeedZipcodeTemplate ? true : undefined,
       address_stage: isNeedZipcodeTemplate ? "awaiting_zipcode" : undefined,
       pending_address: isNeedZipcodeTemplate ? currentAddress || null : undefined,
@@ -830,8 +830,14 @@ export async function emitPreMcpDecisionEvent(input: {
         effectiveMessageForIntent !== message
           ? effectiveMessageForIntent
           : message,
-      forced_calls: forcedCalls.map((call) => ({ name: call.name, args: call.args })),
-      final_calls: finalCalls.map((call) => ({ name: call.name, args: call.args })),
+      forced_calls: forcedCalls.map((call: { name: string; args?: Record<string, any> }) => ({
+        name: call.name,
+        args: call.args,
+      })),
+      final_calls: finalCalls.map((call: { name: string; args?: Record<string, any> }) => ({
+        name: call.name,
+        args: call.args,
+      })),
       denied: Array.from(denied),
       allowed: Array.from(allowed),
       allowed_tool_names: Array.from(allowedToolNames),
@@ -881,7 +887,7 @@ export async function emitToolPolicyConflictIfAny(input: {
       "POLICY_CONFLICT_DETECTED",
       {
         stage: "tool",
-        matched_rule_ids: toolGate.matched.map((rule) => rule.id),
+        matched_rule_ids: toolGate.matched.map((rule: { id?: string }) => rule.id),
         conflict: "force_response_template vs force_tool_call",
         resolution: "force_response_template_precedence",
       },
