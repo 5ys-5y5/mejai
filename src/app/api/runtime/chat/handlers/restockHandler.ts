@@ -837,8 +837,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
 
     if (!restockProductId && !pendingProductName) {
       const ranked = rankRestockEntries(restockQueryText, restockKbEntriesRaw);
-      const rankedSchedulable = ranked.filter((row) => {
-        const entry = (row as { entry?: { month?: unknown; day?: unknown } }).entry;
+      const rankedSchedulable = ranked.filter((row: { entry?: { month?: unknown; day?: unknown } }) => {
+        const entry = row.entry;
         return isSchedulableEntry(Number(entry?.month || 0), Number(entry?.day || 0));
       });
       if (hasUniqueAnswerCandidate(rankedSchedulable.length)) {
