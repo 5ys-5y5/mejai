@@ -902,7 +902,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         });
       }
       if (hasChoiceAnswerCandidates(rankedSchedulable.length)) {
-        const candidateRows = rankedSchedulable.map((row, idx) => ({
+        const candidateRows: RestockCandidateRow[] = rankedSchedulable.map(
+          (row: { entry: RestockCandidateRow }, idx: number) => ({
           index: idx + 1,
           product_name: row.entry.product_name,
           month: row.entry.month,
