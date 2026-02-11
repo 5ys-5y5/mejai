@@ -268,8 +268,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       "";
     const restockChannel = extractRestockChannel(message) || pendingChannel || "sms";
     const rankedFromMessage = rankRestockEntries(restockQueryText, restockKbEntriesRaw);
-    const rankedFromMessageSchedulable = rankedFromMessage.filter((row) => {
-      const entry = (row as { entry?: { month?: unknown; day?: unknown } }).entry;
+    const rankedFromMessageSchedulable = rankedFromMessage.filter((row: { entry?: { month?: unknown; day?: unknown } }) => {
+      const entry = row.entry;
       return isSchedulableEntry(Number(entry?.month || 0), Number(entry?.day || 0));
     });
     const queryCoreNoSpace = normalizeKoreanQueryToken(stripRestockNoise(restockQueryText)).replace(/\s+/g, "");
