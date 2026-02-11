@@ -30,22 +30,11 @@ type Body = {
   };
 };
 
-type SupabaseQueryLike = {
-  select: (...args: unknown[]) => SupabaseQueryLike;
-  eq: (...args: unknown[]) => SupabaseQueryLike;
-  in: (...args: unknown[]) => SupabaseQueryLike;
-  maybeSingle: () => Promise<{ data?: unknown }>;
-};
+type SupabaseQueryLike = any;
 
-type SupabaseClientLike = {
-  from: (table: string) => SupabaseQueryLike;
-};
+type SupabaseClientLike = any;
 
-type RuntimeContext = {
-  supabase: SupabaseClientLike;
-  user: { id: string };
-  orgId: string;
-};
+type RuntimeContext = any;
 
 type AgentShape = {
   id: string | null;
