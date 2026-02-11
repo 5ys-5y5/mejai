@@ -15,13 +15,7 @@ import {
 } from "./runtimeResponseSchema";
 import { buildRenderPlan } from "../policies/renderPolicy";
 
-type RuntimeContextAnyLike = {
-  supabase: {
-    from: (table: string) => {
-      insert: (value: Record<string, any>) => Promise<unknown>;
-    };
-  };
-};
+type RuntimeContextAnyLike = any;
 
 export function createRuntimeResponder(input: {
   runtimeTraceId: string;
