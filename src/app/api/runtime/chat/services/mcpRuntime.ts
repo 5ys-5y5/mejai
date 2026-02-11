@@ -6,10 +6,6 @@ type SupabaseQuery = {
 };
 
 type RuntimeContext = any;
-  orgId: string;
-  user: { id: string };
-  runtimeTraceId?: string | null;
-};
 
 export async function callMcpTool(
   context: any,
