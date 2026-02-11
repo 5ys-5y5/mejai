@@ -163,7 +163,7 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
 }
 
 
-export async function handleOtpLifecycleAndOrderGate(input: Record<string, unknown>) {
+export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>) {
   let {
     customerVerificationToken,
     policyContext,
