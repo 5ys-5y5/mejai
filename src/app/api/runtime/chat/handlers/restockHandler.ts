@@ -76,10 +76,10 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
   const parseIndexedChoiceSafe = parseIndexedChoice as (text: string) => number | null;
   const messageText = typeof message === "string" ? message : String(message ?? "");
   const prevBotContextRecord = (prevBotContext || {}) as Record<string, unknown>;
-  const normalizeNameKey = (value: string) => normalizeKoreanMatch(value).replace(/\s+/g, "");
-  const isNameMatch = (left: string, right: string) => {
-    const a = normalizeNameKey(left || "");
-    const b = normalizeNameKey(right || "");
+  const normalizeNameKey = (value: unknown) => normalizeKoreanMatch(String(value ?? "")).replace(/\s+/g, "");
+  const isNameMatch = (left: unknown, right: unknown) => {
+    const a = normalizeNameKey(left);
+    const b = normalizeNameKey(right);
     return Boolean(a && b && a === b);
   };
   const isSchedulableEntry = (month: number, day: number) => {
