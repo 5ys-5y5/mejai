@@ -139,7 +139,9 @@ export async function runInputStageRuntime(input: {
   };
   const activePolicyConflicts = (compiledPolicy.conflicts || []).filter((c: { intentScope?: string }) => {
     if (c.intentScope === "*") return true;
-    return c.intentScope.split(",").map((v: string) => v.trim()).includes(resolvedIntent);
+    const scope = typeof c.intentScope === "string" ? c.intentScope : "";
+    if (!scope) return false;
+    return scope.split(",").map((v: string) => v.trim()).includes(resolvedIntent);
   });
   await emitPolicyStaticConflict({
     insertEvent,
