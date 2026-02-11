@@ -4,8 +4,15 @@ import { getPrincipleBaseline } from "../_lib/principleBaseline";
 import { detectPrincipleViolations, type RuntimeEvent, type RuntimeMcpAudit, type RuntimeTurn } from "../_lib/detector";
 import { buildPatchProposal } from "../_lib/proposer";
 import { notifyAdmins } from "../_lib/notifier";
-import { fetchEventsForSessions, fetchMcpForSessions, fetchRecentTurns, insertAuditEvent } from "../_lib/store";
+import {
+  fetchEventsForSessions,
+  fetchExceptionStats,
+  fetchMcpForSessions,
+  fetchRecentTurns,
+  insertAuditEvent,
+} from "../_lib/store";
 import { readGovernanceConfig } from "../_lib/config";
+import { computeExceptionFingerprint } from "../_lib/selfHealGate";
 
 type ReviewBody = {
   session_id?: string;
@@ -95,11 +102,18 @@ export async function POST(req: NextRequest) {
   for (const violation of violations) {
     const localTurns = nearbyTurns(turns, violation.session_id, violation.turn_id);
     const localEvents = eventsByTurnId.get(violation.turn_id) || [];
+    const fingerprint = computeExceptionFingerprint(violation);
+    const exceptionStats = await fetchExceptionStats({
+      supabase: access.supabaseAdmin,
+      fingerprint,
+      orgId: access.orgId,
+    });
     const proposal = await buildPatchProposal({
       violation,
       baseline,
       recentTurns: localTurns,
       recentEvents: localEvents,
+      exceptionStats,
     });
 
     if (!dryRun) {

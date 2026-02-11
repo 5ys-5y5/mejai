@@ -42,7 +42,7 @@ export default function CallsListPage({ headerSearch = "" }: { headerSearch?: st
           setSessions(res.items || []);
           setLoading(false);
         }
-      } catch (err) {
+      } catch {
         if (mounted) {
           setError("세션 데이터를 불러오지 못했습니다.");
           setLoading(false);

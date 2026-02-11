@@ -3,10 +3,11 @@ import { ensureGovernanceAccess } from "../../_lib/access";
 import { getPrincipleBaseline } from "../../_lib/principleBaseline";
 import type { PrincipleViolation } from "../../_lib/detector";
 import { buildPatchProposal } from "../../_lib/proposer";
-import { insertAuditEvent } from "../../_lib/store";
+import { fetchExceptionStats, insertAuditEvent } from "../../_lib/store";
 import { SELF_HEAL_PRINCIPLE_KEYS, SELF_HEAL_VIOLATION_KEYS } from "../../selfHeal/principles";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { randomUUID } from "crypto";
+import { computeExceptionFingerprint } from "../../_lib/selfHealGate";
 
 type ReproCase = "zero_result_wrong_prompt" | "multiple_without_choice";
 
@@ -164,6 +165,12 @@ export async function POST(req: NextRequest) {
     turnId: reproSession.turnId,
   });
   const baseline = getPrincipleBaseline();
+  const exceptionFingerprint = computeExceptionFingerprint(violation);
+  const exceptionStats = await fetchExceptionStats({
+    supabase: supabaseAdmin,
+    fingerprint: exceptionFingerprint,
+    orgId,
+  });
   const proposal = await buildPatchProposal({
     violation,
     baseline,
@@ -180,6 +187,7 @@ export async function POST(req: NextRequest) {
       },
     ],
     recentEvents: [],
+    exceptionStats,
   });
 
   if (persist) {

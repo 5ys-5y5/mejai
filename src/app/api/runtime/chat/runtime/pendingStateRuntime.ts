@@ -15,7 +15,7 @@ import {
 } from "../shared/addressCandidateUtils";
 
 type PendingStateParams = {
-  context: any;
+  context: unknown;
   prevBotContext: Record<string, unknown>;
   resolvedIntent: string;
   prevEntity: Record<string, unknown>;
@@ -30,7 +30,7 @@ type PendingStateParams = {
   updateConfirmAcceptedThisTurn: boolean;
   refundConfirmAcceptedThisTurn: boolean;
   callAddressSearchWithAudit: (
-    context: any,
+    context: unknown,
     rawKeyword: string,
     sessionId: string,
     turnId: string | null,
@@ -52,7 +52,7 @@ type PendingStateParams = {
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -75,9 +75,10 @@ function readPendingCandidates(raw: unknown) {
   const source = Array.isArray(raw) ? raw : [];
   return source
     .map((item, idx) => {
-      const zipNo = String((item as any)?.zip_no || "").trim();
-      const roadAddr = String((item as any)?.road_addr || "").trim();
-      const jibunAddr = String((item as any)?.jibun_addr || "").trim();
+      const record = item as Record<string, unknown>;
+      const zipNo = String(record.zip_no || "").trim();
+      const roadAddr = String(record.road_addr || "").trim();
+      const jibunAddr = String(record.jibun_addr || "").trim();
       if (!zipNo) return null;
       return {
         index: idx + 1,
@@ -643,7 +644,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
             sessionId,
             latestTurnId,
             "MCP_TOOL_FAILED",
-            { tool: "search_address", error: (search as any).error || "ADDRESS_SEARCH_FAILED" },
+            { tool: "search_address", error: (search as { error?: unknown }).error || "ADDRESS_SEARCH_FAILED" },
             { intent_name: resolvedIntent }
           );
         }

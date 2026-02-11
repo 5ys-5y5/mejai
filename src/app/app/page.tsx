@@ -163,7 +163,7 @@ export default function DashboardPage() {
 
       const reviewRes = await apiFetch<{ items: ReviewRow[] }>(`/api/review-queue?limit=${config.dashboard_review_limit}`);
       reviewRows = reviewRes.items || [];
-    } catch (err) {
+    } catch {
       setError("세션 데이터를 불러오지 못했습니다.");
       setLoading(false);
       loadInFlightRef.current = false;
@@ -296,7 +296,7 @@ export default function DashboardPage() {
         body: JSON.stringify({ escalated: true }),
       });
       await loadData("manual");
-    } catch (err) {
+    } catch {
       setSimulateError("시뮬레이션 생성에 실패했습니다.");
     } finally {
       setSimulating(false);

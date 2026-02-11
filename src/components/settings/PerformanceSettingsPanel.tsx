@@ -38,7 +38,7 @@ export function PerformanceSettingsPanel() {
         setDraft(next);
         setLoaded(next);
         writePerformanceConfigToStorage(next);
-      } catch (err) {
+      } catch {
         if (!mounted) return;
         setError("성능 설정을 불러오지 못했습니다.");
       } finally {

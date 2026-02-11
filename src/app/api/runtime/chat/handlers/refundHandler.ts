@@ -12,7 +12,7 @@ type HandleRefundRequestInput = {
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -20,7 +20,7 @@ type HandleRefundRequestInput = {
     botContext: Record<string, unknown>
   ) => Promise<unknown>;
   respond: (payload: Record<string, unknown>, init?: ResponseInit) => Response;
-  context: any;
+  context: unknown;
   sessionId: string;
   nextSeq: number;
   message: string;
@@ -121,8 +121,8 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
   }
 
   if (createTicketSuccess) {
-    const ticketId =
-      String((createTicketSuccess.data as any)?.ticket_id || (createTicketSuccess.data as any)?.id || "").trim() || "-";
+    const ticketData = (createTicketSuccess.data ?? {}) as Record<string, unknown>;
+    const ticketId = String(ticketData.ticket_id ?? ticketData.id ?? "").trim() || "-";
     const reply = makeReply(
       `요약: 취소/환불 요청이 접수되었습니다.\n상세: 주문번호 ${resolvedOrderId} 기준으로 요청이 등록되었습니다. (접수번호: ${ticketId})\n다음 액션: 처리 결과를 확인해드릴까요?`
     );

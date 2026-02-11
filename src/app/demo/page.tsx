@@ -83,14 +83,6 @@ export default function DemoPage() {
     setCurrentStep(0);
   };
 
-  function CardShell({ children, className }: { children: React.ReactNode; className?: string }) {
-    return (
-      <div className={cn("rounded-2xl border border-slate-200 bg-white", className)}>
-        {children}
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-12">
       <div className="mx-auto w-full max-w-6xl space-y-10">
@@ -229,6 +221,14 @@ export default function DemoPage() {
           </CardShell>
         </div>
       </div>
+    </div>
+  );
+}
+
+function CardShell({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("rounded-2xl border border-slate-200 bg-white", className)}>
+      {children}
     </div>
   );
 }

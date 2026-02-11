@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "ws": "node ws-server.js",
+    "ws": "node ws-server.mjs",
     "lint": "eslint",
     "validate:runtime:quick-reply": "node scripts/validate-runtime-quick-reply-config.mjs",
     "validate:runtime:prompt-templates": "node scripts/validate-runtime-prompt-templates.mjs",

@@ -49,22 +49,14 @@ import * as LucideIcons from "lucide-react";
 import {
   Bot,
   CalendarDays,
-  CheckCircle2,
-  Info,
   Layers3,
   Search,
-  Send,
   SlidersHorizontal,
   Sparkles,
   Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RENDER_POLICY } from "@/app/api/runtime/chat/policies/renderPolicy";
-import {
-  RUNTIME_UI_PROMPT_RULES,
-  RUNTIME_UI_TYPE_HIERARCHY,
-  buildIntentDisambiguationTableHtmlFromText,
-} from "@/components/design-system/conversation/runtimeUiCatalog";
 import {
   getDefaultConversationPageFeatures,
   resolveConversationSetupUi,
@@ -630,16 +622,8 @@ export default function DesignSystemPage() {
   const [conversationAdminOpen, setConversationAdminOpen] = useState(false);
   const [conversationSelectionEnabled, setConversationSelectionEnabled] = useState(false);
   const [conversationShowLogs, setConversationShowLogs] = useState(false);
-  const [conversationSelectedMessageIds, setConversationSelectedMessageIds] = useState<string[]>([]);
   const [conversationQuickReplyDrafts, setConversationQuickReplyDrafts] = useState<Record<string, string[]>>({});
   const [conversationLockedReplySelections, setConversationLockedReplySelections] = useState<Record<string, string[]>>({});
-  const [conversationInput, setConversationInput] = useState("");
-  const [conversationLlm, setConversationLlm] = useState("chatgpt");
-  const [conversationKb, setConversationKb] = useState("restock");
-  const [conversationAdminKb, setConversationAdminKb] = useState("mk2");
-  const [conversationRuntime, setConversationRuntime] = useState("core_runtime");
-  const [conversationProviders, setConversationProviders] = useState<string[]>(["cafe24", "solapi", "juso", "runtime"]);
-  const [conversationActions, setConversationActions] = useState<string[]>(["admin_request", "send_otp", "search_address"]);
 
   const [workbenchWsStatus, setWorkbenchWsStatus] = useState<"CONNECTED" | "DISCONNECTED">("CONNECTED");
   const [sessionHeaderSessionId, setSessionHeaderSessionId] = useState<string | null>("sess-demo-001");
@@ -693,48 +677,6 @@ export default function DesignSystemPage() {
   const safeIconPage = Math.min(iconPage, iconTotalPages);
   const iconPageEntries = filteredIconEntries.slice((safeIconPage - 1) * iconPageSize, safeIconPage * iconPageSize);
 
-  const intentDisambiguationHtml = useMemo(
-    () =>
-      buildIntentDisambiguationTableHtmlFromText(
-        "요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)\n- 1번 | 재입고 일정 안내 | -\n- 2번 | 일반 문의 | -\n예: 1,2"
-      ) || "",
-    []
-  );
-
-  const conversationChoiceLegoMessage: ConversationReplyDemoMessage = {
-    id: "catalog-choice-lego",
-    role: "bot",
-    quickReplies: [
-      { label: "예시 1", value: "1" },
-      { label: "예시 2", value: "2" },
-      { label: "예시 3", value: "3" },
-    ],
-    renderPlan: {
-      view: "choice",
-      enable_quick_replies: true,
-      selection_mode: "single",
-      interaction_scope: "any",
-      grid_columns: { quick_replies: 3 },
-      submit_format: "single",
-    },
-  };
-  const conversationChoiceGenericMessage: ConversationReplyDemoMessage = {
-    id: "catalog-choice-generic",
-    role: "bot",
-    quickReplies: [
-      { label: "네", value: "yes" },
-      { label: "아니오", value: "no" },
-      { label: "상담원 연결", value: "handoff" },
-    ],
-    renderPlan: {
-      view: "choice",
-      enable_quick_replies: true,
-      selection_mode: "single",
-      interaction_scope: "any",
-      grid_columns: { quick_replies: RENDER_POLICY.grid_max_columns.quick_replies },
-      submit_format: "single",
-    },
-  };
   const conversationLeadDayMessage: ConversationReplyDemoMessage = {
     id: "catalog-choice-lead-day",
     role: "bot",
@@ -748,51 +690,6 @@ export default function DesignSystemPage() {
       submit_format: "single",
     },
   };
-  const conversationCardsLegoMessage: ConversationReplyDemoMessage = {
-    id: "catalog-cards-lego",
-    role: "bot",
-    productCards: [
-      {
-        id: "p1",
-        value: "1",
-        title: "아드헬린 린넨 플레어 원피스 그레이",
-        subtitle: "03/21 입고 예정",
-        imageUrl: "https://sungjy2020.cafe24.com/web/product/tiny/202509/6eb884b4e0fc90d8c8135d93eb8e7fda.jpg",
-      },
-      {
-        id: "p2",
-        value: "2",
-        title: "아드헬린 린넨 롱 원피스 그레이",
-        subtitle: "02/28 입고 예정",
-        imageUrl: "https://sungjy2020.cafe24.com/web/product/tiny/202509/025624c6ca8efcbd5487d14795bf601c.jpg",
-      },
-    ],
-    renderPlan: {
-      view: "cards",
-      enable_cards: true,
-      selection_mode: "single",
-      interaction_scope: "any",
-      grid_columns: { cards: 3 },
-      submit_format: "single",
-    },
-  };
-  const conversationCardsRestockMessage: ConversationReplyDemoMessage = {
-    id: "catalog-cards-restock",
-    role: "bot",
-    productCards: [
-      { id: "r1", value: "1", title: "샘플 상품 A", subtitle: "03/21 입고 예정" },
-      { id: "r2", value: "2", title: "샘플 상품 B", subtitle: "02/28 입고 예정" },
-    ],
-    renderPlan: {
-      view: "cards",
-      enable_cards: true,
-      selection_mode: "single",
-      interaction_scope: "any",
-      grid_columns: { cards: RENDER_POLICY.grid_max_columns.cards },
-      submit_format: "single",
-    },
-  };
-
   const parseLeadDayValueExamples = ["D-1", "D-14", "lead_7days", "x", ""].map((value) => {
     const m = String(value || "").match(/\d+/);
     const parsed = m ? Number(m[0]) : null;

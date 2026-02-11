@@ -49,7 +49,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const renderedChildren = useMemo(() => {
     if (React.isValidElement(children)) {
-      return React.cloneElement(children, { headerSearch } as any);
+      return React.cloneElement(children as React.ReactElement<{ headerSearch?: string }>, {
+        headerSearch,
+      });
     }
     return children;
   }, [children, headerSearch]);

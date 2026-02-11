@@ -1,19 +1,19 @@
 export type SessionState = {
   sessionId: string;
   reusedSession: boolean;
-  recentTurns: any[];
+  recentTurns: Array<Record<string, unknown>>;
   firstTurnInSession: boolean;
-  lastTurn: any;
+  lastTurn: Record<string, unknown> | null;
   nextSeq: number;
   prevBotContext: Record<string, unknown>;
 };
 
 export async function prepareSessionState(input: {
-  context: any;
+  context: unknown;
   requestedSessionId: string;
   agentId: string | null;
-  createSession: (context: any, agentId: string | null) => Promise<any>;
-  getRecentTurns: (context: any, sessionId: string, limit: number) => Promise<any>;
+  createSession: (context: unknown, agentId: string | null) => Promise<{ data?: Record<string, unknown>; error?: unknown }>;
+  getRecentTurns: (context: unknown, sessionId: string, limit: number) => Promise<{ data?: Array<Record<string, unknown>> }>;
   recentTurnLimit?: number;
 }): Promise<{ state?: SessionState; error?: string }> {
   const requestedSessionId = String(input.requestedSessionId || "").trim();
@@ -29,8 +29,8 @@ export async function prepareSessionState(input: {
 
   const recentLimit = Number(input.recentTurnLimit || 15);
   const recentTurnsRes = await input.getRecentTurns(input.context, sessionId, recentLimit);
-  const recentTurns = (recentTurnsRes?.data || []) as any[];
-  const lastTurn = recentTurns[0] as any;
+  const recentTurns = (recentTurnsRes?.data || []) as Array<Record<string, unknown>>;
+  const lastTurn = recentTurns[0] as Record<string, unknown> | undefined;
 
   return {
     state: {
@@ -38,7 +38,7 @@ export async function prepareSessionState(input: {
       reusedSession: Boolean(requestedSessionId),
       recentTurns,
       firstTurnInSession: recentTurns.length === 0,
-      lastTurn,
+      lastTurn: lastTurn || null,
       nextSeq: lastTurn?.seq ? Number(lastTurn.seq) + 1 : 1,
       prevBotContext: (lastTurn?.bot_context || {}) as Record<string, unknown>,
     },

@@ -1,25 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 export function RequireAuth({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [ready, setReady] = useState(false);
+  const supabase = useMemo(() => getSupabaseClient(), []);
+  const [ready, setReady] = useState(() => !supabase);
   const [isAuthed, setIsAuthed] = useState(false);
 
   useEffect(() => {
     let mounted = true;
-    const supabase = getSupabaseClient();
-    if (!supabase) {
-      setReady(true);
-      setIsAuthed(false);
-      return () => {
-        mounted = false;
-      };
-    }
+    if (!supabase) return () => {
+      mounted = false;
+    };
 
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
@@ -36,7 +32,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, []);
+  }, [supabase]);
 
   useEffect(() => {
     if (!ready) return;

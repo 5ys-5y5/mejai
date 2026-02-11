@@ -1,3 +1,5 @@
+import { createHmac, randomBytes } from "crypto";
+
 type RestockSubscriptionInput = {
   orgId: string;
   sessionId: string;
@@ -20,6 +22,16 @@ type RestockSubscriptionInput = {
 type RestockSubscriptionResult =
   | { ok: true; data: { notification_ids: string[]; scheduled_count: number } & Record<string, unknown> }
   | { ok: false; error: string };
+
+type SupabaseLike = {
+  from: (table: string) => {
+    insert: (...args: unknown[]) => { select: (...args: unknown[]) => Promise<{ data?: unknown; error?: { message?: string } }> };
+    update: (...args: unknown[]) => { eq: (...args: unknown[]) => Promise<{ error?: { message?: string } }> };
+    select: (...args: unknown[]) => { eq: (...args: unknown[]) => Promise<{ data?: unknown; error?: { message?: string } }> };
+  };
+};
+
+type RuntimeContext = { supabase: SupabaseLike; runtimeTurnId?: string | null };
 
 function normalizeLeadDays(values?: number[]) {
   if (!Array.isArray(values)) return [];
@@ -62,9 +74,8 @@ function readEnvValue(name: string) {
 
 function buildSolapiAuthHeader(apiKey: string, apiSecret: string) {
   const date = new Date().toISOString();
-  const salt = require("crypto").randomBytes(16).toString("hex");
-  const signature = require("crypto")
-    .createHmac("sha256", apiSecret)
+  const salt = randomBytes(16).toString("hex");
+  const signature = createHmac("sha256", apiSecret)
     .update(date + salt)
     .digest("hex");
   return `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
@@ -109,7 +120,7 @@ async function sendSolapiMessageNow(params: { to: string; text: string; from: st
 function extractSolapiMessageId(payload: Record<string, unknown>) {
   const direct = payload.messageId || payload.message_id;
   if (direct) return String(direct);
-  const list = (payload as any).messageList;
+  const list = (payload as Record<string, unknown>).messageList;
   if (Array.isArray(list) && list.length > 0) {
     const msgId = list[0]?.messageId || list[0]?.message_id;
     if (msgId) return String(msgId);
@@ -117,7 +128,10 @@ function extractSolapiMessageId(payload: Record<string, unknown>) {
   return null;
 }
 
-export async function saveRestockSubscriptionLite(context: any, input: RestockSubscriptionInput): Promise<RestockSubscriptionResult> {
+export async function saveRestockSubscriptionLite(
+  context: RuntimeContext,
+  input: RestockSubscriptionInput
+): Promise<RestockSubscriptionResult> {
   if (!context?.supabase?.from) {
     return { ok: false, error: "SUPABASE_UNAVAILABLE" };
   }
@@ -187,9 +201,11 @@ export async function saveRestockSubscriptionLite(context: any, input: RestockSu
     return { ok: false, error: error.message };
   }
 
-  const ids = Array.isArray(data) ? data.map((row) => String((row as any)?.id || "").trim()).filter(Boolean) : [];
+  const ids = Array.isArray(data)
+    ? data.map((row) => String((row as Record<string, unknown>)?.id || "").trim()).filter(Boolean)
+    : [];
   const nowIso = new Date().toISOString();
-  const runtimeTurnId = String((context as any)?.runtimeTurnId || "").trim() || null;
+  const runtimeTurnId = String((context as { runtimeTurnId?: unknown })?.runtimeTurnId || "").trim() || null;
   const insertDispatchAuditEvent = async (eventType: string, payload: Record<string, unknown>) => {
     try {
       await context.supabase.from("F_audit_events").insert({

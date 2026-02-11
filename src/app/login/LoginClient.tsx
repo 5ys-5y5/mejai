@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AuthShell } from "@/components/AuthShell";
@@ -13,13 +13,11 @@ export default function LoginClient() {
   const [pw, setPw] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [from, setFrom] = useState("/app");
-
-  useEffect(() => {
+  const [from] = useState(() => {
+    if (typeof window === "undefined") return "/app";
     const params = new URLSearchParams(window.location.search);
-    const next = params.get("from");
-    if (next) setFrom(next);
-  }, []);
+    return params.get("from") ?? "/app";
+  });
 
   const handleLogin = async () => {
     if (!email || !pw) {

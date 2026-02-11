@@ -1,4 +1,4 @@
-export async function handleRuntimeError(input: Record<string, any>) {
+export async function handleRuntimeError(input: Record<string, unknown>) {
   const {
     err,
     debugEnabled,

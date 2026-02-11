@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { PrincipleBaseline } from "./principleBaseline";
 import type { PrincipleViolation, RuntimeEvent, RuntimeTurn } from "./detector";
+import { buildSelfHealGate, type ExceptionStats } from "./selfHealGate";
 import {
   isActionLifecycleAuditPrinciple,
   isIntentScopedSlotGatePrinciple,
@@ -28,6 +29,19 @@ export type PatchProposal = {
   suggested_diff: string | null;
   confidence: number;
   created_at: string;
+  self_heal_gate?: Record<string, unknown>;
+  exception_reason?: string;
+  exception_scope?: string;
+  exception_expiry?: string;
+  promotion_plan?: string;
+  promotion_trigger?: string;
+  blast_radius?: string;
+  contract_scope?: string;
+  generalization_scope?: string;
+  slot_request_mapping_strategy?: string;
+  response_projection_strategy?: string;
+  pre_post_invariant_strategy?: string;
+  contract_expectation?: string;
 };
 
 function normalizeFilePath(value: string) {
@@ -476,11 +490,20 @@ export async function buildPatchProposal(input: {
   baseline: PrincipleBaseline;
   recentTurns: RuntimeTurn[];
   recentEvents: RuntimeEvent[];
+  exceptionStats?: ExceptionStats;
 }): Promise<PatchProposal> {
   const apiKey = String(process.env.OPENAI_API_KEY || "").trim();
   if (!apiKey) {
     const fallback = fallbackProposal(input);
-    return qualityGateProposal({ proposal: fallback, violation: input.violation });
+    const quality = qualityGateProposal({ proposal: fallback, violation: input.violation });
+    return {
+      ...quality,
+      self_heal_gate: buildSelfHealGate({
+        proposal: quality as unknown as Record<string, unknown>,
+        violation: input.violation,
+        exceptionStats: input.exceptionStats,
+      }),
+    };
   }
 
   const proposalId = `rp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -500,7 +523,15 @@ export async function buildPatchProposal(input: {
     const parsed = parseJson(content);
     if (!parsed) {
       const fallback = fallbackProposal(input);
-      return qualityGateProposal({ proposal: fallback, violation: input.violation });
+      const quality = qualityGateProposal({ proposal: fallback, violation: input.violation });
+      return {
+        ...quality,
+        self_heal_gate: buildSelfHealGate({
+          proposal: quality as unknown as Record<string, unknown>,
+          violation: input.violation,
+          exceptionStats: input.exceptionStats,
+        }),
+      };
     }
     const parsedProposal: PatchProposal = {
       proposal_id: proposalId,
@@ -529,9 +560,25 @@ export async function buildPatchProposal(input: {
       confidence: Number(parsed.confidence || 0.7),
       created_at: nowIso(),
     };
-    return qualityGateProposal({ proposal: parsedProposal, violation: input.violation });
+    const quality = qualityGateProposal({ proposal: parsedProposal, violation: input.violation });
+    return {
+      ...quality,
+      self_heal_gate: buildSelfHealGate({
+        proposal: quality as unknown as Record<string, unknown>,
+        violation: input.violation,
+        exceptionStats: input.exceptionStats,
+      }),
+    };
   } catch {
     const fallback = fallbackProposal(input);
-    return qualityGateProposal({ proposal: fallback, violation: input.violation });
+    const quality = qualityGateProposal({ proposal: fallback, violation: input.violation });
+    return {
+      ...quality,
+      self_heal_gate: buildSelfHealGate({
+        proposal: quality as unknown as Record<string, unknown>,
+        violation: input.violation,
+        exceptionStats: input.exceptionStats,
+      }),
+    };
   }
 }

@@ -19,19 +19,19 @@ export function reconcileIntentFromInputGate(input: {
 
 export async function emitPolicyStaticConflict(input: {
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, unknown>,
     botContext: Record<string, unknown>
   ) => Promise<unknown>;
-  context: any;
+  context: unknown;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
-  policyContext: any;
-  activePolicyConflicts: any[];
+  policyContext: Record<string, unknown>;
+  activePolicyConflicts: unknown[];
 }) {
   const { insertEvent, context, sessionId, latestTurnId, resolvedIntent, policyContext, activePolicyConflicts } = input;
   if (activePolicyConflicts.length <= 0) return;
@@ -51,14 +51,14 @@ export async function emitPolicyStaticConflict(input: {
 
 export async function emitSlotExtracted(input: {
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, unknown>,
     botContext: Record<string, unknown>
   ) => Promise<unknown>;
-  context: any;
+  context: unknown;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
@@ -70,7 +70,7 @@ export async function emitSlotExtracted(input: {
   derivedZipcode: string | null;
   derivedAddress: string | null;
   resolvedOrderId: string | null;
-  policyContext: any;
+  policyContext: Record<string, unknown>;
   maskPhone: (value?: string | null) => string;
   resolvedSlots?: Record<string, unknown>;
   missingSlots?: string[];
@@ -137,17 +137,17 @@ export async function handleInputForcedResponse(input: {
   sessionId: string;
   nextSeq: number;
   message: string;
-  policyContext: any;
+  policyContext: Record<string, unknown>;
   resolvedOrderId: string | null;
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, unknown>,
     botContext: Record<string, unknown>
   ) => Promise<unknown>;
-  context: any;
+  context: unknown;
   latestTurnId: string | null;
   respond: (payload: Record<string, unknown>, init?: ResponseInit) => Response;
 }): Promise<Response | null> {

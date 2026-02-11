@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { YES_NO_QUICK_REPLIES, resolveQuickReplyConfig } from "../runtime/quickReplyConfigRuntime";
 import { toLeadDayQuickReplies } from "../policies/intentSlotPolicy";
 import { generateAlternativeRestockConsentQuestion } from "../policies/restockResponsePolicy";
@@ -8,7 +7,7 @@ import {
   buildRestockLeadDaysPrompt,
   buildYesNoConfirmationPrompt,
 } from "../runtime/promptTemplateRuntime";
-type HandleRestockIntentInput = Record<string, any>;
+type HandleRestockIntentInput = Record<string, unknown>;
 
 export async function handleRestockIntent(input: HandleRestockIntentInput): Promise<Response | null> {
   const {
@@ -76,8 +75,10 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
   const noSchedulableScheduleReply = "안내 가능한 재입고 일정이 없습니다. 미래 입고 예정 상품만 안내할 수 있습니다.";
 
   // Handle pending restock product choice even if current turn intent is misclassified (e.g. "1" -> general).
-  const prevRestockCandidatesForAnyIntentRaw = Array.isArray((prevBotContext as any).restock_candidates)
-    ? ((prevBotContext as any).restock_candidates as Array<Record<string, unknown>>)
+  const prevRestockCandidatesForAnyIntentRaw = Array.isArray(
+    (prevBotContext as Record<string, unknown>).restock_candidates
+  )
+    ? ((prevBotContext as Record<string, unknown>).restock_candidates as Array<Record<string, unknown>>)
     : [];
   const prevRestockCandidatesForAnyIntent = reindexCandidateRows(
     filterSchedulableEntries(prevRestockCandidatesForAnyIntentRaw)
@@ -163,8 +164,10 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         parseRestockEntriesFromContent(String(item.content || ""), `admin_kb:${item.id}`)
       ),
     ];
-    const prevRestockCandidatesRaw = Array.isArray((prevBotContext as any).restock_candidates)
-      ? ((prevBotContext as any).restock_candidates as Array<Record<string, unknown>>)
+    const prevRestockCandidatesRaw = Array.isArray(
+      (prevBotContext as Record<string, unknown>).restock_candidates
+    )
+      ? ((prevBotContext as Record<string, unknown>).restock_candidates as Array<Record<string, unknown>>)
       : [];
     const prevRestockCandidates = reindexCandidateRows(filterSchedulableEntries(prevRestockCandidatesRaw));
     const pickedIndex = parseIndexedChoice(message);
@@ -251,9 +254,10 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       "";
     const restockChannel = extractRestockChannel(message) || pendingChannel || "sms";
     const rankedFromMessage = rankRestockEntries(restockQueryText, restockKbEntriesRaw);
-    const rankedFromMessageSchedulable = rankedFromMessage.filter((row) =>
-      isSchedulableEntry(Number((row as any)?.entry?.month || 0), Number((row as any)?.entry?.day || 0))
-    );
+    const rankedFromMessageSchedulable = rankedFromMessage.filter((row) => {
+      const entry = (row as { entry?: { month?: unknown; day?: unknown } }).entry;
+      return isSchedulableEntry(Number(entry?.month || 0), Number(entry?.day || 0));
+    });
     const queryCoreNoSpace = normalizeKoreanQueryToken(stripRestockNoise(restockQueryText)).replace(/\s+/g, "");
     const kbMatchFromQuery = rankedFromMessageSchedulable.length > 0 ? rankedFromMessageSchedulable[0].entry : null;
     const broadCandidates =
@@ -401,8 +405,9 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             });
             mcpActions.push("resolve_product");
             if (!resolvedCandidate.ok) continue;
-            const matched = Boolean((resolvedCandidate.data as any)?.matched);
-            const productId = String((resolvedCandidate.data as any)?.product_id || "").trim();
+            const resolvedData = (resolvedCandidate.data ?? {}) as Record<string, unknown>;
+            const matched = Boolean(resolvedData.matched);
+            const productId = String(resolvedData.product_id || "").trim();
             if (!matched || !productId) continue;
             candidate.product_id = productId;
             const readCandidate = await callMcpTool(
@@ -635,8 +640,9 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           });
           mcpActions.push("resolve_product");
           if (!resolvedCandidate.ok) continue;
-          const matched = Boolean((resolvedCandidate.data as any)?.matched);
-          const productId = String((resolvedCandidate.data as any)?.product_id || "").trim();
+          const resolvedData = (resolvedCandidate.data ?? {}) as Record<string, unknown>;
+          const matched = Boolean(resolvedData.matched);
+          const productId = String(resolvedData.product_id || "").trim();
           if (!matched || !productId) continue;
           candidate.product_id = productId;
           const readCandidate = await callMcpTool(
@@ -738,8 +744,9 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       });
       mcpActions.push("resolve_product");
       if (resolvedPending.ok) {
-        const matched = Boolean((resolvedPending.data as any)?.matched);
-        const candidate = String((resolvedPending.data as any)?.product_id || "").trim();
+        const resolvedData = (resolvedPending.data ?? {}) as Record<string, unknown>;
+        const matched = Boolean(resolvedData.matched);
+        const candidate = String(resolvedData.product_id || "").trim();
         if (matched && candidate) restockProductId = candidate;
       }
     }
@@ -762,8 +769,9 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       });
       mcpActions.push("resolve_product");
       if (resolved.ok) {
-        const matched = Boolean((resolved.data as any)?.matched);
-        const candidate = String((resolved.data as any)?.product_id || "").trim();
+        const resolvedData = (resolved.data ?? {}) as Record<string, unknown>;
+        const matched = Boolean(resolvedData.matched);
+        const candidate = String(resolvedData.product_id || "").trim();
         if (matched && candidate) restockProductId = candidate;
       }
       if (!resolved.ok && String(resolved.error || "").toUpperCase().includes("SCOPE_ERROR")) {
@@ -814,9 +822,10 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
 
     if (!restockProductId && !pendingProductName) {
       const ranked = rankRestockEntries(restockQueryText, restockKbEntriesRaw);
-      const rankedSchedulable = ranked.filter((row) =>
-        isSchedulableEntry(Number((row as any)?.entry?.month || 0), Number((row as any)?.entry?.day || 0))
-      );
+      const rankedSchedulable = ranked.filter((row) => {
+        const entry = (row as { entry?: { month?: unknown; day?: unknown } }).entry;
+        return isSchedulableEntry(Number(entry?.month || 0), Number(entry?.day || 0));
+      });
       if (hasUniqueAnswerCandidate(rankedSchedulable.length)) {
         const item = rankedSchedulable[0].entry;
         const due = toRestockDueText(item.month, item.day);
@@ -912,8 +921,9 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             });
             mcpActions.push("resolve_product");
             if (!resolvedCandidate.ok) continue;
-            const matched = Boolean((resolvedCandidate.data as any)?.matched);
-            const productId = String((resolvedCandidate.data as any)?.product_id || "").trim();
+            const resolvedData = (resolvedCandidate.data ?? {}) as Record<string, unknown>;
+            const matched = Boolean(resolvedData.matched);
+            const productId = String(resolvedData.product_id || "").trim();
             if (!matched || !productId) continue;
             candidate.product_id = productId;
             const readCandidate = await callMcpTool(
@@ -1253,8 +1263,12 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
 
       const subscribePhone =
         typeof policyContext.entity?.phone === "string" ? normalizePhoneDigits(policyContext.entity.phone) : "";
-      const pendingLeadDaysFromContext = Array.isArray((prevBotContext as any).pending_lead_days)
-        ? ((prevBotContext as any).pending_lead_days as number[]).map((n) => Number(n)).filter((n) => Number.isFinite(n))
+      const pendingLeadDaysFromContext = Array.isArray(
+        (prevBotContext as Record<string, unknown>).pending_lead_days
+      )
+        ? ((prevBotContext as Record<string, unknown>).pending_lead_days as number[])
+            .map((n) => Number(n))
+            .filter((n) => Number.isFinite(n))
         : [];
       const scheduleDue = scheduleDueForEntry;
       const availableLeadDays = scheduleDue ? availableRestockLeadDays(scheduleDue.diffDays) : [];

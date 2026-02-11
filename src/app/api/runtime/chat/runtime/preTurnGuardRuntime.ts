@@ -3,7 +3,7 @@ import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
 import { readPendingPhoneReuse } from "./memoryReuseRuntime";
 
 type PreTurnGuardParams = {
-  context: any;
+  context: unknown;
   prevBotContext: Record<string, unknown>;
   resolvedIntent: string;
   prevEntity: Record<string, unknown>;
@@ -21,7 +21,7 @@ type PreTurnGuardParams = {
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,

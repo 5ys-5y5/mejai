@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { MatrixRain } from "@/components/landing/matrixRain";
 
 // --- Configuration ---
@@ -33,7 +33,7 @@ export function MatrixRainBackground() {
   const debugCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // Convert any CSS color string to RGB by painting a pixel and reading it back.
-  const colorToRgb = (color: string) => {
+  const colorToRgb = useCallback((color: string) => {
     if (!color) return null;
     if (!colorCanvasRef.current) {
       colorCanvasRef.current = document.createElement("canvas");
@@ -48,14 +48,14 @@ export function MatrixRainBackground() {
     ctx.fillRect(0, 0, 1, 1);
     const data = ctx.getImageData(0, 0, 1, 1).data;
     return { red: data[0], green: data[1], blue: data[2] };
-  };
+  }, []);
 
   // Read computed text color from an element and convert it to RGB.
-  const getRgb = (el: HTMLElement | null) => {
+  const getRgb = useCallback((el: HTMLElement | null) => {
     if (!el) return null;
     const computed = getComputedStyle(el).color || "";
     return colorToRgb(computed);
-  };
+  }, [colorToRgb]);
 
   const samplePixel = (x: number, y: number) => {
     if (!canvasRef.current) return null;
@@ -175,7 +175,6 @@ export function MatrixRainBackground() {
         );
         const headSample = sampleTextPixel("A", headColor);
         const tailSample = sampleTextPixel("A", tailColor);
-        // eslint-disable-next-line no-console
         const samplePayload = {
           canvasMid: sampled,
           canvasRegion: regionSample,
@@ -184,7 +183,6 @@ export function MatrixRainBackground() {
           headColor,
           tailColor,
         };
-        // eslint-disable-next-line no-console
         console.info("[MatrixRain] sample pixel", samplePayload, JSON.stringify(samplePayload));
       }, Math.max(50, Math.floor(1000 / FPS)));
     };
@@ -200,7 +198,6 @@ export function MatrixRainBackground() {
           const tailComputed = tailColorRef.current ? getComputedStyle(tailColorRef.current).color : "missing";
           const headNormalized = colorToRgb(headComputed) || "unresolved";
           const tailNormalized = colorToRgb(tailComputed) || "unresolved";
-          // eslint-disable-next-line no-console
           console.warn("[MatrixRain] color parse pending", {
             headComputed,
             headNormalized,
@@ -210,9 +207,7 @@ export function MatrixRainBackground() {
           window.setTimeout(scheduleMount, 50);
           return;
         }
-        // eslint-disable-next-line no-console
         const mountPayload = { headColor, tailColor };
-        // eslint-disable-next-line no-console
         console.info("[MatrixRain] mount with colors", mountPayload, JSON.stringify(mountPayload));
         mountMatrix();
       });
@@ -248,7 +243,7 @@ export function MatrixRainBackground() {
         matrixInstanceRef.current.destroy();
       }
     };
-  }, []);
+  }, [colorToRgb, getRgb]);
 
   return (
     <div className="relative w-full h-screen bg-white overflow-hidden">

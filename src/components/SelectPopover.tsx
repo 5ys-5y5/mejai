@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -60,7 +60,7 @@ export function SelectPopover({
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
+  }, [open, setOpen]);
 
   return (
     <div className={cn("relative", className)} ref={ref}>
@@ -194,13 +194,16 @@ export function MultiSelectPopover({
 }: MultiSelectPopoverProps) {
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
-  const setOpen = (next: boolean) => {
-    if (onOpenChange) {
-      onOpenChange(next);
-      return;
-    }
-    setOpenState(next);
-  };
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (onOpenChange) {
+        onOpenChange(next);
+        return;
+      }
+      setOpenState(next);
+    },
+    [onOpenChange]
+  );
   const [q, setQ] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
@@ -257,7 +260,7 @@ export function MultiSelectPopover({
     }
     document.addEventListener("mousedown", onDocClick);
     return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
+  }, [open, setOpen]);
 
   const renderMultiOptionButton = (option: SelectOption) => {
     const active = values.includes(option.id);

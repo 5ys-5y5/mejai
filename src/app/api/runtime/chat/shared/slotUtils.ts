@@ -243,7 +243,10 @@ export function buildLookupOrderArgs(orderId: string, customerVerificationToken:
 }
 
 export function readLookupOrderView(payload: unknown) {
-  const order = payload && typeof payload === "object" ? ((payload as any).order || {}) : {};
+  const order =
+    payload && typeof payload === "object"
+      ? ((payload as Record<string, unknown>).order || {})
+      : {};
   const core = order?.core && typeof order.core === "object" ? order.core : order;
   const summary =
     order?.summary && typeof order.summary === "object"

@@ -2,8 +2,8 @@ import { createRuntimePipelineState, type RuntimePipelineState } from "./runtime
 
 export function initializeRuntimeState(input: {
   message: string;
-  lastTurn: any;
-  recentTurns: any[];
+  lastTurn: Record<string, unknown> | null;
+  recentTurns: Array<Record<string, unknown>>;
   prevBotContext: Record<string, unknown>;
   allowedToolByName: Map<string, string[]>;
   extractOrderId: (text: string) => string | null;
@@ -11,7 +11,7 @@ export function initializeRuntimeState(input: {
   extractZipcode: (text: string) => string | null;
   extractAddress: (text: string, orderId: string | null, phone: string | null, zipcode: string | null) => string | null;
   extractChannel: (text: string) => string | null;
-  findRecentEntity: (turns: any[]) => Record<string, string | null> | null;
+  findRecentEntity: (turns: Array<Record<string, unknown>>) => Record<string, string | null> | null;
   isRestockSubscribeStageContext: (botContext: Record<string, unknown>) => boolean;
   deriveExpectedInputFromAnswer: (answer: string) => string | null;
   isRestockInquiry: (text: string) => boolean;

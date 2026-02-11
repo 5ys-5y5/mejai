@@ -32,7 +32,7 @@ export function buildFinalLlmMessages(input: {
 }
 
 
-export async function handleGeneralNoPathGuard(input: Record<string, any>): Promise<Response | null> {
+export async function handleGeneralNoPathGuard(input: Record<string, unknown>): Promise<Response | null> {
   const {
     resolvedIntent,
     finalCalls,
@@ -118,7 +118,7 @@ export async function handleGeneralNoPathGuard(input: Record<string, any>): Prom
   });
 }
 
-export async function runFinalResponseFlow(input: Record<string, any>) {
+export async function runFinalResponseFlow(input: Record<string, unknown>) {
   const {
     runLlm,
     agentLlm,
@@ -164,8 +164,11 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
   let finalAnswer = answerRes.text.trim();
 
   const outputGate = runPolicyStage(compiledPolicy, "output", policyContext);
-  usedRuleIds.push(...outputGate.matched.map((rule: any) => rule.id));
-  usedTemplateIds.push(...extractTemplateIds(outputGate.matched as any[]));
+  const matchedRules = outputGate.matched as Array<{ id?: string }>;
+  usedRuleIds.push(...matchedRules.map((rule) => rule.id).filter((id): id is string => Boolean(id)));
+  usedTemplateIds.push(
+    ...extractTemplateIds(outputGate.matched as Array<Record<string, unknown>>)
+  );
   if (outputGate.actions.outputFormat) {
     finalAnswer = formatOutputDefault(finalAnswer);
   }
@@ -249,7 +252,7 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
     final_answer: reply,
     kb_references: [
       { kb_id: kb.id, title: kb.title, version: kb.version },
-      ...adminKbs.map((adminKb: any) => ({
+      ...adminKbs.map((adminKb: { id?: string; title?: string; version?: string }) => ({
         kb_id: adminKb.id,
         title: adminKb.title,
         version: adminKb.version,

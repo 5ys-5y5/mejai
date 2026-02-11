@@ -97,14 +97,15 @@ function resolveRestockChoiceToProductQuery(prevBotContext: Record<string, unkno
   if (!prevBotContext.restock_pending) return "";
   const pickedIndex = parseIndexedChoice(message);
   if (!pickedIndex) return "";
-  const candidates = Array.isArray((prevBotContext as any).restock_candidates)
-    ? ((prevBotContext as any).restock_candidates as Array<Record<string, unknown>>)
+  const candidates = Array.isArray((prevBotContext as Record<string, unknown>).restock_candidates)
+    ? ((prevBotContext as Record<string, unknown>).restock_candidates as Array<Record<string, unknown>>)
     : [];
   if (candidates.length < pickedIndex) return "";
   const picked = candidates[pickedIndex - 1] || {};
-  const productName = firstNonEmptyString((picked as any).product_name);
+  const pickedRecord = picked as Record<string, unknown>;
+  const productName = firstNonEmptyString(pickedRecord.product_name);
   if (productName) return productName;
-  const productId = firstNonEmptyString((picked as any).product_id);
+  const productId = firstNonEmptyString(pickedRecord.product_id);
   return productId;
 }
 

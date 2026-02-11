@@ -2,7 +2,7 @@ import { handleOrderChangePostTools } from "../handlers/orderChangeHandler";
 import { handleRefundRequest } from "../handlers/refundHandler";
 import { handleOrderSelectionAndListOrdersGuards, summarizeToolResults } from "./toolRuntime";
 
-export async function handlePostToolDeterministicFlows(input: Record<string, any>) {
+export async function handlePostToolDeterministicFlows(input: Record<string, unknown>) {
   let { resolvedOrderId, policyContext, mcpSummary } = input;
   const {
     toolResults,
@@ -36,7 +36,7 @@ export async function handlePostToolDeterministicFlows(input: Record<string, any
   const currentAddress = typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
 
   if (toolResults.length > 0) {
-    toolResults.forEach((tool: any) => {
+    toolResults.forEach((tool: { ok?: boolean; name?: string; error?: unknown }) => {
       if (tool.ok) return;
       if (
         tool.name === "lookup_order" ||
@@ -107,8 +107,12 @@ export async function handlePostToolDeterministicFlows(input: Record<string, any
     return { response: orderChangeHandled, resolvedOrderId, policyContext, mcpSummary };
   }
 
-  const createTicketSuccess = toolResults.find((tool: any) => tool.name === "create_ticket" && tool.ok);
-  const createTicketFailure = toolResults.find((tool: any) => tool.name === "create_ticket" && !tool.ok);
+  const createTicketSuccess = toolResults.find(
+    (tool: { ok?: boolean; name?: string }) => tool.name === "create_ticket" && tool.ok
+  );
+  const createTicketFailure = toolResults.find(
+    (tool: { ok?: boolean; name?: string }) => tool.name === "create_ticket" && !tool.ok
+  );
   const refundHandled = await handleRefundRequest({
     resolvedIntent,
     resolvedOrderId,

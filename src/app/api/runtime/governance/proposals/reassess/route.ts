@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureGovernanceAccess } from "../../_lib/access";
-import { fetchProposalById, insertAuditEvent } from "../../_lib/store";
+import { fetchExceptionStats, fetchProposalById, insertAuditEvent } from "../../_lib/store";
 import { buildPatchProposal } from "../../_lib/proposer";
 import { getPrincipleBaseline } from "../../_lib/principleBaseline";
 import type { PrincipleViolation, RuntimeEvent, RuntimeTurn } from "../../_lib/detector";
+import { computeExceptionFingerprint } from "../../_lib/selfHealGate";
 
 type ReassessBody = {
   proposal_id?: string;
@@ -97,11 +98,18 @@ export async function POST(req: NextRequest) {
     targetIdx >= 0 ? turns.slice(Math.max(0, targetIdx - 2), Math.min(turns.length, targetIdx + 3)) : turns.slice(-5);
 
   const baseline = getPrincipleBaseline();
+  const exceptionFingerprint = computeExceptionFingerprint(violation);
+  const exceptionStats = await fetchExceptionStats({
+    supabase: access.supabaseAdmin,
+    fingerprint: exceptionFingerprint,
+    orgId: access.orgId,
+  });
   const proposal = await buildPatchProposal({
     violation,
     baseline,
     recentTurns,
     recentEvents: localEvents,
+    exceptionStats,
   });
 
   await insertAuditEvent({

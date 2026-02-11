@@ -224,8 +224,8 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
           execution: {
             call_chain: payload.runtimeCallChain
               .map((item) => ({
-                module_path: String((item as any)?.module_path || "").trim(),
-                function_name: String((item as any)?.function_name || "").trim(),
+                module_path: String((item as Record<string, unknown>)?.module_path || "").trim(),
+                function_name: String((item as Record<string, unknown>)?.function_name || "").trim(),
               }))
               .filter((item) => Boolean(item.module_path) && Boolean(item.function_name)),
           },

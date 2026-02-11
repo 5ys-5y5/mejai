@@ -28,6 +28,8 @@ type ProposalItem = {
   status_label: string;
   latest_event_type: string;
   suggested_diff: string | null;
+  confidence: number | null;
+  self_heal_gate: Record<string, unknown> | null;
   event_history: Array<{
     event_type: string;
     created_at: string | null;
@@ -59,6 +61,10 @@ type ProposalListResponse = {
     evidenceContract?: {
       requiredAddressEvidence?: string[];
       requiredMemoryEvidence?: string[];
+      requiredContractFields?: string[];
+      requiredExceptionFields?: string[];
+      evidenceByPrinciple?: Record<string, string[]>;
+      evidenceByViolation?: Record<string, string[]>;
     };
     scenarioMatrix?: Array<{
       key?: string;
@@ -683,6 +689,7 @@ export function ProposalSettingsPanel({ authToken }: Props) {
             .map((file) => `[inferred] ${file}`);
     const beforeAfter = deriveBeforeAfterEvidence(proposal);
     const evidence = (proposal.violation?.evidence || {}) as Record<string, unknown>;
+    const evidenceContract = selfHealMap?.evidenceContract || null;
     const failingInvariant =
       String(evidence.contract_expectation || "").trim() ||
       "deterministic runtime invariant required (slot->request->response semantic consistency)";
@@ -730,6 +737,16 @@ export function ProposalSettingsPanel({ authToken }: Props) {
         Object.keys(readiness.missingReasons).length > 0 ? prettyJson(readiness.missingReasons) : "-"
       }`,
       "",
+      "[Self-Heal Gate]",
+      prettyJson(proposal.self_heal_gate || {}),
+      `[Confidence] ${proposal.confidence ?? "-"}`,
+      "",
+      "[Suggested Diff]",
+      proposal.suggested_diff || "-",
+      "",
+      "[Evidence Contract]",
+      prettyJson(evidenceContract || {}),
+      "",
       "[Why Failed]",
       proposal.why_failed || "-",
       "",
@@ -775,7 +792,7 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       ),
     ];
     return lines.join("\n");
-  }, []);
+  }, [selfHealMap]);
 
   const copyProposalForCli = useCallback(
     async (proposal: ProposalItem) => {
@@ -1122,6 +1139,10 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       {filtered.map((proposal) => {
         const actions = allowedActions(proposal.status);
         const selectable = actions.length > 0;
+        const gate = (proposal.self_heal_gate || {}) as Record<string, unknown>;
+        const gateTrack =
+          gate.track === "exception" ? "Exception" : gate.track === "contract" ? "Contract" : "-";
+        const promotionRequired = Boolean(gate.promotion_required);
         return (
           <div key={proposal.proposal_id} className={`rounded-xl border p-4 ${cardClass(proposal.status)}`}>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1223,6 +1244,11 @@ export function ProposalSettingsPanel({ authToken }: Props) {
             <div className="mt-1 text-xs text-slate-600">
               생성시각: {formatTime(proposal.created_at)} / latest_event: <span className="font-mono">{proposal.latest_event_type}</span>
             </div>
+            <div className="mt-1 text-xs text-slate-600">
+              gate: <span className="font-mono">{gateTrack}</span>
+              {promotionRequired ? <span className="ml-2 font-semibold text-amber-700">승격 필요</span> : null}
+              {" / "}confidence: <span className="font-mono">{proposal.confidence ?? "-"}</span>
+            </div>
 
             <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
               <div className="rounded-lg bg-slate-50 p-3">
@@ -1274,6 +1300,13 @@ export function ProposalSettingsPanel({ authToken }: Props) {
                   <div className="mt-1 text-xs text-slate-700">summary: {proposal.violation?.summary || "-"}</div>
                   <div className="mt-1 text-xs text-slate-700">severity: {proposal.violation?.severity || "-"}</div>
                   <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-[11px] text-slate-700">{JSON.stringify(proposal.violation?.evidence || {}, null, 2)}</pre>
+                </div>
+
+                <div className="mt-3 rounded-lg bg-slate-50 p-3">
+                  <div className="text-xs font-semibold text-slate-700">Self-Heal Gate</div>
+                  <pre className="mt-2 overflow-x-auto rounded bg-white p-2 text-[11px] text-slate-700">
+                    {JSON.stringify(proposal.self_heal_gate || {}, null, 2)}
+                  </pre>
                 </div>
 
                 <div className="mt-3 rounded-lg bg-slate-50 p-3">

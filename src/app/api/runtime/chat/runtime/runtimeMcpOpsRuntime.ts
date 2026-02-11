@@ -1,4 +1,5 @@
 import { flushMcpSkipLogsWithAudit, updateMcpTracking } from "./toolRuntime";
+import type { RuntimePipelineState } from "./runtimePipelineState";
 
 const DEFAULT_TOOL_PROVIDER_MAP: Record<string, string> = {
   find_customer_by_phone: "cafe24",
@@ -15,7 +16,7 @@ export function createRuntimeMcpOps(input: {
   usedProviders: string[];
   mcpSkipLogs: string[];
   mcpSkipQueue: Array<{ tool: string; reason: string; args?: Record<string, unknown>; detail?: Record<string, unknown> }>;
-  pipelineState: any;
+  pipelineState: RuntimePipelineState;
   getResolvedIntent: () => string;
   getPolicyEntity: () => Record<string, unknown>;
   setTracking: (next: {
@@ -25,14 +26,14 @@ export function createRuntimeMcpOps(input: {
     lastMcpCount: number | null;
   }) => void;
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, unknown>,
     botContext: Record<string, unknown>
   ) => Promise<unknown>;
-  context: any;
+  context: unknown;
   sessionId: string;
   getLatestTurnId: () => string | null;
   allowedToolIdByName: Map<string, string>;

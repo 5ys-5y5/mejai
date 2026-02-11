@@ -41,7 +41,8 @@ export async function GET(req: NextRequest) {
 
   const items =
     data?.map((row: { D_conv_sessions?: unknown }) => {
-      const { D_conv_sessions, ...rest } = row as Record<string, unknown>;
+      const rest = { ...(row as Record<string, unknown>) };
+      delete rest.D_conv_sessions;
       return rest;
     }) || [];
 

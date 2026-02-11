@@ -412,6 +412,24 @@ export const SELF_HEAL_PRINCIPLE_KEYS = {
   mcpLastFunctionAudit: SELF_HEAL_PRINCIPLES.principle.mcpLastFunctionAudit.key,
 } as const;
 
+export const SELF_HEAL_REQUIRED_CONTRACT_FIELDS = [
+  "contract_scope",
+  "generalization_scope",
+  "slot_request_mapping_strategy",
+  "response_projection_strategy",
+  "pre_post_invariant_strategy",
+  "contract_expectation",
+] as const;
+
+export const SELF_HEAL_REQUIRED_EXCEPTION_FIELDS = [
+  "exception_reason",
+  "exception_scope",
+  "exception_expiry",
+  "promotion_plan",
+  "promotion_trigger",
+  "blast_radius",
+] as const;
+
 export const SELF_HEAL_EVENT_TYPES = {
   violationDetected: SELF_HEAL_PRINCIPLES.event.violationDetected,
   proposalCreated: SELF_HEAL_PRINCIPLES.event.proposalCreated,
@@ -447,6 +465,49 @@ export const SELF_HEAL_VIOLATION_KEYS = {
   mcpLastFunctionMissingReason:
     SELF_HEAL_PRINCIPLES.violation.mcpLastFunctionMissingReason.key,
 } as const;
+
+export const SELF_HEAL_EVIDENCE_BY_PRINCIPLE: Record<string, readonly string[]> = {
+  [SELF_HEAL_PRINCIPLE_KEYS.memoryNoRepeat]: SELF_HEAL_PRINCIPLES.evidenceContract.requiredMemoryEvidence,
+  [SELF_HEAL_PRINCIPLE_KEYS.addressResolveZipcode]: SELF_HEAL_PRINCIPLES.evidenceContract.requiredAddressEvidence,
+  [SELF_HEAL_PRINCIPLE_KEYS.apiContractAlignment]: SELF_HEAL_PRINCIPLES.evidenceContract.requiredContractMismatchEvidence,
+  [SELF_HEAL_PRINCIPLE_KEYS.contractFirstRuntimeDesign]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredContractFirstDesignEvidence,
+  [SELF_HEAL_PRINCIPLE_KEYS.intentScopedSlotGate]: SELF_HEAL_PRINCIPLES.evidenceContract.requiredIntentScopeGateEvidence,
+  [SELF_HEAL_PRINCIPLE_KEYS.notificationDeliveryAudit]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredNotificationDeliveryEvidence,
+  [SELF_HEAL_PRINCIPLE_KEYS.actionLifecycleAudit]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredActionLifecycleEvidence,
+  [SELF_HEAL_PRINCIPLE_KEYS.mcpLastFunctionAudit]: SELF_HEAL_PRINCIPLES.evidenceContract.requiredMcpLastFunctionEvidence,
+};
+
+export const SELF_HEAL_EVIDENCE_BY_VIOLATION: Record<string, readonly string[]> = {
+  [SELF_HEAL_VIOLATION_KEYS.memoryNoRepeatAddressQuestion]: SELF_HEAL_PRINCIPLES.evidenceContract.requiredMemoryEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.addressMultipleWithoutChoice]: SELF_HEAL_PRINCIPLES.evidenceContract.requiredAddressEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.addressCandidateTruncated]: SELF_HEAL_PRINCIPLES.evidenceContract.requiredAddressEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.addressZeroResultWrongPrompt]: SELF_HEAL_PRINCIPLES.evidenceContract.requiredAddressEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.addressRuntimePathMissingAfterTemplateDefer]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredRuntimePathEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.addressConfirmedZipcodeNotApplied]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredConfirmedZipcodeEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.addressUpdateSkippedAfterConfirmation]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredUpdateSkippedEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.addressUpdatePayloadStructureMismatch]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredUpdatePayloadEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.apiConversationToolContractMismatch]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredContractMismatchEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.caseSpecificHardcodingPrimaryFix]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredContractFirstDesignEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.intentScopeRequiredSlotMissingProgressed]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredIntentScopeGateEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.notificationDeliveryAuditMissing]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredNotificationDeliveryEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.actionLifecycleOutcomeMissing]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredActionLifecycleEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.dialogueRepeatedScopeSlotAskLoop]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredIntentScopeGateEvidence,
+  [SELF_HEAL_VIOLATION_KEYS.mcpLastFunctionMissingReason]:
+    SELF_HEAL_PRINCIPLES.evidenceContract.requiredMcpLastFunctionEvidence,
+};
 
 export function isAddressSelfHealPrinciple(principleKey: unknown) {
   return String(principleKey || "") === SELF_HEAL_PRINCIPLE_KEYS.addressResolveZipcode;

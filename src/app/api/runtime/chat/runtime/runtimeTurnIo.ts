@@ -8,6 +8,9 @@ import {
 } from "../../governance/_lib/detector";
 import { getPrincipleBaseline } from "../../governance/_lib/principleBaseline";
 import { buildPatchProposal } from "../../governance/_lib/proposer";
+import { computeExceptionFingerprint } from "../../governance/_lib/selfHealGate";
+import { fetchExceptionStats } from "../../governance/_lib/store";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type DebugSnapshot = {
   llmModel: string | null;
@@ -56,6 +59,31 @@ type MakeReplyParams = {
   currentDebugPrefixJson: Record<string, unknown> | null;
 };
 
+type RuntimeContext = {
+  supabase: SupabaseClient;
+  runtimeRequestStartedAt?: string | null;
+  runtimeTurnId?: string | null;
+};
+
+type InsertFinalTurnResult = {
+  data?: { id?: string | null; session_id?: string | null };
+  error?: unknown;
+};
+
+function readToolCount(value: unknown) {
+  if (Array.isArray(value)) return value.length;
+  if (!value || typeof value !== "object") return null;
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.count === "number") return obj.count;
+  if (Array.isArray(obj.items)) return obj.items.length;
+  if (Array.isArray(obj.orders)) return obj.orders.length;
+  if (obj.orders && typeof obj.orders === "object") {
+    const orders = obj.orders as Record<string, unknown>;
+    if (Array.isArray(orders.order)) return orders.order.length;
+  }
+  return null;
+}
+
 export function makeReplyWithDebug(params: MakeReplyParams): {
   text: string;
   lastDebugPrefixJson: Record<string, unknown> | null;
@@ -76,17 +104,7 @@ export function makeReplyWithDebug(params: MakeReplyParams): {
     const mcpLogLines = toolResults.map((tool) => {
       const status = tool.ok ? "success" : "error";
       const error = tool.ok ? "" : String(tool.error || "MCP_ERROR");
-      let count: number | null = null;
-      if (tool.ok && tool.data) {
-        const data = tool.data as any;
-        if (Array.isArray(data)) count = data.length;
-        else if (data && typeof data === "object") {
-          if (typeof data.count === "number") count = data.count;
-          else if (Array.isArray(data.items)) count = data.items.length;
-          else if (Array.isArray(data.orders)) count = data.orders.length;
-          else if (data.orders && Array.isArray(data.orders.order)) count = data.orders.order.length;
-        }
-      }
+      const count = tool.ok ? readToolCount(tool.data) : null;
       const countText = count !== null ? ` (count=${count})` : "";
       return error ? `${tool.name}: ${status}${countText} - ${error}` : `${tool.name}: ${status}${countText}`;
     });
@@ -121,8 +139,12 @@ type InsertTurnParams = {
   getFallbackSnapshot: () => DebugSnapshot;
   buildDebugPrefixJson: (payload: Record<string, unknown>) => Record<string, unknown>;
   pendingIntentQueue: string[];
-  insertFinalTurn: (context: any, payload: Record<string, unknown>, debugPrefixJson: Record<string, unknown>) => Promise<any>;
-  context: any;
+  insertFinalTurn: (
+    context: RuntimeContext,
+    payload: Record<string, unknown>,
+    debugPrefixJson: Record<string, unknown>
+  ) => Promise<InsertFinalTurnResult>;
+  context: RuntimeContext;
   orgId?: string | null;
 };
 
@@ -283,7 +305,7 @@ function collapseViolationsForTurn(
   return out;
 }
 
-async function insertAuditEvent(context: any, input: {
+async function insertAuditEvent(context: RuntimeContext, input: {
   sessionId: string;
   turnId: string;
   eventType: string;
@@ -301,12 +323,12 @@ async function insertAuditEvent(context: any, input: {
 }
 
 async function backfillTurnIdForRuntimeTrace(input: {
-  context: any;
+  context: RuntimeContext;
   sessionId: string;
   turnId: string;
 }) {
   const { context, sessionId, turnId } = input;
-  const requestStartedAt = String((context as any)?.runtimeRequestStartedAt || "").trim();
+  const requestStartedAt = String(context.runtimeRequestStartedAt || "").trim();
   if (!requestStartedAt) return;
   const targets = ["F_audit_events", "F_audit_mcp_tools"] as const;
   for (const table of targets) {
@@ -345,7 +367,7 @@ async function backfillTurnIdForRuntimeTrace(input: {
 }
 
 async function runRuntimeSelfUpdateReview(params: {
-  context: any;
+  context: RuntimeContext;
   orgId: string;
   sessionId: string;
   turnId: string;
@@ -473,11 +495,18 @@ async function runRuntimeSelfUpdateReview(params: {
     const issueFingerprint = violationFingerprint(violation);
     const localTurns = nearbyTurns(turns, turnId);
     const localEvents = eventsByTurnId.get(turnId) || [];
+    const exceptionFingerprint = computeExceptionFingerprint(violation);
+    const exceptionStats = await fetchExceptionStats({
+      supabase: context.supabase,
+      fingerprint: exceptionFingerprint,
+      orgId,
+    });
     const proposal = await buildPatchProposal({
       violation,
       baseline,
       recentTurns: localTurns,
       recentEvents: localEvents,
+      exceptionStats,
     });
     await insertAuditEvent(context, {
       sessionId,
@@ -528,7 +557,7 @@ async function runRuntimeSelfUpdateReview(params: {
 }
 
 export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
-  result: any;
+  result: InsertFinalTurnResult;
   lastDebugPrefixJson: Record<string, unknown>;
   latestTurnId: string | null;
 }> {
@@ -552,7 +581,7 @@ export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
     payload.failed = null;
   }
   if (!Object.prototype.hasOwnProperty.call(payload, "id")) {
-    const runtimeTurnId = String((context as any)?.runtimeTurnId || "").trim();
+    const runtimeTurnId = String(context.runtimeTurnId || "").trim();
     if (runtimeTurnId) {
       payload.id = runtimeTurnId;
     }

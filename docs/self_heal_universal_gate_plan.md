@@ -387,12 +387,12 @@ const repeat_count_30d = (rows30d || []).filter((row) => {
 
 ## 10) 체크리스트 (최종 실행용)
 
-- [ ] evidenceContract 정의 및 반환
-- [ ] selfHealGate 신규 구현
-- [ ] proposer.ts에 gate 적용
-- [ ] review/reassess/runtimeTurnIo 경로에 exceptionStats 연결
-- [ ] proposals API에 evidenceContract 노출
-- [ ] UI와 복사 텍스트에 gate 결과 표시
+- [x] evidenceContract 정의 및 반환
+- [x] selfHealGate 신규 구현
+- [x] proposer.ts에 gate 적용
+- [x] review/reassess/runtimeTurnIo 경로에 exceptionStats 연결
+- [x] proposals API에 evidenceContract 노출
+- [x] UI와 복사 텍스트에 gate 결과 표시
 - [ ] 테스트 통과 및 기본 시나리오 검증
 
 ---
@@ -402,4 +402,13 @@ const repeat_count_30d = (rows30d || []).filter((row) => {
 - promotion_required 상태의 proposal은 “계약 승격” 우선순위로 분류한다.
 - 예외 proposal이 30일 이상 남아 있으면 계약 설계 리뷰를 강제한다.
 - 반복 예외는 rule catalog에 정식 규칙으로 승격한다.
+
+---
+
+## 12) 테스트 실행 기록
+
+- 2026-02-11: `npm run lint` 실행 → 실패
+  - 실패 원인: 기존 코드베이스에 다수의 lint 오류/경고 존재
+  - 상세 오류는 lint 출력 참조 (이번 변경과 직접 연관되지 않은 오류 다수 포함)
+- 2026-02-11: `npx eslint <self-heal 변경 파일>` 실행 → 성공
 

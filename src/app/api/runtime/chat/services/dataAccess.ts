@@ -1,6 +1,18 @@
 import { chooseBestAlias } from "../shared/slotUtils";
 import type { AgentRow, KbRow, ProductAliasRow, ProductDecision, ProductRuleRow } from "../shared/types";
 
+type SupabaseQuery = {
+  select: (...args: unknown[]) => SupabaseQuery;
+  eq: (...args: unknown[]) => SupabaseQuery;
+  or: (...args: unknown[]) => SupabaseQuery;
+  order: (...args: unknown[]) => SupabaseQuery;
+  limit: (value: number) => SupabaseQuery;
+  maybeSingle: () => Promise<{ data?: unknown; error?: { message?: string } }>;
+  insert: (...args: unknown[]) => { select: (...args: unknown[]) => { single: () => Promise<{ data?: unknown; error?: { message?: string } }> } };
+};
+
+type RuntimeContext = { supabase: { from: (table: string) => SupabaseQuery }; orgId: string };
+
 export function matchesAdminGroup(
   applyGroups: Array<{ path: string; values: string[] }> | null | undefined,
   group: Record<string, unknown> | null,
@@ -23,7 +35,7 @@ function readGroupValue(group: Record<string, unknown> | null, path: string) {
   }, group as unknown);
 }
 
-export async function resolveProductDecision(context: any, text: string) {
+export async function resolveProductDecision(context: RuntimeContext, text: string) {
   const aliasRes = await context.supabase
     .from("G_com_product_aliases")
     .select("org_id, alias, product_id, match_type, priority, is_active")
@@ -69,7 +81,7 @@ export async function resolveProductDecision(context: any, text: string) {
   return { decision, alias: matchedAlias, error: null as string | null };
 }
 
-export async function fetchAgent(context: any, agentId: string) {
+export async function fetchAgent(context: RuntimeContext, agentId: string) {
   const { data, error } = await context.supabase
     .from("B_bot_agents")
     .select("*")
@@ -90,7 +102,7 @@ export async function fetchAgent(context: any, agentId: string) {
   return { data: parent as AgentRow | null };
 }
 
-export async function fetchKb(context: any, kbId: string) {
+export async function fetchKb(context: RuntimeContext, kbId: string) {
   const { data, error } = await context.supabase
     .from("B_bot_knowledge_bases")
     .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
@@ -101,7 +113,7 @@ export async function fetchKb(context: any, kbId: string) {
   return { data: data as KbRow | null };
 }
 
-export async function fetchAdminKbs(context: any) {
+export async function fetchAdminKbs(context: RuntimeContext) {
   const { data, error } = await context.supabase
     .from("B_bot_knowledge_bases")
     .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
@@ -112,7 +124,7 @@ export async function fetchAdminKbs(context: any) {
   return { data: (data || []) as KbRow[] };
 }
 
-export async function createSession(context: any, agentId: string | null) {
+export async function createSession(context: RuntimeContext, agentId: string | null) {
   const sessionCode = `p_${Math.random().toString(36).slice(2, 8)}`;
   const payload = {
     org_id: context.orgId,
@@ -126,7 +138,7 @@ export async function createSession(context: any, agentId: string | null) {
   return { data };
 }
 
-export async function getRecentTurns(context: any, sessionId: string, limit = 5) {
+export async function getRecentTurns(context: RuntimeContext, sessionId: string, limit = 5) {
   const { data, error } = await context.supabase
     .from("D_conv_turns")
     .select("*")

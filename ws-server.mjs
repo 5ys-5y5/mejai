@@ -1,6 +1,6 @@
 /* Minimal WebSocket server entrypoint for Railway */
-const http = require("http");
-const WebSocket = require("ws");
+import http from "http";
+import WebSocket from "ws";
 
 const PORT = Number(process.env.PORT || 8080);
 const APP_BASE_URL = (process.env.APP_BASE_URL || "http://localhost:3000").replace(/\/$/, "");

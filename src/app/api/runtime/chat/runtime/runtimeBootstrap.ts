@@ -30,6 +30,33 @@ type Body = {
   };
 };
 
+type SupabaseQueryLike = {
+  select: (...args: unknown[]) => SupabaseQueryLike;
+  eq: (...args: unknown[]) => SupabaseQueryLike;
+  in: (...args: unknown[]) => SupabaseQueryLike;
+  maybeSingle: () => Promise<{ data?: unknown }>;
+};
+
+type SupabaseClientLike = {
+  from: (table: string) => SupabaseQueryLike;
+};
+
+type RuntimeContext = {
+  supabase: SupabaseClientLike;
+  user: { id: string };
+  orgId: string;
+};
+
+type AgentShape = {
+  id: string | null;
+  name?: string | null;
+  llm?: string | null;
+  kb_id?: string | null;
+  mcp_tool_ids?: string[] | null;
+};
+
+type CompiledPolicy = ReturnType<typeof compilePolicy>;
+
 type BootstrapParams = {
   req: NextRequest;
   debugEnabled: boolean;
@@ -42,15 +69,15 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   | {
       response: null;
       state: {
-        context: any;
-        authContext: any;
+        context: RuntimeContext;
+        authContext: RuntimeContext;
         body: Body | null;
-        agent: any;
+        agent: AgentShape;
         message: string;
         conversationMode: string;
         kb: KbRow;
-        adminKbs: any[];
-        compiledPolicy: any;
+        adminKbs: Array<Record<string, unknown>>;
+        compiledPolicy: CompiledPolicy;
         allowedToolNames: Set<string>;
         allowedToolIdByName: Map<string, string>;
         allowedToolVersionByName: Map<string, string | null>;
@@ -59,16 +86,16 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         providerAvailable: string[];
         providerConfig: { mall_id: string | null; shop_no: string | null; board_no: string | null };
         runtimeFlags: { restock_lite: boolean };
-        authSettings: any;
+        authSettings: Record<string, unknown> | null;
         userPlan: string | null;
         userIsAdmin: boolean | null;
         userRole: string | null;
         userOrgId: string | null;
         sessionId: string;
         reusedSession: boolean;
-        recentTurns: any[];
+        recentTurns: Array<Record<string, unknown>>;
         firstTurnInSession: boolean;
-        lastTurn: any;
+        lastTurn: Record<string, unknown> | null;
         nextSeq: number;
         prevBotContext: Record<string, unknown>;
       };
@@ -118,7 +145,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     return { response: respond({ error: "INVALID_BODY" }, { status: 400 }), state: null };
   }
 
-  let agent: any = null;
+  let agent: AgentShape | null = null;
   const agentLookupStartedAt = Date.now();
   if (agentId) {
     const agentRes = await fetchAgent(context, agentId);
@@ -205,11 +232,11 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     const value = providers[key];
     return value && Object.keys(value).length > 0;
   });
-  const cafe24Provider = providers.cafe24 || {};
+  const cafe24Provider = (providers.cafe24 || {}) as Record<string, unknown>;
   const providerConfig = {
-    mall_id: (cafe24Provider as any)?.mall_id ? String((cafe24Provider as any).mall_id) : null,
-    shop_no: (cafe24Provider as any)?.shop_no ? String((cafe24Provider as any).shop_no) : null,
-    board_no: (cafe24Provider as any)?.board_no ? String((cafe24Provider as any).board_no) : null,
+    mall_id: cafe24Provider.mall_id ? String(cafe24Provider.mall_id) : null,
+    shop_no: cafe24Provider.shop_no ? String(cafe24Provider.shop_no) : null,
+    board_no: cafe24Provider.board_no ? String(cafe24Provider.board_no) : null,
   };
   pushRuntimeTimingStage(timingStages, "load_auth_settings", iamLookupStartedAt);
 
@@ -281,7 +308,9 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           id: String(t.id),
           name: String(t.name || ""),
           provider_key: String(t.provider_key || ""),
-          version: typeof (t as any).version === "string" ? String((t as any).version) : null,
+          version: typeof (t as Record<string, unknown>).version === "string"
+            ? String((t as Record<string, unknown>).version)
+            : null,
         });
       });
 
@@ -310,15 +339,18 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           id: String(t.id),
           name: String(t.name || ""),
           provider_key: String(t.provider_key || ""),
-          version: typeof (t as any).version === "string" ? String((t as any).version) : null,
+          version: typeof (t as Record<string, unknown>).version === "string"
+            ? String((t as Record<string, unknown>).version)
+            : null,
         });
       });
     }
 
     Array.from(resolvedTools.values()).forEach((t) => {
       const name = String(t.name || "").trim();
-      const key = `${String((t as any).provider_key || "").trim()}:${name}`;
-      const id = String((t as any).id || "").trim();
+      const tRecord = t as Record<string, unknown>;
+      const key = `${String(tRecord.provider_key || "").trim()}:${name}`;
+      const id = String(tRecord.id || "").trim();
       if (!name) return;
       allowedToolNames.add(key);
       const list = allowedToolByName.get(name) || [];
@@ -328,7 +360,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         allowedToolIdByName.set(name, id);
       }
       if (!allowedToolVersionByName.has(name)) {
-        allowedToolVersionByName.set(name, (t as any).version || null);
+        allowedToolVersionByName.set(name, (t as Record<string, unknown>).version || null);
       }
     });
   }

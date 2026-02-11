@@ -77,11 +77,8 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     if (normalizedBusinessNumber.length !== 10) {
-      setExistingOrg(null);
-      setNameLocked(false);
       return;
     }
-
     let cancelled = false;
     const supabase = getSupabaseClient();
     if (!supabase) return () => {};
@@ -120,7 +117,7 @@ export default function OnboardingPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [normalizedBusinessNumber]);
+  }, [normalizedBusinessNumber, orgName]);
 
   const nextStep = async () => {
     if (currentStep === 1) {
@@ -330,7 +327,16 @@ export default function OnboardingPage() {
                   <Input
                     placeholder="000-00-00000"
                     value={formattedBusinessNumber}
-                    onChange={(e) => setBusinessNumber(e.target.value)}
+                    onChange={(e) => {
+                      const nextValue = e.target.value;
+                      setBusinessNumber(nextValue);
+                      const normalizedNext = nextValue.replace(/\D/g, "").slice(0, 10);
+                      if (normalizedNext.length !== 10) {
+                        setExistingOrg(null);
+                        setNameLocked(false);
+                        setIsCheckingOrg(false);
+                      }
+                    }}
                   />
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {isCheckingOrg ? (

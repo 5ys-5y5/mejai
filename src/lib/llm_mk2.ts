@@ -50,7 +50,6 @@ export async function runOpenAI(messages: ChatMessage[], userText: string): Prom
 
 export async function runGemini(messages: ChatMessage[]): Promise<LlmResult> {
   const systemMessage = messages.find((m) => m.role === "system");
-  const historyMessages = messages.filter((m) => m.role !== "system" && m.role !== "user"); // Actually last user message should be separated
   // Gemini chat history requires alternating user/model
   // Simplified: use generateContent with all text if strictly one-shot, or startChat
 
@@ -70,7 +69,7 @@ export async function runGemini(messages: ChatMessage[]): Promise<LlmResult> {
   });
 
   const chat = genModel.startChat({
-    history: history as any, // SDK types mismatch sometimes, casting safely
+    history: history as unknown as Array<{ role: "user" | "model"; parts: Array<{ text: string }> }>,
   });
 
   const result = await chat.sendMessage(lastUserMsg?.content || "");

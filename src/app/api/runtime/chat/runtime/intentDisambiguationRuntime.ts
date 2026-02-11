@@ -2,7 +2,7 @@ import { resolveQuickReplyConfig, type RuntimeQuickReplyConfig } from "./quickRe
 import { resolveRuntimeTemplate } from "./promptTemplateRuntime";
 
 type DisambiguationParams = {
-  context: any;
+  context: unknown;
   sessionId: string;
   nextSeq: number;
   message: string;
@@ -20,7 +20,7 @@ type DisambiguationParams = {
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -50,14 +50,18 @@ function buildIntentDisambiguationPrompt(input: {
     key: "intent_disambiguation_title",
     botContext: {
       ...(input.prevBotContext || {}),
-      template_intent_disambiguation_title: String((input.prevBotContext as any).intent_disambiguation_prompt_title || ""),
+      template_intent_disambiguation_title: String(
+        (input.prevBotContext as Record<string, unknown>).intent_disambiguation_prompt_title || ""
+      ),
     },
   }) || defaultTitle;
   const example = resolveRuntimeTemplate({
     key: "intent_disambiguation_example",
     botContext: {
       ...(input.prevBotContext || {}),
-      template_intent_disambiguation_example: String((input.prevBotContext as any).intent_disambiguation_prompt_example || ""),
+      template_intent_disambiguation_example: String(
+        (input.prevBotContext as Record<string, unknown>).intent_disambiguation_prompt_example || ""
+      ),
     },
   }) || defaultExample;
   const lines = input.options.map((intent, idx) => `- ${idx + 1}번 | ${input.intentLabel(intent)}`);
@@ -76,10 +80,11 @@ function resolveIntentDisambiguationQuickReplyConfig(input: {
   prevBotContext: Record<string, unknown>;
   sourceText: string;
 }): RuntimeQuickReplyConfig {
-  const configuredMinRaw = Number((input.prevBotContext as any).intent_disambiguation_min_select ?? 0);
-  const configuredMaxRaw = Number((input.prevBotContext as any).intent_disambiguation_max_select ?? 0);
-  const explicitMode = (input.prevBotContext as any).intent_disambiguation_mode;
-  const explicitMulti = Boolean((input.prevBotContext as any).intent_disambiguation_multi === true);
+  const prevContext = input.prevBotContext as Record<string, unknown>;
+  const configuredMinRaw = Number(prevContext.intent_disambiguation_min_select ?? 0);
+  const configuredMaxRaw = Number(prevContext.intent_disambiguation_max_select ?? 0);
+  const explicitMode = prevContext.intent_disambiguation_mode;
+  const explicitMulti = Boolean(prevContext.intent_disambiguation_multi === true);
   const connectorSignal = /(,|\/|그리고|및|and)/i.test(String(input.sourceText || ""));
   return resolveQuickReplyConfig({
     optionsCount: input.options.length,
@@ -136,8 +141,10 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
   let effectiveMessageForIntent = message;
 
   if (prevBotContext.intent_disambiguation_pending) {
-    const options = Array.isArray((prevBotContext as any).intent_disambiguation_options)
-      ? ((prevBotContext as any).intent_disambiguation_options as string[]).map((v) => String(v)).filter(Boolean)
+    const options = Array.isArray((prevBotContext as Record<string, unknown>).intent_disambiguation_options)
+      ? ((prevBotContext as Record<string, unknown>).intent_disambiguation_options as string[])
+          .map((v) => String(v))
+          .filter(Boolean)
       : [];
     const picked = parseIndexedChoices(message, options.length);
     if (picked.length === 0) {
@@ -196,8 +203,10 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
     !prevBotContext.restock_pending &&
     !prevBotContext.phone_reuse_pending
   ) {
-    const queuedIntents = Array.isArray((prevBotContext as any).intent_queue)
-      ? ((prevBotContext as any).intent_queue as string[]).map((v) => String(v)).filter(Boolean)
+    const queuedIntents = Array.isArray((prevBotContext as Record<string, unknown>).intent_queue)
+      ? ((prevBotContext as Record<string, unknown>).intent_queue as string[])
+          .map((v) => String(v))
+          .filter(Boolean)
       : [];
     if (queuedIntents.length > 0 && (isYesText(message) || /다음|계속/.test(message))) {
       forcedIntentQueue = [queuedIntents[0]];

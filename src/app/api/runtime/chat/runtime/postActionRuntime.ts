@@ -1,7 +1,18 @@
 import { resolveQuickReplyConfig } from "./quickReplyConfigRuntime";
 
+type SupabaseLike = {
+  from: (table: string) => {
+    select: (...args: unknown[]) => {
+      eq: (...args: unknown[]) => { maybeSingle: () => Promise<{ data?: { metadata?: unknown } | null }> };
+    };
+    update: (...args: unknown[]) => { eq: (...args: unknown[]) => Promise<unknown> };
+  };
+};
+
+type RuntimeContext = { supabase: SupabaseLike };
+
 type PostActionRuntimeParams = {
-  context: any;
+  context: RuntimeContext;
   prevBotContext: Record<string, unknown>;
   resolvedIntent: string;
   prevEntity: Record<string, unknown>;

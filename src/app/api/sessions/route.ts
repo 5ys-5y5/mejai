@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerSupabaseClient } from "@/lib/supabaseServer";
 import { getServerContext } from "@/lib/serverAuth";
 
 function makeSessionCode() {

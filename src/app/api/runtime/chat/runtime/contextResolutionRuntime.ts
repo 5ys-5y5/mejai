@@ -2,7 +2,7 @@ import type { PolicyEvalContext } from "@/lib/policyEngine";
 import { resolveAddressWithReuse, resolvePhoneWithReuse } from "./memoryReuseRuntime";
 
 type ContextResolutionParams = {
-  context: any;
+  context: unknown;
   sessionId: string;
   latestTurnId: string | null;
   message: string;
@@ -32,7 +32,7 @@ type ContextResolutionParams = {
   isYesText: (text: string) => boolean;
   isNoText: (text: string) => boolean;
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,

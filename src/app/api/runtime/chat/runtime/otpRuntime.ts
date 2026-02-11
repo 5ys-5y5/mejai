@@ -1,6 +1,6 @@
 import { resolvePhoneWithReuse } from "./memoryReuseRuntime";
 
-export function readOtpState(lastTurn: any) {
+export function readOtpState(lastTurn: unknown) {
   const pending = Boolean(lastTurn?.bot_context?.otp_pending);
   return {
     pending,
@@ -11,7 +11,7 @@ export function readOtpState(lastTurn: any) {
 }
 
 
-export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Promise<Response | null> {
+export async function handlePreSensitiveOtpGuard(input: Record<string, unknown>): Promise<Response | null> {
   const {
     finalCalls,
     isOtpRequiredTool,
@@ -44,7 +44,7 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
     respond,
   } = input;
 
-  const hasSensitivePlannedCall = finalCalls.some((call: any) => isOtpRequiredTool(call.name));
+  const hasSensitivePlannedCall = finalCalls.some((call: { name?: string }) => isOtpRequiredTool(call.name));
   if (
     requiresOtpForIntent(resolvedIntent) &&
     hasSensitivePlannedCall &&
@@ -86,7 +86,7 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
         {
           intent: resolvedIntent,
           stage: "otp.pre_sensitive_call",
-          planned_calls: finalCalls.map((call: any) => call.name),
+          planned_calls: finalCalls.map((call: { name?: string }) => call.name),
           allowed_tool_names: Array.from(allowedToolNames),
         },
         { destination: otpDestination }
@@ -134,7 +134,8 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
       });
       return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
     }
-    const otpRefValue = String((sendResult.data as any)?.otp_ref || "").trim();
+    const sendData = (sendResult.data ?? {}) as Record<string, unknown>;
+    const otpRefValue = String(sendData.otp_ref || "").trim();
     const prompt = "문자로 전송된 인증번호를 입력해 주세요.";
     const reply = makeReply(prompt);
     await insertTurn({
@@ -160,7 +161,7 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
 }
 
 
-export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>) {
+export async function handleOtpLifecycleAndOrderGate(input: Record<string, unknown>) {
   let {
     customerVerificationToken,
     policyContext,
@@ -279,7 +280,8 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
         });
         return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }), otpVerifiedThisTurn, otpPending, customerVerificationToken, policyContext, auditEntity, mcpCandidateCalls };
       }
-      const otpRefValue = String((sendResult.data as any)?.otp_ref || "").trim();
+      const sendData = (sendResult.data ?? {}) as Record<string, unknown>;
+      const otpRefValue = String(sendData.otp_ref || "").trim();
       const prompt = "문자로 전송된 인증번호를 입력해 주세요.";
       const reply = makeReply(prompt);
       await insertTurn({
@@ -381,7 +383,8 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
       });
       return { response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }), otpVerifiedThisTurn, otpPending, customerVerificationToken, policyContext, auditEntity, mcpCandidateCalls };
     }
-    const tokenValue = String((verifyResult.data as any)?.customer_verification_token || "").trim();
+    const verifyData = (verifyResult.data ?? {}) as Record<string, unknown>;
+    const tokenValue = String(verifyData.customer_verification_token || "").trim();
     customerVerificationToken = tokenValue || null;
     policyContext = {
       ...policyContext,
@@ -490,7 +493,8 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
       });
       return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }), otpVerifiedThisTurn, otpPending, customerVerificationToken, policyContext, auditEntity, mcpCandidateCalls };
     }
-    const otpRefValue = String((sendResult.data as any)?.otp_ref || "").trim();
+    const sendData = (sendResult.data ?? {}) as Record<string, unknown>;
+    const otpRefValue = String(sendData.otp_ref || "").trim();
     const prompt = "문자로 전송된 인증번호를 입력해 주세요.";
     const reply = makeReply(prompt);
     await insertTurn({

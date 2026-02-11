@@ -11,12 +11,15 @@ function toText(value: unknown) {
 }
 
 export function extractAddressCandidatesFromSearchData(searchData: unknown, max = 5): AddressCandidate[] {
-  const rows = Array.isArray((searchData as any)?.results) ? ((searchData as any).results as any[]) : [];
+  const data = (searchData as Record<string, unknown>) || {};
+  const rows = Array.isArray(data.results)
+    ? (data.results as Array<Record<string, unknown>>)
+    : [];
   const out: AddressCandidate[] = [];
   for (const row of rows) {
-    const zipNo = toText(row?.zipNo);
-    const roadAddr = toText(row?.roadAddr || row?.roadAddrPart1);
-    const jibunAddr = toText(row?.jibunAddr);
+    const zipNo = toText(row.zipNo);
+    const roadAddr = toText(row.roadAddr || row.roadAddrPart1);
+    const jibunAddr = toText(row.jibunAddr);
     if (!zipNo) continue;
     const label = `${jibunAddr || roadAddr || "-"} / ${roadAddr || "-"} / ${zipNo}`;
     const duplicate = out.some(

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import {
   BrowserRouter,
   Routes,
@@ -618,9 +619,9 @@ function ProfileMenu() {
         tabIndex={0}
         className="group relative flex h-10 w-10 items-center justify-center rounded-lg outline-none hover:bg-slate-100 transition-all duration-150"
       >
-        <div className="h-9 w-9 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center">
+        <div className="relative h-9 w-9 rounded-full bg-slate-200 overflow-hidden flex items-center justify-center">
           {auth?.avatarUrl ? (
-            <img src={auth.avatarUrl} alt="Profile" className="h-full w-full object-cover" />
+            <Image src={auth.avatarUrl} alt="Profile" fill sizes="36px" className="object-cover" />
           ) : (
             <span className="text-xs font-semibold text-slate-700">
               {String(email || "U").slice(0, 1).toUpperCase()}
@@ -821,28 +822,6 @@ function Metric({ label, value, sub }) {
         <div className="mt-1 text-xs text-slate-500">{sub}</div>
       </div>
     </CardShell>
-  );
-}
-
-function PillToggle({ checked, onChange, children }) {
-  // NOTE: 사용자 요청에 따라 label 내부의 불필요한 span을 제거했습니다.
-  // 디자인은 첨부 이미지의 pill 형태를 따릅니다.
-  return (
-    <label
-      className={cx(
-        "inline-flex cursor-pointer select-none items-center rounded-full border px-3 py-2 text-sm font-medium transition-colors",
-        checked ? "border-slate-300 bg-slate-100 text-slate-900" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-      )}
-    >
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="sr-only"
-        aria-label={typeof children === "string" ? children : "toggle"}
-      />
-      {children}
-    </label>
   );
 }
 
@@ -1428,6 +1407,8 @@ function SimplePage({ title, children }) {
   return (
     <AppMain className="space-y-4">
       <CardShell className="p-5">
+        <div className="text-sm font-semibold text-slate-900">{title}</div>
+        <div className="mt-3">
         {children || (
           <div className="text-sm text-slate-900">
             <div className="font-semibold">UI placeholder</div>
@@ -1436,6 +1417,7 @@ function SimplePage({ title, children }) {
             </div>
           </div>
         )}
+        </div>
       </CardShell>
     </AppMain>
   );

@@ -346,7 +346,8 @@ export default function NewKbPage() {
   }, [kbType, policyJson, adminInputMode]);
 
 
-  const rulePresets: PolicyRulePreset[] = [
+  const rulePresets = useMemo<PolicyRulePreset[]>(
+    () => [
     {
       id: "abuse",
       title: "욕설 대응",
@@ -441,9 +442,12 @@ export default function NewKbPage() {
         enforce: { actions: [{ type: "format_output" }] },
       },
     },
-  ];
+    ],
+    []
+  );
 
-  const templatePresets: PolicyTemplatePreset[] = [
+  const templatePresets = useMemo<PolicyTemplatePreset[]>(
+    () => [
     {
       id: "abuse_warn",
       title: "욕설 경고",
@@ -463,9 +467,12 @@ export default function NewKbPage() {
       summary: "주문번호 필요 안내",
       value: "주문 조회를 위해 주문번호가 필요합니다. 주문번호를 알려주세요.",
     },
-  ];
+    ],
+    []
+  );
 
-  const toolPolicyPresets: PolicyToolPreset[] = [
+  const toolPolicyPresets = useMemo<PolicyToolPreset[]>(
+    () => [
     {
       id: "lookup_order",
       title: "lookup_order 필수 인자/검증",
@@ -487,7 +494,9 @@ export default function NewKbPage() {
       summary: "title/content 필수",
       policy: { required_args: ["title", "content"] },
     },
-  ];
+    ],
+    []
+  );
 
   useEffect(() => {
     if (kbType !== "admin" || adminInputMode !== "builder") return;
@@ -545,7 +554,7 @@ export default function NewKbPage() {
     return entries;
   };
 
-  const buildPolicyFromSelection = () => {
+  const buildPolicyFromSelection = useCallback(() => {
     const rules = [
       ...rulePresets.filter((r) => selectedRules[r.id]).map((r) => r.rule),
       ...customRules.map((rule) => rule.rule),
@@ -559,14 +568,14 @@ export default function NewKbPage() {
       if (selectedToolPolicies[tool.id]) tool_policies[tool.id] = tool.policy;
     });
     return { rules, templates, tool_policies };
-  };
+  }, [rulePresets, selectedRules, customRules, templatePresets, selectedTemplates, toolPolicyPresets, selectedToolPolicies]);
 
   useEffect(() => {
     if (kbType !== "admin" || adminInputMode !== "builder") return;
     const next = buildPolicyFromSelection();
     const nextText = JSON.stringify(next, null, 2);
     setPolicyJson(nextText);
-  }, [kbType, adminInputMode, customRules, selectedRules, selectedTemplates, selectedToolPolicies]);
+  }, [kbType, adminInputMode, customRules, selectedRules, selectedTemplates, selectedToolPolicies, buildPolicyFromSelection]);
 
   const handleAddCustomRule = () => {
     const title = customRuleTitle.trim() || "CUSTOM_RULE";

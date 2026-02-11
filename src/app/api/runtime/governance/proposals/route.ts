@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ensureGovernanceReadAccess } from "../_lib/access";
 import { readGovernanceConfig } from "../_lib/config";
-import { SELF_HEAL_PRINCIPLES } from "../selfHeal/principles";
+import {
+  SELF_HEAL_EVIDENCE_BY_PRINCIPLE,
+  SELF_HEAL_EVIDENCE_BY_VIOLATION,
+  SELF_HEAL_PRINCIPLES,
+  SELF_HEAL_REQUIRED_CONTRACT_FIELDS,
+  SELF_HEAL_REQUIRED_EXCEPTION_FIELDS,
+} from "../selfHeal/principles";
 import {
   SELF_HEAL_RULE_CATALOG,
   buildRuleDrivenScenarioMatrix,
@@ -107,6 +113,8 @@ export async function GET(req: NextRequest) {
     status_label: string;
     latest_event_type: string;
     suggested_diff: string | null;
+    confidence: number | null;
+    self_heal_gate: Record<string, unknown> | null;
     event_history: Array<{
       event_type: string;
       created_at: string | null;
@@ -157,6 +165,8 @@ export async function GET(req: NextRequest) {
         status_label: statusLabel("proposed"),
         latest_event_type: row.event_type,
         suggested_diff: typeof payload.suggested_diff === "string" ? payload.suggested_diff : null,
+        confidence: Number.isFinite(Number(payload.confidence)) ? Number(payload.confidence) : null,
+        self_heal_gate: readObj(payload.self_heal_gate),
         event_history: [{ event_type: row.event_type, created_at: row.created_at, payload, bot_context: readObj(row.bot_context) }],
         violation: null,
         conversation: [],
@@ -340,7 +350,13 @@ export async function GET(req: NextRequest) {
       principle: catalogPrinciples,
       event: SELF_HEAL_PRINCIPLES.event,
       violation: buildRuleDrivenViolationMap(),
-      evidenceContract: {},
+      evidenceContract: {
+        ...SELF_HEAL_PRINCIPLES.evidenceContract,
+        requiredContractFields: SELF_HEAL_REQUIRED_CONTRACT_FIELDS,
+        requiredExceptionFields: SELF_HEAL_REQUIRED_EXCEPTION_FIELDS,
+        evidenceByPrinciple: SELF_HEAL_EVIDENCE_BY_PRINCIPLE,
+        evidenceByViolation: SELF_HEAL_EVIDENCE_BY_VIOLATION,
+      },
       scenarioMatrix: buildRuleDrivenScenarioMatrix(),
       ruleCatalog: SELF_HEAL_RULE_CATALOG,
     },

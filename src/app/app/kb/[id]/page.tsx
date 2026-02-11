@@ -112,15 +112,6 @@ function getActiveAgents(items: AgentItem[]) {
   return Array.from(map.values()).sort(compareAgentVersions);
 }
 
-function buildChangeSummary(current: KbItem, prev?: KbItem | null) {
-  if (!prev) return "신규";
-  const changes: string[] = [];
-  if ((current.title || "") !== (prev.title || "")) changes.push("제목");
-  if ((current.category || "") !== (prev.category || "")) changes.push("카테고리");
-  if ((current.content || "") !== (prev.content || "")) changes.push("내용");
-  return changes.length > 0 ? `${changes.join(", ")} 변경` : "변경 없음";
-}
-
 function buildDiffLines(current?: KbItem | null, prev?: KbItem | null): DiffLine[] {
   const currLines = (current?.content || "").split(/\r?\n/);
   const prevLines = (prev?.content || "").split(/\r?\n/);
@@ -268,7 +259,7 @@ export default function EditKbPage() {
         setBaseContent(res.content || "");
         setContent(res.content || "");
         setLoading(false);
-      } catch (err) {
+      } catch {
         if (!mounted) return;
         setError("문서를 불러오지 못했습니다.");
         setLoading(false);

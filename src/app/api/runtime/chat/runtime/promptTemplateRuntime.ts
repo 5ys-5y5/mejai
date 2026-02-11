@@ -33,12 +33,12 @@ type ResolveTemplateInput = {
 
 function readOverride(target: Record<string, unknown> | null | undefined, key: TemplateKey) {
   if (!target || typeof target !== "object") return null;
-  const map = (target as any).template_overrides;
+  const map = (target as Record<string, unknown>).template_overrides;
   if (map && typeof map === "object") {
-    const fromMap = String((map as any)[key] || "").trim();
+    const fromMap = String((map as Record<string, unknown>)[key] || "").trim();
     if (fromMap) return fromMap;
   }
-  const direct = String((target as any)[`template_${key}`] || "").trim();
+  const direct = String((target as Record<string, unknown>)[`template_${key}`] || "").trim();
   return direct || null;
 }
 
@@ -92,7 +92,7 @@ export function resolveRuntimeTemplateOverridesFromPolicy(templates: Record<stri
   (Object.keys(keysByPriority) as TemplateKey[]).forEach((key) => {
     const aliases = keysByPriority[key];
     for (const alias of aliases) {
-      const value = String((source as any)[alias] || "").trim();
+      const value = String((source as Record<string, unknown>)[alias] || "").trim();
       if (value) {
         out[key] = value;
         break;
@@ -107,7 +107,7 @@ export function mergeRuntimeTemplateOverrides(
   overrides: Partial<Record<TemplateKey, string>>
 ) {
   const base = botContext && typeof botContext === "object" ? botContext : {};
-  const existing = (base as any).template_overrides;
+  const existing = (base as Record<string, unknown>).template_overrides;
   const existingMap =
     existing && typeof existing === "object"
       ? (Object.fromEntries(

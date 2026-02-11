@@ -109,3 +109,53 @@ export async function fetchProposalById(input: {
     }) || null
   );
 }
+
+export type ExceptionStats = {
+  repeat_count_7d: number;
+  repeat_count_30d: number;
+};
+
+export async function fetchExceptionStats(input: {
+  supabase: SupabaseClient;
+  fingerprint: string;
+  now?: Date;
+  orgId?: string | null;
+}) {
+  const now = input.now ?? new Date();
+  const since7d = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString();
+  const since30d = new Date(now.getTime() - 30 * 24 * 3600 * 1000).toISOString();
+  const { data, error } = await input.supabase
+    .from("F_audit_events")
+    .select("id, payload, bot_context, created_at")
+    .eq("event_type", "RUNTIME_PATCH_PROPOSAL_CREATED")
+    .gte("created_at", since30d)
+    .limit(2000);
+  if (error) throw new Error(error.message);
+  const rows = (data || []) as Array<{
+    payload?: Record<string, unknown> | null;
+    bot_context?: Record<string, unknown> | null;
+    created_at?: string | null;
+  }>;
+  const orgId = String(input.orgId || "").trim();
+  const scopedRows = orgId
+    ? rows.filter((row) => {
+        const payloadOrg = String((row.payload || {}).org_id || "").trim();
+        const contextOrg = String((row.bot_context || {}).org_id || "").trim();
+        if (payloadOrg) return payloadOrg === orgId;
+        if (contextOrg) return contextOrg === orgId;
+        return false;
+      })
+    : rows;
+  const repeat_count_30d = scopedRows.filter((row) => {
+    const gate = (row.payload || {}).self_heal_gate as Record<string, unknown> | undefined;
+    return String(gate?.exception_fingerprint || "") === input.fingerprint;
+  }).length;
+  const repeat_count_7d = scopedRows.filter((row) => {
+    const createdAt = row.created_at ? new Date(row.created_at) : null;
+    if (!createdAt || Number.isNaN(createdAt.getTime())) return false;
+    if (createdAt.toISOString() < since7d) return false;
+    const gate = (row.payload || {}).self_heal_gate as Record<string, unknown> | undefined;
+    return String(gate?.exception_fingerprint || "") === input.fingerprint;
+  }).length;
+  return { repeat_count_7d, repeat_count_30d } as ExceptionStats;
+}

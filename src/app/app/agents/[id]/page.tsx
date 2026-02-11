@@ -241,7 +241,7 @@ export default function AgentDetailPage() {
         setBaseWebsite(res.website || "");
         setBaseGoal(res.goal || "");
         setLoading(false);
-      } catch (err) {
+      } catch {
         if (!mounted) return;
         setError("에이전트를 불러오지 못했습니다.");
         setLoading(false);

@@ -173,29 +173,31 @@ export function readProductShape(raw: unknown) {
   const root = (raw || {}) as Record<string, unknown>;
   const fromProduct = (root.product || {}) as Record<string, unknown>;
   const fromProducts =
-    Array.isArray((root as any).products) && (root as any).products.length > 0
-      ? ((root as any).products[0] as Record<string, unknown>)
+    Array.isArray((root as { products?: unknown }).products) &&
+    ((root as { products?: unknown }).products as Array<unknown>).length > 0
+      ? (((root as { products?: unknown }).products as Array<unknown>)[0] as Record<string, unknown>)
       : null;
   const product = (Object.keys(fromProduct).length > 0 ? fromProduct : fromProducts) || root;
+  const productRecord = product as Record<string, unknown>;
   const productName = String(
-    (product as any).product_name ||
-      (product as any).product_name_default ||
-      (product as any).name ||
+    productRecord.product_name ||
+      productRecord.product_name_default ||
+      productRecord.name ||
       ""
   ).trim();
   const rawQty =
-    (product as any).stock_quantity ??
-    (product as any).quantity ??
-    (product as any).total_stock ??
-    (product as any).stock;
+    productRecord.stock_quantity ??
+    productRecord.quantity ??
+    productRecord.total_stock ??
+    productRecord.stock;
   const qtyNum =
     rawQty === null || rawQty === undefined || rawQty === ""
       ? null
       : Number(String(rawQty).replace(/,/g, ""));
   const soldOutRaw = String(
-    (product as any).sold_out ??
-      (product as any).soldout ??
-      (product as any).is_soldout ??
+    productRecord.sold_out ??
+      productRecord.soldout ??
+      productRecord.is_soldout ??
       ""
   )
     .trim()
@@ -207,11 +209,11 @@ export function readProductShape(raw: unknown) {
     soldOutRaw === "1" ||
     (Number.isFinite(qtyNum as number) && (qtyNum as number) <= 0);
   const thumbnailUrl = String(
-    (product as any).tiny_image ||
-      (product as any).small_image ||
-      (product as any).list_image ||
-      (product as any).image_url ||
-      (product as any).detail_image ||
+    productRecord.tiny_image ||
+      productRecord.small_image ||
+      productRecord.list_image ||
+      productRecord.image_url ||
+      productRecord.detail_image ||
       ""
   ).trim();
   return {
@@ -285,7 +287,7 @@ Output Schema: { "order_id": string | null, "phone": string | null, "address": s
     ]);
     const cleanJson = res.text.replace(/```json/g, "").replace(/```/g, "").trim();
     return JSON.parse(cleanJson);
-  } catch (e) {
+  } catch {
     return null;
   }
 }

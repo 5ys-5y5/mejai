@@ -39,8 +39,12 @@ type RuntimeStateSnapshot = {
 };
 
 export function createRuntimeConversationIo(input: {
-  context: any;
-  insertFinalTurn: (context: any, payload: Record<string, unknown>, debugPrefixJson: Record<string, unknown>) => Promise<any>;
+  context: unknown;
+  insertFinalTurn: (
+    context: unknown,
+    payload: Record<string, unknown>,
+    debugPrefixJson: Record<string, unknown>
+  ) => Promise<Record<string, unknown>>;
   pendingIntentQueue: string[];
   orgId?: string | null;
   getSnapshot: (llmModel: string | null, tools: string[]) => RuntimeStateSnapshot;

@@ -6,6 +6,37 @@ import {
 import { buildNumberedChoicePrompt, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
 import { splitAddressForUpdate } from "../shared/slotUtils";
 
+type ToolCall = { name: string; args?: Record<string, unknown>; ok?: boolean; data?: Record<string, unknown>; error?: unknown };
+type LookupOrderView = {
+  core?: Record<string, unknown>;
+  summary?: Record<string, unknown>;
+  order?: Record<string, unknown>;
+  items?: unknown;
+};
+type PolicyContext = {
+  entity?: Record<string, unknown>;
+  conversation?: Record<string, unknown>;
+};
+type ToolGateRule = { id?: string; enforce?: { actions?: Array<Record<string, unknown>> } };
+type ToolGate = { matched: ToolGateRule[] };
+
+const toRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+const readNestedArray = (value: unknown, nestedKey?: string): unknown[] => {
+  if (Array.isArray(value)) return value;
+  if (nestedKey && value && typeof value === "object") {
+    const nested = (value as Record<string, unknown>)[nestedKey];
+    if (Array.isArray(nested)) return nested;
+  }
+  return [];
+};
+
+const readRuleActions = (rule: ToolGateRule): Array<Record<string, unknown>> => {
+  const actions = rule.enforce?.actions;
+  return Array.isArray(actions) ? actions : [];
+};
+
 export function createToolAccessEvaluator(denied: Set<string>, allowed: Set<string>) {
   return (name: string) => {
     if (denied.has("*") || denied.has(name)) return false;
@@ -33,7 +64,7 @@ export function filterForcedCallsByPolicy(
   });
 }
 
-export async function normalizeAndFilterFinalCalls(input: Record<string, any>) {
+export async function normalizeAndFilterFinalCalls(input: Record<string, unknown>) {
   const {
     finalCalls: sourceCalls,
     buildDefaultOrderRange,
@@ -52,7 +83,7 @@ export async function normalizeAndFilterFinalCalls(input: Record<string, any>) {
     validateToolArgs,
   } = input;
 
-  let finalCalls = (sourceCalls || []).map((call: any) => {
+  let finalCalls = (sourceCalls || []).map((call: ToolCall) => {
     if (call.name === "list_orders") {
       const nextArgs = { ...(call.args || {}) };
       if (!nextArgs.start_date || !nextArgs.end_date) {
@@ -72,7 +103,7 @@ export async function normalizeAndFilterFinalCalls(input: Record<string, any>) {
     return call;
   });
 
-  finalCalls = finalCalls.filter((call: any) => {
+  finalCalls = finalCalls.filter((call: ToolCall) => {
     if (resolvedIntent === "restock_subscribe" && call.name === "subscribe_restock") {
       noteMcpSkip(call.name, "DEFERRED_TO_DETERMINISTIC_RESTOCK_SUBSCRIBE", { intent: resolvedIntent }, call.args || {});
       return false;
@@ -149,7 +180,7 @@ export async function normalizeAndFilterFinalCalls(input: Record<string, any>) {
 }
 
 
-export async function executeFinalToolCalls(input: Record<string, any>) {
+export async function executeFinalToolCalls(input: Record<string, unknown>) {
   const {
     finalCalls,
     hasAllowedToolName,
@@ -181,7 +212,8 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
   let listOrdersEmpty = false;
   let listOrdersChoices: Array<Record<string, unknown>> = [];
   const shouldPreserveOriginalEntity = Boolean(
-    (CHAT_PRINCIPLES as any)?.audit?.preserveOriginalEntityForMutationTargets
+    (CHAT_PRINCIPLES as { audit?: { preserveOriginalEntityForMutationTargets?: boolean } })?.audit
+      ?.preserveOriginalEntityForMutationTargets
   );
   const isMutationToolCall = (name: string) => {
     const normalized = String(name || "").trim().toLowerCase();
@@ -264,14 +296,16 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
     if (call.name === "list_orders") {
       listOrdersCalled = true;
       if (result.ok) {
-        const orders = (result.data as any)?.orders || (result.data as any)?.orders?.order || [];
+        const data = toRecord(result.data);
+        const orders = readNestedArray(data.orders, "order");
         const items = Array.isArray(orders) ? orders : [];
         if (items.length > 0) {
           const slice = items.slice(0, CHAT_PRINCIPLES.response.orderLookupPreviewMax);
           const detailMap = new Map<string, { name: string; option: string; qty: string; price: string }>();
           if (canUseTool("lookup_order") && hasAllowedToolName("lookup_order")) {
             for (const item of slice) {
-              const id = String(item?.order_id || item?.order_no || "").trim();
+              const entry = toRecord(item);
+              const id = String(entry.order_id || entry.order_no || "").trim();
               if (!id || detailMap.has(id)) continue;
               const detail = await callMcpTool(
                 context,
@@ -291,18 +325,21 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
               });
               mcpActions.push("lookup_order");
               if (detail.ok) {
-                const parsed = readLookupOrderView(detail.data);
+                const parsed = readLookupOrderView(detail.data) as LookupOrderView;
                 const core = parsed.core || {};
                 const itemsData = parsed.items;
                 const first = Array.isArray(itemsData) ? itemsData[0] : itemsData;
-                const name = first?.product_name || first?.name || first?.product_name_default || "상품 정보 확인 필요";
-                const option = first?.option_name || first?.option_value || first?.option_value_default || "기본 옵션";
-                const qty = first?.quantity || first?.qty || "1";
+                const firstRecord = toRecord(first);
+                const name =
+                  firstRecord.product_name || firstRecord.name || firstRecord.product_name_default || "상품 정보 확인 필요";
+                const option =
+                  firstRecord.option_name || firstRecord.option_value || firstRecord.option_value_default || "기본 옵션";
+                const qty = firstRecord.quantity || firstRecord.qty || "1";
                 const priceRaw =
-                  first?.price ||
-                  first?.product_price ||
-                  first?.unit_price ||
-                  first?.supply_price ||
+                  firstRecord.price ||
+                  firstRecord.product_price ||
+                  firstRecord.unit_price ||
+                  firstRecord.supply_price ||
                   core.order_price_amount ||
                   core.payment_amount ||
                   core.total_amount ||
@@ -318,16 +355,18 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
             }
           }
           listOrdersChoices = slice
-            .map((o: any, idx: number) => {
-              const id = String(o.order_id || o.order_no || "").trim();
+            .map((item, idx: number) => {
+              const entry = toRecord(item);
+              const id = String(entry.order_id || entry.order_no || "").trim();
               if (!id) return null;
-              const date = o.order_date || "";
-              const fallbackName = o.first_product_name || o.product_name || "상품 정보 확인 필요";
+              const date = entry.order_date || "";
+              const fallbackName = entry.first_product_name || entry.product_name || "상품 정보 확인 필요";
+              const actualOrderAmount = toRecord(entry.actual_order_amount);
               const fallbackPrice =
-                o?.actual_order_amount?.order_price_amount ||
-                o?.actual_order_amount?.payment_amount ||
-                o?.payment_amount ||
-                o?.total_supply_price ||
+                actualOrderAmount.order_price_amount ||
+                actualOrderAmount.payment_amount ||
+                entry.payment_amount ||
+                entry.total_supply_price ||
                 "-";
               const detail = detailMap.get(id) || {
                 name: String(fallbackName || "상품 정보 확인 필요"),
@@ -374,7 +413,7 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
 
 export function summarizeToolResults(input: {
   toolResults: Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }>;
-  readLookupOrderView: (data: unknown) => any;
+  readLookupOrderView: (data: unknown) => LookupOrderView;
 }) {
   const { toolResults, readLookupOrderView } = input;
   if (!toolResults || toolResults.length === 0) return "";
@@ -401,23 +440,27 @@ export function summarizeToolResults(input: {
       return;
     }
     if (tool.name === "track_shipment") {
-      const shipments = (tool.data as any)?.shipments || (tool.data as any)?.shipments?.shipment || [];
+      const data = toRecord(tool.data);
+      const shipments = readNestedArray(data.shipments, "shipment");
       const count = Array.isArray(shipments) ? shipments.length : 0;
       summaries.push(`track_shipment: ${count}건`);
       return;
     }
     if (tool.name === "create_ticket") {
-      const ticketId = (tool.data as any)?.ticket_id || (tool.data as any)?.id || "";
+      const data = toRecord(tool.data);
+      const ticketId = String(data.ticket_id || data.id || "");
       summaries.push(`create_ticket: ${ticketId || "성공"}`);
       return;
     }
     if (tool.name === "update_order_shipping_address") {
-      const resultOrderId = (tool.data as any)?.order_id || (tool.data as any)?.order_no || "";
+      const data = toRecord(tool.data);
+      const resultOrderId = String(data.order_id || data.order_no || "");
       summaries.push(`update_order_shipping_address: ${resultOrderId || "성공"}`);
       return;
     }
     if (tool.name === "list_orders") {
-      const orders = (tool.data as any)?.orders || (tool.data as any)?.orders?.order || [];
+      const data = toRecord(tool.data);
+      const orders = readNestedArray(data.orders, "order");
       const count = Array.isArray(orders) ? orders.length : 0;
       summaries.push(`list_orders: ${count}건`);
       return;
@@ -437,7 +480,7 @@ export function updateMcpTracking(input: {
   const { name, result, toolProviderMap, usedProviders } = input;
   let lastMcpCount: number | null = null;
   if (result.ok) {
-    const data = result.data as any;
+    const data = result.data;
     if (Array.isArray(data)) {
       lastMcpCount = data.length;
     } else if (data && typeof data === "object") {
@@ -464,14 +507,14 @@ export async function flushMcpSkipLogsWithAudit(input: {
     detail?: Record<string, unknown>;
   }>;
   insertEvent: (
-    context: any,
+    context: Record<string, unknown>,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, unknown>,
     botContext: Record<string, unknown>
   ) => Promise<unknown>;
-  context: any;
+  context: Record<string, unknown>;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
@@ -492,7 +535,7 @@ export async function flushMcpSkipLogsWithAudit(input: {
     allowedToolVersionByName,
     nowIso,
   } = input;
-  const traceId = String((context as any)?.runtimeTraceId || "").trim();
+  const traceId = String((context as Record<string, unknown>)?.runtimeTraceId || "").trim();
   for (const skip of mcpSkipQueue) {
     await insertEvent(
       context,
@@ -541,7 +584,7 @@ export async function flushMcpSkipLogsWithAudit(input: {
   mcpSkipQueue.length = 0;
 }
 
-export async function handleToolForcedResponse(input: Record<string, any>): Promise<Response | null> {
+export async function handleToolForcedResponse(input: Record<string, unknown>): Promise<Response | null> {
   const {
     toolGate,
     conversationMode,
@@ -644,7 +687,7 @@ export async function handleToolForcedResponse(input: Record<string, any>): Prom
       entity: policyContext.entity,
       selected_order_id: resolvedOrderId,
       product_decision: productDecisionRes.decision || null,
-      policy_matched: toolGate.matched.map((rule: any) => rule.id),
+      policy_matched: toolGate.matched.map((rule) => rule.id),
       address_pending: isNeedZipcodeTemplate ? true : undefined,
       address_stage: isNeedZipcodeTemplate ? "awaiting_zipcode" : undefined,
       pending_address: isNeedZipcodeTemplate ? currentAddress || null : undefined,
@@ -672,8 +715,8 @@ export function maybeQueueListOrdersSkip(input: {
   mcpCandidateCalls: string[];
   resolvedOrderId: string | null;
   resolvedIntent: string;
-  policyContext: any;
-  compiledPolicy: any;
+  policyContext: PolicyContext;
+  compiledPolicy: Record<string, unknown>;
   hasAllowedToolName: (name: string) => boolean;
   canUseTool: (name: string) => boolean;
   noteMcpSkip: (name: string, reason: string, detail?: Record<string, unknown>, args?: Record<string, unknown>) => void;
@@ -701,7 +744,8 @@ export function maybeQueueListOrdersSkip(input: {
     (resolvedIntent === "order_change" || resolvedIntent === "shipping_inquiry" || resolvedIntent === "refund_request")
   ) {
     const phone = typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : null;
-    const hasListOrdersPolicy = Boolean(compiledPolicy.toolPolicies?.list_orders);
+    const compiledToolPolicies = toRecord(compiledPolicy.toolPolicies);
+    const hasListOrdersPolicy = Boolean(compiledToolPolicies.list_orders);
     if (phone && hasListOrdersPolicy && hasAllowedToolName("list_orders") && canUseTool("list_orders")) {
       noteMcpSkip(
         "list_orders",
@@ -715,14 +759,14 @@ export function maybeQueueListOrdersSkip(input: {
 
 export async function emitPreMcpDecisionEvent(input: {
   insertEvent: (
-    context: any,
+    context: Record<string, unknown>,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, unknown>,
     botContext: Record<string, unknown>
   ) => Promise<unknown>;
-  context: any;
+  context: Record<string, unknown>;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
@@ -733,9 +777,9 @@ export async function emitPreMcpDecisionEvent(input: {
   denied: Set<string>;
   allowed: Set<string>;
   allowedToolNames: Set<string>;
-  activePolicyConflicts: any[];
+  activePolicyConflicts: Array<Record<string, unknown>>;
   resolvedOrderId: string | null;
-  policyContext: any;
+  policyContext: PolicyContext;
   maskPhone: (value?: string | null) => string;
 }) {
   const {
@@ -807,27 +851,27 @@ export async function emitPreMcpDecisionEvent(input: {
 }
 
 export async function emitToolPolicyConflictIfAny(input: {
-  toolGate: any;
+  toolGate: ToolGate;
   insertEvent: (
-    context: any,
+    context: Record<string, unknown>,
     sessionId: string,
     turnId: string | null,
     eventType: string,
     payload: Record<string, unknown>,
     botContext: Record<string, unknown>
   ) => Promise<unknown>;
-  context: any;
+  context: Record<string, unknown>;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
-  policyContext: any;
+  policyContext: PolicyContext;
 }) {
   const { toolGate, insertEvent, context, sessionId, latestTurnId, resolvedIntent, policyContext } = input;
-  const toolGateHasForcedResponse = toolGate.matched.some((rule: any) =>
-    (rule.enforce?.actions || []).some((action: any) => String(action.type || "") === "force_response_template")
+  const toolGateHasForcedResponse = toolGate.matched.some((rule) =>
+    readRuleActions(rule).some((action) => String(action.type || "") === "force_response_template")
   );
-  const toolGateHasForcedTool = toolGate.matched.some((rule: any) =>
-    (rule.enforce?.actions || []).some((action: any) => String(action.type || "") === "force_tool_call")
+  const toolGateHasForcedTool = toolGate.matched.some((rule) =>
+    readRuleActions(rule).some((action) => String(action.type || "") === "force_tool_call")
   );
   if (toolGateHasForcedResponse && toolGateHasForcedTool) {
     await insertEvent(
@@ -837,7 +881,7 @@ export async function emitToolPolicyConflictIfAny(input: {
       "POLICY_CONFLICT_DETECTED",
       {
         stage: "tool",
-        matched_rule_ids: toolGate.matched.map((rule: any) => rule.id),
+        matched_rule_ids: toolGate.matched.map((rule) => rule.id),
         conflict: "force_response_template vs force_tool_call",
         resolution: "force_response_template_precedence",
       },
@@ -847,7 +891,7 @@ export async function emitToolPolicyConflictIfAny(input: {
 }
 
 
-export async function handleOrderSelectionAndListOrdersGuards(input: Record<string, any>) {
+export async function handleOrderSelectionAndListOrdersGuards(input: Record<string, unknown>) {
   let { resolvedOrderId, policyContext } = input;
   const {
     listOrdersChoices,
@@ -880,10 +924,10 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     const phoneFromSlot = typeof policyContext.entity?.phone === "string" ? normalizePhoneDigits(policyContext.entity.phone) : "";
     const selectedOrderId = String(selected.order_id || "").trim();
     const successfulLookupTools = toolResults.filter(
-      (tool: any) => tool.name === "lookup_order" && tool.ok && tool.data
+      (tool: ToolCall) => tool.name === "lookup_order" && tool.ok && tool.data
     );
-    const getLookupOrderId = (tool: any) => {
-      const parsed = readLookupOrderView(tool?.data);
+    const getLookupOrderId = (tool: ToolCall) => {
+      const parsed = readLookupOrderView(tool?.data) as LookupOrderView;
       const core = (parsed?.core || {}) as Record<string, unknown>;
       const order = (parsed?.order || {}) as Record<string, unknown>;
       return String(
@@ -895,12 +939,13 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
       ).trim();
     };
     const lookupForSelected =
-      successfulLookupTools.find((tool: any) => getLookupOrderId(tool) === selectedOrderId) ||
+      successfulLookupTools.find((tool: ToolCall) => getLookupOrderId(tool) === selectedOrderId) ||
       (successfulLookupTools.length === 1 ? successfulLookupTools[0] : null);
     const receiverPhoneFromLookup = (() => {
       if (!lookupForSelected?.data) return "";
-      const parsed = readLookupOrderView(lookupForSelected.data);
-      const receivers = Array.isArray((parsed.order as any)?.receivers) ? (parsed.order as any).receivers : [];
+      const parsed = readLookupOrderView(lookupForSelected.data) as LookupOrderView;
+      const order = toRecord(parsed.order);
+      const receivers = Array.isArray(order.receivers) ? (order.receivers as Array<Record<string, unknown>>) : [];
       const first = receivers[0] || {};
       return normalizePhoneDigits(String(first?.cellphone || first?.phone || ""));
     })();
@@ -942,9 +987,9 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     resolvedOrderId = selected.order_id;
     const shippingBeforeSnapshot = (() => {
       if (!lookupForSelected?.data) return null;
-      const parsed = readLookupOrderView(lookupForSelected.data);
-      const orderObj = (parsed.order || {}) as any;
-      const receivers = Array.isArray(orderObj.receivers) ? orderObj.receivers : [];
+      const parsed = readLookupOrderView(lookupForSelected.data) as LookupOrderView;
+      const orderObj = toRecord(parsed.order);
+      const receivers = Array.isArray(orderObj.receivers) ? (orderObj.receivers as Array<Record<string, unknown>>) : [];
       const first = (receivers[0] || {}) as Record<string, unknown>;
       const zipcode = String(first.zipcode || "").trim();
       const address1 = String(first.address1 || "").trim();
@@ -977,8 +1022,12 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
   }
 
   if (hasChoiceAnswerCandidates(listOrdersChoices.length)) {
-    const templateOverrides = resolveRuntimeTemplateOverridesFromPolicy((compiledPolicy as any)?.templates || {});
-    const lines = listOrdersChoices.map((o: any) => (o.label ? o.label : `${o.index}번 주문`));
+    const templateOverrides = resolveRuntimeTemplateOverridesFromPolicy(
+      (compiledPolicy as Record<string, unknown>)?.templates || {}
+    );
+    const lines = listOrdersChoices.map((choice: Record<string, unknown>) =>
+      choice.label ? String(choice.label) : `${choice.index}번 주문`
+    );
     const replyText = buildNumberedChoicePrompt({
       titleKey: "order_choice_title",
       headerKey: "order_choice_header",
@@ -1005,7 +1054,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     await insertEvent(context, sessionId, latestTurnId, "ORDER_CHOICES_PRESENTED", { choices: listOrdersChoices }, { intent_name: resolvedIntent });
     const quickReplies = listOrdersChoices
       .slice(0, CHAT_PRINCIPLES.response.quickReplyMax)
-      .map((item: any) => ({ label: `${item.index}번`, value: String(item.index) }));
+      .map((item: Record<string, unknown>) => ({ label: `${item.index}번`, value: String(item.index) }));
     const quickReplyConfig = resolveQuickReplyConfig({
       optionsCount: quickReplies.length,
       minSelectHint: 1,
@@ -1050,7 +1099,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
   }
 
   const listOrdersScopeFailure = toolResults.find(
-    (tool: any) => tool.name === "list_orders" && !tool.ok && String(tool.error || "").toUpperCase().includes("SCOPE_ERROR")
+    (tool: ToolCall) => tool.name === "list_orders" && !tool.ok && String(tool.error || "").toUpperCase().includes("SCOPE_ERROR")
   );
   if (listOrdersScopeFailure) {
     const maskedPhone = typeof policyContext.entity?.phone === "string" ? maskPhone(policyContext.entity.phone) : "-";
@@ -1096,7 +1145,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions }), resolvedOrderId, policyContext };
   }
 
-  const listOrdersTokenRefreshFailure = toolResults.find((tool: any) => {
+  const listOrdersTokenRefreshFailure = toolResults.find((tool: ToolCall) => {
     if (tool.name !== "list_orders" || tool.ok) return false;
     const errorText = String(tool.error || "").toUpperCase();
     return (

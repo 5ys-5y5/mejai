@@ -100,7 +100,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "INVALID_PARAMS", message: validation.error }, { status: 400 });
   }
 
-  const conditionCheck = checkPolicyConditions((tool.conditions as any) || null, resolvedParams);
+  const conditionCheck = checkPolicyConditions(
+    (tool.conditions as Record<string, unknown> | null) || null,
+    resolvedParams
+  );
   if (!conditionCheck.ok) {
     return NextResponse.json({ error: conditionCheck.error }, { status: 403 });
   }
@@ -119,7 +122,7 @@ export async function POST(req: NextRequest) {
         session_id: body.session_id ?? null,
         tool_id: tool.id,
         tool_version: tool.version ?? null,
-        tool_name: `${String((tool as any).provider_key || "unknown")}:${tool.name}`,
+        tool_name: `${String(tool.provider_key || "unknown")}:${tool.name}`,
         request_payload: resolvedParams,
         response_payload: null,
         status: "rate_limited",
@@ -134,7 +137,7 @@ export async function POST(req: NextRequest) {
 
   const start = Date.now();
   const result = await callAdapter(
-    String((tool as any).provider_key || "unknown"),
+    String(tool.provider_key || "unknown"),
     resolvedParams,
     {
       supabase: context.supabase,
@@ -146,14 +149,17 @@ export async function POST(req: NextRequest) {
   const latency = Date.now() - start;
 
   const responsePayload = result.data ? { ...result.data } : {};
-  const masked = applyMasking(responsePayload, (tool.masking_rules as any) || null);
+  const masked = applyMasking(
+    responsePayload,
+    (tool.masking_rules as Record<string, unknown> | null) || null
+  );
 
   await context.supabase.from("F_audit_mcp_tools").insert({
     org_id: context.orgId,
     session_id: body.session_id ?? null,
     tool_id: tool.id,
     tool_version: tool.version ?? null,
-    tool_name: `${String((tool as any).provider_key || "unknown")}:${tool.name}`,
+    tool_name: `${String(tool.provider_key || "unknown")}:${tool.name}`,
     request_payload: resolvedParams,
     response_payload: masked.masked,
     status: result.status,
@@ -164,7 +170,7 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({
-    tool: `${String((tool as any).provider_key || "unknown")}:${tool.name}`,
+    tool: `${String(tool.provider_key || "unknown")}:${tool.name}`,
     version: tool.version,
     status: result.status,
     data: masked.masked,

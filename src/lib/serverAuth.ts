@@ -39,7 +39,7 @@ function extractTokenFromCookie(cookieHeader?: string) {
   if (cookies.size === 0) return null;
 
   // handle chunked cookies: sb-<ref>-auth-token.0, .1, ...
-  for (const [key, value] of cookies.entries()) {
+  for (const key of cookies.keys()) {
     if (key.includes("auth-token.") && key.startsWith("sb-")) {
       const prefix = key.split(".")[0];
       const parts: string[] = [];

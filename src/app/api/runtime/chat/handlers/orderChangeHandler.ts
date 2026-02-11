@@ -54,17 +54,19 @@ function hasCompleteAddressTriple(input: {
 
 type OrderChangeToolResult = { name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown };
 
+type AddressSearchResult = { status: string; data?: unknown };
+
 type HandleOrderChangePostToolsInput = {
   toolResults: OrderChangeToolResult[];
   resolvedIntent: string;
   callAddressSearchWithAudit: (
-    context: any,
+    context: unknown,
     keyword: string,
     sessionId: string,
     turnId: string | null,
     botContext: Record<string, unknown>
-  ) => Promise<any>;
-  context: any;
+  ) => Promise<AddressSearchResult>;
+  context: unknown;
   currentAddress: string;
   sessionId: string;
   latestTurnId: string | null;
@@ -77,7 +79,7 @@ type HandleOrderChangePostToolsInput = {
   nextSeq: number;
   message: string;
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -97,13 +99,13 @@ type HandleOrderChangePostToolsInput = {
 type MissingZipcodeFlowInput = {
   resolvedIntent: string;
   callAddressSearchWithAudit: (
-    context: any,
+    context: unknown,
     keyword: string,
     sessionId: string,
     turnId: string | null,
     botContext: Record<string, unknown>
-  ) => Promise<any>;
-  context: any;
+  ) => Promise<AddressSearchResult>;
+  context: unknown;
   currentAddress: string;
   sessionId: string;
   latestTurnId: string | null;
@@ -116,7 +118,7 @@ type MissingZipcodeFlowInput = {
   nextSeq: number;
   message: string;
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -567,7 +569,9 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
         ? String(policyContextEntity.shipping_before_address_full).trim()
         : "";
       const updateData = (updateSuccess.data || {}) as Record<string, unknown>;
-      const updateReceivers = Array.isArray((updateData as any).receivers) ? ((updateData as any).receivers as Array<Record<string, unknown>>) : [];
+      const updateReceivers = Array.isArray((updateData as { receivers?: unknown }).receivers)
+        ? ((updateData as { receivers?: unknown }).receivers as Array<Record<string, unknown>>)
+        : [];
       const appliedReceiver = (updateReceivers[0] || {}) as Record<string, unknown>;
       const appliedZip = String(appliedReceiver.zipcode || "").trim();
       const appliedAddress1 = String(appliedReceiver.address1 || "").trim();

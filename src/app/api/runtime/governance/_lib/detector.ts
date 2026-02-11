@@ -901,8 +901,8 @@ export function detectPrincipleViolations(input: {
           : {};
       const requestAddress1 = String(requestPayload.address1 || "").trim();
       const requestZipcode = String(requestPayload.zipcode || "").trim();
-      const receivers = Array.isArray((responsePayload as any).receivers)
-        ? ((responsePayload as any).receivers as Array<Record<string, unknown>>)
+      const receivers = Array.isArray(responsePayload.receivers)
+        ? (responsePayload.receivers as Array<Record<string, unknown>>)
         : [];
       const firstReceiver = receivers[0] || {};
       const responseAddress1 = String(firstReceiver.address1 || "").trim();

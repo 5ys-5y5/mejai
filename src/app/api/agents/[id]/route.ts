@@ -82,7 +82,12 @@ export async function GET(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
   }
 
-  let { data, error } = await buildScopedQuery(serverContext.supabase, id, serverContext.orgId).maybeSingle();
+  const { data: scopedData, error } = await buildScopedQuery(
+    serverContext.supabase,
+    id,
+    serverContext.orgId
+  ).maybeSingle();
+  let data = scopedData;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -154,11 +159,12 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const rawId = routeId;
   const urlId = req.nextUrl.pathname.split("/").pop() || "";
   const id = normalizeId(rawId && rawId !== "undefined" ? rawId : urlId);
-  let { data: existing, error: fetchError } = await buildScopedQuery(
+  const { data: fetched, error: fetchError } = await buildScopedQuery(
     serverContext.supabase,
     id,
     serverContext.orgId
   ).maybeSingle();
+  let existing = fetched;
 
   if (fetchError) {
     return NextResponse.json({ error: fetchError.message }, { status: 400 });

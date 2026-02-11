@@ -66,14 +66,10 @@ const numberFields: Array<keyof LandingSettings> = [
 
 export function AdminClient() {
   const router = useRouter();
-  const [settings, setSettings] = useState<LandingSettings>(defaultLandingSettings);
+  const [settings, setSettings] = useState<LandingSettings>(() => loadLandingSettings());
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<SectionKey>("hero");
   const [ready, setReady] = useState(false);
-
-  useEffect(() => {
-    setSettings(loadLandingSettings());
-  }, []);
 
   useEffect(() => {
     let mounted = true;

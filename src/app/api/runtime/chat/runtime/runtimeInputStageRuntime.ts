@@ -17,8 +17,13 @@ type ContextResolutionResult = {
   policyContext: PolicyEvalContext;
 };
 
+type CompiledPolicy = {
+  conflicts?: Array<{ intentScope?: string }>;
+  templates?: Record<string, unknown>;
+};
+
 export async function runInputStageRuntime(input: {
-  compiledPolicy: any;
+  compiledPolicy: CompiledPolicy;
   resolvedContext: ContextResolutionResult;
   lockIntentToRestockSubscribe: boolean;
   expectedInput: string | null;
@@ -29,14 +34,14 @@ export async function runInputStageRuntime(input: {
   derivedZipcode: string | null;
   derivedAddress: string | null;
   prevBotContext: Record<string, unknown>;
-  context: any;
+  context: unknown;
   sessionId: string;
   latestTurnId: string | null;
   nextSeq: number;
   maskPhone: (value?: string | null) => string;
   normalizeOrderChangeAddressPrompt: (intent: string, text: string) => string;
   insertEvent: (
-    context: any,
+    context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
@@ -89,12 +94,12 @@ export async function runInputStageRuntime(input: {
   };
 
   let resolvedIntent = resolvedContext.resolvedIntent;
-  let resolvedOrderId = resolvedContext.resolvedOrderId;
+  const resolvedOrderId = resolvedContext.resolvedOrderId;
   let policyContext: PolicyEvalContext = resolvedContext.policyContext;
 
   const inputGate = runPolicyStage(compiledPolicy, "input", policyContext);
   const matchedRuleIds = inputGate.matched.map((rule) => rule.id);
-  const matchedTemplateIds = extractTemplateIds(inputGate.matched as any[]);
+  const matchedTemplateIds = extractTemplateIds(inputGate.matched as Array<Record<string, unknown>>);
   let usedRuleIds = [...matchedRuleIds];
   let usedTemplateIds = [...matchedTemplateIds];
   const inputRuleIds = [...matchedRuleIds];
@@ -132,7 +137,7 @@ export async function runInputStageRuntime(input: {
     ...policyContext,
     intent: { name: resolvedIntent },
   };
-  const activePolicyConflicts = (compiledPolicy.conflicts || []).filter((c: any) => {
+  const activePolicyConflicts = (compiledPolicy.conflicts || []).filter((c: { intentScope?: string }) => {
     if (c.intentScope === "*") return true;
     return c.intentScope.split(",").map((v: string) => v.trim()).includes(resolvedIntent);
   });

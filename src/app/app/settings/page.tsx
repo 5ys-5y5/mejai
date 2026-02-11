@@ -7,8 +7,8 @@ import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 import { useHelpPanelEnabled } from "@/hooks/useHelpPanel";
 import { getSupabaseClient } from "@/lib/supabaseClient";
-import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
-import { ExternalLink, Eye, EyeOff, Pencil } from "lucide-react";
+import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
+import { Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { PerformanceSettingsPanel } from "@/components/settings/PerformanceSettingsPanel";
 import { ChatSettingsPanel } from "@/components/settings/ChatSettingsPanel";
@@ -58,28 +58,26 @@ export default function SettingsPage() {
   const givenName = "성지용";
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminReady, setAdminReady] = useState(false);
-  const [envLoading, setEnvLoading] = useState(false);
+  const [, setEnvLoading] = useState(false);
   const [envError, setEnvError] = useState<string | null>(null);
   const [envSavedAt, setEnvSavedAt] = useState<string | null>(null);
   const [envSaveNotice, setEnvSaveNotice] = useState<string>("");
   const [envEditorOpen, setEnvEditorOpen] = useState(false);
   const [authToken, setAuthToken] = useState<string>("");
   const [activeProvider, setActiveProvider] = useState<ProviderKey>("cafe24");
-  const [revealedField, setRevealedField] = useState<string | null>(null);
   const envReadOnly = false;
   const editableCafe24Keys = new Set(["mall_id", "mall_domain", "shop_no", "board_no"]);
   const [shopOptions, setShopOptions] = useState<SelectOption[]>([]);
-  const [shopError, setShopError] = useState<string | null>(null);
+  const [, setShopError] = useState<string | null>(null);
   const [shopLoading, setShopLoading] = useState(false);
-  const [shopPickerOpen, setShopPickerOpen] = useState(false);
+  const [, setShopPickerOpen] = useState(false);
   const [cafe24TokenMallId, setCafe24TokenMallId] = useState<string>("");
   const [cafe24Stored, setCafe24Stored] = useState<Partial<Cafe24ProviderDraft> | null>(null);
   const [shopifyStored, setShopifyStored] = useState<Partial<ShopifyProviderDraft> | null>(null);
   const [cafe24Flow, setCafe24Flow] = useState<"idle" | "oauth" | "token" | "shops" | "done">("idle");
   const [cafe24Step, setCafe24Step] = useState<"mall" | "shop" | "board">("mall");
-  const [cafe24CallbackUrl, setCafe24CallbackUrl] = useState<string>("");
+  const [, setCafe24CallbackUrl] = useState<string>("");
   const [cafe24SaveNotice, setCafe24SaveNotice] = useState<string>("");
-  const [cafe24ScopeTouched, setCafe24ScopeTouched] = useState(false);
   const [cafe24ScopeBusy, setCafe24ScopeBusy] = useState(false);
   const [cafe24MallBusy, setCafe24MallBusy] = useState(false);
   const [cafe24MallStatus, setCafe24MallStatus] = useState<string>("");
@@ -103,7 +101,7 @@ export default function SettingsPage() {
     shop_no: "",
     board_no: "",
   });
-  const [shopifyDraft, setShopifyDraft] = useState<ShopifyProviderDraft>({
+  const [shopifyDraft] = useState<ShopifyProviderDraft>({
     shop_domain: "",
     client_id: "",
     client_secret: "",
@@ -232,63 +230,27 @@ export default function SettingsPage() {
     []
   );
 
-  const shopifyScopeOptions = useMemo<SelectOption[]>(
-    () =>
-      [
-        "read_orders",
-        "write_orders",
-        "read_customers",
-        "write_customers",
-        "read_products",
-        "write_products",
-        "read_inventory",
-        "write_inventory",
-        "read_fulfillments",
-        "write_fulfillments",
-        "read_locations",
-        "read_shipping",
-        "write_shipping",
-        "read_content",
-        "write_content",
-      ].map((item) => ({ id: item, label: item })),
+
+  const parseCsv = useCallback(
+    (value: string) =>
+      value
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean),
     []
   );
 
-  const parseCsv = (value: string) =>
-    value
-      .split(",")
-      .map((v) => v.trim())
-      .filter(Boolean);
-
-  const parseScopes = (value: string) =>
-    value
-      .split(/\s+/)
-      .map((v) => v.trim())
-      .filter(Boolean);
-
-  const sortStrings = (values: string[]) => [...new Set(values)].sort((a, b) => a.localeCompare(b));
-  const sortNumbers = (values: string[]) =>
-    [...new Set(values)]
-      .map((v) => v.trim())
-      .filter(Boolean)
-      .sort((a, b) => Number(a) - Number(b));
+  const sortNumbers = useCallback(
+    (values: string[]) =>
+      [...new Set(values)]
+        .map((v) => v.trim())
+        .filter(Boolean)
+        .sort((a, b) => Number(a) - Number(b)),
+    []
+  );
 
   const sleep = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-  const cafe24AllowedScopes = useMemo(
-    () => new Set(cafe24ScopeOptions.map((option) => option.id)),
-    [cafe24ScopeOptions]
-  );
-  const filterCafe24Scopes = useCallback(
-    (values: string[]) => values.filter((value) => cafe24AllowedScopes.has(value)),
-    [cafe24AllowedScopes]
-  );
-  const cafe24BoardNoValues = useMemo(
-    () => sortNumbers(parseCsv(cafe24Draft.board_no)),
-    [cafe24Draft.board_no]
-  );
-
-  const shopifyScopeValues = useMemo(() => parseScopes(shopifyDraft.scopes), [shopifyDraft.scopes]);
 
   const listifyShopDomainPairs = useCallback(
     (stored?: Partial<Cafe24ProviderDraft> | null) => {
@@ -304,7 +266,7 @@ export default function SettingsPage() {
       if (domains.length > 0) items.push(...domains.map((domain) => `- (${domain})`));
       return items;
     },
-    []
+    [parseCsv]
   );
 
   const listifyBoardPairs = useCallback(
@@ -318,7 +280,7 @@ export default function SettingsPage() {
         return { main: id, meta: name };
       });
     },
-    [boardNoOptions]
+    [boardNoOptions, parseCsv, sortNumbers]
   );
 
   const maskValue = (value?: string) => {
@@ -327,12 +289,6 @@ export default function SettingsPage() {
     return `${value.slice(0, 2)}***${value.slice(-2)}`;
   };
 
-  const revealFor = (field: string) => {
-    setRevealedField(field);
-    window.setTimeout(() => {
-      setRevealedField((current) => (current === field ? null : current));
-    }, 5000);
-  };
 
   const shopDomainByNo = useMemo(() => {
     const map = new Map<string, string>();
@@ -344,20 +300,16 @@ export default function SettingsPage() {
     return map;
   }, [shopOptions]);
 
-  const buildMallDomainFromShopNo = (values: string[]) =>
-    values
-      .map((shopNo) => shopDomainByNo.get(shopNo))
-      .filter(Boolean)
-      .join(", ");
+  const buildMallDomainFromShopNo = useCallback(
+    (values: string[]) =>
+      values
+        .map((shopNo) => shopDomainByNo.get(shopNo))
+        .filter(Boolean)
+        .join(", "),
+    [shopDomainByNo]
+  );
 
   const allCafe24Scopes = useMemo(() => cafe24ScopeOptions.map((opt) => opt.id), [cafe24ScopeOptions]);
-
-  const openDomain = (domain?: string) => {
-    if (!domain) return;
-    const url = domain.startsWith("http") ? domain : `https://${domain}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  };
-
 
   const loadShops = useCallback(async (override?: { mallId?: string; accessToken?: string }) => {
     if (!adminReady || !isAdmin || tab !== "env") return false;
@@ -434,39 +386,6 @@ export default function SettingsPage() {
     [loadShops]
   );
 
-  const reloadCafe24Provider = useCallback(async (overrideMallId?: string) => {
-    if (!authToken) return false;
-    try {
-      const res = await fetch(`/api/auth-settings/providers?provider=cafe24`, {
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
-      const payload = (await res.json()) as { provider?: Record<string, unknown>; error?: string };
-      if (!res.ok || payload.error || !payload.provider) {
-        setShopError(payload.error || "OAuth 결과를 불러오지 못했습니다.");
-        return null;
-      }
-      setCafe24Flow("token");
-      const next = payload.provider as Partial<Cafe24ProviderDraft>;
-      const forcedMallId = overrideMallId || lastMallIdRef.current;
-      if (forcedMallId) next.mall_id = forcedMallId;
-      if (next.mall_id) {
-        setCafe24TokenMallId(next.mall_id);
-        lastSavedMallIdRef.current = next.mall_id;
-      }
-      setCafe24Draft((prev) => {
-        const keepScope = cafe24ScopeTouched && prev.scope;
-        const merged = { ...prev, ...next };
-        if (keepScope) merged.scope = prev.scope;
-        return merged;
-      });
-      return next;
-    } catch {
-      setShopError("OAuth 결과를 불러오지 못했습니다.");
-      return null;
-    }
-  }, [authToken, cafe24ScopeTouched]);
 
   const startCafe24OAuth = useCallback(async (override?: { mallId?: string; scope?: string }) => {
     if (!authToken) {
@@ -562,7 +481,6 @@ export default function SettingsPage() {
     allCafe24Scopes,
     cafe24Draft.mall_id,
     cafe24MallBusy,
-    cafe24ScopeBusy,
     startCafe24OAuth,
   ]);
 
@@ -673,14 +591,18 @@ export default function SettingsPage() {
     };
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [allCafe24Scopes, loadShopsWithRetry]);
+  }, [allCafe24Scopes, cafe24Draft.mall_id, loadShopsWithRetry, startCafe24OAuth]);
 
   useEffect(() => {
+    const pollId = oauthPollRef.current;
+    const oauthTimeoutId = oauthTimeoutRef.current;
+    const advanceTimeoutId = advanceTimeoutRef.current;
+    const envSaveTimeoutId = envSaveTimeoutRef.current;
     return () => {
-      if (oauthPollRef.current) window.clearInterval(oauthPollRef.current);
-      if (oauthTimeoutRef.current) window.clearTimeout(oauthTimeoutRef.current);
-      if (advanceTimeoutRef.current) window.clearTimeout(advanceTimeoutRef.current);
-      if (envSaveTimeoutRef.current) window.clearTimeout(envSaveTimeoutRef.current);
+      if (pollId) window.clearInterval(pollId);
+      if (oauthTimeoutId) window.clearTimeout(oauthTimeoutId);
+      if (advanceTimeoutId) window.clearTimeout(advanceTimeoutId);
+      if (envSaveTimeoutId) window.clearTimeout(envSaveTimeoutId);
     };
   }, []);
 
@@ -696,10 +618,7 @@ export default function SettingsPage() {
     if (nextDomain && nextDomain !== cafe24Draft.mall_domain) {
       setCafe24Draft((prev) => ({ ...prev, mall_domain: nextDomain }));
     }
-  }, [activeProvider, cafe24Draft.shop_no, shopDomainByNo]);
-
-  const buildCompanyInfoUrl = (fragment: string) =>
-    `https://${cafe24Draft.mall_id || "{mall_id}"}.cafe24.com/admin/php/shop1/m/company_info_f.php#:~:text=${fragment}`;
+  }, [activeProvider, cafe24Draft.shop_no, cafe24Draft.mall_domain, buildMallDomainFromShopNo, parseCsv, sortNumbers]);
 
   useEffect(() => {
     if (!adminReady || !isAdmin || tab !== "env" || !authToken) return;
@@ -777,7 +696,7 @@ export default function SettingsPage() {
     setCafe24CallbackUrl("");
   }, [cafe24Draft.mall_id, cafe24TokenMallId]);
 
-  const handleProviderSave = async () => {
+  const handleProviderSave = useCallback(async () => {
     setEnvLoading(true);
     setEnvError(null);
     try {
@@ -862,7 +781,17 @@ export default function SettingsPage() {
     } finally {
       setEnvLoading(false);
     }
-  };
+  }, [
+    activeProvider,
+    authToken,
+    buildMallDomainFromShopNo,
+    cafe24Draft,
+    cafe24TokenMallId,
+    parseCsv,
+    shopOptions,
+    shopifyDraft,
+    sortNumbers,
+  ]);
 
   const handleShopSave = useCallback(async () => {
     if (!cafe24Draft.shop_no) {
@@ -879,7 +808,7 @@ export default function SettingsPage() {
     }
     await handleProviderSave();
     setCafe24SaveNotice("저장이 완료되었습니다.");
-  }, [cafe24Draft.board_no]);
+  }, [cafe24Draft.board_no, handleProviderSave]);
 
   const handleStepPrev = useCallback(() => {
     if (cafe24Step === "board") {

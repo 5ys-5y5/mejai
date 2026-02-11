@@ -118,7 +118,7 @@ export default function CallsDetailPage() {
           setAudioSegments(audioRes || []);
           setLoading(false);
         }
-      } catch (err) {
+      } catch {
         if (mounted) {
           setError("세션 데이터를 불러오지 못했습니다.");
           setLoading(false);
@@ -151,7 +151,7 @@ export default function CallsDetailPage() {
         body: JSON.stringify({ step, ...payload }),
       });
       await refresh();
-    } catch (err) {
+    } catch {
       setProcessError("통화 처리 단계 실행에 실패했습니다.");
     } finally {
       setProcessing(false);

@@ -234,7 +234,7 @@ export default function AgentsPage() {
         if (!mounted) return;
         setAgents(agentRes.items || []);
         setKbItems(kbRes.items || []);
-      } catch (err) {
+      } catch {
         if (!mounted) return;
         setError("에이전트 목록을 불러오지 못했습니다.");
       } finally {

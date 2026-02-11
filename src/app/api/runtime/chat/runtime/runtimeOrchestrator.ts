@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { runLlm, type ChatMessage } from "@/lib/llm_mk2";
+import { runLlm } from "@/lib/llm_mk2";
 import {
   formatOutputDefault,
   runPolicyStage,
@@ -44,18 +44,15 @@ import {
   extractOtpCode,
   extractPhone,
   extractZipcode,
-  isInvalidOrderIdError,
   isLikelyAddressDetailOnly,
   isLikelyOrderId,
   isLikelyZipcode,
   findRecentEntity,
   maskPhone,
-  normalizeAddressText,
   normalizePhoneDigits,
   readLookupOrderView,
-  splitAddressForUpdate,
 } from "../shared/slotUtils";
-import type { AgentRow, KbRow, ProductDecision } from "../shared/types";
+import type { KbRow } from "../shared/types";
 import {
   getRecentTurns,
   resolveProductDecision,
@@ -78,18 +75,16 @@ import {
 import { callAddressSearchWithAudit, callMcpTool } from "../services/mcpRuntime";
 import { handleRestockIntent } from "../handlers/restockHandler";
 import {
-  buildDebugPrefix,
   buildDebugPrefixJson,
   buildDefaultOrderRange,
   buildFailedPayload,
   extractTemplateIds,
   nowIso,
   pushRuntimeTimingStage,
-  type DebugPayload,
   type RuntimeTimingStage,
 } from "./runtimeSupport";
 import { deriveExpectedInputFromAnswer, isRestockSubscribeStage as isRestockSubscribeStageContext } from "./intentRuntime";
-import { handleOtpLifecycleAndOrderGate, readOtpState } from "./otpRuntime";
+import { handleOtpLifecycleAndOrderGate } from "./otpRuntime";
 import { buildFinalLlmMessages, handleGeneralNoPathGuard, runFinalResponseFlow } from "./finalizeRuntime";
 import { handleRuntimeError } from "./errorRuntime";
 import { handlePostActionStage } from "./postActionRuntime";
@@ -138,7 +133,7 @@ export async function POST(req: NextRequest) {
   const runtimeTurnId =
     String(req.headers.get("x-runtime-turn-id") || "").trim() || crypto.randomUUID();
   const timingStages: RuntimeTimingStage[] = [];
-  let runtimeContext: any = null;
+  let runtimeContext: Record<string, unknown> | null = null;
   let currentSessionId: string | null = null;
   let firstTurnInSession = false;
   let latestTurnId: string | null = null;
@@ -180,7 +175,6 @@ export async function POST(req: NextRequest) {
     const {
       context,
       authContext,
-      body,
       agent,
       message,
       conversationMode,
@@ -201,7 +195,6 @@ export async function POST(req: NextRequest) {
       userRole,
       userOrgId,
       sessionId,
-      reusedSession,
       recentTurns,
       firstTurnInSession: firstInSession,
       lastTurn,
@@ -209,11 +202,14 @@ export async function POST(req: NextRequest) {
       prevBotContext,
     } = bootstrap.state;
     if (context && typeof context === "object") {
-      (context as any).runtimeTraceId = runtimeTraceId;
-      (context as any).runtimeRequestStartedAt = new Date(requestStartedAt).toISOString();
-      (context as any).runtimeTurnId = runtimeTurnId;
+      const contextRecord = context as Record<string, unknown>;
+      contextRecord.runtimeTraceId = runtimeTraceId;
+      contextRecord.runtimeRequestStartedAt = new Date(requestStartedAt).toISOString();
+      contextRecord.runtimeTurnId = runtimeTurnId;
     }
-    const runtimeTemplateOverrides = resolveRuntimeTemplateOverridesFromPolicy((compiledPolicy as any)?.templates || {});
+    const runtimeTemplateOverrides = resolveRuntimeTemplateOverridesFromPolicy(
+      ((compiledPolicy as { templates?: Record<string, unknown> })?.templates || {}) as Record<string, unknown>
+    );
     const effectivePrevBotContext = mergeRuntimeTemplateOverrides(
       (prevBotContext || {}) as Record<string, unknown>,
       runtimeTemplateOverrides
@@ -284,7 +280,7 @@ export async function POST(req: NextRequest) {
     let lastMcpError = initialized.lastMcpError;
     let lastMcpCount = initialized.lastMcpCount;
     let contaminationSummaries = initialized.contaminationSummaries;
-    let toolResults = initialized.toolResults;
+    const toolResults = initialized.toolResults;
     const buildRuntimeSnapshot = (resolvedLlmModel: string | null, resolvedTools: string[]) => ({
       llmModel: resolvedLlmModel,
       mcpTools: resolvedTools.length > 0 ? resolvedTools : mcpActions,
@@ -372,7 +368,7 @@ export async function POST(req: NextRequest) {
       insertEvent,
       respond,
     });
-    if (disambiguation.response) return disambiguation.response as any;
+    if (disambiguation.response) return disambiguation.response;
     const disambiguationOutput: DisambiguationStepOutput = {
       forcedIntentQueue: disambiguation.forcedIntentQueue,
       pendingIntentQueue: disambiguation.pendingIntentQueue,
@@ -382,8 +378,7 @@ export async function POST(req: NextRequest) {
     pendingIntentQueue = disambiguationOutput.pendingIntentQueue;
     pipelineState.forcedIntentQueue = forcedIntentQueue;
     pipelineState.pendingIntentQueue = pendingIntentQueue;
-    const intentDisambiguationSourceText = disambiguation.intentDisambiguationSourceText;
-    let effectiveMessageForIntent = disambiguationOutput.effectiveMessageForIntent;
+    const effectiveMessageForIntent = disambiguationOutput.effectiveMessageForIntent;
     const preTurnGuardInput: PreTurnGuardStepInput = {
       message,
       resolvedIntent,
@@ -412,7 +407,7 @@ export async function POST(req: NextRequest) {
       insertEvent,
       respond,
     });
-    if (preTurnGuards.response) return preTurnGuards.response as any;
+    if (preTurnGuards.response) return preTurnGuards.response;
     const preTurnGuardOutput: PreTurnGuardStepOutput = {
       derivedPhone: preTurnGuards.derivedPhone,
       expectedInput: preTurnGuards.expectedInput,
@@ -490,7 +485,7 @@ export async function POST(req: NextRequest) {
       insertEvent,
       respond,
     });
-    if (pendingState.response) return pendingState.response as any;
+    if (pendingState.response) return pendingState.response;
     derivedOrderId = pendingState.derivedOrderId;
     derivedZipcode = pendingState.derivedZipcode;
     derivedAddress = pendingState.derivedAddress;
@@ -528,7 +523,7 @@ export async function POST(req: NextRequest) {
       insertEvent,
       respond,
     });
-    if (restockPending.response) return restockPending.response as any;
+    if (restockPending.response) return restockPending.response;
     resolvedIntent = restockPending.resolvedIntent;
     restockSubscribeAcceptedThisTurn = restockPending.restockSubscribeAcceptedThisTurn;
     lockIntentToRestockSubscribe = restockPending.lockIntentToRestockSubscribe;
@@ -553,7 +548,7 @@ export async function POST(req: NextRequest) {
       insertTurn,
       respond,
     });
-    if (postActionStage.response) return postActionStage.response as any;
+    if (postActionStage.response) return postActionStage.response;
     pushRuntimeCall("src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts", "resolveIntentAndPolicyContext");
     const resolvedContext = await resolveIntentAndPolicyContext({
       context,
@@ -630,7 +625,7 @@ export async function POST(req: NextRequest) {
     resolvedIntent = inputStage.resolvedIntent as string;
     resolvedOrderId = (inputStage.resolvedOrderId as string | null) || null;
     policyContext = inputStage.policyContext as PolicyEvalContext;
-    const activePolicyConflicts = inputStage.activePolicyConflicts as any[];
+    const activePolicyConflicts = inputStage.activePolicyConflicts as Array<Record<string, unknown>>;
     usedRuleIds = inputStage.usedRuleIds as string[];
     usedTemplateIds = inputStage.usedTemplateIds as string[];
     inputRuleIds = inputStage.inputRuleIds as string[];
@@ -738,7 +733,7 @@ export async function POST(req: NextRequest) {
       customerVerificationToken: otpGate.customerVerificationToken,
       mcpCandidateCalls: otpGate.mcpCandidateCalls,
     };
-    let otpVerifiedThisTurn = otpGateOutput.otpVerifiedThisTurn;
+    const otpVerifiedThisTurn = otpGateOutput.otpVerifiedThisTurn;
     const otpPending = otpGateOutput.otpPending;
     customerVerificationToken = otpGateOutput.customerVerificationToken;
     policyContext = otpGate.policyContext;

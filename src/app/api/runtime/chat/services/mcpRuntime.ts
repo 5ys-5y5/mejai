@@ -1,5 +1,19 @@
+type SupabaseQuery = {
+  select: (...args: unknown[]) => SupabaseQuery;
+  eq: (...args: unknown[]) => SupabaseQuery;
+  insert: (...args: unknown[]) => Promise<unknown>;
+  maybeSingle: () => Promise<{ data?: Record<string, unknown> | null }>;
+};
+
+type RuntimeContext = {
+  supabase: { from: (table: string) => SupabaseQuery };
+  orgId: string;
+  user: { id: string };
+  runtimeTraceId?: string | null;
+};
+
 export async function callMcpTool(
-  context: any,
+  context: RuntimeContext,
   tool: string,
   params: Record<string, unknown>,
   sessionId: string,
@@ -12,7 +26,7 @@ export async function callMcpTool(
     }
     | undefined
 ) {
-  const traceId = String((context as any)?.runtimeTraceId || "").trim();
+  const traceId = String(context?.runtimeTraceId || "").trim();
   const tracedBotContext =
     botContext && typeof botContext === "object"
       ? ({
@@ -90,48 +104,54 @@ export async function callMcpTool(
     await auditBlocked("blocked", "TOOL_NOT_FOUND");
     return { ok: false, error: "TOOL_NOT_FOUND" };
   }
+  const toolRecord = toolRow as Record<string, unknown>;
   const { callAdapter } = await import("@/lib/mcpAdapters");
   const { applyMasking, checkPolicyConditions, validateToolParams } = await import("@/lib/mcpPolicy");
 
   const resolvedParams: Record<string, unknown> = { ...params };
-  if ((toolRow as any).endpoint_path && resolvedParams.path === undefined) {
-    resolvedParams.path = (toolRow as any).endpoint_path;
+  if (toolRecord.endpoint_path && resolvedParams.path === undefined) {
+    resolvedParams.path = toolRecord.endpoint_path as string;
   }
-  if ((toolRow as any).http_method && resolvedParams.method === undefined) {
-    resolvedParams.method = (toolRow as any).http_method;
+  if (toolRecord.http_method && resolvedParams.method === undefined) {
+    resolvedParams.method = toolRecord.http_method as string;
   }
-  if ((toolRow as any).scope_key && resolvedParams.required_scope === undefined) {
-    resolvedParams.required_scope = (toolRow as any).scope_key;
+  if (toolRecord.scope_key && resolvedParams.required_scope === undefined) {
+    resolvedParams.required_scope = toolRecord.scope_key as string;
   }
 
-  const schema = (toolRow as any).schema_json || {};
+  const schema = toolRecord.schema_json || {};
   const validation = validateToolParams(schema as Record<string, unknown>, resolvedParams);
   if (!validation.ok) {
-    await auditBlocked("invalid_params", "INVALID_PARAMS", toolRow.id, (toolRow as any).version || null, {
+    await auditBlocked("invalid_params", "INVALID_PARAMS", toolRow.id as string, (toolRecord.version as string) || null, {
       error: validation.error || "INVALID_PARAMS",
     });
     return { ok: false, error: validation.error };
   }
 
-  const conditionCheck = checkPolicyConditions((toolRow as any).conditions || null, resolvedParams);
+  const conditionCheck = checkPolicyConditions(toolRecord.conditions || null, resolvedParams);
   if (!conditionCheck.ok) {
-    await auditBlocked("blocked", String(conditionCheck.error || "POLICY_CONDITION_BLOCK"), toolRow.id, (toolRow as any).version || null);
+    await auditBlocked(
+      "blocked",
+      String(conditionCheck.error || "POLICY_CONDITION_BLOCK"),
+      toolRow.id as string,
+      (toolRecord.version as string) || null
+    );
     return { ok: false, error: conditionCheck.error };
   }
 
   const start = Date.now();
-  let result: any;
+  let result: { status: string; data?: Record<string, unknown>; error?: unknown };
   let latency = 0;
   try {
     result = await callAdapter(
-      String((toolRow as any).provider_key || "unknown"),
+      String(toolRecord.provider_key || "unknown"),
       resolvedParams,
       {
         supabase: context.supabase,
         orgId: context.orgId,
         userId: context.user.id,
       },
-      { toolName: String((toolRow as any).name || "") }
+      { toolName: String(toolRecord.name || "") }
     );
     latency = Date.now() - start;
   } catch (error) {
@@ -142,8 +162,8 @@ export async function callMcpTool(
         org_id: context.orgId,
         session_id: sessionId,
         turn_id: turnId,
-        tool_id: toolRow.id,
-        tool_version: (toolRow as any).version || null,
+        tool_id: toolRow.id as string,
+        tool_version: (toolRecord.version as string) || null,
         tool_name: tool,
         request_payload: resolvedParams,
         response_payload: { error: message },
@@ -163,7 +183,7 @@ export async function callMcpTool(
     return { ok: false, error: `ADAPTER_ERROR: ${message}` };
   }
   const responsePayload = result.data ? { ...result.data } : {};
-  const masked = applyMasking(responsePayload, (toolRow as any).masking_rules || null);
+  const masked = applyMasking(responsePayload, toolRecord.masking_rules || null);
 
   const responsePayloadWithError =
     result.status === "error"
@@ -174,8 +194,8 @@ export async function callMcpTool(
       org_id: context.orgId,
       session_id: sessionId,
       turn_id: turnId,
-      tool_id: toolRow.id,
-      tool_version: (toolRow as any).version || null,
+      tool_id: toolRow.id as string,
+      tool_version: (toolRecord.version as string) || null,
       tool_name: `${toolRow.provider_key}:${toolRow.name}`,
       request_payload: resolvedParams,
       response_payload: responsePayloadWithError,
@@ -233,13 +253,13 @@ export function buildAddressSearchKeywords(raw: string) {
 }
 
 export async function callAddressSearchWithAudit(
-  context: any,
+  context: RuntimeContext,
   keyword: string,
   sessionId: string,
   turnId: string | null,
   botContext: Record<string, unknown>
 ) {
-  const traceId = String((context as any)?.runtimeTraceId || "").trim();
+  const traceId = String(context?.runtimeTraceId || "").trim();
   const tracedBotContext =
     botContext && typeof botContext === "object"
       ? ({
@@ -254,7 +274,7 @@ export async function callAddressSearchWithAudit(
   const { callAdapter } = await import("@/lib/mcpAdapters");
   const start = Date.now();
   const keywords = buildAddressSearchKeywords(keyword);
-  let result: any = {
+  let result: { status: string; data?: Record<string, unknown>; error?: unknown } = {
     status: "error",
     error: { code: "INVALID_INPUT", message: "keyword is required" },
     data: {},
@@ -264,22 +284,30 @@ export async function callAddressSearchWithAudit(
   if (keywords.length > 0) {
     for (const kw of keywords) {
       try {
-        const current = await callAdapter(
+        const current = (await callAdapter(
           "search_address",
           { keyword: kw },
           { supabase: context.supabase, orgId: context.orgId, userId: context.user.id }
-        );
+        )) as { status?: string; data?: Record<string, unknown>; error?: unknown };
+        const currentData = (current?.data || {}) as Record<string, unknown>;
+        const currentError = current?.error;
         attempts.push({
           keyword: kw,
           status: current?.status || "error",
-          total_count: (current as any)?.data?.totalCount,
+          total_count: currentData.totalCount,
           error:
             current?.status === "error"
-              ? String((current as any)?.error?.message || (current as any)?.error || "ADDRESS_SEARCH_FAILED")
+              ? String(
+                  (currentError as { message?: string } | undefined)?.message ||
+                    currentError ||
+                    "ADDRESS_SEARCH_FAILED"
+                )
               : undefined,
         });
         result = current;
-        const rows = Array.isArray((current as any)?.data?.results) ? (current as any).data.results : [];
+        const rows = Array.isArray(currentData.results)
+          ? (currentData.results as Array<unknown>)
+          : [];
         if (current?.status === "success" && rows.length > 0) {
           break;
         }

@@ -13,7 +13,7 @@ import {
 import { handlePreSensitiveOtpGuard } from "./otpRuntime";
 import { handlePostToolDeterministicFlows } from "./postToolRuntime";
 
-export async function runToolStagePipeline(input: Record<string, any>) {
+export async function runToolStagePipeline(input: Record<string, unknown>) {
   const {
     compiledPolicy,
     policyContext,
@@ -79,11 +79,15 @@ export async function runToolStagePipeline(input: Record<string, any>) {
   } = input;
 
   const toolGate = runPolicyStage(compiledPolicy, "tool", policyContext);
-  const toolRuleIds = toolGate.matched.map((rule: any) => rule.id);
+  const toolRuleIds = toolGate.matched.map((rule: { id?: string }) => rule.id).filter(Boolean) as string[];
   usedRuleIds.push(...toolRuleIds);
-  usedTemplateIds.push(...extractTemplateIds(toolGate.matched as any[]));
+  usedTemplateIds.push(...extractTemplateIds(toolGate.matched as Array<Record<string, unknown>>));
   const forcedCalls = toolGate.actions.forcedToolCalls || [];
-  mcpCandidateCalls.splice(0, mcpCandidateCalls.length, ...forcedCalls.map((call: any) => String(call.name || "")).filter(Boolean));
+  mcpCandidateCalls.splice(
+    0,
+    mcpCandidateCalls.length,
+    ...forcedCalls.map((call: { name?: string }) => String(call.name || "")).filter(Boolean)
+  );
 
   const denied = deniedOverride || new Set(toolGate.actions.denyTools || []);
   const allowed = new Set(toolGate.actions.allowTools || []);

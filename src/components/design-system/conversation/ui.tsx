@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Image from "next/image";
 import { CornerDownRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -118,7 +119,9 @@ export function ConversationProductCard({
         {item.value}
       </span>
       {item.imageUrl ? (
-        <img src={item.imageUrl} alt={item.title} className="h-24 w-full rounded-md bg-slate-100 object-cover" />
+        <div className="relative h-24 w-full overflow-hidden rounded-md bg-slate-100">
+          <Image src={item.imageUrl} alt={item.title} fill sizes="200px" className="object-cover" />
+        </div>
       ) : (
         <div className="flex h-24 w-full items-center justify-center rounded-md bg-slate-100 text-[11px] text-slate-500">
           이미지 없음

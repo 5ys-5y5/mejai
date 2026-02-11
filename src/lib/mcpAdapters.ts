@@ -182,7 +182,7 @@ async function solapiSendMessage(params: { to: string; text: string; from: strin
 function extractSolapiMessageId(payload: Record<string, unknown>) {
   const direct = payload.messageId || payload.message_id;
   if (direct) return String(direct);
-  const list = (payload as any).messageList;
+  const list = (payload as Record<string, unknown>).messageList;
   if (Array.isArray(list) && list.length > 0) {
     const msgId = list[0]?.messageId || list[0]?.message_id;
     if (msgId) return String(msgId);
@@ -355,90 +355,6 @@ async function solapiScheduleMessage(params: { to: string; text: string; from: s
   }
 }
 
-async function registerSolapiReservationsForSubscription(
-  ctx: AdapterContext,
-  subscriptionId: string,
-  fallbackMessage: string
-) {
-  const bypass = isEnvTrue("SOLAPI_BYPASS");
-  if (bypass) {
-    return { ok: true as const, scheduledCount: 0, skippedReason: "SOLAPI_BYPASS" };
-  }
-  const from = readEnv("SOLAPI_FROM");
-  if (!from) {
-    return { ok: false as const, error: "SOLAPI_FROM_MISSING", scheduledCount: 0 };
-  }
-
-  const { data, error } = await ctx.supabase
-    .from("G_com_restock_message_queue")
-    .select("id,phone,scheduled_for,message_text,attempts")
-    .eq("subscription_id", subscriptionId)
-    .eq("status", "pending")
-    .order("scheduled_for", { ascending: true });
-  if (error) {
-    return { ok: false as const, error: `QUEUE_FETCH_FAILED: ${error.message}`, scheduledCount: 0 };
-  }
-
-  const rows = (data || []) as Array<{
-    id: string;
-    phone: string;
-    scheduled_for: string;
-    message_text: string | null;
-    attempts: number | null;
-  }>;
-  if (rows.length === 0) {
-    return { ok: true as const, scheduledCount: 0 };
-  }
-
-  let scheduledCount = 0;
-  const errors: string[] = [];
-  for (const row of rows) {
-    const destination = String(row.phone || "").trim();
-    const scheduledAtIso = new Date(String(row.scheduled_for || "")).toISOString();
-    if (!destination || Number.isNaN(Date.parse(scheduledAtIso))) {
-      errors.push(`${row.id}:INVALID_ROW`);
-      continue;
-    }
-    const text = String(row.message_text || "").trim() || fallbackMessage;
-    const sent = await solapiScheduleMessage({
-      to: destination,
-      from,
-      text,
-      scheduledAt: scheduledAtIso,
-    });
-    if (!sent.ok) {
-      errors.push(`${row.id}:${sent.error}`);
-      continue;
-    }
-    const payload = (sent.data || {}) as Record<string, unknown>;
-    const messageId =
-      payload.messageId ||
-      payload.message_id ||
-      (Array.isArray((payload as any).messageList) ? (payload as any).messageList?.[0]?.messageId : null) ||
-      null;
-    const { error: updateError } = await ctx.supabase
-      .from("G_com_restock_message_queue")
-      .update({
-        status: "sent",
-        sent_at: new Date().toISOString(),
-        last_error: null,
-        solapi_message_id: messageId ? String(messageId) : null,
-        attempts: Number(row.attempts || 0) + 1,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", row.id);
-    if (updateError) {
-      errors.push(`${row.id}:QUEUE_UPDATE_FAILED:${updateError.message}`);
-      continue;
-    }
-    scheduledCount += 1;
-  }
-  if (errors.length > 0) {
-    return { ok: false as const, error: errors.slice(0, 3).join(" | "), scheduledCount };
-  }
-  return { ok: true as const, scheduledCount };
-}
-
 function toQueryRecord(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {} as Record<string, string>;
   const out: Record<string, string> = {};
@@ -516,7 +432,7 @@ async function searchJusoAddress(keyword: string) {
     apiKey = readEnv("JUSO_API_KEY");
   }
 
-  const debugInfo: any = {
+  const debugInfo: Record<string, unknown> = {
     keyFound: !!apiKey,
     keyLength: apiKey ? apiKey.length : 0,
     source: "JUSO_API"
@@ -1105,7 +1021,7 @@ const adapters: Record<string, ToolAdapter> = {
       if (searchRes.ok && searchRes.data && searchRes.data.length > 0) {
         // Logic: If all results share the same zipNo, use it.
         const firstZip = searchRes.data[0].zipNo;
-        const allSame = searchRes.data.every((r: any) => r.zipNo === firstZip);
+        const allSame = searchRes.data.every((r: { zipNo?: string }) => r.zipNo === firstZip);
 
         if (allSame) {
           finalZipcode = firstZip;
@@ -1116,7 +1032,9 @@ const adapters: Record<string, ToolAdapter> = {
             status: "error",
             error: {
               code: "AMBIGUOUS_ADDRESS",
-              message: `Multiple zipcodes found for address "${address1}". Please specify zipcode manually. Found: ${Array.from(new Set(searchRes.data.map((r: any) => r.zipNo))).join(", ")}`
+              message: `Multiple zipcodes found for address "${address1}". Please specify zipcode manually. Found: ${Array.from(
+                new Set(searchRes.data.map((r: { zipNo?: string }) => r.zipNo))
+              ).join(", ")}`
             }
           };
         }
@@ -1396,8 +1314,9 @@ const adapters: Record<string, ToolAdapter> = {
         query: q,
       });
       if (!searchResult.ok) continue;
-      const list = Array.isArray((searchResult.data as any)?.products)
-        ? ((searchResult.data as any).products as Array<Record<string, unknown>>)
+      const searchData = (searchResult.data || {}) as Record<string, unknown>;
+      const list = Array.isArray(searchData.products)
+        ? (searchData.products as Array<Record<string, unknown>>)
         : [];
       if (list.length > 0) {
         products = list;
@@ -1410,11 +1329,9 @@ const adapters: Record<string, ToolAdapter> = {
     let bestProduct: Record<string, unknown> | null = null;
     let bestScore = 0;
     for (const product of products) {
+      const productRecord = product as Record<string, unknown>;
       const name = String(
-        (product as any).product_name ||
-          (product as any).product_name_default ||
-          (product as any).name ||
-          ""
+        productRecord.product_name || productRecord.product_name_default || productRecord.name || ""
       ).trim();
       if (!name) continue;
       const normalizedName = normalizeMatchText(name);
@@ -1430,16 +1347,10 @@ const adapters: Record<string, ToolAdapter> = {
         bestProduct = product;
       }
     }
-    const productId = String(
-      (bestProduct as any)?.product_no ||
-        (bestProduct as any)?.product_id ||
-        ""
-    ).trim();
+    const bestProductRecord = (bestProduct || {}) as Record<string, unknown>;
+    const productId = String(bestProductRecord.product_no || bestProductRecord.product_id || "").trim();
     const productName = String(
-      (bestProduct as any)?.product_name ||
-        (bestProduct as any)?.product_name_default ||
-        (bestProduct as any)?.name ||
-        ""
+      bestProductRecord.product_name || bestProductRecord.product_name_default || bestProductRecord.name || ""
     ).trim();
     if (!productId || bestScore <= 0) {
       return { status: "success", data: { matched: false } };
@@ -1820,7 +1731,9 @@ const adapters: Record<string, ToolAdapter> = {
       if (error) {
         return { status: "error", error: { code: "DB_ERROR", message: error.message } };
       }
-      const ids = Array.isArray(data) ? data.map((row) => String((row as any)?.id || "").trim()).filter(Boolean) : [];
+      const ids = Array.isArray(data)
+        ? data.map((row) => String((row as Record<string, unknown>)?.id || "").trim()).filter(Boolean)
+        : [];
 
       const bypass = isEnvTrue("SOLAPI_BYPASS");
       const from = readEnv("SOLAPI_FROM");
@@ -2044,9 +1957,9 @@ const adapters: Record<string, ToolAdapter> = {
           message: sendError || "SOLAPI_SEND_FAILED",
           detail: {
             otp_ref: otpRef,
-            notification_id: notifData ? String((notifData as any).id || "") : null,
+            notification_id: notifData ? String((notifData as Record<string, unknown>).id || "") : null,
           },
-        } as any,
+        },
       };
     }
     return {
@@ -2102,6 +2015,7 @@ const adapters: Record<string, ToolAdapter> = {
     };
   },
   search_address: async (params, ctx) => {
+    void ctx;
     const keyword = String(params.keyword || "").trim();
     if (!keyword) {
       return { status: "error", error: { code: "INVALID_INPUT", message: "keyword is required" } };
