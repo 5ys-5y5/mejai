@@ -307,7 +307,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             entity: policyContext.entity,
           })
         );
-        const candidateRows = broadCandidates.map((item, idx) => ({
+        const candidateRows: RestockCandidateRow[] = broadCandidates.map((item, idx) => ({
           index: idx + 1,
           product_name: item.product_name,
           month: item.month,
@@ -350,7 +350,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         );
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions, product_cards: [] });
       }
-        const candidateRows = filterSchedulableEntries(restockKbEntriesRaw)
+        const candidateRows: RestockCandidateRow[] = filterSchedulableEntries(restockKbEntriesRaw)
           .slice(0, CHAT_PRINCIPLES.response.choicePreviewMax)
           .map((item, idx) => ({
           index: idx + 1,
@@ -462,7 +462,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
                 value: String(candidate.index),
               }))
           : [];
-        const lines = candidateRows.map((candidate) => {
+        const lines = candidateRows.map((candidate: RestockCandidateRow) => {
           const due = toRestockDueText(candidate.month, candidate.day);
           return `- ${candidate.index}번 | ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
         });
@@ -610,7 +610,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           step: "confirm",
           message: reply,
           mcp_actions: mcpActions,
-          quick_replies: candidateRows.map((candidate) => ({
+          quick_replies: candidateRows.map((candidate: RestockCandidateRow) => ({
             label: `${candidate.index}번`,
             value: String(candidate.index),
           })),
@@ -620,7 +620,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       }
 
     if (hasChoiceAnswerCandidates(rankedFromMessageSchedulable.length)) {
-      const candidateRows = rankedFromMessageSchedulable.map((row: { entry: RestockCandidateRow }, idx: number) => ({
+      const candidateRows: RestockCandidateRow[] = rankedFromMessageSchedulable.map(
+        (row: { entry: RestockCandidateRow }, idx: number) => ({
         index: idx + 1,
         product_name: row.entry.product_name,
         month: row.entry.month,
@@ -685,7 +686,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           }
         }
       }
-      const lines = candidateRows.map((candidate) => {
+      const lines = candidateRows.map((candidate: RestockCandidateRow) => {
         const due = toRestockDueText(candidate.month, candidate.day);
         return `- ${candidate.index}번 | ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
       });
@@ -966,7 +967,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             }
           }
         }
-        const lines = candidateRows.map((candidate) => {
+        const lines = candidateRows.map((candidate: RestockCandidateRow) => {
           const due = toRestockDueText(candidate.month, candidate.day);
           return `- ${candidate.index}번 | ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
         });
