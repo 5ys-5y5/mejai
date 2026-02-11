@@ -8,12 +8,14 @@ export type SessionState = {
   prevBotContext: Record<string, any>;
 };
 
+import type { RuntimeContext } from "../shared/runtimeTypes";
+
 export async function prepareSessionState(input: {
-  context: any;
+  context: RuntimeContext;
   requestedSessionId: string;
   agentId: string | null;
-  createSession: (context: any, agentId: string | null) => Promise<{ data?: Record<string, any>; error?: unknown }>;
-  getRecentTurns: (context: any, sessionId: string, limit: number) => Promise<{ data?: Array<Record<string, any>> }>;
+  createSession: (context: RuntimeContext, agentId: string | null) => Promise<{ data?: Record<string, any>; error?: unknown }>;
+  getRecentTurns: (context: RuntimeContext, sessionId: string, limit: number) => Promise<{ data?: Array<Record<string, any>> }>;
   recentTurnLimit?: number;
 }): Promise<{ state?: SessionState; error?: string }> {
   const requestedSessionId = String(input.requestedSessionId || "").trim();

@@ -1,4 +1,5 @@
 import { insertTurnWithDebug, makeReplyWithDebug } from "./runtimeTurnIo";
+import type { RuntimeContext } from "../shared/runtimeTypes";
 
 type RuntimeStateSnapshot = {
   llmModel: string | null;
@@ -39,9 +40,9 @@ type RuntimeStateSnapshot = {
 };
 
 export function createRuntimeConversationIo(input: {
-  context: any;
+  context: RuntimeContext;
   insertFinalTurn: (
-    context: any,
+    context: RuntimeContext,
     payload: Record<string, any>,
     debugPrefixJson: Record<string, any>
   ) => Promise<Record<string, any>>;

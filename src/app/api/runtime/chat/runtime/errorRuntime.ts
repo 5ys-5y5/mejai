@@ -1,3 +1,5 @@
+import type { RuntimeContext } from "../shared/runtimeTypes";
+
 export async function handleRuntimeError(input: Record<string, any>) {
   const {
     err,

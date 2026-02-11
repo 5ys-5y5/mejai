@@ -11,6 +11,7 @@ import {
   buildAddressCandidateQuickReplies,
   extractAddressCandidatesFromSearchData,
 } from "../shared/addressCandidateUtils";
+import type { AddressSearchResult } from "../shared/runtimeTypes";
 
 function joinAddressParts(input: {
   zipcode?: string | null;
@@ -53,8 +54,6 @@ function hasCompleteAddressTriple(input: {
 }
 
 type OrderChangeToolResult = { name: string; ok: boolean; data?: Record<string, any>; error?: unknown };
-
-type AddressSearchResult = { status: string; data?: unknown };
 
 type HandleOrderChangePostToolsInput = {
   toolResults: OrderChangeToolResult[];

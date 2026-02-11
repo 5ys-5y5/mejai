@@ -11,6 +11,7 @@ import { buildPatchProposal } from "../../governance/_lib/proposer";
 import { computeExceptionFingerprint } from "../../governance/_lib/selfHealGate";
 import { fetchExceptionStats } from "../../governance/_lib/store";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { RuntimeContext } from "../shared/runtimeTypes";
 
 type DebugSnapshot = {
   llmModel: string | null;
@@ -59,7 +60,7 @@ type MakeReplyParams = {
   currentDebugPrefixJson: Record<string, any> | null;
 };
 
-type RuntimeContextAny = any;
+type RuntimeContextAny = RuntimeContext;
 
 type InsertFinalTurnResult = {
   data?: { id?: string | null; session_id?: string | null };

@@ -5,6 +5,7 @@ import {
 } from "./quickReplyConfigRuntime";
 import { buildNumberedChoicePrompt, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
 import { splitAddressForUpdate } from "../shared/slotUtils";
+import type { CompiledPolicy } from "../shared/runtimeTypes";
 
 type ToolCall = { name: string; args?: Record<string, any>; ok?: boolean; data?: Record<string, any>; error?: unknown };
 type LookupOrderView = {
@@ -18,7 +19,7 @@ type PolicyContext = {
   conversation?: Record<string, any>;
 };
 type ToolGateRule = { id?: string; enforce?: { actions?: Array<Record<string, any>> } };
-type ToolGate = { matched: ToolGateRule[] };
+type ToolGate = { matched: ToolGateRule[]; actions?: Record<string, any> };
 
 const toRecord = (value: unknown): Record<string, any> =>
   value && typeof value === "object" ? (value as Record<string, any>) : {};
@@ -584,7 +585,35 @@ export async function flushMcpSkipLogsWithAudit(input: {
   mcpSkipQueue.length = 0;
 }
 
-export async function handleToolForcedResponse(input: Record<string, any>): Promise<Response | null> {
+export async function handleToolForcedResponse(input: {
+  toolGate: ToolGate;
+  conversationMode?: string;
+  compiledPolicy: CompiledPolicy;
+  resolvedIntent: string;
+  usedTemplateIds: string[];
+  message: string;
+  sessionId: string;
+  nextSeq: number;
+  latestTurnId: string | null;
+  policyContext: PolicyContext;
+  resolvedOrderId: string | null;
+  customerVerificationToken: string | null;
+  productDecisionRes: { decision?: Record<string, any> | null };
+  normalizeOrderChangeAddressPrompt: (intent: string, text: string) => string;
+  isOrderChangeZipcodeTemplateText: (text: string) => boolean;
+  makeReply: (text: string) => string;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
+  insertEvent: (
+    context: any,
+    sessionId: string,
+    turnId: string | null,
+    eventType: string,
+    payload: Record<string, any>,
+    botContext: Record<string, any>
+  ) => Promise<unknown>;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => Response;
+  context: any;
+}): Promise<Response | null> {
   const {
     toolGate,
     conversationMode,
@@ -716,7 +745,7 @@ export function maybeQueueListOrdersSkip(input: {
   resolvedOrderId: string | null;
   resolvedIntent: string;
   policyContext: PolicyContext;
-  compiledPolicy: Record<string, any>;
+  compiledPolicy: CompiledPolicy;
   hasAllowedToolName: (name: string) => boolean;
   canUseTool: (name: string) => boolean;
   noteMcpSkip: (name: string, reason: string, detail?: Record<string, any>, args?: Record<string, any>) => void;

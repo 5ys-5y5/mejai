@@ -12,8 +12,9 @@ import {
 } from "./toolRuntime";
 import { handlePreSensitiveOtpGuard } from "./otpRuntime";
 import { handlePostToolDeterministicFlows } from "./postToolRuntime";
+import type { CompiledPolicy } from "../shared/runtimeTypes";
 
-export async function runToolStagePipeline(input: Record<string, any>) {
+export async function runToolStagePipeline(input: Record<string, any> & { compiledPolicy: CompiledPolicy }) {
   const {
     compiledPolicy,
     policyContext,
@@ -78,7 +79,7 @@ export async function runToolStagePipeline(input: Record<string, any>) {
     isOtpRequiredTool,
   } = input;
 
-  const toolGate = runPolicyStage(compiledPolicy as any, "tool", policyContext);
+  const toolGate = runPolicyStage(compiledPolicy, "tool", policyContext);
   const toolRuleIds = toolGate.matched.map((rule: { id?: string }) => rule.id).filter(Boolean) as string[];
   usedRuleIds.push(...toolRuleIds);
   usedTemplateIds.push(...extractTemplateIds(toolGate.matched as Array<Record<string, any>>));

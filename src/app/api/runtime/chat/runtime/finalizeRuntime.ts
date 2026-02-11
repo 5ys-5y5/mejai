@@ -2,6 +2,7 @@ import type { ChatMessage } from "@/lib/llm_mk2";
 import { YES_NO_QUICK_REPLIES, maybeBuildYesNoQuickReplyRule } from "./quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
 import { canOfferPhoneReusePrompt } from "./memoryReuseRuntime";
+import type { CompiledPolicy } from "../shared/runtimeTypes";
 
 export function buildFinalLlmMessages(input: {
   message: string;
@@ -32,7 +33,7 @@ export function buildFinalLlmMessages(input: {
 }
 
 
-export async function handleGeneralNoPathGuard(input: Record<string, any>): Promise<Response | null> {
+export async function handleGeneralNoPathGuard(input: Record<string, any> & { compiledPolicy?: CompiledPolicy }): Promise<Response | null> {
   const {
     resolvedIntent,
     finalCalls,
@@ -163,7 +164,7 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
   });
   let finalAnswer = answerRes.text.trim();
 
-  const outputGate = runPolicyStage(compiledPolicy as any, "output", policyContext);
+  const outputGate = runPolicyStage(compiledPolicy as CompiledPolicy, "output", policyContext);
   const matchedRules = outputGate.matched as Array<{ id?: string }>;
   usedRuleIds.push(...matchedRules.map((rule) => rule.id).filter((id): id is string => Boolean(id)));
   usedTemplateIds.push(

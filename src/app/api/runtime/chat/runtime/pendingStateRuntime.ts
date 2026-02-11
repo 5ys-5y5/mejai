@@ -13,6 +13,7 @@ import {
   parseAddressCandidateSelection,
   type AddressCandidate,
 } from "../shared/addressCandidateUtils";
+import type { AddressSearchResult } from "../shared/runtimeTypes";
 
 type PendingStateParams = {
   context: any;
@@ -35,7 +36,7 @@ type PendingStateParams = {
     sessionId: string,
     turnId: string | null,
     botContext: Record<string, any>
-  ) => Promise<{ status: string; data?: unknown; error?: unknown }>;
+  ) => Promise<AddressSearchResult>;
   extractZipcode: (text: string) => string | null;
   extractAddress: (
     text: string,

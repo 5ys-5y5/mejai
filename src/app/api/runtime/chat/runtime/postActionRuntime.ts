@@ -9,7 +9,9 @@ type SupabaseLike = {
   };
 };
 
-type RuntimeContextAny = any;
+import type { RuntimeContext } from "../shared/runtimeTypes";
+
+type RuntimeContextAny = RuntimeContext;
 
 type PostActionRuntimeParams = {
   context: RuntimeContextAny;

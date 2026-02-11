@@ -11,7 +11,7 @@ type ServerContextError =
   | { error: "ORG_NOT_FOUND" }
   | { error: "ORG_PENDING" };
 
-type ServerContextSuccess = ServerUserSuccess & { orgId: string; orgRole: string };
+export type ServerContextSuccess = ServerUserSuccess & { orgId: string; orgRole: string };
 
 function isUuid(value: string | null | undefined) {
   if (!value) return false;

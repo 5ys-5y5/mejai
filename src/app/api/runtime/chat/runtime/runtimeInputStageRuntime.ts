@@ -7,6 +7,7 @@ import {
   reconcileIntentFromInputGate,
 } from "./policyInputRuntime";
 import { buildIntentScopePrompt, evaluateIntentScopeGate } from "./intentScopeGateRuntime";
+import type { CompiledPolicy } from "../shared/runtimeTypes";
 
 type ContextResolutionResult = {
   contaminationSummaries: string[];
@@ -15,11 +16,6 @@ type ContextResolutionResult = {
   resolvedOrderId: string | null;
   resolvedIntent: string;
   policyContext: PolicyEvalContext;
-};
-
-type CompiledPolicy = {
-  conflicts?: Array<{ intentScope?: string }>;
-  templates?: Record<string, any>;
 };
 
 export async function runInputStageRuntime(input: {
@@ -97,7 +93,7 @@ export async function runInputStageRuntime(input: {
   const resolvedOrderId = resolvedContext.resolvedOrderId;
   let policyContext: PolicyEvalContext = resolvedContext.policyContext;
 
-  const inputGate = runPolicyStage(compiledPolicy as any, "input", policyContext);
+  const inputGate = runPolicyStage(compiledPolicy, "input", policyContext);
   const matchedRuleIds = inputGate.matched.map((rule) => rule.id);
   const matchedTemplateIds = extractTemplateIds(inputGate.matched as Array<Record<string, any>>);
   let usedRuleIds = [...matchedRuleIds];

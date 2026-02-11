@@ -1,14 +1,7 @@
-type SupabaseQuery = {
-  select: (...args: unknown[]) => SupabaseQuery;
-  eq: (...args: unknown[]) => SupabaseQuery;
-  insert: (...args: unknown[]) => Promise<unknown>;
-  maybeSingle: () => Promise<{ data?: Record<string, any> | null }>;
-};
-
-type RuntimeContextAny = any;
+import type { AddressSearchResult, RuntimeContext } from "../shared/runtimeTypes";
 
 export async function callMcpTool(
-  context: any,
+  context: RuntimeContext,
   tool: string,
   params: Record<string, any>,
   sessionId: string,
@@ -248,7 +241,7 @@ export function buildAddressSearchKeywords(raw: string) {
 }
 
 export async function callAddressSearchWithAudit(
-  context: any,
+  context: RuntimeContext,
   keyword: string,
   sessionId: string,
   turnId: string | null,
@@ -269,9 +262,9 @@ export async function callAddressSearchWithAudit(
   const { callAdapter } = await import("@/lib/mcpAdapters");
   const start = Date.now();
   const keywords = buildAddressSearchKeywords(keyword);
-  let result: { status: string; data?: Record<string, any>; error?: unknown } = {
+  let result: AddressSearchResult = {
     status: "error",
-    error: { code: "INVALID_INPUT", message: "keyword is required" },
+    error: "INVALID_INPUT",
     data: {},
   };
   const attempts: Array<{ keyword: string; status: string; total_count?: number | string; error?: string }> = [];
@@ -299,7 +292,18 @@ export async function callAddressSearchWithAudit(
                 )
               : undefined,
         });
-        result = current;
+        result = {
+          status: (current?.status === "success" ? "success" : "error"),
+          data: current?.data,
+          error:
+            current?.status === "error"
+              ? String(
+                  (currentError as { message?: string } | undefined)?.message ||
+                    currentError ||
+                    "ADDRESS_SEARCH_FAILED"
+                )
+              : undefined,
+        };
         const rows = Array.isArray(currentData.results)
           ? (currentData.results as Array<unknown>)
           : [];
@@ -314,7 +318,7 @@ export async function callAddressSearchWithAudit(
         });
         result = {
           status: "error",
-          error: { code: "ADDRESS_SEARCH_THROWN", message: error instanceof Error ? error.message : String(error) },
+          error: error instanceof Error ? error.message : String(error),
           data: {},
         };
       }

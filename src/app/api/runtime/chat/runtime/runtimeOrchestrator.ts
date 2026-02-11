@@ -104,6 +104,7 @@ import { initializeRuntimeState } from "./runtimeInitializationRuntime";
 import { createRuntimeResponder } from "../presentation/ui-runtimeResponseRuntime";
 import { mergeRuntimeTemplateOverrides, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
 import { applyReplyStyle, resolveReplyStyleDirective } from "../policies/replyStyleRuntime";
+import type { RuntimeContext } from "../shared/runtimeTypes";
 import type {
   DisambiguationStepInput,
   DisambiguationStepOutput,
@@ -133,7 +134,7 @@ export async function POST(req: NextRequest) {
   const runtimeTurnId =
     String(req.headers.get("x-runtime-turn-id") || "").trim() || crypto.randomUUID();
   const timingStages: RuntimeTimingStage[] = [];
-  let RuntimeContextAny: Record<string, any> | null = null;
+  let RuntimeContextAny: RuntimeContext | null = null;
   let currentSessionId: string | null = null;
   let firstTurnInSession = false;
   let latestTurnId: string | null = null;

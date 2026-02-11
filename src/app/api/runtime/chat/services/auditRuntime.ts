@@ -5,7 +5,9 @@ type SupabaseLike = {
   };
 };
 
-type RuntimeContextAny = any;
+import type { RuntimeContext } from "../shared/runtimeTypes";
+
+type RuntimeContextAny = RuntimeContext;
 
 function nowIso() {
   return new Date().toISOString();

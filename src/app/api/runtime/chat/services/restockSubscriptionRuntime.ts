@@ -31,7 +31,9 @@ type SupabaseLike = {
   };
 };
 
-type RuntimeContextAny = any;
+import type { RuntimeContext } from "../shared/runtimeTypes";
+
+type RuntimeContextAny = RuntimeContext;
 
 function normalizeLeadDays(values?: number[]) {
   if (!Array.isArray(values)) return [];

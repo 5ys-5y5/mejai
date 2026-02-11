@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { getServerContext } from "@/lib/serverAuth";
+import { getServerContext, type ServerContextSuccess } from "@/lib/serverAuth";
 import { compilePolicy, type PolicyPack } from "@/lib/policyEngine";
 import { isUuidLike, isValidLlm } from "../shared/slotUtils";
 import type { KbRow } from "../shared/types";
@@ -13,6 +13,7 @@ import {
 } from "../services/dataAccess";
 import { prepareSessionState } from "./sessionRuntime";
 import { pushRuntimeTimingStage, type RuntimeTimingStage } from "./runtimeSupport";
+import type { CompiledPolicy, RuntimeContext } from "../shared/runtimeTypes";
 
 type Body = {
   agent_id?: string;
@@ -30,11 +31,7 @@ type Body = {
   };
 };
 
-type SupabaseQueryLike = any;
-
-type SupabaseClientLike = any;
-
-type RuntimeContextAny = any;
+type RuntimeContextAny = RuntimeContext;
 
 type AgentShape = {
   id: string | null;
@@ -43,8 +40,6 @@ type AgentShape = {
   kb_id?: string | null;
   mcp_tool_ids?: string[] | null;
 };
-
-type CompiledPolicy = ReturnType<typeof compilePolicy>;
 
 type BootstrapParams = {
   req: NextRequest;

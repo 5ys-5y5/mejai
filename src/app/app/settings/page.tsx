@@ -448,7 +448,6 @@ export default function SettingsPage() {
     const forcedScope =
       (process.env.NEXT_PUBLIC_CAFE24_SCOPE || "").trim() || allCafe24Scopes.join(" ");
     setCafe24Draft((prev) => ({ ...prev, scope: forcedScope }));
-    setCafe24ScopeTouched(false);
     setCafe24CallbackUrl("");
     if (oauthTimeoutRef.current) window.clearTimeout(oauthTimeoutRef.current);
     if (advanceTimeoutRef.current) window.clearTimeout(advanceTimeoutRef.current);

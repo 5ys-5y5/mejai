@@ -19,7 +19,7 @@ type SelfHealGateInput = {
 };
 
 const HARD_CODED_BRANCH_REGEX = /\b(if|else if)\s*\([^\)]*([=!]==?|===)\s*(["'`][^"'`]+["'`]|\d+)\s*\)/;
-const SWITCH_LITERAL_REGEX = /\bswitch\s*\([^\)]*\)\s*\{[^}]*\bcase\s+(["'`][^"'`]+["'`]|\d+)\s*:/s;
+const SWITCH_LITERAL_REGEX = /\bswitch\s*\([^\)]*\)\s*\{[\s\S]*?\bcase\s+(["'`][^"'`]+["'`]|\d+)\s*:/;
 const CHANGE_PLAN_KEYWORDS = ["특정 케이스", "예외 처리", "하드코딩", "only this case"];
 
 function normalizeText(value: unknown) {

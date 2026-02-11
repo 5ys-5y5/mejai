@@ -14,8 +14,9 @@ import {
   validateRuntimeResponseSchema,
 } from "./runtimeResponseSchema";
 import { buildRenderPlan } from "../policies/renderPolicy";
+import type { RuntimeContext } from "../shared/runtimeTypes";
 
-type RuntimeContextAnyLike = any;
+type RuntimeContextAnyLike = RuntimeContext;
 
 export function createRuntimeResponder(input: {
   runtimeTraceId: string;
