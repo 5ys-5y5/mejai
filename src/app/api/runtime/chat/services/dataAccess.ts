@@ -1,17 +1,9 @@
 import { chooseBestAlias } from "../shared/slotUtils";
 import type { AgentRow, KbRow, ProductAliasRow, ProductDecision, ProductRuleRow } from "../shared/types";
 
-type SupabaseQuery = {
-  select: (...args: unknown[]) => SupabaseQuery;
-  eq: (...args: unknown[]) => SupabaseQuery;
-  or: (...args: unknown[]) => SupabaseQuery;
-  order: (...args: unknown[]) => SupabaseQuery;
-  limit: (value: number) => SupabaseQuery;
-  maybeSingle: () => Promise<{ data?: unknown; error?: { message?: string } }>;
-  insert: (...args: unknown[]) => { select: (...args: unknown[]) => { single: () => Promise<{ data?: unknown; error?: { message?: string } }> } };
-};
+type SupabaseQuery = any;
 
-type RuntimeContext = { supabase: { from: (table: string) => SupabaseQuery }; orgId: string };
+type RuntimeContext = { supabase: any; orgId: string };
 
 export function matchesAdminGroup(
   applyGroups: Array<{ path: string; values: string[] }> | null | undefined,
