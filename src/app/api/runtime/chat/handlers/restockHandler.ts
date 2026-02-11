@@ -7,7 +7,7 @@ import {
   buildRestockLeadDaysPrompt,
   buildYesNoConfirmationPrompt,
 } from "../runtime/promptTemplateRuntime";
-type HandleRestockIntentInput = Record<string, unknown>;
+type HandleRestockIntentInput = Record<string, any>;
 type RestockCandidateRow = {
   index: number;
   product_id?: string | null;
