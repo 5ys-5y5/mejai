@@ -58,7 +58,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     allowRestockLite,
   } = input;
 
-  const normalizeNameKey = (value: string) => normalizeKoreanMatchText(value).replace(/\s+/g, "");
+  const normalizeKoreanMatch = normalizeKoreanMatchText as (value: string) => string;
+  const normalizeNameKey = (value: string) => normalizeKoreanMatch(value).replace(/\s+/g, "");
   const isNameMatch = (left: string, right: string) => {
     const a = normalizeNameKey(left || "");
     const b = normalizeNameKey(right || "");
@@ -265,7 +266,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         ? filterSchedulableEntries(
           restockKbEntriesRaw
           .filter((item) =>
-            normalizeKoreanMatchText(item.product_name).replace(/\s+/g, "").includes(queryCoreNoSpace)
+            normalizeKoreanMatch(item.product_name).replace(/\s+/g, "").includes(queryCoreNoSpace)
           )
         ).slice(0, CHAT_PRINCIPLES.response.choicePreviewMax)
         : [];
