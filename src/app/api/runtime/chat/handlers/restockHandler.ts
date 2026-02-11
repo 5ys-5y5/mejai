@@ -113,7 +113,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     const month = Number(pickedFromPrevForAnyIntent.month || 0);
     const day = Number(pickedFromPrevForAnyIntent.day || 0);
     if (productName && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      const due = toRestockDueText(month, day);
+      const due = toRestockDue(month, day);
       const reply = makeReply(buildRestockFinalAnswerWithChoices(productName, due));
       await insertTurn({
         session_id: sessionId,
@@ -195,7 +195,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       const month = Number(pickedFromPrev.month || 0);
       const day = Number(pickedFromPrev.day || 0);
       if (productName && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-        const due = toRestockDueText(month, day);
+        const due = toRestockDue(month, day);
         const reply = makeReply(buildRestockFinalAnswerWithChoices(productName, due));
         await insertTurn({
           session_id: sessionId,
