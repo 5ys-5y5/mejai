@@ -2,7 +2,7 @@ import { handleOrderChangePostTools } from "../handlers/orderChangeHandler";
 import { handleRefundRequest } from "../handlers/refundHandler";
 import { handleOrderSelectionAndListOrdersGuards, summarizeToolResults } from "./toolRuntime";
 
-export async function handlePostToolDeterministicFlows(input: Record<string, unknown>) {
+export async function handlePostToolDeterministicFlows(input: Record<string, any>) {
   let { resolvedOrderId, policyContext, mcpSummary } = input;
   const {
     toolResults,
@@ -33,7 +33,8 @@ export async function handlePostToolDeterministicFlows(input: Record<string, unk
     refundConfirmAcceptedThisTurn,
   } = input;
 
-  const currentAddress = typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
+  const policyEntity = (policyContext.entity ?? {}) as Record<string, any>;
+  const currentAddress = typeof policyEntity.address === "string" ? String(policyEntity.address).trim() : "";
 
   if (toolResults.length > 0) {
     toolResults.forEach((tool: { ok?: boolean; name?: string; error?: unknown }) => {
@@ -91,7 +92,7 @@ export async function handlePostToolDeterministicFlows(input: Record<string, unk
     currentAddress,
     sessionId,
     latestTurnId,
-    policyContextEntity: (policyContext.entity || {}) as Record<string, unknown>,
+    policyContextEntity: (policyContext.entity || {}) as Record<string, any>,
     resolvedOrderId,
     customerVerificationToken,
     mcpActions,
@@ -128,7 +129,7 @@ export async function handlePostToolDeterministicFlows(input: Record<string, unk
     nextSeq,
     message,
     latestTurnId,
-    policyContextEntity: (policyContext.entity || {}) as Record<string, unknown>,
+    policyContextEntity: (policyContext.entity || {}) as Record<string, any>,
     customerVerificationToken,
     mcpActions,
   });
@@ -138,3 +139,4 @@ export async function handlePostToolDeterministicFlows(input: Record<string, unk
 
   return { response: null, resolvedOrderId, policyContext, mcpSummary };
 }
+

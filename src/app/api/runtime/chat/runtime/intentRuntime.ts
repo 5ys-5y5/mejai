@@ -14,7 +14,7 @@ export function deriveExpectedInputFromAnswer(lastAnswer: string) {
   return null;
 }
 
-export function isRestockSubscribeStage(prevBotContext: Record<string, unknown>) {
+export function isRestockSubscribeStage(prevBotContext: Record<string, any>) {
   return (
     prevBotContext.restock_pending === true &&
     [
@@ -25,3 +25,4 @@ export function isRestockSubscribeStage(prevBotContext: Record<string, unknown>)
     ].includes(String(prevBotContext.restock_stage || ""))
   );
 }
+

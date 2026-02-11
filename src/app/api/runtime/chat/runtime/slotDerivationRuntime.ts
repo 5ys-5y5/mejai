@@ -10,7 +10,7 @@ type SlotDerivationParams = {
     stages: RuntimeTimingStage[],
     name: string,
     startedAt: number,
-    meta?: Record<string, unknown>
+    meta?: Record<string, any>
   ) => void;
   derivedOrderId: string | null;
   derivedPhone: string | null;
@@ -138,3 +138,4 @@ export async function deriveSlotsForTurn(params: SlotDerivationParams): Promise<
     resolvedIntent: nextResolvedIntent,
   };
 }
+

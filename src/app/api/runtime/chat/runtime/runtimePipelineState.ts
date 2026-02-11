@@ -21,8 +21,8 @@ export type RuntimePipelineState = {
   mcpSkipQueue: Array<{
     tool: string;
     reason: string;
-    args?: Record<string, unknown>;
-    detail?: Record<string, unknown>;
+    args?: Record<string, any>;
+    detail?: Record<string, any>;
   }>;
   usedRuleIds: string[];
   usedTemplateIds: string[];
@@ -75,3 +75,4 @@ export function createRuntimePipelineState(
     lastMcpCount: null,
   };
 }
+

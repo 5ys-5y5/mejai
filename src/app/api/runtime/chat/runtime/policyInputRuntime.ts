@@ -23,14 +23,14 @@ export async function emitPolicyStaticConflict(input: {
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
   context: unknown;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
-  policyContext: Record<string, unknown>;
+  policyContext: Record<string, any>;
   activePolicyConflicts: unknown[];
 }) {
   const { insertEvent, context, sessionId, latestTurnId, resolvedIntent, policyContext, activePolicyConflicts } = input;
@@ -45,7 +45,7 @@ export async function emitPolicyStaticConflict(input: {
       conflicts: activePolicyConflicts,
       resolution: "tool_stage_force_response_precedence",
     },
-    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
   );
 }
 
@@ -55,8 +55,8 @@ export async function emitSlotExtracted(input: {
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
   context: unknown;
   sessionId: string;
@@ -70,9 +70,9 @@ export async function emitSlotExtracted(input: {
   derivedZipcode: string | null;
   derivedAddress: string | null;
   resolvedOrderId: string | null;
-  policyContext: Record<string, unknown>;
+  policyContext: Record<string, any>;
   maskPhone: (value?: string | null) => string;
-  resolvedSlots?: Record<string, unknown>;
+  resolvedSlots?: Record<string, any>;
   missingSlots?: string[];
 }) {
   const {
@@ -125,7 +125,7 @@ export async function emitSlotExtracted(input: {
       resolved_slots: resolvedSlots || {},
       missing_slots: Array.isArray(missingSlots) ? missingSlots : [],
     },
-    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
   );
 }
 
@@ -134,23 +134,23 @@ export async function handleInputForcedResponse(input: {
   normalizeOrderChangeAddressPrompt: (intent: string, text: string) => string;
   resolvedIntent: string;
   makeReply: (text: string) => string;
-  insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   sessionId: string;
   nextSeq: number;
   message: string;
-  policyContext: Record<string, unknown>;
+  policyContext: Record<string, any>;
   resolvedOrderId: string | null;
   insertEvent: (
     context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
   context: unknown;
   latestTurnId: string | null;
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => Response;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => Response;
 }): Promise<Response | null> {
   const {
     forcedResponse,
@@ -186,3 +186,4 @@ export async function handleInputForcedResponse(input: {
   await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "input" }, { intent_name: resolvedIntent });
   return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
 }
+

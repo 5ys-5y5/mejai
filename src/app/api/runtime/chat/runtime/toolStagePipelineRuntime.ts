@@ -13,7 +13,7 @@ import {
 import { handlePreSensitiveOtpGuard } from "./otpRuntime";
 import { handlePostToolDeterministicFlows } from "./postToolRuntime";
 
-export async function runToolStagePipeline(input: Record<string, unknown>) {
+export async function runToolStagePipeline(input: Record<string, any>) {
   const {
     compiledPolicy,
     policyContext,
@@ -81,7 +81,7 @@ export async function runToolStagePipeline(input: Record<string, unknown>) {
   const toolGate = runPolicyStage(compiledPolicy, "tool", policyContext);
   const toolRuleIds = toolGate.matched.map((rule: { id?: string }) => rule.id).filter(Boolean) as string[];
   usedRuleIds.push(...toolRuleIds);
-  usedTemplateIds.push(...extractTemplateIds(toolGate.matched as Array<Record<string, unknown>>));
+  usedTemplateIds.push(...extractTemplateIds(toolGate.matched as Array<Record<string, any>>));
   const forcedCalls = toolGate.actions.forcedToolCalls || [];
   mcpCandidateCalls.splice(
     0,
@@ -93,7 +93,7 @@ export async function runToolStagePipeline(input: Record<string, unknown>) {
   const allowed = new Set(toolGate.actions.allowTools || []);
   const canUseTool = createToolAccessEvaluator(denied, allowed);
   let finalCalls = filterForcedCallsByPolicy(
-    forcedCalls as Array<{ name: string; args?: Record<string, unknown> }>,
+    forcedCalls as Array<{ name: string; args?: Record<string, any> }>,
     denied,
     allowed,
     noteMcpSkip
@@ -175,8 +175,8 @@ export async function runToolStagePipeline(input: Record<string, unknown>) {
     resolvedIntent,
     effectiveMessageForIntent,
     message,
-    forcedCalls: forcedCalls as Array<{ name: string; args?: Record<string, unknown> }>,
-    finalCalls: finalCalls as Array<{ name: string; args?: Record<string, unknown> }>,
+    forcedCalls: forcedCalls as Array<{ name: string; args?: Record<string, any> }>,
+    finalCalls: finalCalls as Array<{ name: string; args?: Record<string, any> }>,
     denied,
     allowed,
     allowedToolNames,
@@ -223,7 +223,7 @@ export async function runToolStagePipeline(input: Record<string, unknown>) {
     return { response: forcedToolResponse };
   }
 
-  const toolResults: Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }> =
+  const toolResults: Array<{ name: string; ok: boolean; data?: Record<string, any>; error?: unknown }> =
     Array.isArray(input.toolResults) ? input.toolResults : [];
   const toolExec = await executeFinalToolCalls({
     finalCalls,
@@ -257,7 +257,7 @@ export async function runToolStagePipeline(input: Record<string, unknown>) {
   mcpSummary = toolExec.mcpSummary;
   nextListOrdersCalled = toolExec.listOrdersCalled;
   nextListOrdersEmpty = toolExec.listOrdersEmpty;
-  nextListOrdersChoices = toolExec.listOrdersChoices as Array<Record<string, unknown>>;
+  nextListOrdersChoices = toolExec.listOrdersChoices as Array<Record<string, any>>;
 
   await flushMcpSkipLogs();
 
@@ -315,3 +315,4 @@ export async function runToolStagePipeline(input: Record<string, unknown>) {
     toolResults,
   };
 }
+

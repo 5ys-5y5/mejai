@@ -61,7 +61,7 @@ type BootstrapParams = {
   req: NextRequest;
   debugEnabled: boolean;
   timingStages: RuntimeTimingStage[];
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => Response;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => Response;
 };
 
 export async function bootstrapRuntime(params: BootstrapParams): Promise<
@@ -76,7 +76,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         message: string;
         conversationMode: string;
         kb: KbRow;
-        adminKbs: Array<Record<string, unknown>>;
+        adminKbs: Array<Record<string, any>>;
         compiledPolicy: CompiledPolicy;
         allowedToolNames: Set<string>;
         allowedToolIdByName: Map<string, string>;
@@ -86,18 +86,18 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         providerAvailable: string[];
         providerConfig: { mall_id: string | null; shop_no: string | null; board_no: string | null };
         runtimeFlags: { restock_lite: boolean };
-        authSettings: Record<string, unknown> | null;
+        authSettings: Record<string, any> | null;
         userPlan: string | null;
         userIsAdmin: boolean | null;
         userRole: string | null;
         userOrgId: string | null;
         sessionId: string;
         reusedSession: boolean;
-        recentTurns: Array<Record<string, unknown>>;
+        recentTurns: Array<Record<string, any>>;
         firstTurnInSession: boolean;
-        lastTurn: Record<string, unknown> | null;
+        lastTurn: Record<string, any> | null;
         nextSeq: number;
-        prevBotContext: Record<string, unknown>;
+        prevBotContext: Record<string, any>;
       };
     }
 > {
@@ -215,7 +215,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     .select("group, plan, is_admin, org_role, org_id")
     .eq("user_id", authContext.user.id)
     .maybeSingle();
-  const userGroup = (accessRow?.group as Record<string, unknown> | null) ?? null;
+  const userGroup = (accessRow?.group as Record<string, any> | null) ?? null;
   const userPlan = (accessRow?.plan as string | null) ?? null;
   const userIsAdmin = typeof accessRow?.is_admin === "boolean" ? accessRow.is_admin : null;
   const userRole = (accessRow?.org_role as string | null) ?? null;
@@ -227,12 +227,12 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     .eq("org_id", authContext.orgId)
     .eq("user_id", authContext.user.id)
     .maybeSingle();
-  const providers = (authSettings?.providers || {}) as Record<string, Record<string, unknown> | undefined>;
+  const providers = (authSettings?.providers || {}) as Record<string, Record<string, any> | undefined>;
   const providerAvailable = Object.keys(providers || {}).filter((key) => {
     const value = providers[key];
     return value && Object.keys(value).length > 0;
   });
-  const cafe24Provider = (providers.cafe24 || {}) as Record<string, unknown>;
+  const cafe24Provider = (providers.cafe24 || {}) as Record<string, any>;
   const providerConfig = {
     mall_id: cafe24Provider.mall_id ? String(cafe24Provider.mall_id) : null,
     shop_no: cafe24Provider.shop_no ? String(cafe24Provider.shop_no) : null,
@@ -308,8 +308,8 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           id: String(t.id),
           name: String(t.name || ""),
           provider_key: String(t.provider_key || ""),
-          version: typeof (t as Record<string, unknown>).version === "string"
-            ? String((t as Record<string, unknown>).version)
+          version: typeof (t as Record<string, any>).version === "string"
+            ? String((t as Record<string, any>).version)
             : null,
         });
       });
@@ -339,8 +339,8 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           id: String(t.id),
           name: String(t.name || ""),
           provider_key: String(t.provider_key || ""),
-          version: typeof (t as Record<string, unknown>).version === "string"
-            ? String((t as Record<string, unknown>).version)
+          version: typeof (t as Record<string, any>).version === "string"
+            ? String((t as Record<string, any>).version)
             : null,
         });
       });
@@ -348,7 +348,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
 
     Array.from(resolvedTools.values()).forEach((t) => {
       const name = String(t.name || "").trim();
-      const tRecord = t as Record<string, unknown>;
+      const tRecord = t as Record<string, any>;
       const key = `${String(tRecord.provider_key || "").trim()}:${name}`;
       const id = String(tRecord.id || "").trim();
       if (!name) return;
@@ -360,7 +360,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         allowedToolIdByName.set(name, id);
       }
       if (!allowedToolVersionByName.has(name)) {
-        allowedToolVersionByName.set(name, (t as Record<string, unknown>).version || null);
+        allowedToolVersionByName.set(name, (t as Record<string, any>).version || null);
       }
     });
   }
@@ -427,3 +427,4 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     },
   };
 }
+

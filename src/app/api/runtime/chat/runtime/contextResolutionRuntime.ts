@@ -10,8 +10,8 @@ type ContextResolutionParams = {
   forcedIntentQueue: string[];
   lockIntentToRestockSubscribe: boolean;
   prevIntent: string | null;
-  prevEntity: Record<string, unknown>;
-  prevBotContext: Record<string, unknown>;
+  prevEntity: Record<string, any>;
+  prevBotContext: Record<string, any>;
   prevSelectedOrderId: string | null;
   prevOrderIdFromTranscript: string | null;
   prevPhoneFromTranscript: string | null;
@@ -36,8 +36,8 @@ type ContextResolutionParams = {
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
   resolvedIntent: string;
 };
@@ -62,7 +62,7 @@ function shouldPreserveEntityAuditKey(key: string) {
   return false;
 }
 
-function pickPreservedEntityAuditFields(entity: Record<string, unknown>) {
+function pickPreservedEntityAuditFields(entity: Record<string, any>) {
   const entries = Object.entries(entity || {}).filter(([key, value]) => {
     if (!shouldPreserveEntityAuditKey(key)) return false;
     return value !== undefined;
@@ -166,7 +166,7 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
         reason: "ORDER_ID_FAILED_LIKELIHOOD_CHECK",
         action: "CLEARED",
       },
-      { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
     );
     resolvedOrderId = null;
   }
@@ -195,7 +195,7 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
           reason: "ORDER_ID_NOT_IN_ACTIVE_CHOICES",
           action: listedOrderIds.size === 1 ? "REPLACED_WITH_SINGLE_CHOICE" : "CLEARED",
         },
-        { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+        { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
       );
       resolvedOrderId = listedOrderIds.size === 1 ? Array.from(listedOrderIds)[0] : null;
     }
@@ -249,7 +249,7 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
         expected_input: expectedInput,
         address_stage: addressStage || null,
       },
-      { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
     );
   }
   const allowZipHistoryFallback =
@@ -277,7 +277,7 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
         action: "CLEARED",
         expected_input: expectedInput,
       },
-      { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
     );
   }
   let resolvedZipcode =
@@ -304,7 +304,7 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
         reason: "ZIPCODE_FAILED_LIKELIHOOD_CHECK",
         action: "CLEARED",
       },
-      { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
     );
     resolvedZipcode = null;
   }
@@ -381,3 +381,4 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     contaminationSummaries,
   };
 }
+

@@ -2,17 +2,17 @@ import { createRuntimePipelineState, type RuntimePipelineState } from "./runtime
 
 export function initializeRuntimeState(input: {
   message: string;
-  lastTurn: Record<string, unknown> | null;
-  recentTurns: Array<Record<string, unknown>>;
-  prevBotContext: Record<string, unknown>;
+  lastTurn: Record<string, any> | null;
+  recentTurns: Array<Record<string, any>>;
+  prevBotContext: Record<string, any>;
   allowedToolByName: Map<string, string[]>;
   extractOrderId: (text: string) => string | null;
   extractPhone: (text: string) => string | null;
   extractZipcode: (text: string) => string | null;
   extractAddress: (text: string, orderId: string | null, phone: string | null, zipcode: string | null) => string | null;
   extractChannel: (text: string) => string | null;
-  findRecentEntity: (turns: Array<Record<string, unknown>>) => Record<string, string | null> | null;
-  isRestockSubscribeStageContext: (botContext: Record<string, unknown>) => boolean;
+  findRecentEntity: (turns: Array<Record<string, any>>) => Record<string, string | null> | null;
+  isRestockSubscribeStageContext: (botContext: Record<string, any>) => boolean;
   deriveExpectedInputFromAnswer: (answer: string) => string | null;
   isRestockInquiry: (text: string) => boolean;
   isRestockSubscribe: (text: string) => boolean;
@@ -20,7 +20,7 @@ export function initializeRuntimeState(input: {
   hasAllowedToolName: (name: string) => boolean;
   prevIntent: string | null;
   resolvedIntent: string;
-  prevEntity: Record<string, unknown>;
+  prevEntity: Record<string, any>;
   prevSelectedOrderId: string | null;
   prevChoices: Array<{ order_id?: string }>;
   prevOrderIdFromTranscript: string | null;
@@ -61,15 +61,15 @@ export function initializeRuntimeState(input: {
   mcpSkipQueue: Array<{
     tool: string;
     reason: string;
-    args?: Record<string, unknown>;
-    detail?: Record<string, unknown>;
+    args?: Record<string, any>;
+    detail?: Record<string, any>;
   }>;
   lastMcpFunction: string | null;
   lastMcpStatus: string | null;
   lastMcpError: string | null;
   lastMcpCount: number | null;
   contaminationSummaries: string[];
-  toolResults: Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }>;
+  toolResults: Array<{ name: string; ok: boolean; data?: Record<string, any>; error?: unknown }>;
 } {
   const {
     message,
@@ -93,7 +93,7 @@ export function initializeRuntimeState(input: {
   const prevIntent =
     typeof prevBotContext.intent_name === "string" ? String(prevBotContext.intent_name) : null;
   const resolvedIntent = prevIntent || "general";
-  const prevEntity = (prevBotContext.entity || {}) as Record<string, unknown>;
+  const prevEntity = (prevBotContext.entity || {}) as Record<string, any>;
   const prevSelectedOrderId =
     typeof prevBotContext.selected_order_id === "string" ? prevBotContext.selected_order_id : null;
   const prevChoicesRaw = prevBotContext.order_choices;
@@ -202,3 +202,4 @@ export function initializeRuntimeState(input: {
     toolResults: [],
   };
 }
+

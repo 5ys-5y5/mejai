@@ -19,7 +19,7 @@ type ContextResolutionResult = {
 
 type CompiledPolicy = {
   conflicts?: Array<{ intentScope?: string }>;
-  templates?: Record<string, unknown>;
+  templates?: Record<string, any>;
 };
 
 export async function runInputStageRuntime(input: {
@@ -33,7 +33,7 @@ export async function runInputStageRuntime(input: {
   derivedPhone: string | null;
   derivedZipcode: string | null;
   derivedAddress: string | null;
-  prevBotContext: Record<string, unknown>;
+  prevBotContext: Record<string, any>;
   context: unknown;
   sessionId: string;
   latestTurnId: string | null;
@@ -45,12 +45,12 @@ export async function runInputStageRuntime(input: {
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
   makeReply: (text: string, llmModel?: string | null, tools?: string[]) => string;
-  insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => Response;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => Response;
 }) {
   const {
     compiledPolicy,
@@ -99,7 +99,7 @@ export async function runInputStageRuntime(input: {
 
   const inputGate = runPolicyStage(compiledPolicy, "input", policyContext);
   const matchedRuleIds = inputGate.matched.map((rule) => rule.id);
-  const matchedTemplateIds = extractTemplateIds(inputGate.matched as Array<Record<string, unknown>>);
+  const matchedTemplateIds = extractTemplateIds(inputGate.matched as Array<Record<string, any>>);
   let usedRuleIds = [...matchedRuleIds];
   let usedTemplateIds = [...matchedTemplateIds];
   const inputRuleIds = [...matchedRuleIds];
@@ -112,8 +112,8 @@ export async function runInputStageRuntime(input: {
   const mcpSkipQueue: Array<{
     tool: string;
     reason: string;
-    args?: Record<string, unknown>;
-    detail?: Record<string, unknown>;
+    args?: Record<string, any>;
+    detail?: Record<string, any>;
   }> = [];
   const slotDebug = {
     expectedInput,
@@ -154,7 +154,7 @@ export async function runInputStageRuntime(input: {
     resolvedIntent,
     message,
     effectiveMessageForIntent,
-    policyEntity: (policyContext.entity || {}) as Record<string, unknown>,
+    policyEntity: (policyContext.entity || {}) as Record<string, any>,
     prevBotContext,
     expectedInput,
   });
@@ -191,17 +191,17 @@ export async function runInputStageRuntime(input: {
           ? "intent_disambiguation_source_text"
           : "current_message",
     },
-    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
   );
   if (gate.enabled) {
     if (gate.missing_slots.length > 0 && gate.spec) {
       const conversation =
         policyContext.conversation && typeof policyContext.conversation === "object"
-          ? (policyContext.conversation as Record<string, unknown>)
+          ? (policyContext.conversation as Record<string, any>)
           : {};
       const flags =
         conversation.flags && typeof conversation.flags === "object"
-          ? (conversation.flags as Record<string, unknown>)
+          ? (conversation.flags as Record<string, any>)
           : {};
       policyContext = {
         ...policyContext,
@@ -228,7 +228,7 @@ export async function runInputStageRuntime(input: {
           resolved_slots: gate.resolved_slots,
           missing_slots: gate.missing_slots,
         },
-        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
       );
       await insertEvent(
         context,
@@ -244,7 +244,7 @@ export async function runInputStageRuntime(input: {
           expected_input: gate.spec.expected_input,
           missing_slots: gate.missing_slots,
         },
-        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
       );
       await insertEvent(
         context,
@@ -273,7 +273,7 @@ export async function runInputStageRuntime(input: {
             has_address: Boolean(policyContext.entity?.address),
           },
         },
-        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
       );
       const prompt = buildIntentScopePrompt({
         spec: gate.spec,
@@ -306,7 +306,7 @@ export async function runInputStageRuntime(input: {
           resolved_slots: gate.resolved_slots,
           missing_slots: gate.missing_slots,
         },
-        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
       );
       return {
         response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
@@ -324,15 +324,15 @@ export async function runInputStageRuntime(input: {
         required_slots: gate.spec?.required_slots || [],
         resolved_slots: gate.resolved_slots,
       },
-      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
     );
     const conversation =
       policyContext.conversation && typeof policyContext.conversation === "object"
-        ? (policyContext.conversation as Record<string, unknown>)
+        ? (policyContext.conversation as Record<string, any>)
         : {};
     const flags =
       conversation.flags && typeof conversation.flags === "object"
-        ? (conversation.flags as Record<string, unknown>)
+        ? (conversation.flags as Record<string, any>)
         : {};
     policyContext = {
       ...policyContext,
@@ -359,7 +359,7 @@ export async function runInputStageRuntime(input: {
       resolved_slots: gate.resolved_slots,
       missing_slots: gate.missing_slots,
     },
-    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
   );
 
   const forcedInputResponse = await handleInputForcedResponse({
@@ -406,3 +406,4 @@ export async function runInputStageRuntime(input: {
     noteContamination,
   };
 }
+

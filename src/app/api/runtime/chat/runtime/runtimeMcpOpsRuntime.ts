@@ -15,10 +15,10 @@ const DEFAULT_TOOL_PROVIDER_MAP: Record<string, string> = {
 export function createRuntimeMcpOps(input: {
   usedProviders: string[];
   mcpSkipLogs: string[];
-  mcpSkipQueue: Array<{ tool: string; reason: string; args?: Record<string, unknown>; detail?: Record<string, unknown> }>;
+  mcpSkipQueue: Array<{ tool: string; reason: string; args?: Record<string, any>; detail?: Record<string, any> }>;
   pipelineState: RuntimePipelineState;
   getResolvedIntent: () => string;
-  getPolicyEntity: () => Record<string, unknown>;
+  getPolicyEntity: () => Record<string, any>;
   setTracking: (next: {
     lastMcpFunction: string | null;
     lastMcpStatus: string | null;
@@ -30,8 +30,8 @@ export function createRuntimeMcpOps(input: {
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
   context: unknown;
   sessionId: string;
@@ -57,7 +57,7 @@ export function createRuntimeMcpOps(input: {
     nowIso,
   } = input;
 
-  const noteMcp = (name: string, result: { ok: boolean; error?: string; data?: Record<string, unknown> }) => {
+  const noteMcp = (name: string, result: { ok: boolean; error?: string; data?: Record<string, any> }) => {
     const tracking = updateMcpTracking({ name, result, toolProviderMap: DEFAULT_TOOL_PROVIDER_MAP, usedProviders });
     setTracking(tracking);
     pipelineState.usedProviders = usedProviders;
@@ -66,8 +66,8 @@ export function createRuntimeMcpOps(input: {
   const noteMcpSkip = (
     name: string,
     reason: string,
-    detail?: Record<string, unknown>,
-    args?: Record<string, unknown>
+    detail?: Record<string, any>,
+    args?: Record<string, any>
   ) => {
     const provider = DEFAULT_TOOL_PROVIDER_MAP[name];
     if (provider) usedProviders.push(provider);
@@ -101,4 +101,5 @@ export function createRuntimeMcpOps(input: {
 
   return { noteMcp, noteMcpSkip, flushMcpSkipLogs };
 }
+
 

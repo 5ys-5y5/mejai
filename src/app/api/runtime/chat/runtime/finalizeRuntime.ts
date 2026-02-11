@@ -8,8 +8,8 @@ export function buildFinalLlmMessages(input: {
   resolvedIntent: string;
   derivedChannel: string | null;
   resolvedOrderId: string | null;
-  policyEntity: Record<string, unknown>;
-  productDecision: Record<string, unknown> | null;
+  policyEntity: Record<string, any>;
+  productDecision: Record<string, any> | null;
   kb: { title: string; content: string | null };
   adminKbs: Array<{ title: string; content: string | null }>;
   mcpSummary: string;
@@ -167,7 +167,7 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
   const matchedRules = outputGate.matched as Array<{ id?: string }>;
   usedRuleIds.push(...matchedRules.map((rule) => rule.id).filter((id): id is string => Boolean(id)));
   usedTemplateIds.push(
-    ...extractTemplateIds(outputGate.matched as Array<Record<string, unknown>>)
+    ...extractTemplateIds(outputGate.matched as Array<Record<string, any>>)
   );
   if (outputGate.actions.outputFormat) {
     finalAnswer = formatOutputDefault(finalAnswer);
@@ -184,7 +184,7 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
       typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
     const conversationFlags =
       policyContext.conversation && typeof policyContext.conversation === "object"
-        ? ((policyContext.conversation as Record<string, unknown>).flags as Record<string, unknown>) || {}
+        ? ((policyContext.conversation as Record<string, any>).flags as Record<string, any>) || {}
         : {};
     const deferredForceReason = String(conversationFlags.deferred_force_response_reason || "").trim();
     const isAddressPromptTemplate =
@@ -328,3 +328,4 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
     ...(quickReplyConfig ? { quick_replies: YES_NO_QUICK_REPLIES, quick_reply_config: quickReplyConfig } : {}),
   });
 }
+

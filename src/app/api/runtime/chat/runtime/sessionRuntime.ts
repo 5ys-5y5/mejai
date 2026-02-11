@@ -1,19 +1,19 @@
 export type SessionState = {
   sessionId: string;
   reusedSession: boolean;
-  recentTurns: Array<Record<string, unknown>>;
+  recentTurns: Array<Record<string, any>>;
   firstTurnInSession: boolean;
-  lastTurn: Record<string, unknown> | null;
+  lastTurn: Record<string, any> | null;
   nextSeq: number;
-  prevBotContext: Record<string, unknown>;
+  prevBotContext: Record<string, any>;
 };
 
 export async function prepareSessionState(input: {
   context: unknown;
   requestedSessionId: string;
   agentId: string | null;
-  createSession: (context: unknown, agentId: string | null) => Promise<{ data?: Record<string, unknown>; error?: unknown }>;
-  getRecentTurns: (context: unknown, sessionId: string, limit: number) => Promise<{ data?: Array<Record<string, unknown>> }>;
+  createSession: (context: unknown, agentId: string | null) => Promise<{ data?: Record<string, any>; error?: unknown }>;
+  getRecentTurns: (context: unknown, sessionId: string, limit: number) => Promise<{ data?: Array<Record<string, any>> }>;
   recentTurnLimit?: number;
 }): Promise<{ state?: SessionState; error?: string }> {
   const requestedSessionId = String(input.requestedSessionId || "").trim();
@@ -29,8 +29,8 @@ export async function prepareSessionState(input: {
 
   const recentLimit = Number(input.recentTurnLimit || 15);
   const recentTurnsRes = await input.getRecentTurns(input.context, sessionId, recentLimit);
-  const recentTurns = (recentTurnsRes?.data || []) as Array<Record<string, unknown>>;
-  const lastTurn = recentTurns[0] as Record<string, unknown> | undefined;
+  const recentTurns = (recentTurnsRes?.data || []) as Array<Record<string, any>>;
+  const lastTurn = recentTurns[0] as Record<string, any> | undefined;
 
   return {
     state: {
@@ -40,7 +40,8 @@ export async function prepareSessionState(input: {
       firstTurnInSession: recentTurns.length === 0,
       lastTurn: lastTurn || null,
       nextSeq: lastTurn?.seq ? Number(lastTurn.seq) + 1 : 1,
-      prevBotContext: (lastTurn?.bot_context || {}) as Record<string, unknown>,
+      prevBotContext: (lastTurn?.bot_context || {}) as Record<string, any>,
     },
   };
 }
+

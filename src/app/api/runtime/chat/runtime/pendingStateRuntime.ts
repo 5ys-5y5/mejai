@@ -16,9 +16,9 @@ import {
 
 type PendingStateParams = {
   context: unknown;
-  prevBotContext: Record<string, unknown>;
+  prevBotContext: Record<string, any>;
   resolvedIntent: string;
-  prevEntity: Record<string, unknown>;
+  prevEntity: Record<string, any>;
   prevSelectedOrderId: string | null;
   message: string;
   sessionId: string;
@@ -34,7 +34,7 @@ type PendingStateParams = {
     rawKeyword: string,
     sessionId: string,
     turnId: string | null,
-    botContext: Record<string, unknown>
+    botContext: Record<string, any>
   ) => Promise<{ status: string; data?: unknown; error?: string }>;
   extractZipcode: (text: string) => string | null;
   extractAddress: (
@@ -50,16 +50,16 @@ type PendingStateParams = {
   isYesText: (text: string) => boolean;
   isNoText: (text: string) => boolean;
   makeReply: (text: string) => string;
-  insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
     context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => unknown;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => unknown;
 };
 
 type PendingStateResult = {
@@ -75,7 +75,7 @@ function readPendingCandidates(raw: unknown) {
   const source = Array.isArray(raw) ? raw : [];
   return source
     .map((item, idx) => {
-      const record = item as Record<string, unknown>;
+      const record = item as Record<string, any>;
       const zipNo = String(record.zip_no || "").trim();
       const roadAddr = String(record.road_addr || "").trim();
       const jibunAddr = String(record.jibun_addr || "").trim();
@@ -476,7 +476,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           pendingAddress,
           sessionId,
           latestTurnId,
-          { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+          { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
         );
         if (search.status === "success") {
           const candidates = extractAddressCandidatesFromSearchData(search.data, 5);
@@ -903,3 +903,4 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
     refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
   };
 }
+

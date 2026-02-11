@@ -9,9 +9,9 @@ import { buildNumberedChoicePrompt, buildRestockLeadDaysPrompt, buildYesNoConfir
 
 type RestockPendingParams = {
   context: unknown;
-  prevBotContext: Record<string, unknown>;
+  prevBotContext: Record<string, any>;
   resolvedIntent: string;
-  prevEntity: Record<string, unknown>;
+  prevEntity: Record<string, any>;
   prevSelectedOrderId: string | null;
   message: string;
   sessionId: string;
@@ -29,16 +29,16 @@ type RestockPendingParams = {
   isExecutionAffirmativeText: (text: string) => boolean;
   isRestockSubscribe: (text: string) => boolean;
   makeReply: (text: string) => string;
-  insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
     context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => unknown;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => unknown;
 };
 
 type RestockPendingResult = {
@@ -77,12 +77,12 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
   let nextLocked = params.lockIntentToRestockSubscribe;
 
   if (prevBotContext.restock_pending && prevBotContext.restock_stage === "awaiting_non_target_alternative_confirm") {
-    const pendingCandidates = Array.isArray((prevBotContext as Record<string, unknown>).restock_candidates)
-      ? ((prevBotContext as Record<string, unknown>).restock_candidates as Array<Record<string, unknown>>)
+    const pendingCandidates = Array.isArray((prevBotContext as Record<string, any>).restock_candidates)
+      ? ((prevBotContext as Record<string, any>).restock_candidates as Array<Record<string, any>>)
       : [];
     const disableProductCards = Boolean(
-      (prevBotContext as Record<string, unknown>).restock_kb_only ||
-        (prevBotContext as Record<string, unknown>).restock_new_product
+      (prevBotContext as Record<string, any>).restock_kb_only ||
+        (prevBotContext as Record<string, any>).restock_new_product
     );
     const lines = pendingCandidates.map(
       (candidate, idx) => `- ${idx + 1}번 | ${String(candidate.product_name || "-")} | ${String(candidate.raw_date || "-")}`
@@ -109,13 +109,13 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
       const productCards = disableProductCards
         ? []
         : pendingCandidates
-            .filter((candidate) => Boolean((candidate as Record<string, unknown>).thumbnail_url))
+            .filter((candidate) => Boolean((candidate as Record<string, any>).thumbnail_url))
             .map((candidate, idx) => ({
               id: `restock-${idx + 1}`,
-              title: String((candidate as Record<string, unknown>).product_name || "-"),
-              subtitle: `${String((candidate as Record<string, unknown>).raw_date || "-")} 입고 예정`,
+              title: String((candidate as Record<string, any>).product_name || "-"),
+              subtitle: `${String((candidate as Record<string, any>).raw_date || "-")} 입고 예정`,
               description: "",
-              image_url: String((candidate as Record<string, unknown>).thumbnail_url || ""),
+              image_url: String((candidate as Record<string, any>).thumbnail_url || ""),
               value: String(idx + 1),
             }));
       await insertTurn({
@@ -139,7 +139,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         latestTurnId,
         "POLICY_DECISION",
         { stage: "tool", action: "ASK_RESTOCK_PRODUCT_CHOICE", candidate_count: pendingCandidates.length },
-        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, unknown> }
+        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, any> }
       );
       await insertEvent(
         context,
@@ -147,7 +147,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         latestTurnId,
         "FINAL_ANSWER_READY",
         { answer: reply, model: "deterministic_restock_kb", quick_reply_config: quickReplyConfig },
-        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, unknown> }
+        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, any> }
       );
       return {
         response: respond({
@@ -186,7 +186,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         latestTurnId,
         "POLICY_DECISION",
         { stage: "tool", action: "ASK_PRODUCT_NAME_FOR_RESTOCK" },
-        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, unknown> }
+        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, any> }
       );
       await insertEvent(
         context,
@@ -194,7 +194,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         latestTurnId,
         "FINAL_ANSWER_READY",
         { answer: reply, model: "deterministic_restock_kb" },
-        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, unknown> }
+        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, any> }
       );
       return {
         response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
@@ -277,7 +277,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         latestTurnId,
         "POLICY_DECISION",
         { stage: "tool", action: "END_CONVERSATION_FROM_RESTOCK_SUGGESTION" },
-        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, unknown> }
+        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, any> }
       );
       await insertEvent(
         context,
@@ -285,7 +285,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         latestTurnId,
         "FINAL_ANSWER_READY",
         { answer: reply, model: "deterministic_conversation_end" },
-        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, unknown> }
+        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, any> }
       );
       return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }), resolvedIntent: nextResolvedIntent, restockSubscribeAcceptedThisTurn: nextAccepted, lockIntentToRestockSubscribe: nextLocked };
     }
@@ -361,8 +361,8 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
     const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
     const pendingChannel = String(prevBotContext.pending_channel || "").trim() || "sms";
-    const pendingLeadDays = Array.isArray((prevBotContext as Record<string, unknown>).pending_lead_days)
-      ? ((prevBotContext as Record<string, unknown>).pending_lead_days as number[])
+    const pendingLeadDays = Array.isArray((prevBotContext as Record<string, any>).pending_lead_days)
+      ? ((prevBotContext as Record<string, any>).pending_lead_days as number[])
           .map((n) => Number(n))
           .filter((n) => Number.isFinite(n))
       : [];
@@ -439,14 +439,14 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
     const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
     const pendingChannel = String(prevBotContext.pending_channel || "").trim() || "sms";
-    const availableLeadDays = Array.isArray((prevBotContext as Record<string, unknown>).available_lead_days)
-      ? ((prevBotContext as Record<string, unknown>).available_lead_days as number[])
+    const availableLeadDays = Array.isArray((prevBotContext as Record<string, any>).available_lead_days)
+      ? ((prevBotContext as Record<string, any>).available_lead_days as number[])
           .map((n) => Number(n))
           .filter((n) => Number.isFinite(n))
       : [];
     const minLeadDays =
-      Number.isFinite(Number((prevBotContext as Record<string, unknown>).min_lead_days || 0))
-        ? Math.max(1, Number((prevBotContext as Record<string, unknown>).min_lead_days || 1))
+      Number.isFinite(Number((prevBotContext as Record<string, any>).min_lead_days || 0))
+        ? Math.max(1, Number((prevBotContext as Record<string, any>).min_lead_days || 1))
         : 1;
     const selectedLeadDays = parseLeadDaysSelection(message, availableLeadDays);
     if (selectedLeadDays.length < minLeadDays) {
@@ -555,8 +555,8 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     const pendingProductId = String(prevBotContext.pending_product_id || "").trim();
     const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
     const pendingChannel = String(prevBotContext.pending_channel || "").trim();
-    const pendingLeadDays = Array.isArray((prevBotContext as Record<string, unknown>).pending_lead_days)
-      ? ((prevBotContext as Record<string, unknown>).pending_lead_days as number[])
+    const pendingLeadDays = Array.isArray((prevBotContext as Record<string, any>).pending_lead_days)
+      ? ((prevBotContext as Record<string, any>).pending_lead_days as number[])
           .map((n) => Number(n))
           .filter((n) => Number.isFinite(n))
       : [];
@@ -581,7 +581,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         latestTurnId,
         "POLICY_DECISION",
         { stage: "tool", action: "END_CONVERSATION_FROM_RESTOCK_CONFIRM" },
-        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, unknown> }
+        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, any> }
       );
       await insertEvent(
         context,
@@ -589,7 +589,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         latestTurnId,
         "FINAL_ANSWER_READY",
         { answer: reply, model: "deterministic_conversation_end" },
-        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, unknown> }
+        { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, any> }
       );
       return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }), resolvedIntent: nextResolvedIntent, restockSubscribeAcceptedThisTurn: nextAccepted, lockIntentToRestockSubscribe: nextLocked };
     }
@@ -667,3 +667,4 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     lockIntentToRestockSubscribe: nextLocked,
   };
 }
+

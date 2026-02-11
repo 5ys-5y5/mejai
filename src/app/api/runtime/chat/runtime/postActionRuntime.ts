@@ -13,9 +13,9 @@ type RuntimeContext = { supabase: SupabaseLike };
 
 type PostActionRuntimeParams = {
   context: RuntimeContext;
-  prevBotContext: Record<string, unknown>;
+  prevBotContext: Record<string, any>;
   resolvedIntent: string;
-  prevEntity: Record<string, unknown>;
+  prevEntity: Record<string, any>;
   message: string;
   sessionId: string;
   nextSeq: number;
@@ -25,8 +25,8 @@ type PostActionRuntimeParams = {
   isOtherInquiryText: (text: string) => boolean;
   isYesText: (text: string) => boolean;
   makeReply: (text: string) => string;
-  insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => unknown;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => unknown;
 };
 
 const SATISFACTION_QUICK_REPLIES = [
@@ -194,9 +194,9 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
       .maybeSingle();
     const currentMeta =
       currentSessionRow && currentSessionRow.metadata && typeof currentSessionRow.metadata === "object"
-        ? (currentSessionRow.metadata as Record<string, unknown>)
+        ? (currentSessionRow.metadata as Record<string, any>)
         : {};
-    const baseMeta = { ...currentMeta, csat: { ...(currentMeta.csat as Record<string, unknown> | undefined), score } };
+    const baseMeta = { ...currentMeta, csat: { ...(currentMeta.csat as Record<string, any> | undefined), score } };
     await context.supabase
       .from("D_conv_sessions")
       .update({ satisfaction: score, ended_at: new Date().toISOString(), metadata: baseMeta })
@@ -263,11 +263,11 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
       .maybeSingle();
     const currentMeta =
       currentSessionRow && currentSessionRow.metadata && typeof currentSessionRow.metadata === "object"
-        ? (currentSessionRow.metadata as Record<string, unknown>)
+        ? (currentSessionRow.metadata as Record<string, any>)
         : {};
     const priorCsat =
       currentMeta.csat && typeof currentMeta.csat === "object"
-        ? (currentMeta.csat as Record<string, unknown>)
+        ? (currentMeta.csat as Record<string, any>)
         : {};
     const nextMeta = {
       ...currentMeta,
@@ -300,3 +300,4 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
 
   return { response: null };
 }
+

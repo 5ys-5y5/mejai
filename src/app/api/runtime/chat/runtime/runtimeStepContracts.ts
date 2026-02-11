@@ -1,5 +1,5 @@
-export type StepInput<T extends Record<string, unknown>> = T;
-export type StepOutput<T extends Record<string, unknown>> = T;
+export type StepInput<T extends Record<string, any>> = T;
+export type StepOutput<T extends Record<string, any>> = T;
 
 export type DisambiguationStepInput = StepInput<{
   message: string;
@@ -44,10 +44,11 @@ export type ToolExecStepOutput = StepOutput<{
   mcpSummary: string;
   listOrdersCalled: boolean;
   listOrdersEmpty: boolean;
-  listOrdersChoices: Array<Record<string, unknown>>;
+  listOrdersChoices: Array<Record<string, any>>;
 }>;
 
 export type PostToolFlowStepOutput = StepOutput<{
   resolvedOrderId: string | null;
   mcpSummary: string;
 }>;
+

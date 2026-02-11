@@ -133,15 +133,15 @@ export async function POST(req: NextRequest) {
   const runtimeTurnId =
     String(req.headers.get("x-runtime-turn-id") || "").trim() || crypto.randomUUID();
   const timingStages: RuntimeTimingStage[] = [];
-  let runtimeContext: Record<string, unknown> | null = null;
+  let runtimeContext: Record<string, any> | null = null;
   let currentSessionId: string | null = null;
   let firstTurnInSession = false;
   let latestTurnId: string | null = null;
-  let lastDebugPrefixJson: Record<string, unknown> | null = null;
+  let lastDebugPrefixJson: Record<string, any> | null = null;
   let auditMessage: string | null = null;
   let auditConversationMode: string | null = null;
   let auditIntent: string | null = null;
-  let auditEntity: Record<string, unknown> = {};
+  let auditEntity: Record<string, any> = {};
   let pipelineStateForError: RuntimePipelineState | null = null;
   const runtimeCallChain: Array<{ module_path: string; function_name: string }> = [];
   const pushRuntimeCall = (modulePath: string, functionName: string) => {
@@ -202,16 +202,16 @@ export async function POST(req: NextRequest) {
       prevBotContext,
     } = bootstrap.state;
     if (context && typeof context === "object") {
-      const contextRecord = context as Record<string, unknown>;
+      const contextRecord = context as Record<string, any>;
       contextRecord.runtimeTraceId = runtimeTraceId;
       contextRecord.runtimeRequestStartedAt = new Date(requestStartedAt).toISOString();
       contextRecord.runtimeTurnId = runtimeTurnId;
     }
     const runtimeTemplateOverrides = resolveRuntimeTemplateOverridesFromPolicy(
-      ((compiledPolicy as { templates?: Record<string, unknown> })?.templates || {}) as Record<string, unknown>
+      ((compiledPolicy as { templates?: Record<string, any> })?.templates || {}) as Record<string, any>
     );
     const effectivePrevBotContext = mergeRuntimeTemplateOverrides(
-      (prevBotContext || {}) as Record<string, unknown>,
+      (prevBotContext || {}) as Record<string, any>,
       runtimeTemplateOverrides
     );
     runtimeContext = context;
@@ -225,7 +225,7 @@ export async function POST(req: NextRequest) {
       message,
       lastTurn,
       recentTurns,
-      prevBotContext: effectivePrevBotContext as Record<string, unknown>,
+      prevBotContext: effectivePrevBotContext as Record<string, any>,
       allowedToolByName,
       extractOrderId,
       extractPhone,
@@ -589,7 +589,7 @@ export async function POST(req: NextRequest) {
     pipelineState.resolvedIntent = resolvedIntent;
     let policyContext: PolicyEvalContext = resolvedContext.policyContext;
     auditIntent = resolvedIntent;
-    auditEntity = (policyContext.entity || {}) as Record<string, unknown>;
+    auditEntity = (policyContext.entity || {}) as Record<string, any>;
     pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts", "runInputStageRuntime");
     const inputStage = await runInputStageRuntime({
       compiledPolicy,
@@ -609,7 +609,7 @@ export async function POST(req: NextRequest) {
       derivedPhone,
       derivedZipcode,
       derivedAddress,
-      prevBotContext: effectivePrevBotContext as Record<string, unknown>,
+      prevBotContext: effectivePrevBotContext as Record<string, any>,
       context,
       sessionId,
       latestTurnId,
@@ -625,7 +625,7 @@ export async function POST(req: NextRequest) {
     resolvedIntent = inputStage.resolvedIntent as string;
     resolvedOrderId = (inputStage.resolvedOrderId as string | null) || null;
     policyContext = inputStage.policyContext as PolicyEvalContext;
-    const activePolicyConflicts = inputStage.activePolicyConflicts as Array<Record<string, unknown>>;
+    const activePolicyConflicts = inputStage.activePolicyConflicts as Array<Record<string, any>>;
     usedRuleIds = inputStage.usedRuleIds as string[];
     usedTemplateIds = inputStage.usedTemplateIds as string[];
     inputRuleIds = inputStage.inputRuleIds as string[];
@@ -638,8 +638,8 @@ export async function POST(req: NextRequest) {
     mcpSkipQueue = inputStage.mcpSkipQueue as Array<{
       tool: string;
       reason: string;
-      args?: Record<string, unknown>;
-      detail?: Record<string, unknown>;
+      args?: Record<string, any>;
+      detail?: Record<string, any>;
     }>;
     slotDebug = inputStage.slotDebug as typeof slotDebug;
     contaminationSummaries = inputStage.contaminationSummaries as string[];
@@ -673,7 +673,7 @@ export async function POST(req: NextRequest) {
       mcpSkipQueue,
       pipelineState,
       getResolvedIntent: () => resolvedIntent,
-      getPolicyEntity: () => (policyContext.entity || {}) as Record<string, unknown>,
+      getPolicyEntity: () => (policyContext.entity || {}) as Record<string, any>,
       setTracking: (next) => {
         lastMcpFunction = next.lastMcpFunction;
         lastMcpStatus = next.lastMcpStatus;
@@ -693,7 +693,7 @@ export async function POST(req: NextRequest) {
       nowIso,
     });
     auditIntent = resolvedIntent;
-    auditEntity = (policyContext.entity || {}) as Record<string, unknown>;
+    auditEntity = (policyContext.entity || {}) as Record<string, any>;
 
     pushRuntimeCall("src/app/api/runtime/chat/runtime/otpRuntime.ts", "handleOtpLifecycleAndOrderGate");
     const otpGate = await handleOtpLifecycleAndOrderGate({
@@ -756,7 +756,7 @@ export async function POST(req: NextRequest) {
           restock_at: decision.restock_at ?? null,
         },
       };
-      auditEntity = (policyContext.entity || {}) as Record<string, unknown>;
+      auditEntity = (policyContext.entity || {}) as Record<string, any>;
     }
 
     let listOrdersCalled = false;
@@ -843,7 +843,7 @@ export async function POST(req: NextRequest) {
     usedTemplateIds = toolStage.usedTemplateIds as string[];
     usedToolPolicies = toolStage.usedToolPolicies as string[];
     mcpCandidateCalls = toolStage.mcpCandidateCalls as string[];
-    const finalCalls = toolStage.finalCalls as Array<{ name: string; args?: Record<string, unknown> }>;
+    const finalCalls = toolStage.finalCalls as Array<{ name: string; args?: Record<string, any> }>;
     const allowed = toolStage.allowed as Set<string>;
     const canUseTool = toolStage.canUseTool as (name: string) => boolean;
     mcpSummary = toolStage.mcpSummary as string;
@@ -934,8 +934,8 @@ export async function POST(req: NextRequest) {
       resolvedIntent,
       derivedChannel,
       resolvedOrderId,
-      policyEntity: (policyContext.entity || {}) as Record<string, unknown>,
-      productDecision: (productDecisionRes.decision || null) as Record<string, unknown> | null,
+      policyEntity: (policyContext.entity || {}) as Record<string, any>,
+      productDecision: (productDecisionRes.decision || null) as Record<string, any> | null,
       kb: { title: kb.title, content: kb.content || null },
       adminKbs: adminKbs.map((item) => ({ title: item.title, content: item.content || null })),
       mcpSummary,
@@ -1021,3 +1021,4 @@ export async function POST(req: NextRequest) {
     return runtimeError.response;
   }
 }
+

@@ -115,7 +115,7 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
       { destination: otpDestination },
       sessionId,
       latestTurnId,
-      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
       allowedTools
     );
     noteMcp("send_otp", sendResult);
@@ -136,7 +136,7 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
       });
       return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] });
     }
-    const sendData = (sendResult.data ?? {}) as Record<string, unknown>;
+    const sendData = (sendResult.data ?? {}) as Record<string, any>;
     const otpRefValue = String(sendData.otp_ref || "").trim();
     const prompt = "문자로 전송된 인증번호를 입력해 주세요.";
     const reply = makeReply(prompt);
@@ -261,7 +261,7 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
         { destination: phone },
         sessionId,
         latestTurnId,
-        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
         allowedTools
       );
       noteMcp("send_otp", sendResult);
@@ -282,7 +282,7 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
         });
         return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }), otpVerifiedThisTurn, otpPending, customerVerificationToken, policyContext, auditEntity, mcpCandidateCalls };
       }
-      const sendData = (sendResult.data ?? {}) as Record<string, unknown>;
+      const sendData = (sendResult.data ?? {}) as Record<string, any>;
       const otpRefValue = String(sendData.otp_ref || "").trim();
       const prompt = "문자로 전송된 인증번호를 입력해 주세요.";
       const reply = makeReply(prompt);
@@ -359,7 +359,7 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
       { code: otpCode, otp_ref: otpRef || undefined },
       sessionId,
       latestTurnId,
-      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
       allowedTools
     );
     noteMcp("verify_otp", verifyResult);
@@ -385,14 +385,14 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
       });
       return { response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }), otpVerifiedThisTurn, otpPending, customerVerificationToken, policyContext, auditEntity, mcpCandidateCalls };
     }
-    const verifyData = (verifyResult.data ?? {}) as Record<string, unknown>;
+    const verifyData = (verifyResult.data ?? {}) as Record<string, any>;
     const tokenValue = String(verifyData.customer_verification_token || "").trim();
     customerVerificationToken = tokenValue || null;
     policyContext = {
       ...policyContext,
       user: { ...(policyContext.user || {}), confirmed: true },
     };
-    auditEntity = (policyContext.entity || {}) as Record<string, unknown>;
+    auditEntity = (policyContext.entity || {}) as Record<string, any>;
     await context.supabase
       .from("D_conv_turns")
       .update({
@@ -474,7 +474,7 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
       { destination: otpDestination },
       sessionId,
       latestTurnId,
-      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
       allowedTools
     );
     noteMcp("send_otp", sendResult);
@@ -495,7 +495,7 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
       });
       return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }), otpVerifiedThisTurn, otpPending, customerVerificationToken, policyContext, auditEntity, mcpCandidateCalls };
     }
-    const sendData = (sendResult.data ?? {}) as Record<string, unknown>;
+    const sendData = (sendResult.data ?? {}) as Record<string, any>;
     const otpRefValue = String(sendData.otp_ref || "").trim();
     const prompt = "문자로 전송된 인증번호를 입력해 주세요.";
     const reply = makeReply(prompt);
@@ -520,3 +520,4 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
 
   return { response: null, otpVerifiedThisTurn, otpPending, customerVerificationToken, policyContext, auditEntity, mcpCandidateCalls };
 }
+

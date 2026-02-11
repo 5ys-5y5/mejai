@@ -9,7 +9,7 @@ type RuntimeStateSnapshot = {
   mcpLastError: string | null;
   mcpLastCount: number | null;
   mcpLogs: string[];
-  providerConfig?: Record<string, unknown>;
+  providerConfig?: Record<string, any>;
   providerAvailable: string[];
   authSettingsId: string | null;
   userId: string;
@@ -42,18 +42,18 @@ export function createRuntimeConversationIo(input: {
   context: unknown;
   insertFinalTurn: (
     context: unknown,
-    payload: Record<string, unknown>,
-    debugPrefixJson: Record<string, unknown>
-  ) => Promise<Record<string, unknown>>;
+    payload: Record<string, any>,
+    debugPrefixJson: Record<string, any>
+  ) => Promise<Record<string, any>>;
   pendingIntentQueue: string[];
   orgId?: string | null;
   getSnapshot: (llmModel: string | null, tools: string[]) => RuntimeStateSnapshot;
   getFallbackSnapshot: () => RuntimeStateSnapshot;
-  getToolResults: () => Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }>;
+  getToolResults: () => Array<{ name: string; ok: boolean; data?: Record<string, any>; error?: unknown }>;
   getMcpSkipLogs: () => string[];
-  buildDebugPrefixJson: (payload: Record<string, unknown>) => Record<string, unknown>;
-  getLastDebugPrefixJson: () => Record<string, unknown> | null;
-  setLastDebugPrefixJson: (next: Record<string, unknown> | null) => void;
+  buildDebugPrefixJson: (payload: Record<string, any>) => Record<string, any>;
+  getLastDebugPrefixJson: () => Record<string, any> | null;
+  setLastDebugPrefixJson: (next: Record<string, any> | null) => void;
   setLatestTurnId: (id: string | null) => void;
   decorateReplyText?: (text: string) => string;
 }) {
@@ -89,7 +89,7 @@ export function createRuntimeConversationIo(input: {
     return made.text;
   }
 
-  async function insertTurn(payload: Record<string, unknown>) {
+  async function insertTurn(payload: Record<string, any>) {
     const inserted = await insertTurnWithDebug({
       payload,
       currentDebugPrefixJson: getLastDebugPrefixJson(),
@@ -107,3 +107,4 @@ export function createRuntimeConversationIo(input: {
 
   return { makeReply, insertTurn };
 }
+

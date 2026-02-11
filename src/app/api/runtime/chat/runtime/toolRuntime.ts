@@ -6,33 +6,33 @@ import {
 import { buildNumberedChoicePrompt, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
 import { splitAddressForUpdate } from "../shared/slotUtils";
 
-type ToolCall = { name: string; args?: Record<string, unknown>; ok?: boolean; data?: Record<string, unknown>; error?: unknown };
+type ToolCall = { name: string; args?: Record<string, any>; ok?: boolean; data?: Record<string, any>; error?: unknown };
 type LookupOrderView = {
-  core?: Record<string, unknown>;
-  summary?: Record<string, unknown>;
-  order?: Record<string, unknown>;
+  core?: Record<string, any>;
+  summary?: Record<string, any>;
+  order?: Record<string, any>;
   items?: unknown;
 };
 type PolicyContext = {
-  entity?: Record<string, unknown>;
-  conversation?: Record<string, unknown>;
+  entity?: Record<string, any>;
+  conversation?: Record<string, any>;
 };
-type ToolGateRule = { id?: string; enforce?: { actions?: Array<Record<string, unknown>> } };
+type ToolGateRule = { id?: string; enforce?: { actions?: Array<Record<string, any>> } };
 type ToolGate = { matched: ToolGateRule[] };
 
-const toRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+const toRecord = (value: unknown): Record<string, any> =>
+  value && typeof value === "object" ? (value as Record<string, any>) : {};
 
 const readNestedArray = (value: unknown, nestedKey?: string): unknown[] => {
   if (Array.isArray(value)) return value;
   if (nestedKey && value && typeof value === "object") {
-    const nested = (value as Record<string, unknown>)[nestedKey];
+    const nested = (value as Record<string, any>)[nestedKey];
     if (Array.isArray(nested)) return nested;
   }
   return [];
 };
 
-const readRuleActions = (rule: ToolGateRule): Array<Record<string, unknown>> => {
+const readRuleActions = (rule: ToolGateRule): Array<Record<string, any>> => {
   const actions = rule.enforce?.actions;
   return Array.isArray(actions) ? actions : [];
 };
@@ -46,10 +46,10 @@ export function createToolAccessEvaluator(denied: Set<string>, allowed: Set<stri
 }
 
 export function filterForcedCallsByPolicy(
-  forcedCalls: Array<{ name: string; args?: Record<string, unknown> }>,
+  forcedCalls: Array<{ name: string; args?: Record<string, any> }>,
   denied: Set<string>,
   allowed: Set<string>,
-  noteSkip: (name: string, reason: string, detail?: Record<string, unknown>, args?: Record<string, unknown>) => void
+  noteSkip: (name: string, reason: string, detail?: Record<string, any>, args?: Record<string, any>) => void
 ) {
   return forcedCalls.filter((call) => {
     if (denied.has("*") || denied.has(call.name)) {
@@ -64,7 +64,7 @@ export function filterForcedCallsByPolicy(
   });
 }
 
-export async function normalizeAndFilterFinalCalls(input: Record<string, unknown>) {
+export async function normalizeAndFilterFinalCalls(input: Record<string, any>) {
   const {
     finalCalls: sourceCalls,
     buildDefaultOrderRange,
@@ -123,7 +123,7 @@ export async function normalizeAndFilterFinalCalls(input: Record<string, unknown
       call.args = { ...(call.args || {}), customer_verification_token: customerVerificationToken };
     }
     if (call.name === "update_order_shipping_address") {
-      const entity = (policyContext?.entity || {}) as Record<string, unknown>;
+      const entity = (policyContext?.entity || {}) as Record<string, any>;
       const rawAddressFromArgs = String(call?.args?.address1 || "").trim();
       const rawAddressFromEntity = typeof entity.address === "string" ? String(entity.address).trim() : "";
       const rawAddress = rawAddressFromArgs || rawAddressFromEntity;
@@ -164,7 +164,7 @@ export async function normalizeAndFilterFinalCalls(input: Record<string, unknown
             reason: "FORCED_CALL_INVALID_ORDER_ID",
             action: "CALL_SKIPPED",
           },
-          { intent_name: resolvedIntent, entity: (policyContext?.entity || {}) as Record<string, unknown> }
+          { intent_name: resolvedIntent, entity: (policyContext?.entity || {}) as Record<string, any> }
         );
         return false;
       }
@@ -180,7 +180,7 @@ export async function normalizeAndFilterFinalCalls(input: Record<string, unknown
 }
 
 
-export async function executeFinalToolCalls(input: Record<string, unknown>) {
+export async function executeFinalToolCalls(input: Record<string, any>) {
   const {
     finalCalls,
     hasAllowedToolName,
@@ -210,7 +210,7 @@ export async function executeFinalToolCalls(input: Record<string, unknown>) {
   let mcpSummary = "";
   let listOrdersCalled = false;
   let listOrdersEmpty = false;
-  let listOrdersChoices: Array<Record<string, unknown>> = [];
+  let listOrdersChoices: Array<Record<string, any>> = [];
   const shouldPreserveOriginalEntity = Boolean(
     (CHAT_PRINCIPLES as { audit?: { preserveOriginalEntityForMutationTargets?: boolean } })?.audit
       ?.preserveOriginalEntityForMutationTargets
@@ -232,7 +232,7 @@ export async function executeFinalToolCalls(input: Record<string, unknown>) {
         call.name,
         "TOOL_NOT_ALLOWED_FOR_AGENT",
         { allowed_tool_names: Array.from(allowedToolNames) },
-        call.args as Record<string, unknown>
+        call.args as Record<string, any>
       );
       continue;
     }
@@ -241,12 +241,12 @@ export async function executeFinalToolCalls(input: Record<string, unknown>) {
         "create_ticket",
         "DEFERRED_TO_REFUND_CONFIRM",
         { intent: resolvedIntent, order_id: resolvedOrderId || null },
-        call.args as Record<string, unknown>
+        call.args as Record<string, any>
       );
       continue;
     }
     if (call.name === "update_order_shipping_address") {
-      const entity = ((policyContext?.entity || {}) as Record<string, unknown>);
+      const entity = ((policyContext?.entity || {}) as Record<string, any>);
       const requestZipcode = String(call?.args?.zipcode || "").trim();
       const requestAddress1 = String(call?.args?.address1 || "").trim();
       const requestAddress2 = String(call?.args?.address2 || "").trim();
@@ -258,10 +258,10 @@ export async function executeFinalToolCalls(input: Record<string, unknown>) {
       };
     }
     if (shouldPreserveOriginalEntity && isMutationToolCall(call.name)) {
-      const entity = ((policyContext?.entity || {}) as Record<string, unknown>);
+      const entity = ((policyContext?.entity || {}) as Record<string, any>);
       const byTool =
         entity.original_entity_before_by_tool && typeof entity.original_entity_before_by_tool === "object"
-          ? ({ ...(entity.original_entity_before_by_tool as Record<string, unknown>) } as Record<string, unknown>)
+          ? ({ ...(entity.original_entity_before_by_tool as Record<string, any>) } as Record<string, any>)
           : {};
       if (!byTool[call.name]) {
         byTool[call.name] = { ...entity };
@@ -282,14 +282,14 @@ export async function executeFinalToolCalls(input: Record<string, unknown>) {
       call.args,
       sessionId,
       latestTurnId,
-      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
       allowedTools
     );
     noteMcp(call.name, result);
     toolResults.push({
       name: call.name,
       ok: result.ok,
-      data: result.ok ? (result.data as Record<string, unknown>) : undefined,
+      data: result.ok ? (result.data as Record<string, any>) : undefined,
       error: result.ok ? undefined : result.error,
     });
 
@@ -313,14 +313,14 @@ export async function executeFinalToolCalls(input: Record<string, unknown>) {
                 buildLookupOrderArgs(id, customerVerificationToken),
                 sessionId,
                 latestTurnId,
-                { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> },
+                { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
                 allowedTools
               );
               noteMcp("lookup_order", detail);
               toolResults.push({
                 name: "lookup_order",
                 ok: detail.ok,
-                data: detail.ok ? (detail.data as Record<string, unknown>) : undefined,
+                data: detail.ok ? (detail.data as Record<string, any>) : undefined,
                 error: detail.ok ? undefined : detail.error,
               });
               mcpActions.push("lookup_order");
@@ -393,7 +393,7 @@ export async function executeFinalToolCalls(input: Record<string, unknown>) {
                 label,
               };
             })
-            .filter(Boolean) as Array<Record<string, unknown>>;
+            .filter(Boolean) as Array<Record<string, any>>;
         } else {
           listOrdersEmpty = true;
         }
@@ -412,7 +412,7 @@ export async function executeFinalToolCalls(input: Record<string, unknown>) {
 }
 
 export function summarizeToolResults(input: {
-  toolResults: Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }>;
+  toolResults: Array<{ name: string; ok: boolean; data?: Record<string, any>; error?: unknown }>;
   readLookupOrderView: (data: unknown) => LookupOrderView;
 }) {
   const { toolResults, readLookupOrderView } = input;
@@ -473,7 +473,7 @@ export function summarizeToolResults(input: {
 
 export function updateMcpTracking(input: {
   name: string;
-  result: { ok: boolean; error?: string; data?: Record<string, unknown> };
+  result: { ok: boolean; error?: string; data?: Record<string, any> };
   toolProviderMap: Record<string, string>;
   usedProviders: string[];
 }) {
@@ -503,22 +503,22 @@ export async function flushMcpSkipLogsWithAudit(input: {
   mcpSkipQueue: Array<{
     tool: string;
     reason: string;
-    args?: Record<string, unknown>;
-    detail?: Record<string, unknown>;
+    args?: Record<string, any>;
+    detail?: Record<string, any>;
   }>;
   insertEvent: (
-    context: Record<string, unknown>,
+    context: Record<string, any>,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
-  context: Record<string, unknown>;
+  context: Record<string, any>;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
-  policyEntity: Record<string, unknown>;
+  policyEntity: Record<string, any>;
   allowedToolIdByName: Map<string, string>;
   allowedToolVersionByName: Map<string, string | null>;
   nowIso: () => string;
@@ -535,7 +535,7 @@ export async function flushMcpSkipLogsWithAudit(input: {
     allowedToolVersionByName,
     nowIso,
   } = input;
-  const traceId = String((context as Record<string, unknown>)?.runtimeTraceId || "").trim();
+  const traceId = String((context as Record<string, any>)?.runtimeTraceId || "").trim();
   for (const skip of mcpSkipQueue) {
     await insertEvent(
       context,
@@ -584,7 +584,7 @@ export async function flushMcpSkipLogsWithAudit(input: {
   mcpSkipQueue.length = 0;
 }
 
-export async function handleToolForcedResponse(input: Record<string, unknown>): Promise<Response | null> {
+export async function handleToolForcedResponse(input: Record<string, any>): Promise<Response | null> {
   const {
     toolGate,
     conversationMode,
@@ -612,11 +612,11 @@ export async function handleToolForcedResponse(input: Record<string, unknown>): 
   const markDeferredTemplate = (reason: string, templateKey: string) => {
     const conversation =
       policyContext.conversation && typeof policyContext.conversation === "object"
-        ? (policyContext.conversation as Record<string, unknown>)
+        ? (policyContext.conversation as Record<string, any>)
         : {};
     const flags =
       conversation.flags && typeof conversation.flags === "object"
-        ? (conversation.flags as Record<string, unknown>)
+        ? (conversation.flags as Record<string, any>)
         : {};
     policyContext.conversation = {
       ...conversation,
@@ -711,15 +711,15 @@ export async function handleToolForcedResponse(input: Record<string, unknown>): 
 }
 
 export function maybeQueueListOrdersSkip(input: {
-  finalCalls: Array<{ name: string; args?: Record<string, unknown> }>;
+  finalCalls: Array<{ name: string; args?: Record<string, any> }>;
   mcpCandidateCalls: string[];
   resolvedOrderId: string | null;
   resolvedIntent: string;
   policyContext: PolicyContext;
-  compiledPolicy: Record<string, unknown>;
+  compiledPolicy: Record<string, any>;
   hasAllowedToolName: (name: string) => boolean;
   canUseTool: (name: string) => boolean;
-  noteMcpSkip: (name: string, reason: string, detail?: Record<string, unknown>, args?: Record<string, unknown>) => void;
+  noteMcpSkip: (name: string, reason: string, detail?: Record<string, any>, args?: Record<string, any>) => void;
   maskPhone: (value?: string | null) => string;
   buildDefaultOrderRange: () => { start_date: string; end_date: string };
 }) {
@@ -759,25 +759,25 @@ export function maybeQueueListOrdersSkip(input: {
 
 export async function emitPreMcpDecisionEvent(input: {
   insertEvent: (
-    context: Record<string, unknown>,
+    context: Record<string, any>,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
-  context: Record<string, unknown>;
+  context: Record<string, any>;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
   effectiveMessageForIntent: string;
   message: string;
-  forcedCalls: Array<{ name: string; args?: Record<string, unknown> }>;
-  finalCalls: Array<{ name: string; args?: Record<string, unknown> }>;
+  forcedCalls: Array<{ name: string; args?: Record<string, any> }>;
+  finalCalls: Array<{ name: string; args?: Record<string, any> }>;
   denied: Set<string>;
   allowed: Set<string>;
   allowedToolNames: Set<string>;
-  activePolicyConflicts: Array<Record<string, unknown>>;
+  activePolicyConflicts: Array<Record<string, any>>;
   resolvedOrderId: string | null;
   policyContext: PolicyContext;
   maskPhone: (value?: string | null) => string;
@@ -802,17 +802,17 @@ export async function emitPreMcpDecisionEvent(input: {
   } = input;
   const conversation =
     policyContext.conversation && typeof policyContext.conversation === "object"
-      ? (policyContext.conversation as Record<string, unknown>)
+      ? (policyContext.conversation as Record<string, any>)
       : {};
   const flags =
     conversation.flags && typeof conversation.flags === "object"
-      ? (conversation.flags as Record<string, unknown>)
+      ? (conversation.flags as Record<string, any>)
       : {};
   const blockedByMissingSlots = Boolean(flags.intent_scope_gate_blocked);
   const missingSlots = Array.isArray(flags.intent_scope_missing_slots) ? flags.intent_scope_missing_slots : [];
   const resolvedSlots =
     flags.intent_scope_resolved_slots && typeof flags.intent_scope_resolved_slots === "object"
-      ? (flags.intent_scope_resolved_slots as Record<string, unknown>)
+      ? (flags.intent_scope_resolved_slots as Record<string, any>)
       : {};
 
   await insertEvent(
@@ -846,21 +846,21 @@ export async function emitPreMcpDecisionEvent(input: {
         has_address: Boolean(policyContext.entity?.address),
       },
     },
-    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+    { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
   );
 }
 
 export async function emitToolPolicyConflictIfAny(input: {
   toolGate: ToolGate;
   insertEvent: (
-    context: Record<string, unknown>,
+    context: Record<string, any>,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
-  context: Record<string, unknown>;
+  context: Record<string, any>;
   sessionId: string;
   latestTurnId: string | null;
   resolvedIntent: string;
@@ -885,13 +885,13 @@ export async function emitToolPolicyConflictIfAny(input: {
         conflict: "force_response_template vs force_tool_call",
         resolution: "force_response_template_precedence",
       },
-      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, unknown> }
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
     );
   }
 }
 
 
-export async function handleOrderSelectionAndListOrdersGuards(input: Record<string, unknown>) {
+export async function handleOrderSelectionAndListOrdersGuards(input: Record<string, any>) {
   let { resolvedOrderId, policyContext } = input;
   const {
     listOrdersChoices,
@@ -928,8 +928,8 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     );
     const getLookupOrderId = (tool: ToolCall) => {
       const parsed = readLookupOrderView(tool?.data) as LookupOrderView;
-      const core = (parsed?.core || {}) as Record<string, unknown>;
-      const order = (parsed?.order || {}) as Record<string, unknown>;
+      const core = (parsed?.core || {}) as Record<string, any>;
+      const order = (parsed?.order || {}) as Record<string, any>;
       return String(
         core.order_id ||
         core.order_no ||
@@ -945,7 +945,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
       if (!lookupForSelected?.data) return "";
       const parsed = readLookupOrderView(lookupForSelected.data) as LookupOrderView;
       const order = toRecord(parsed.order);
-      const receivers = Array.isArray(order.receivers) ? (order.receivers as Array<Record<string, unknown>>) : [];
+      const receivers = Array.isArray(order.receivers) ? (order.receivers as Array<Record<string, any>>) : [];
       const first = receivers[0] || {};
       return normalizePhoneDigits(String(first?.cellphone || first?.phone || ""));
     })();
@@ -989,8 +989,8 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
       if (!lookupForSelected?.data) return null;
       const parsed = readLookupOrderView(lookupForSelected.data) as LookupOrderView;
       const orderObj = toRecord(parsed.order);
-      const receivers = Array.isArray(orderObj.receivers) ? (orderObj.receivers as Array<Record<string, unknown>>) : [];
-      const first = (receivers[0] || {}) as Record<string, unknown>;
+      const receivers = Array.isArray(orderObj.receivers) ? (orderObj.receivers as Array<Record<string, any>>) : [];
+      const first = (receivers[0] || {}) as Record<string, any>;
       const zipcode = String(first.zipcode || "").trim();
       const address1 = String(first.address1 || "").trim();
       const address2 = String(first.address2 || "").trim();
@@ -1023,9 +1023,9 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
 
   if (hasChoiceAnswerCandidates(listOrdersChoices.length)) {
     const templateOverrides = resolveRuntimeTemplateOverridesFromPolicy(
-      (compiledPolicy as Record<string, unknown>)?.templates || {}
+      (compiledPolicy as Record<string, any>)?.templates || {}
     );
-    const lines = listOrdersChoices.map((choice: Record<string, unknown>) =>
+    const lines = listOrdersChoices.map((choice: Record<string, any>) =>
       choice.label ? String(choice.label) : `${choice.index}번 주문`
     );
     const replyText = buildNumberedChoicePrompt({
@@ -1054,7 +1054,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     await insertEvent(context, sessionId, latestTurnId, "ORDER_CHOICES_PRESENTED", { choices: listOrdersChoices }, { intent_name: resolvedIntent });
     const quickReplies = listOrdersChoices
       .slice(0, CHAT_PRINCIPLES.response.quickReplyMax)
-      .map((item: Record<string, unknown>) => ({ label: `${item.index}번`, value: String(item.index) }));
+      .map((item: Record<string, any>) => ({ label: `${item.index}번`, value: String(item.index) }));
     const quickReplyConfig = resolveQuickReplyConfig({
       optionsCount: quickReplies.length,
       minSelectHint: 1,
@@ -1199,3 +1199,4 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
 
   return { response: null, resolvedOrderId, policyContext };
 }
+

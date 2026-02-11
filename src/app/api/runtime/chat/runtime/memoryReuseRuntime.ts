@@ -69,8 +69,9 @@ export function canOfferPhoneReusePrompt(input: {
   );
 }
 
-export function readPendingPhoneReuse(botContext: Record<string, unknown>) {
+export function readPendingPhoneReuse(botContext: Record<string, any>) {
   const pending = Boolean(botContext.phone_reuse_pending);
   const pendingPhone = normalizeText(String(botContext.pending_phone || ""));
   return { pending, pendingPhone };
 }
+

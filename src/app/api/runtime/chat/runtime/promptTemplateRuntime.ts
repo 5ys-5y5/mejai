@@ -27,18 +27,18 @@ const DEFAULT_TEMPLATES: Record<TemplateKey, string> = {
 
 type ResolveTemplateInput = {
   key: TemplateKey;
-  botContext?: Record<string, unknown> | null;
-  entity?: Record<string, unknown> | null;
+  botContext?: Record<string, any> | null;
+  entity?: Record<string, any> | null;
 };
 
-function readOverride(target: Record<string, unknown> | null | undefined, key: TemplateKey) {
+function readOverride(target: Record<string, any> | null | undefined, key: TemplateKey) {
   if (!target || typeof target !== "object") return null;
-  const map = (target as Record<string, unknown>).template_overrides;
+  const map = (target as Record<string, any>).template_overrides;
   if (map && typeof map === "object") {
-    const fromMap = String((map as Record<string, unknown>)[key] || "").trim();
+    const fromMap = String((map as Record<string, any>)[key] || "").trim();
     if (fromMap) return fromMap;
   }
-  const direct = String((target as Record<string, unknown>)[`template_${key}`] || "").trim();
+  const direct = String((target as Record<string, any>)[`template_${key}`] || "").trim();
   return direct || null;
 }
 
@@ -53,8 +53,8 @@ export function resolveRuntimeTemplate(input: ResolveTemplateInput) {
 export function buildYesNoConfirmationPrompt(
   question: string,
   input?: {
-    botContext?: Record<string, unknown> | null;
-    entity?: Record<string, unknown> | null;
+    botContext?: Record<string, any> | null;
+    entity?: Record<string, any> | null;
   }
 ) {
   const suffix = resolveRuntimeTemplate({
@@ -65,7 +65,7 @@ export function buildYesNoConfirmationPrompt(
   return `${String(question || "").trim()}\n${suffix}`;
 }
 
-export function resolveRuntimeTemplateOverridesFromPolicy(templates: Record<string, unknown> | null | undefined) {
+export function resolveRuntimeTemplateOverridesFromPolicy(templates: Record<string, any> | null | undefined) {
   const source = templates && typeof templates === "object" ? templates : {};
   const keysByPriority: Record<TemplateKey, string[]> = {
     confirm_yes_no_suffix: ["confirm_yes_no_suffix", "yes_no_suffix", "confirmation_yes_no_suffix"],
@@ -92,7 +92,7 @@ export function resolveRuntimeTemplateOverridesFromPolicy(templates: Record<stri
   (Object.keys(keysByPriority) as TemplateKey[]).forEach((key) => {
     const aliases = keysByPriority[key];
     for (const alias of aliases) {
-      const value = String((source as Record<string, unknown>)[alias] || "").trim();
+      const value = String((source as Record<string, any>)[alias] || "").trim();
       if (value) {
         out[key] = value;
         break;
@@ -103,15 +103,15 @@ export function resolveRuntimeTemplateOverridesFromPolicy(templates: Record<stri
 }
 
 export function mergeRuntimeTemplateOverrides(
-  botContext: Record<string, unknown> | null | undefined,
+  botContext: Record<string, any> | null | undefined,
   overrides: Partial<Record<TemplateKey, string>>
 ) {
   const base = botContext && typeof botContext === "object" ? botContext : {};
-  const existing = (base as Record<string, unknown>).template_overrides;
+  const existing = (base as Record<string, any>).template_overrides;
   const existingMap =
     existing && typeof existing === "object"
       ? (Object.fromEntries(
-          Object.entries(existing as Record<string, unknown>).map(([k, v]) => [k, String(v ?? "").trim()])
+          Object.entries(existing as Record<string, any>).map(([k, v]) => [k, String(v ?? "").trim()])
         ) as Record<string, string>)
       : {};
   const normalizedOverrides = Object.fromEntries(
@@ -125,15 +125,15 @@ export function mergeRuntimeTemplateOverrides(
       ...existingMap,
       ...normalizedOverrides,
     },
-  } as Record<string, unknown>;
+  } as Record<string, any>;
 }
 
 export function buildRestockLeadDaysPrompt(input: {
   minRequired: number;
   options: number[];
   exampleValues: number[];
-  botContext?: Record<string, unknown> | null;
-  entity?: Record<string, unknown> | null;
+  botContext?: Record<string, any> | null;
+  entity?: Record<string, any> | null;
   retryMode?: boolean;
 }) {
   const optionText = (input.options || []).map((v) => `D-${v}`).join(", ") || "-";
@@ -167,8 +167,8 @@ export function buildRestockLeadDaysPrompt(input: {
 export function buildNumberedChoicePrompt(input: {
   titleKey: "restock_product_choice_title" | "order_choice_title";
   lines: string[];
-  botContext?: Record<string, unknown> | null;
-  entity?: Record<string, unknown> | null;
+  botContext?: Record<string, any> | null;
+  entity?: Record<string, any> | null;
   headerKey?: "order_choice_header";
   includeExample?: boolean;
 }) {
@@ -196,3 +196,4 @@ export function buildNumberedChoicePrompt(input: {
   }
   return output.filter(Boolean).join("\n");
 }
+

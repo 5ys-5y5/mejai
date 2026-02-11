@@ -4,9 +4,9 @@ import { readPendingPhoneReuse } from "./memoryReuseRuntime";
 
 type PreTurnGuardParams = {
   context: unknown;
-  prevBotContext: Record<string, unknown>;
+  prevBotContext: Record<string, any>;
   resolvedIntent: string;
-  prevEntity: Record<string, unknown>;
+  prevEntity: Record<string, any>;
   prevSelectedOrderId: string | null;
   message: string;
   sessionId: string;
@@ -19,16 +19,16 @@ type PreTurnGuardParams = {
   isNoText: (text: string) => boolean;
   maskPhone: (value?: string | null) => string;
   makeReply: (text: string) => string;
-  insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
     context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => unknown;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => unknown;
 };
 
 type PreTurnGuardResult = {
@@ -83,7 +83,7 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
       latestTurnId,
       "POLICY_DECISION",
       { stage: "input", action: "CONVERSATION_ALREADY_CLOSED" },
-      { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
     );
     await insertEvent(
       context,
@@ -91,7 +91,7 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
       latestTurnId,
       "FINAL_ANSWER_READY",
       { answer: reply, model: "deterministic_conversation_closed_guard" },
-      { intent_name: resolvedIntent, entity: prevEntity as Record<string, unknown> }
+      { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
     );
     return {
       response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }),
@@ -177,3 +177,4 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
     expectedInput: nextExpectedInput,
   };
 }
+

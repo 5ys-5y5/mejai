@@ -27,8 +27,8 @@ type GateInput = {
   resolvedIntent: string;
   message: string;
   effectiveMessageForIntent: string;
-  policyEntity: Record<string, unknown>;
-  prevBotContext: Record<string, unknown>;
+  policyEntity: Record<string, any>;
+  prevBotContext: Record<string, any>;
   expectedInput: string | null;
 };
 
@@ -91,18 +91,18 @@ function parseIndexedChoice(text: string): number | null {
   return n;
 }
 
-function resolveRestockChoiceToProductQuery(prevBotContext: Record<string, unknown>, message: string): string {
+function resolveRestockChoiceToProductQuery(prevBotContext: Record<string, any>, message: string): string {
   const stage = String(prevBotContext.restock_stage || "").trim();
   if (stage !== "awaiting_product_choice") return "";
   if (!prevBotContext.restock_pending) return "";
   const pickedIndex = parseIndexedChoice(message);
   if (!pickedIndex) return "";
-  const candidates = Array.isArray((prevBotContext as Record<string, unknown>).restock_candidates)
-    ? ((prevBotContext as Record<string, unknown>).restock_candidates as Array<Record<string, unknown>>)
+  const candidates = Array.isArray((prevBotContext as Record<string, any>).restock_candidates)
+    ? ((prevBotContext as Record<string, any>).restock_candidates as Array<Record<string, any>>)
     : [];
   if (candidates.length < pickedIndex) return "";
   const picked = candidates[pickedIndex - 1] || {};
-  const pickedRecord = picked as Record<string, unknown>;
+  const pickedRecord = picked as Record<string, any>;
   const productName = firstNonEmptyString(pickedRecord.product_name);
   if (productName) return productName;
   const productId = firstNonEmptyString(pickedRecord.product_id);
@@ -163,3 +163,4 @@ export function buildIntentScopePrompt(input: {
   }
   return "필수 정보를 먼저 알려주세요.";
 }
+

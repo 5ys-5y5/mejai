@@ -21,7 +21,7 @@ type DebugSnapshot = {
   mcpLastError: string | null;
   mcpLastCount: number | null;
   mcpLogs: string[];
-  providerConfig?: Record<string, unknown>;
+  providerConfig?: Record<string, any>;
   providerAvailable: string[];
   authSettingsId: string | null;
   userId: string;
@@ -52,11 +52,11 @@ type MakeReplyParams = {
   text: string;
   llmModel?: string | null;
   tools?: string[];
-  toolResults: Array<{ name: string; ok: boolean; data?: Record<string, unknown>; error?: unknown }>;
+  toolResults: Array<{ name: string; ok: boolean; data?: Record<string, any>; error?: unknown }>;
   mcpSkipLogs: string[];
   getDebugSnapshot: (llmModel: string | null, tools: string[]) => DebugSnapshot;
-  buildDebugPrefixJson: (payload: Record<string, unknown>) => Record<string, unknown>;
-  currentDebugPrefixJson: Record<string, unknown> | null;
+  buildDebugPrefixJson: (payload: Record<string, any>) => Record<string, any>;
+  currentDebugPrefixJson: Record<string, any> | null;
 };
 
 type RuntimeContext = {
@@ -73,12 +73,12 @@ type InsertFinalTurnResult = {
 function readToolCount(value: unknown) {
   if (Array.isArray(value)) return value.length;
   if (!value || typeof value !== "object") return null;
-  const obj = value as Record<string, unknown>;
+  const obj = value as Record<string, any>;
   if (typeof obj.count === "number") return obj.count;
   if (Array.isArray(obj.items)) return obj.items.length;
   if (Array.isArray(obj.orders)) return obj.orders.length;
   if (obj.orders && typeof obj.orders === "object") {
-    const orders = obj.orders as Record<string, unknown>;
+    const orders = obj.orders as Record<string, any>;
     if (Array.isArray(orders.order)) return orders.order.length;
   }
   return null;
@@ -86,7 +86,7 @@ function readToolCount(value: unknown) {
 
 export function makeReplyWithDebug(params: MakeReplyParams): {
   text: string;
-  lastDebugPrefixJson: Record<string, unknown> | null;
+  lastDebugPrefixJson: Record<string, any> | null;
 } {
   const {
     text,
@@ -134,15 +134,15 @@ export function makeReplyWithDebug(params: MakeReplyParams): {
 }
 
 type InsertTurnParams = {
-  payload: Record<string, unknown>;
-  currentDebugPrefixJson: Record<string, unknown> | null;
+  payload: Record<string, any>;
+  currentDebugPrefixJson: Record<string, any> | null;
   getFallbackSnapshot: () => DebugSnapshot;
-  buildDebugPrefixJson: (payload: Record<string, unknown>) => Record<string, unknown>;
+  buildDebugPrefixJson: (payload: Record<string, any>) => Record<string, any>;
   pendingIntentQueue: string[];
   insertFinalTurn: (
     context: RuntimeContext,
-    payload: Record<string, unknown>,
-    debugPrefixJson: Record<string, unknown>
+    payload: Record<string, any>,
+    debugPrefixJson: Record<string, any>
   ) => Promise<InsertFinalTurnResult>;
   context: RuntimeContext;
   orgId?: string | null;
@@ -253,7 +253,7 @@ function violationFingerprint(input: {
   summary?: unknown;
   evidence?: unknown;
 }) {
-  const evidence = input.evidence && typeof input.evidence === "object" ? (input.evidence as Record<string, unknown>) : {};
+  const evidence = input.evidence && typeof input.evidence === "object" ? (input.evidence as Record<string, any>) : {};
   const coreText =
     normalizeText(evidence.repeated_answer) ||
     normalizeText(evidence.answer) ||
@@ -283,7 +283,7 @@ function collapseViolationsForTurn(
     turn_id: string;
     severity: "medium" | "high";
     summary: string;
-    evidence: Record<string, unknown>;
+    evidence: Record<string, any>;
   }>
 ) {
   if (violations.length <= 1) return violations;
@@ -309,8 +309,8 @@ async function insertAuditEvent(context: RuntimeContext, input: {
   sessionId: string;
   turnId: string;
   eventType: string;
-  payload: Record<string, unknown>;
-  botContext?: Record<string, unknown>;
+  payload: Record<string, any>;
+  botContext?: Record<string, any>;
 }) {
   await context.supabase.from("F_audit_events").insert({
     session_id: input.sessionId,
@@ -440,7 +440,7 @@ async function runRuntimeSelfUpdateReview(params: {
     turn_id: string;
     severity: "medium" | "high";
     summary: string;
-    evidence: Record<string, unknown>;
+    evidence: Record<string, any>;
   }>;
   if (duplicateViolation) scoped.push(duplicateViolation);
   const collapsed = collapseViolationsForTurn(scoped);
@@ -448,14 +448,14 @@ async function runRuntimeSelfUpdateReview(params: {
   const existingViolationIds = new Set(
     events
       .filter((event) => event.event_type === "PRINCIPLE_VIOLATION_DETECTED")
-      .map((event) => String(((event.payload || {}) as Record<string, unknown>).violation_id || ""))
+      .map((event) => String(((event.payload || {}) as Record<string, any>).violation_id || ""))
       .filter(Boolean)
   );
   const existingFingerprints = new Set(
     events
       .filter((event) => event.event_type === "PRINCIPLE_VIOLATION_DETECTED")
       .map((event) => {
-        const payload = (event.payload || {}) as Record<string, unknown>;
+        const payload = (event.payload || {}) as Record<string, any>;
         const embedded = normalizeText(payload.issue_fingerprint);
         if (embedded) return embedded;
         return violationFingerprint({
@@ -531,7 +531,7 @@ async function runRuntimeSelfUpdateReview(params: {
       turnId,
       eventType: "RUNTIME_PATCH_PROPOSAL_CREATED",
       payload: {
-        ...(proposal as unknown as Record<string, unknown>),
+        ...(proposal as unknown as Record<string, any>),
         org_id: orgId,
         trigger: "runtime_turn_write",
         issue_fingerprint: issueFingerprint,
@@ -558,7 +558,7 @@ async function runRuntimeSelfUpdateReview(params: {
 
 export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
   result: InsertFinalTurnResult;
-  lastDebugPrefixJson: Record<string, unknown>;
+  lastDebugPrefixJson: Record<string, any>;
   latestTurnId: string | null;
 }> {
   const {
@@ -589,8 +589,8 @@ export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
   if (pendingIntentQueue.length > 0) {
     const currentBotContext =
       payload.bot_context && typeof payload.bot_context === "object"
-        ? ({ ...(payload.bot_context as Record<string, unknown>) } as Record<string, unknown>)
-        : ({} as Record<string, unknown>);
+        ? ({ ...(payload.bot_context as Record<string, any>) } as Record<string, any>)
+        : ({} as Record<string, any>);
     payload.bot_context = {
       ...currentBotContext,
       intent_queue: pendingIntentQueue,
@@ -623,3 +623,4 @@ export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
   }
   return { result, lastDebugPrefixJson: nextDebugPrefixJson, latestTurnId };
 }
+

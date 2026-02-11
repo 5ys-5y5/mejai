@@ -7,8 +7,8 @@ type DisambiguationParams = {
   nextSeq: number;
   message: string;
   prevIntent: string | null;
-  prevEntity: Record<string, unknown>;
-  prevBotContext: Record<string, unknown>;
+  prevEntity: Record<string, any>;
+  prevBotContext: Record<string, any>;
   expectedInput: string | null;
   latestTurnId: string | null;
   resolvedIntent: string;
@@ -18,16 +18,16 @@ type DisambiguationParams = {
   parseIndexedChoices: (text: string, max: number) => number[];
   isYesText: (text: string) => boolean;
   makeReply: (text: string) => string;
-  insertTurn: (payload: Record<string, unknown>) => Promise<unknown>;
+  insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
     context: unknown,
     sessionId: string,
     turnId: string | null,
     eventType: string,
-    payload: Record<string, unknown>,
-    botContext: Record<string, unknown>
+    payload: Record<string, any>,
+    botContext: Record<string, any>
   ) => Promise<unknown>;
-  respond: (payload: Record<string, unknown>, init?: ResponseInit) => unknown;
+  respond: (payload: Record<string, any>, init?: ResponseInit) => unknown;
 };
 
 type DisambiguationResult = {
@@ -42,7 +42,7 @@ type DisambiguationResult = {
 function buildIntentDisambiguationPrompt(input: {
   options: string[];
   intentLabel: (intent: string) => string;
-  prevBotContext: Record<string, unknown>;
+  prevBotContext: Record<string, any>;
 }) {
   const defaultTitle = "요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)";
   const defaultExample = "예: 1,2";
@@ -51,7 +51,7 @@ function buildIntentDisambiguationPrompt(input: {
     botContext: {
       ...(input.prevBotContext || {}),
       template_intent_disambiguation_title: String(
-        (input.prevBotContext as Record<string, unknown>).intent_disambiguation_prompt_title || ""
+        (input.prevBotContext as Record<string, any>).intent_disambiguation_prompt_title || ""
       ),
     },
   }) || defaultTitle;
@@ -60,7 +60,7 @@ function buildIntentDisambiguationPrompt(input: {
     botContext: {
       ...(input.prevBotContext || {}),
       template_intent_disambiguation_example: String(
-        (input.prevBotContext as Record<string, unknown>).intent_disambiguation_prompt_example || ""
+        (input.prevBotContext as Record<string, any>).intent_disambiguation_prompt_example || ""
       ),
     },
   }) || defaultExample;
@@ -77,10 +77,10 @@ function buildIndexedQuickReplies(options: string[], intentLabel: (intent: strin
 
 function resolveIntentDisambiguationQuickReplyConfig(input: {
   options: string[];
-  prevBotContext: Record<string, unknown>;
+  prevBotContext: Record<string, any>;
   sourceText: string;
 }): RuntimeQuickReplyConfig {
-  const prevContext = input.prevBotContext as Record<string, unknown>;
+  const prevContext = input.prevBotContext as Record<string, any>;
   const configuredMinRaw = Number(prevContext.intent_disambiguation_min_select ?? 0);
   const configuredMaxRaw = Number(prevContext.intent_disambiguation_max_select ?? 0);
   const explicitMode = prevContext.intent_disambiguation_mode;
@@ -141,8 +141,8 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
   let effectiveMessageForIntent = message;
 
   if (prevBotContext.intent_disambiguation_pending) {
-    const options = Array.isArray((prevBotContext as Record<string, unknown>).intent_disambiguation_options)
-      ? ((prevBotContext as Record<string, unknown>).intent_disambiguation_options as string[])
+    const options = Array.isArray((prevBotContext as Record<string, any>).intent_disambiguation_options)
+      ? ((prevBotContext as Record<string, any>).intent_disambiguation_options as string[])
           .map((v) => String(v))
           .filter(Boolean)
       : [];
@@ -203,8 +203,8 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
     !prevBotContext.restock_pending &&
     !prevBotContext.phone_reuse_pending
   ) {
-    const queuedIntents = Array.isArray((prevBotContext as Record<string, unknown>).intent_queue)
-      ? ((prevBotContext as Record<string, unknown>).intent_queue as string[])
+    const queuedIntents = Array.isArray((prevBotContext as Record<string, any>).intent_queue)
+      ? ((prevBotContext as Record<string, any>).intent_queue as string[])
           .map((v) => String(v))
           .filter(Boolean)
       : [];
@@ -302,3 +302,4 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
     response: null,
   };
 }
+

@@ -42,7 +42,7 @@ export type RuntimeTimingStage = {
   stage: string;
   ms: number;
   at: string;
-  detail?: Record<string, unknown>;
+  detail?: Record<string, any>;
 };
 
 export const ENABLE_RUNTIME_TIMING = false;
@@ -59,7 +59,7 @@ export function buildFailedPayload(input: {
   tool?: string;
   required_scope?: string;
   retryable?: boolean;
-  detail?: Record<string, unknown>;
+  detail?: Record<string, any>;
 }) {
   return {
     code: input.code,
@@ -146,7 +146,7 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
     Object.entries(payload.providerConfig || {}).filter(([, value]) => Boolean(value))
   );
   const normalizedLastFunction = resolveMcpLastFunctionValue(payload);
-  const mcpLast: Record<string, unknown> = {
+  const mcpLast: Record<string, any> = {
     function: normalizedLastFunction,
     status: payload.mcpLastStatus || "none",
     error: payload.mcpLastError || null,
@@ -224,8 +224,8 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
           execution: {
             call_chain: payload.runtimeCallChain
               .map((item) => ({
-                module_path: String((item as Record<string, unknown>)?.module_path || "").trim(),
-                function_name: String((item as Record<string, unknown>)?.function_name || "").trim(),
+                module_path: String((item as Record<string, any>)?.module_path || "").trim(),
+                function_name: String((item as Record<string, any>)?.function_name || "").trim(),
               }))
               .filter((item) => Boolean(item.module_path) && Boolean(item.function_name)),
           },
@@ -379,14 +379,14 @@ function resolveMcpLastFunctionValue(payload: DebugPayload) {
 }
 
 export function buildDebugPrefixJson(payload: DebugPayload) {
-  return buildStructuredDebugPrefix(payload) as Record<string, unknown>;
+  return buildStructuredDebugPrefix(payload) as Record<string, any>;
 }
 
 export function pushRuntimeTimingStage(
   stages: RuntimeTimingStage[],
   stage: string,
   startedAt: number,
-  detail?: Record<string, unknown>
+  detail?: Record<string, any>
 ) {
   if (!ENABLE_RUNTIME_TIMING) return;
   stages.push({
@@ -405,7 +405,7 @@ export function buildDefaultOrderRange() {
   return { start_date: toDate(start), end_date: toDate(end) };
 }
 
-export function extractTemplateIds(rules: Array<{ enforce?: { actions?: Array<Record<string, unknown>> } }>) {
+export function extractTemplateIds(rules: Array<{ enforce?: { actions?: Array<Record<string, any>> } }>) {
   const ids: string[] = [];
   rules.forEach((rule) => {
     (rule.enforce?.actions || []).forEach((action) => {
@@ -417,3 +417,4 @@ export function extractTemplateIds(rules: Array<{ enforce?: { actions?: Array<Re
   });
   return ids;
 }
+
