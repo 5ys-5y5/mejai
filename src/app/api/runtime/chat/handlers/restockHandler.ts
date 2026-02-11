@@ -176,7 +176,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
   if (resolvedIntent === "restock_inquiry" || resolvedIntent === "restock_subscribe") {
     const restockKbEntriesRaw = [
       ...parseRestockEntriesFromContent(String(kb.content || ""), `kb:${kb.id}`),
-      ...adminKbs.flatMap((item) =>
+      ...adminKbs.flatMap((item: { id?: unknown; content?: unknown }) =>
         parseRestockEntriesFromContent(String(item.content || ""), `admin_kb:${item.id}`)
       ),
     ];
