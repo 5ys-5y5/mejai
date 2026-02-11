@@ -9,11 +9,11 @@ export type SessionState = {
 };
 
 export async function prepareSessionState(input: {
-  context: unknown;
+  context: any;
   requestedSessionId: string;
   agentId: string | null;
-  createSession: (context: unknown, agentId: string | null) => Promise<{ data?: Record<string, any>; error?: unknown }>;
-  getRecentTurns: (context: unknown, sessionId: string, limit: number) => Promise<{ data?: Array<Record<string, any>> }>;
+  createSession: (context: any, agentId: string | null) => Promise<{ data?: Record<string, any>; error?: unknown }>;
+  getRecentTurns: (context: any, sessionId: string, limit: number) => Promise<{ data?: Array<Record<string, any>> }>;
   recentTurnLimit?: number;
 }): Promise<{ state?: SessionState; error?: string }> {
   const requestedSessionId = String(input.requestedSessionId || "").trim();
@@ -44,4 +44,5 @@ export async function prepareSessionState(input: {
     },
   };
 }
+
 

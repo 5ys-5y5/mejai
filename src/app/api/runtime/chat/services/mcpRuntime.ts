@@ -5,15 +5,14 @@ type SupabaseQuery = {
   maybeSingle: () => Promise<{ data?: Record<string, unknown> | null }>;
 };
 
-type RuntimeContext = {
-  supabase: { from: (table: string) => SupabaseQuery };
+type RuntimeContext = any;
   orgId: string;
   user: { id: string };
   runtimeTraceId?: string | null;
 };
 
 export async function callMcpTool(
-  context: RuntimeContext,
+  context: any,
   tool: string,
   params: Record<string, unknown>,
   sessionId: string,
@@ -253,7 +252,7 @@ export function buildAddressSearchKeywords(raw: string) {
 }
 
 export async function callAddressSearchWithAudit(
-  context: RuntimeContext,
+  context: any,
   keyword: string,
   sessionId: string,
   turnId: string | null,
@@ -355,3 +354,4 @@ export async function callAddressSearchWithAudit(
   }
   return result;
 }
+

@@ -3,7 +3,7 @@ import type { AgentRow, KbRow, ProductAliasRow, ProductDecision, ProductRuleRow 
 
 type SupabaseQuery = any;
 
-type RuntimeContext = { supabase: any; orgId: string };
+type RuntimeContext = any;
 
 export function matchesAdminGroup(
   applyGroups: Array<{ path: string; values: string[] }> | null | undefined,
@@ -27,7 +27,7 @@ function readGroupValue(group: Record<string, unknown> | null, path: string) {
   }, group as unknown);
 }
 
-export async function resolveProductDecision(context: RuntimeContext, text: string) {
+export async function resolveProductDecision(context: any, text: string) {
   const aliasRes = await context.supabase
     .from("G_com_product_aliases")
     .select("org_id, alias, product_id, match_type, priority, is_active")
@@ -73,7 +73,7 @@ export async function resolveProductDecision(context: RuntimeContext, text: stri
   return { decision, alias: matchedAlias, error: null as string | null };
 }
 
-export async function fetchAgent(context: RuntimeContext, agentId: string) {
+export async function fetchAgent(context: any, agentId: string) {
   const { data, error } = await context.supabase
     .from("B_bot_agents")
     .select("*")
@@ -94,7 +94,7 @@ export async function fetchAgent(context: RuntimeContext, agentId: string) {
   return { data: parent as AgentRow | null };
 }
 
-export async function fetchKb(context: RuntimeContext, kbId: string) {
+export async function fetchKb(context: any, kbId: string) {
   const { data, error } = await context.supabase
     .from("B_bot_knowledge_bases")
     .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
@@ -105,7 +105,7 @@ export async function fetchKb(context: RuntimeContext, kbId: string) {
   return { data: data as KbRow | null };
 }
 
-export async function fetchAdminKbs(context: RuntimeContext) {
+export async function fetchAdminKbs(context: any) {
   const { data, error } = await context.supabase
     .from("B_bot_knowledge_bases")
     .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
@@ -116,7 +116,7 @@ export async function fetchAdminKbs(context: RuntimeContext) {
   return { data: (data || []) as KbRow[] };
 }
 
-export async function createSession(context: RuntimeContext, agentId: string | null) {
+export async function createSession(context: any, agentId: string | null) {
   const sessionCode = `p_${Math.random().toString(36).slice(2, 8)}`;
   const payload = {
     org_id: context.orgId,
@@ -130,7 +130,7 @@ export async function createSession(context: RuntimeContext, agentId: string | n
   return { data };
 }
 
-export async function getRecentTurns(context: RuntimeContext, sessionId: string, limit = 5) {
+export async function getRecentTurns(context: any, sessionId: string, limit = 5) {
   const { data, error } = await context.supabase
     .from("D_conv_turns")
     .select("*")
@@ -140,4 +140,5 @@ export async function getRecentTurns(context: RuntimeContext, sessionId: string,
   if (error) return { error: error.message };
   return { data: data || [] };
 }
+
 

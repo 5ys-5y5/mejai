@@ -5,7 +5,7 @@ type SupabaseLike = {
   };
 };
 
-type RuntimeContext = { supabase: SupabaseLike; runtimeTraceId?: string | null };
+type RuntimeContext = any;
 
 function nowIso() {
   return new Date().toISOString();
@@ -239,7 +239,7 @@ function captureDecisionTrace(eventType: string, payload: Record<string, unknown
 }
 
 export async function insertEvent(
-  context: RuntimeContext,
+  context: any,
   sessionId: string,
   turnId: string | null,
   eventType: string,
@@ -300,7 +300,7 @@ export async function insertEvent(
 }
 
 export async function upsertDebugLog(
-  context: RuntimeContext,
+  context: any,
   payload: { sessionId: string; turnId: string; seq?: number | null; prefixJson: Record<string, unknown> | null }
 ) {
   if (!payload.prefixJson) return;
@@ -325,7 +325,7 @@ export async function upsertDebugLog(
 }
 
 export async function insertFinalTurn(
-  context: RuntimeContext,
+  context: any,
   payload: Record<string, unknown>,
   prefixJson: Record<string, unknown> | null
 ) {
@@ -354,3 +354,4 @@ export async function insertFinalTurn(
   }
   return { data, error };
 }
+

@@ -31,7 +31,7 @@ type SupabaseLike = {
   };
 };
 
-type RuntimeContext = { supabase: SupabaseLike; runtimeTurnId?: string | null };
+type RuntimeContext = any;
 
 function normalizeLeadDays(values?: number[]) {
   if (!Array.isArray(values)) return [];
@@ -129,7 +129,7 @@ function extractSolapiMessageId(payload: Record<string, unknown>) {
 }
 
 export async function saveRestockSubscriptionLite(
-  context: RuntimeContext,
+  context: any,
   input: RestockSubscriptionInput
 ): Promise<RestockSubscriptionResult> {
   if (!context?.supabase?.from) {
@@ -374,3 +374,4 @@ export async function saveRestockSubscriptionLite(
     },
   };
 }
+
