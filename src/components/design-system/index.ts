@@ -63,3 +63,5 @@ export {
   type ConversationModelLegoAssembly,
 } from "@/components/design-system/conversation/ConversationUI.parts";
 
+export { WidgetShell, type WidgetShellProps, type WidgetMessage } from "@/components/design-system/widget/WidgetShell";
+

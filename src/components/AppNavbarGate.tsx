@@ -6,7 +6,7 @@ import { Navbar } from "@/components/landing/navbar";
 export function AppNavbarGate() {
   const pathname = usePathname();
 
-  if (pathname.startsWith("/app")) {
+  if (pathname.startsWith("/app") || pathname.startsWith("/embed")) {
     return null;
   }
 

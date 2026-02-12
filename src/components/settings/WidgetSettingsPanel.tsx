@@ -125,6 +125,7 @@ export function WidgetSettingsPanel() {
 
   const greeting = String((draft.theme || {}).greeting || "");
   const inputPlaceholder = String((draft.theme || {}).input_placeholder || "");
+  const launcherIconUrl = String((draft.theme || {}).launcher_icon_url || "");
 
   return (
     <div className="space-y-4">
@@ -199,6 +200,31 @@ export function WidgetSettingsPanel() {
             }
             className="h-9"
           />
+        </label>
+        <label className="block">
+          <div className="mb-1 text-xs text-slate-600">위젯 아이콘 URL</div>
+          <div className="flex items-center gap-2">
+            <Input
+              value={launcherIconUrl}
+              onChange={(e) =>
+                setDraft((prev) => ({
+                  ...prev,
+                  theme: { ...(prev.theme || {}), launcher_icon_url: e.target.value },
+                }))
+              }
+              placeholder="/logo.png"
+              className="h-9 flex-1"
+            />
+            <div className="h-9 w-9 rounded-full border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={launcherIconUrl || "/logo.png"}
+                alt="Widget Icon Preview"
+                className="h-5 w-5 object-contain"
+              />
+            </div>
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">비워두면 기본 아이콘(/logo.png)이 사용됩니다.</div>
         </label>
       </Card>
 

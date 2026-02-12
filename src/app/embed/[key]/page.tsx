@@ -2,16 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
-import { cn } from "@/lib/utils";
-import { Send } from "lucide-react";
+import { WidgetShell, type WidgetMessage } from "@/components/design-system";
 
-type ChatMessage = {
-  id: string;
-  role: "user" | "bot" | "system";
-  content: string;
-};
+type ChatMessage = WidgetMessage;
 
 type WidgetConfig = {
   id: string;
@@ -41,6 +34,7 @@ export default function WidgetEmbedPage() {
   const searchParams = useSearchParams();
   const key = useMemo(() => String(params?.key || ""), [params]);
   const visitorId = useMemo(() => String(searchParams?.get("vid") || "").trim(), [searchParams]);
+  const sessionSeed = useMemo(() => String(searchParams?.get("sid") || "").trim(), [searchParams]);
   const [widgetToken, setWidgetToken] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [config, setConfig] = useState<WidgetConfig | null>(null);
@@ -51,24 +45,52 @@ export default function WidgetEmbedPage() {
   const [pendingMeta, setPendingMeta] = useState<Record<string, any> | null>(null);
   const initCalledRef = useRef(false);
   const widgetTokenRef = useRef("");
-  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const sessionSeedRef = useRef(sessionSeed);
+  const scrollRef = useRef<HTMLElement | null>(null);
 
   const appendMessage = useCallback((role: ChatMessage["role"], content: string) => {
     setMessages((prev) => [...prev, { id: buildId(), role, content }]);
   }, []);
 
+  const fetchHistory = useCallback(async (token: string) => {
+    if (!token) return [] as ChatMessage[];
+    try {
+      const res = await fetch("/api/widget/history", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) return [] as ChatMessage[];
+      const data = await res.json();
+      const items = Array.isArray(data?.messages) ? data.messages : [];
+      return items
+        .map((item: Record<string, any>) => ({
+          id: buildId(),
+          role: item.role === "user" ? ("user" as const) : ("bot" as const),
+          content: String(item.content || "").trim(),
+        }))
+        .filter((msg: ChatMessage) => msg.content.length > 0);
+    } catch {
+      return [] as ChatMessage[];
+    }
+  }, []);
+
   const callInit = useCallback(
-    async (user?: Record<string, any> | null) => {
-      if (initCalledRef.current) return;
+    async (user?: Record<string, any> | null, options?: { forceNew?: boolean }) => {
+      if (initCalledRef.current && !options?.forceNew) return;
       initCalledRef.current = true;
-      setStatus("초기화 중");
+      setStatus(options?.forceNew ? "새 대화 준비 중" : "초기화 중");
       const referrer = typeof document !== "undefined" ? document.referrer : "";
       const meta = pendingMeta || {};
+      const seedSession = options?.forceNew ? "" : sessionSeedRef.current;
+      if (seedSession) sessionSeedRef.current = "";
       const payload = {
         public_key: key,
         origin: meta.origin || "",
         page_url: meta.page_url || referrer || "",
         referrer: meta.referrer || referrer || "",
+        session_id: seedSession || undefined,
         visitor: {
           id: meta.visitor_id || visitorId || undefined,
           ...user,
@@ -86,25 +108,55 @@ export default function WidgetEmbedPage() {
           appendMessage("system", `오류: ${data?.error || "INIT_FAILED"}`);
           return;
         }
-        setWidgetToken(String(data.widget_token || ""));
-        setSessionId(String(data.session_id || ""));
+        const nextToken = String(data.widget_token || "");
+        const nextSessionId = String(data.session_id || "");
+        setWidgetToken(nextToken);
+        setSessionId(nextSessionId);
         setConfig(data.widget_config || null);
+        try {
+          window.parent?.postMessage?.(
+            { type: "mejai_widget_session", session_id: nextSessionId },
+            "*"
+          );
+        } catch {
+          // ignore
+        }
+        try {
+          window.parent?.postMessage?.(
+            {
+              type: "mejai_widget_theme",
+              theme: data.widget_config?.theme || {},
+              name: data.widget_config?.name || "",
+            },
+            "*"
+          );
+        } catch {
+          // ignore
+        }
+        setStatus("대화 불러오는 중");
+        const history = await fetchHistory(nextToken);
         const greeting =
           (data.widget_config?.theme && (data.widget_config.theme as Record<string, any>).greeting) ||
           "안녕하세요. 무엇을 도와드릴까요?";
-        appendMessage("bot", String(greeting));
+        const nextMessages =
+          history.length > 0 ? history : [{ id: buildId(), role: "bot" as const, content: String(greeting) }];
+        setMessages(nextMessages);
         setStatus("연결됨");
       } catch (error) {
         setStatus("초기화 실패");
         appendMessage("system", `오류: ${error instanceof Error ? error.message : "INIT_FAILED"}`);
       }
     },
-    [appendMessage, key, pendingMeta, visitorId]
+    [appendMessage, fetchHistory, key, pendingMeta, visitorId]
   );
 
   useEffect(() => {
     widgetTokenRef.current = widgetToken;
   }, [widgetToken]);
+
+  useEffect(() => {
+    sessionSeedRef.current = sessionSeed;
+  }, [sessionSeed]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -118,6 +170,9 @@ export default function WidgetEmbedPage() {
           visitor_id: data.visitor_id,
         };
         setPendingMeta(nextMeta);
+        if (!initCalledRef.current && data.session_id) {
+          sessionSeedRef.current = String(data.session_id || "").trim();
+        }
       }
       if (data.type === "mejai_widget_event" && data.event) {
         const token = widgetTokenRef.current;
@@ -147,6 +202,16 @@ export default function WidgetEmbedPage() {
     if (!scrollRef.current) return;
     scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
+
+  const handleNewConversation = useCallback(() => {
+    setMessages([]);
+    setInputValue("");
+    setStatus("새 대화 준비 중");
+    setWidgetToken("");
+    setSessionId("");
+    initCalledRef.current = false;
+    void callInit(pendingUser, { forceNew: true });
+  }, [callInit, pendingUser]);
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,51 +272,27 @@ export default function WidgetEmbedPage() {
 
   const theme = (config?.theme || {}) as Record<string, any>;
   const brandName = String(config?.name || "Mejai");
+  const launcherIconUrl = String(
+    theme.launcher_icon_url || theme.launcherIconUrl || theme.icon_url || theme.iconUrl || ""
+  );
+  const headerIcon = launcherIconUrl || "/logo.png";
 
   return (
-    <div className="min-h-screen w-full bg-white text-slate-900 flex flex-col">
-      <header className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <div className="text-sm font-semibold">{brandName}</div>
-        <div className="text-[11px] text-slate-500">{status}</div>
-      </header>
-      <main ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-        {messages.map((msg, idx) => {
-          const isUser = msg.role === "user";
-          const prev = messages[idx - 1];
-          const grouped = prev?.role === msg.role;
-          return (
-            <div
-              key={msg.id}
-              className={cn("flex", isUser ? "justify-end" : "justify-start", grouped ? "mt-1" : "mt-2")}
-            >
-              <div
-                className={cn(
-                  "max-w-[80%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words",
-                  isUser ? "bg-slate-900 text-white" : "bg-slate-100 border border-slate-200 text-slate-800"
-                )}
-              >
-                {msg.content}
-              </div>
-            </div>
-          );
-        })}
-      </main>
-      <footer className="border-t border-slate-200 px-3 py-3">
-        <form onSubmit={handleSend} className="flex items-center gap-2">
-          <Input
-            placeholder={theme.input_placeholder || "메시지를 입력하세요"}
-            className="flex-1 h-10 rounded-full px-4"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-          />
-          <Button type="submit" size="icon" className="h-10 w-10 rounded-full" disabled={!inputValue.trim()}>
-            <Send className="h-4 w-4" />
-          </Button>
-        </form>
-        {theme.disclaimer ? (
-          <div className="mt-2 text-[10px] text-slate-500">{String(theme.disclaimer)}</div>
-        ) : null}
-      </footer>
+    <div className="h-full">
+      <WidgetShell
+        brandName={brandName}
+        status={status}
+        iconUrl={headerIcon}
+        messages={messages}
+        inputPlaceholder={theme.input_placeholder || "메시지를 입력하세요"}
+        disclaimer={theme.disclaimer ? String(theme.disclaimer) : ""}
+        inputValue={inputValue}
+        onInputChange={setInputValue}
+        onSend={handleSend}
+        onNewConversation={handleNewConversation}
+        sendDisabled={!inputValue.trim() || !widgetToken || !sessionId}
+        scrollRef={scrollRef}
+      />
     </div>
   );
 }

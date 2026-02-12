@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode, type FormEvent } from "react";
 import {
   AdminTag,
   AgentSelectPopover,
@@ -39,6 +39,8 @@ import {
   SidebarNavigationShell,
   TopHeaderShell,
   TypographyScaleShell,
+  WidgetShell,
+  type WidgetMessage,
   type SelectOption,
 } from "@/components/design-system";
 import {
@@ -75,6 +77,7 @@ type CategoryKey =
   | "input"
   | "select"
   | "conversation"
+  | "widget"
   | "display"
   | "feedback"
   | "overlay"
@@ -88,6 +91,7 @@ const categoryLabels: Array<{ key: CategoryKey; label: string }> = [
   { key: "input", label: "Input" },
   { key: "select", label: "Select" },
   { key: "conversation", label: "Conversation" },
+  { key: "widget", label: "Widget" },
   { key: "display", label: "Display" },
   { key: "feedback", label: "Feedback" },
   { key: "overlay", label: "Overlay" },
@@ -315,11 +319,12 @@ const conversationDefinitionGroups: Array<{ label: string; items: DefinitionCata
 ];
 
 function UsedInPages({ pages }: { pages: string[] }) {
+  const uniquePages = Array.from(new Set(pages));
   return (
     <div className="mt-3 text-[11px] text-slate-500">
       <div className="mb-1">사용 페이지:</div>
       <div className="space-y-1">
-        {pages.map((page) => (
+        {uniquePages.map((page) => (
           <div key={page}>
             <code>{page}</code>
           </div>
@@ -608,7 +613,11 @@ function createDemoModelState(): ModelState {
   };
 }
 
-export default function DesignSystemPage() {
+function buildWidgetId() {
+  return `widget_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function DesignSystemContent() {
   const [activeCategory, setActiveCategory] = useState<CategoryKey>("all");
 
   const [singleValue, setSingleValue] = useState("chatgpt");
@@ -649,6 +658,29 @@ export default function DesignSystemPage() {
   const [iconSearch, setIconSearch] = useState("");
   const [iconPage, setIconPage] = useState(1);
 
+  const [widgetBrandName, setWidgetBrandName] = useState("Mejai");
+  const [widgetStatus, setWidgetStatus] = useState("연결됨");
+  const [widgetIconUrl, setWidgetIconUrl] = useState("/logo.png");
+  const [widgetGreeting, setWidgetGreeting] = useState("안녕하세요. 무엇을 도와드릴까요?");
+  const [widgetPlaceholder, setWidgetPlaceholder] = useState("메시지를 입력하세요");
+  const [widgetDisclaimer, setWidgetDisclaimer] = useState("");
+  const [widgetInputValue, setWidgetInputValue] = useState("");
+  const [widgetMessages, setWidgetMessages] = useState<WidgetMessage[]>(() => [
+    { id: buildWidgetId(), role: "bot", content: "안녕하세요. 무엇을 도와드릴까요?" },
+  ]);
+
+  useEffect(() => {
+    setWidgetMessages((prev) => {
+      if (prev.length === 0) {
+        return [{ id: buildWidgetId(), role: "bot", content: widgetGreeting }];
+      }
+      if (prev.length === 1 && prev[0].role === "bot") {
+        return [{ ...prev[0], content: widgetGreeting }];
+      }
+      return prev;
+    });
+  }, [widgetGreeting]);
+
   const selectedMultiLabel = useMemo(() => {
     if (!multiValues.length) return "-";
     const mapped = multiValues
@@ -676,6 +708,22 @@ export default function DesignSystemPage() {
   const iconTotalPages = Math.max(1, Math.ceil(filteredIconEntries.length / iconPageSize));
   const safeIconPage = Math.min(iconPage, iconTotalPages);
   const iconPageEntries = filteredIconEntries.slice((safeIconPage - 1) * iconPageSize, safeIconPage * iconPageSize);
+
+  const handleWidgetSend = (event: FormEvent) => {
+    event.preventDefault();
+    const text = widgetInputValue.trim();
+    if (!text) return;
+    setWidgetInputValue("");
+    setWidgetMessages((prev) => [
+      ...prev,
+      { id: buildWidgetId(), role: "user", content: text },
+      { id: buildWidgetId(), role: "bot", content: "샘플 응답입니다. 실제 위젯에서는 응답이 이어집니다." },
+    ]);
+  };
+
+  const handleWidgetReset = () => {
+    setWidgetMessages([{ id: buildWidgetId(), role: "bot", content: widgetGreeting }]);
+  };
 
   const conversationLeadDayMessage: ConversationReplyDemoMessage = {
     id: "catalog-choice-lead-day",
@@ -1363,6 +1411,99 @@ export default function DesignSystemPage() {
       ),
     },
     {
+      key: "widget",
+      category: "widget",
+      node: (
+        <SectionBlock
+          id="widget"
+          title="Widget UI"
+          description="웹 위젯 UI 구성 요소를 디자인 시스템 컴포넌트로 조합하고, 입력값을 즉시 반영합니다."
+        >
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+            <Card className="p-4 space-y-3">
+              <div className="text-sm font-semibold text-slate-900">Widget Controls</div>
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">브랜드 이름</div>
+                <Input value={widgetBrandName} onChange={(e) => setWidgetBrandName(e.target.value)} className="h-9" />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">상태 텍스트</div>
+                <Input value={widgetStatus} onChange={(e) => setWidgetStatus(e.target.value)} className="h-9" />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">아이콘 URL</div>
+                <Input
+                  value={widgetIconUrl}
+                  onChange={(e) => setWidgetIconUrl(e.target.value)}
+                  placeholder="/logo.png"
+                  className="h-9"
+                />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">환영 메시지</div>
+                <Input value={widgetGreeting} onChange={(e) => setWidgetGreeting(e.target.value)} className="h-9" />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">입력 안내 문구</div>
+                <Input
+                  value={widgetPlaceholder}
+                  onChange={(e) => setWidgetPlaceholder(e.target.value)}
+                  className="h-9"
+                />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">하단 안내 문구</div>
+                <Input
+                  value={widgetDisclaimer}
+                  onChange={(e) => setWidgetDisclaimer(e.target.value)}
+                  placeholder="예: 개인정보는 안전하게 처리됩니다."
+                  className="h-9"
+                />
+              </label>
+              <StateBanner
+                tone="info"
+                title="미리보기 안내"
+                description="좌측 값을 변경하면 우측 위젯 UI에 즉시 반영됩니다."
+              />
+            </Card>
+            <Card className="p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-900">Widget Preview</div>
+                <Button variant="outline" size="sm" onClick={handleWidgetReset}>
+                  대화 초기화
+                </Button>
+              </div>
+              <div className="mx-auto w-full max-w-[380px]">
+                <div className="h-[560px] overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                  <WidgetShell
+                    brandName={widgetBrandName}
+                    status={widgetStatus}
+                    iconUrl={widgetIconUrl || "/logo.png"}
+                    messages={widgetMessages}
+                    inputPlaceholder={widgetPlaceholder}
+                    disclaimer={widgetDisclaimer}
+                    inputValue={widgetInputValue}
+                    onInputChange={setWidgetInputValue}
+                    onSend={handleWidgetSend}
+                    onNewConversation={handleWidgetReset}
+                    sendDisabled={!widgetInputValue.trim()}
+                    fill={false}
+                    className="h-full"
+                  />
+                </div>
+              </div>
+              <UsedInPages
+                pages={[
+                  "src/components/design-system/widget/WidgetShell.tsx",
+                  "src/app/embed/[key]/page.tsx",
+                ]}
+              />
+            </Card>
+          </div>
+        </SectionBlock>
+      ),
+    },
+    {
       key: "display",
       category: "display",
       node: (
@@ -1562,17 +1703,16 @@ export default function DesignSystemPage() {
   const visibleSections = sections.filter((section) => activeCategory === "all" || section.category === activeCategory);
 
   return (
-    <div className="px-5 py-6 md:px-8">
-      <div className="mx-auto w-full max-w-7xl space-y-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Design System Playground</h1>
-          <p className="mt-1 text-sm text-slate-500">
-            서비스 전역 반복 UI를 카테고리별로 확인하는 기준 페이지입니다.
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            모든 샘플은 <code>@/components/design-system</code> 경유 import 기준으로 정리됩니다.
-          </p>
-        </div>
+    <div className="mx-auto w-full max-w-7xl space-y-4">
+      <div>
+        <h1 className="text-2xl font-semibold text-slate-900">Design System Playground</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          서비스 전역 반복 UI를 카테고리별로 확인하는 기준 페이지입니다.
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          모든 샘플은 <code>@/components/design-system</code> 경유 import 기준으로 정리됩니다.
+        </p>
+      </div>
 
         <div className="sticky top-0 z-20 flex flex-wrap rounded-3xl border border-slate-200 gap-2 bg-white/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
           {categoryLabels.map((category) => (
@@ -1592,8 +1732,15 @@ export default function DesignSystemPage() {
           ))}
         </div>
 
-        <div className="space-y-4">{visibleSections.map((section) => <div key={section.key}>{section.node}</div>)}</div>
-      </div>
+      <div className="space-y-4">{visibleSections.map((section) => <div key={section.key}>{section.node}</div>)}</div>
+    </div>
+  );
+}
+
+export default function DesignSystemPage() {
+  return (
+    <div className="px-5 py-6 md:px-8">
+      <DesignSystemContent />
     </div>
   );
 }

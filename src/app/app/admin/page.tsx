@@ -8,14 +8,18 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import { ChatSettingsPanel } from "@/components/settings/ChatSettingsPanel";
 import { ProposalSettingsPanel } from "@/components/settings/ProposalSettingsPanel";
 import { PerformanceSettingsPanel } from "@/components/settings/PerformanceSettingsPanel";
+import { DesignSystemContent } from "@/app/app/design-system/page";
 
-type TabKey = "chat" | "proposal" | "performance";
+type TabKey = "chat" | "proposal" | "performance" | "design-system";
 
 export default function AdminPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawTab = (searchParams.get("tab") || "chat").toLowerCase();
-  const tab: TabKey = rawTab === "proposal" || rawTab === "performance" ? (rawTab as TabKey) : "chat";
+  const tab: TabKey =
+    rawTab === "proposal" || rawTab === "performance" || rawTab === "design-system"
+      ? (rawTab as TabKey)
+      : "chat";
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminReady, setAdminReady] = useState(false);
@@ -61,6 +65,7 @@ export default function AdminPage() {
       { key: "chat", label: "대화 설정" },
       { key: "proposal", label: "제안" },
       { key: "performance", label: "성능" },
+      { key: "design-system", label: "디자인 시스템" },
     ],
     []
   );
@@ -94,6 +99,8 @@ export default function AdminPage() {
             <ChatSettingsPanel authToken={authToken} />
           ) : tab === "proposal" ? (
             <ProposalSettingsPanel authToken={authToken} />
+          ) : tab === "design-system" ? (
+            <DesignSystemContent />
           ) : (
             <PerformanceSettingsPanel />
           )}
