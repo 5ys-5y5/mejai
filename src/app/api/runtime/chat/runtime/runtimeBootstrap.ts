@@ -138,15 +138,16 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   } else {
     const authHeader = req.headers.get("authorization") || "";
     const cookieHeader = req.headers.get("cookie") || "";
-    context = await getServerContext(authHeader, cookieHeader);
+    const contextRes = await getServerContext(authHeader, cookieHeader);
     pushRuntimeTimingStage(timingStages, "auth_context", authStartedAt);
-    if ("error" in context) {
+    if ("error" in contextRes) {
       if (debugEnabled) {
-        console.debug("[runtime/chat/mk2] auth error", context.error);
+        console.debug("[runtime/chat/mk2] auth error", contextRes.error);
       }
-      return { response: respond({ error: context.error }, { status: 401 }), state: null };
+      return { response: respond({ error: contextRes.error }, { status: 401 }), state: null };
     }
-    authContext = context;
+    context = contextRes;
+    authContext = contextRes;
   }
   if (!context || !authContext) {
     return { response: respond({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 }), state: null };
