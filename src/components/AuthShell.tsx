@@ -1,3 +1,4 @@
+import Image from "next/image";
 import React from "react";
 import Link from "next/link";
 
@@ -11,7 +12,9 @@ interface AuthShellProps {
 function BrandMark() {
   return (
     <Link href="/" className="flex items-center gap-2" aria-label="랜딩 페이지로 이동">
-      <div className="h-9 w-9 rounded-2xl bg-slate-200" />
+      <div className="relative h-9 w-9 overflow-hidden rounded-2xl bg-slate-200">
+        <Image src="/brand/logo.svg" alt="Mejai logo" fill sizes="36px" className="object-cover" priority />
+      </div>
       <div className="leading-tight">
         <div className="font-semibold tracking-tight text-slate-900">Mejai</div>
       </div>
