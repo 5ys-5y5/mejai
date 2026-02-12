@@ -74,9 +74,10 @@
 
   var buttonIcon = document.createElement("img");
   buttonIcon.alt = brandName + " Icon";
-  buttonIcon.style.width = "28px";
-  buttonIcon.style.height = "28px";
-  buttonIcon.style.objectFit = "contain";
+  buttonIcon.style.width = "56px";
+  buttonIcon.style.height = "56px";
+  buttonIcon.style.objectFit = "cover";
+  buttonIcon.style.borderRadius = "999px";
   buttonIcon.style.display = "block";
   buttonIcon.style.pointerEvents = "none";
 
@@ -119,7 +120,7 @@
     var raw =
       readThemeValue(cfg, ["launcherIconUrl", "launcherIcon", "launcher_icon_url", "icon", "icon_url"]) ||
       readThemeValue(themeConfig, ["launcher_icon_url", "launcherIconUrl", "icon_url", "iconUrl", "icon"]);
-    return normalizeIconUrl(raw) || baseUrl + "/logo.png";
+    return normalizeIconUrl(raw) || baseUrl + "/brand/logo.png";
   }
 
   function resolveLauncherColor() {

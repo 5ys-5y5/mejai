@@ -275,7 +275,7 @@ export default function WidgetEmbedPage() {
   const launcherIconUrl = String(
     theme.launcher_icon_url || theme.launcherIconUrl || theme.icon_url || theme.iconUrl || ""
   );
-  const headerIcon = launcherIconUrl || "/logo.png";
+  const headerIcon = launcherIconUrl || "/brand/logo.png";
 
   return (
     <div className="h-full">

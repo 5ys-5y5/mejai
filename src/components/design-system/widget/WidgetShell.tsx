@@ -45,7 +45,7 @@ export function WidgetShell({
   fill = true,
   className,
 }: WidgetShellProps) {
-  const resolvedIcon = iconUrl || "/logo.png";
+  const resolvedIcon = iconUrl || "/brand/logo.png";
 
   return (
     <div
@@ -59,7 +59,7 @@ export function WidgetShell({
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-full border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={resolvedIcon} alt="" className="h-5 w-5 object-contain" />
+            <img src={resolvedIcon} alt="" className="h-full w-full object-cover" />
           </div>
           <div>
             <div className="text-sm font-semibold">{brandName}</div>

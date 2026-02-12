@@ -212,19 +212,19 @@ export function WidgetSettingsPanel() {
                   theme: { ...(prev.theme || {}), launcher_icon_url: e.target.value },
                 }))
               }
-              placeholder="/logo.png"
+              placeholder="/brand/logo.png"
               className="h-9 flex-1"
             />
             <div className="h-9 w-9 rounded-full border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={launcherIconUrl || "/logo.png"}
+                src={launcherIconUrl || "/brand/logo.png"}
                 alt="Widget Icon Preview"
-                className="h-5 w-5 object-contain"
+                className="h-full w-full object-cover"
               />
             </div>
           </div>
-          <div className="mt-1 text-[11px] text-slate-500">비워두면 기본 아이콘(/logo.png)이 사용됩니다.</div>
+          <div className="mt-1 text-[11px] text-slate-500">비워두면 기본 아이콘(/brand/logo.png)이 사용됩니다.</div>
         </label>
       </Card>
 

@@ -660,7 +660,7 @@ export function DesignSystemContent() {
 
   const [widgetBrandName, setWidgetBrandName] = useState("Mejai");
   const [widgetStatus, setWidgetStatus] = useState("연결됨");
-  const [widgetIconUrl, setWidgetIconUrl] = useState("/logo.png");
+  const [widgetIconUrl, setWidgetIconUrl] = useState("/brand/logo.png");
   const [widgetGreeting, setWidgetGreeting] = useState("안녕하세요. 무엇을 도와드릴까요?");
   const [widgetPlaceholder, setWidgetPlaceholder] = useState("메시지를 입력하세요");
   const [widgetDisclaimer, setWidgetDisclaimer] = useState("");
@@ -1431,11 +1431,11 @@ export function DesignSystemContent() {
                 <Input value={widgetStatus} onChange={(e) => setWidgetStatus(e.target.value)} className="h-9" />
               </label>
               <label className="block">
-                <div className="mb-1 text-xs text-slate-600">아이콘 URL</div>
+                <div className="mb-1 text-xs text-slate-600">아이콘 URL (런처/헤더 공통)</div>
                 <Input
                   value={widgetIconUrl}
                   onChange={(e) => setWidgetIconUrl(e.target.value)}
-                  placeholder="/logo.png"
+                  placeholder="/brand/logo.png"
                   className="h-9"
                 />
               </label>
@@ -1473,12 +1473,19 @@ export function DesignSystemContent() {
                   대화 초기화
                 </Button>
               </div>
+              <div className="mb-3 flex items-center gap-3">
+                <div className="text-xs font-semibold text-slate-600">런처(확장 전)</div>
+                <div className="h-14 w-14 rounded-full border border-slate-200 bg-white overflow-hidden shadow-sm">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={widgetIconUrl || "/brand/logo.png"} alt="" className="h-full w-full object-cover" />
+                </div>
+              </div>
               <div className="mx-auto w-full max-w-[380px]">
                 <div className="h-[560px] overflow-hidden rounded-2xl border border-slate-200 bg-white">
                   <WidgetShell
                     brandName={widgetBrandName}
                     status={widgetStatus}
-                    iconUrl={widgetIconUrl || "/logo.png"}
+                    iconUrl={widgetIconUrl || "/brand/logo.png"}
                     messages={widgetMessages}
                     inputPlaceholder={widgetPlaceholder}
                     disclaimer={widgetDisclaimer}
