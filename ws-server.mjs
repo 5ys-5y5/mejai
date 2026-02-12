@@ -1,6 +1,6 @@
 /* Minimal WebSocket server entrypoint for Railway */
 import http from "http";
-import WebSocket from "ws";
+import { WebSocketServer } from "ws";
 
 const PORT = Number(process.env.PORT || 8080);
 const APP_BASE_URL = (process.env.APP_BASE_URL || "http://localhost:3000").replace(/\/$/, "");
@@ -10,7 +10,7 @@ const server = http.createServer((req, res) => {
   res.end("ws-server ok");
 });
 
-const wss = new WebSocket.Server({ server });
+const wss = new WebSocketServer({ server });
 
 function safeJsonParse(raw) {
   try {
@@ -21,7 +21,7 @@ function safeJsonParse(raw) {
 }
 
 function sendJson(ws, payload) {
-  if (ws.readyState !== WebSocket.OPEN) return;
+  if (ws.readyState !== ws.OPEN) return;
   ws.send(JSON.stringify(payload));
 }
 
