@@ -240,6 +240,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           const res = result.value;
           const botMessageId = res.message ? loadingMessageId : null;
           const transcriptFields = mapRuntimeResponseToTranscriptFields(res);
+          const inlineLogs = res.log_bundle && typeof res.log_bundle === "object" ? res.log_bundle : null;
           const quickReplies = transcriptFields.quickReplies;
           const productCards = transcriptFields.productCards;
           const responseSchema = transcriptFields.responseSchema;
@@ -276,7 +277,22 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
               .filter((msg) => !(msg.id === loadingMessageId && msg.role === "bot" && !msg.content)),
             sending: false,
           }));
-          if (botMessageId) {
+          if (botMessageId && inlineLogs) {
+            updateModel(modelId, (model) => ({
+              ...model,
+              messageLogs: {
+                ...model.messageLogs,
+                [botMessageId]: {
+                  mcp_logs: inlineLogs.mcp_logs || [],
+                  event_logs: inlineLogs.event_logs || [],
+                  debug_logs: inlineLogs.debug_logs || [],
+                  logsError: null,
+                  logsLoading: false,
+                },
+              },
+            }));
+          }
+          if (botMessageId && !inlineLogs) {
             await loadLogs(modelId, botMessageId, res.session_id || target.sessionId, transcriptFields.turnId);
           }
         } else {

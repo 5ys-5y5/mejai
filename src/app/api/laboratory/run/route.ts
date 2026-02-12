@@ -29,6 +29,48 @@ function parsePageKey(value: unknown): ConversationPageKey {
   return pageKey;
 }
 
+function parseForwardedHeader(value?: string | null) {
+  if (!value) return "";
+  return String(value)
+    .split(",")[0]
+    ?.trim();
+}
+
+function isLocalHost(value?: string | null) {
+  const host = String(value || "").toLowerCase();
+  if (!host) return false;
+  return host.includes("localhost") || host.startsWith("127.") || host.startsWith("0.0.0.0");
+}
+
+function resolveRuntimeOrigin(req: NextRequest) {
+  const forwardedHost = parseForwardedHeader(req.headers.get("x-forwarded-host"));
+  const forwardedProto =
+    parseForwardedHeader(req.headers.get("x-forwarded-proto")) ||
+    parseForwardedHeader(req.headers.get("x-forwarded-protocol"));
+  const hostHeader = parseForwardedHeader(req.headers.get("host"));
+  const candidateHost = forwardedHost || hostHeader || "";
+  const nextProtocol = String(req.nextUrl.protocol || "").replace(":", "");
+  let proto = forwardedProto || nextProtocol || "https";
+  if (!forwardedProto && candidateHost && !isLocalHost(candidateHost)) {
+    proto = "https";
+  }
+  const resolvedOrigin = candidateHost ? `${proto}://${candidateHost}` : req.nextUrl.origin;
+  return {
+    origin: resolvedOrigin,
+    info: {
+      resolved_origin: resolvedOrigin,
+      next_origin: req.nextUrl.origin,
+      next_protocol: nextProtocol,
+      host_header: hostHeader || null,
+      forwarded_host: forwardedHost || null,
+      forwarded_proto: forwardedProto || null,
+      proto_used: proto,
+      is_localhost: isLocalHost(candidateHost),
+      request_url: req.nextUrl.href,
+    },
+  };
+}
+
 function deriveScopeLevels(stage: string) {
   const safeStage = String(stage || "").trim() || "lab.proxy";
   const parts = safeStage.split(".").filter(Boolean);
@@ -71,9 +113,11 @@ async function persistProxyFailure(input: {
   traceId: string;
   body: Record<string, any> | null;
   targetPath: string;
+  targetUrl: string | null;
   pageKey: string;
   authHeader: string;
   cookieHeader: string;
+  originInfo: Record<string, any> | null;
   stageHistory: Array<{ stage: string; at: string }>;
   lastStage: string;
   requestStartedAt: number;
@@ -84,9 +128,11 @@ async function persistProxyFailure(input: {
     traceId,
     body,
     targetPath,
+    targetUrl,
     pageKey,
     authHeader,
     cookieHeader,
+    originInfo,
     stageHistory,
     lastStage,
     requestStartedAt,
@@ -105,6 +151,21 @@ async function persistProxyFailure(input: {
 
   const errorMessage = error instanceof Error ? error.message : String(error || "LAB_PROXY_FAILED");
   const errorStack = error instanceof Error ? error.stack || null : null;
+  const errorCause = (error as { cause?: unknown } | null)?.cause;
+  const errorCauseDetail =
+    errorCause && typeof errorCause === "object"
+      ? {
+          name: (errorCause as { name?: string }).name || null,
+          message: (errorCause as { message?: string }).message || null,
+          code: (errorCause as { code?: string }).code || null,
+          errno: (errorCause as { errno?: string | number }).errno || null,
+          syscall: (errorCause as { syscall?: string }).syscall || null,
+          address: (errorCause as { address?: string }).address || null,
+          port: (errorCause as { port?: number }).port || null,
+        }
+      : errorCause
+        ? { message: String(errorCause) }
+        : null;
   const providedSessionId = String(body?.session_id || "").trim();
   const resolvedSessionId = isUuidLike(providedSessionId) ? providedSessionId : crypto.randomUUID();
   const needsSessionInsert = !isUuidLike(providedSessionId);
@@ -169,13 +230,18 @@ async function persistProxyFailure(input: {
     scope,
     page_key: pageKey,
     route: targetPath,
+    target_url: targetUrl,
+    origin_info: originInfo || null,
     message_excerpt: messageExcerpt,
     stage_history: stageHistory,
     duration_ms: Date.now() - requestStartedAt,
     has_auth_header: Boolean(authHeader),
     has_cookie: Boolean(cookieHeader),
     error_stack: errorStack,
+    error_cause: errorCauseDetail,
   };
+
+  const eventCreatedAt = nowIso();
 
   await insertLabAuditEvent({
     supabase: supabaseAdmin,
@@ -232,6 +298,8 @@ async function persistProxyFailure(input: {
     mcpLogs: [
       `lab_proxy_error: ${errorMessage || "LAB_PROXY_FAILED"}`,
       `last_stage: ${lastStage}`,
+      ...(targetUrl ? [`target_url: ${targetUrl}`] : []),
+      ...(originInfo?.resolved_origin ? [`resolved_origin: ${originInfo.resolved_origin}`] : []),
     ],
     providerAvailable: [],
     conversationMode: String(body?.mode || "mk2"),
@@ -255,6 +323,40 @@ async function persistProxyFailure(input: {
     });
   }
 
+  const inlineDebugLog = {
+    id: null,
+    session_id: resolvedSessionId,
+    turn_id: persistedTurnId,
+    seq: persistedSeq,
+    prefix_json: debugPrefix,
+    prefix_tree: null,
+    created_at: eventCreatedAt,
+  };
+  const inlineEventBefore = {
+    id: null,
+    event_type: "LAB_PROXY_FAILURE_BEFORE_TURN_WRITE",
+    payload: { ...eventPayload, point: "before_turn_write" },
+    created_at: eventCreatedAt,
+    session_id: resolvedSessionId,
+    turn_id: persistedTurnId,
+  };
+  const inlineEventAfter = {
+    id: null,
+    event_type: "LAB_PROXY_FAILURE_AFTER_TURN_WRITE",
+    payload: { ...eventPayload, point: "after_turn_write", turn_id: persistedTurnId },
+    created_at: eventCreatedAt,
+    session_id: resolvedSessionId,
+    turn_id: persistedTurnId,
+  };
+  const inlineEventUnhandled = {
+    id: null,
+    event_type: "UNHANDLED_ERROR_CAUGHT",
+    payload: { ...eventPayload, turn_id: persistedTurnId },
+    created_at: eventCreatedAt,
+    session_id: resolvedSessionId,
+    turn_id: persistedTurnId,
+  };
+
   await insertLabAuditEvent({
     supabase: supabaseAdmin,
     sessionId: resolvedSessionId,
@@ -272,7 +374,15 @@ async function persistProxyFailure(input: {
     botContext: { trace_id: traceId, stage: "lab_proxy" },
   });
 
-  return { sessionId: resolvedSessionId, turnId: persistedTurnId };
+  return {
+    sessionId: resolvedSessionId,
+    turnId: persistedTurnId,
+    logBundle: {
+      mcp_logs: [],
+      event_logs: [inlineEventBefore, inlineEventAfter, inlineEventUnhandled],
+      debug_logs: [inlineDebugLog],
+    },
+  };
 }
 
 function sanitizeRuntimePayloadByInteractionPolicy(
@@ -333,10 +443,12 @@ export async function POST(req: NextRequest) {
   };
   let body: Record<string, any> | null = null;
   let targetPath = "/api/runtime/chat";
+  let targetUrl: string | null = null;
   let pageKey: ConversationPageKey = "/app/laboratory";
   let authHeader = "";
   let cookieHeader = "";
   let serverContext: { userId?: string | null; orgId?: string | null } | null = null;
+  let originInfo: Record<string, any> | null = null;
   try {
     const parseStartedAt = Date.now();
     markStage("lab.proxy.parse_body.start");
@@ -353,7 +465,12 @@ export async function POST(req: NextRequest) {
     }
 
     targetPath = normalizeRoute(String(body.route || ""));
-    const targetUrl = new URL(targetPath, req.nextUrl.origin);
+    markStage("lab.proxy.origin.resolve.start");
+    const runtimeOrigin = resolveRuntimeOrigin(req);
+    originInfo = runtimeOrigin.info;
+    markStage("lab.proxy.origin.resolve.done");
+    const targetUrlObject = new URL(targetPath, runtimeOrigin.origin);
+    targetUrl = targetUrlObject.toString();
     authHeader = req.headers.get("authorization") || "";
     cookieHeader = req.headers.get("cookie") || "";
     pageKey = parsePageKey(body.page_key);
@@ -418,7 +535,7 @@ export async function POST(req: NextRequest) {
 
     const fetchStartedAt = Date.now();
     markStage("lab.proxy.runtime.fetch.start");
-    const res = await fetch(targetUrl.toString(), {
+    const res = await fetch(targetUrlObject.toString(), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -463,14 +580,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(sanitizedData, { status: res.status });
   } catch (error) {
     markStage("lab.proxy.error");
-    await persistProxyFailure({
+    const persisted = await persistProxyFailure({
       error,
       traceId,
       body,
       targetPath,
+      targetUrl,
       pageKey,
       authHeader,
       cookieHeader,
+      originInfo,
       stageHistory,
       lastStage,
       requestStartedAt,
@@ -488,6 +607,10 @@ export async function POST(req: NextRequest) {
         message: "처리 중 오류가 발생했습니다. 같은 내용을 한 번 더 보내주세요.",
         mcp_actions: [],
         error: "LAB_PROXY_FAILED",
+        trace_id: traceId,
+        session_id: persisted?.sessionId || (body?.session_id ? String(body.session_id) : null),
+        turn_id: persisted?.turnId || null,
+        log_bundle: persisted?.logBundle || null,
       },
       { status: 200 }
     );

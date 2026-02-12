@@ -139,11 +139,12 @@ export function useConversationController(options: ControllerOptions) {
           options.makeRunBody({ text: trimmed, sessionId }),
           makeTraceId(traceIdPrefix)
         );
-                const mapped = mapRuntimeResponseToTranscriptFields(res);
-                const nextSessionId = res.session_id || sessionId;
-                setSessionId(nextSessionId);
-                setMessages((prev) =>
-                  prev.map((msg) =>
+        const mapped = mapRuntimeResponseToTranscriptFields(res);
+        const nextSessionId = res.session_id || sessionId;
+        const inlineLogs = res.log_bundle && typeof res.log_bundle === "object" ? res.log_bundle : null;
+        setSessionId(nextSessionId);
+        setMessages((prev) =>
+          prev.map((msg) =>
             msg.id === loadingId
               ? {
                   ...msg,
@@ -160,7 +161,20 @@ export function useConversationController(options: ControllerOptions) {
               : msg
           )
         );
-        void loadTurnLogs(loadingId, nextSessionId, mapped.turnId);
+        if (inlineLogs) {
+          setMessageLogs((prev) => ({
+            ...prev,
+            [loadingId]: {
+              mcp_logs: inlineLogs.mcp_logs || [],
+              event_logs: inlineLogs.event_logs || [],
+              debug_logs: inlineLogs.debug_logs || [],
+              logsError: null,
+              logsLoading: false,
+            },
+          }));
+        } else {
+          void loadTurnLogs(loadingId, nextSessionId, mapped.turnId);
+        }
       } catch (error) {
         const fallback = "요청에 실패했습니다. 잠시 후 다시 시도해 주세요.";
         const message = options.mapErrorMessage ? options.mapErrorMessage(error) : fallback;

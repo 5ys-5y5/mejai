@@ -1,7 +1,10 @@
-import type { TranscriptMessage } from "@/lib/debugTranscript";
+import type { LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
 
 export type RuntimeRunResponseLike = {
   turn_id?: string | null;
+  session_id?: string | null;
+  trace_id?: string | null;
+  log_bundle?: LogBundle | null;
   quick_replies?: Array<{ label?: string; value?: string }>;
   quick_reply_config?: {
     selection_mode?: "single" | "multi";
