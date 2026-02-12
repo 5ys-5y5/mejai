@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const ROOT = path.resolve(process.cwd(), "src");
+const ROOTS = [path.resolve(process.cwd(), "src"), path.resolve(process.cwd(), "scripts")];
 const FILE_EXTENSIONS = new Set([".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"]);
 const IMPORT_RE = /(import|export)\s+[^;]*?from\s+["']([^"']+)["']|import\s+["']([^"']+)["']/g;
 
@@ -21,7 +21,7 @@ function walk(dir, files = []) {
 }
 
 const violations = [];
-const files = walk(ROOT);
+const files = ROOTS.flatMap((root) => (fs.existsSync(root) ? walk(root) : []));
 
 for (const filePath of files) {
   const content = fs.readFileSync(filePath, "utf8");

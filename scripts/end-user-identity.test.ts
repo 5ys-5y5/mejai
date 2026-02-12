@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { __test } from "../src/app/api/runtime/chat/services/endUserRuntime.ts";
+import { __test } from "../src/app/api/runtime/chat/services/endUserRuntime";
 
 const {
   normalizeEmail,

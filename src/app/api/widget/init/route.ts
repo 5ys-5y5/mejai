@@ -84,7 +84,7 @@ export async function POST(req: NextRequest) {
   if (!matchAllowedDomain(host, allowedDomains)) {
     return NextResponse.json({ error: "DOMAIN_NOT_ALLOWED" }, { status: 403 });
   }
-  const allowedPaths = Array.isArray(widget.allowed_paths) ? widget.allowed_paths : [];
+  const allowedPaths = Array.isArray(widget.allowed_paths) ? (widget.allowed_paths as unknown[]) : [];
   if (allowedPaths.length > 0 && pageUrl) {
     let pathname = "";
     try {
@@ -93,8 +93,8 @@ export async function POST(req: NextRequest) {
       pathname = "";
     }
     const normalizedPaths = allowedPaths
-      .map((p) => String(p || "").trim())
-      .filter(Boolean);
+      .map((p: unknown) => String(p || "").trim())
+      .filter((value): value is string => Boolean(value));
     if (normalizedPaths.length > 0) {
       const ok = normalizedPaths.some((rule) => {
         if (rule === "*") return true;
