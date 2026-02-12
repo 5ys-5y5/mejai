@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { isUuidLike, normalizePhoneDigits } from "../shared/slotUtils.ts";
+import { isUuidLike, normalizePhoneDigits } from "../shared/slotUtils";
 import type { RuntimeContext } from "../shared/runtimeTypes";
 
 export type EndUserSyncContext = Pick<RuntimeContext, "supabase" | "orgId" | "runtimeEndUser">;

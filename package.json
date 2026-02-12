@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/validate-imports-no-ts-extension.mjs",
     "build": "next build",
     "start": "next start",
     "ws": "node ws-server.mjs",
