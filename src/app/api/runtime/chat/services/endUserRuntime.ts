@@ -94,7 +94,7 @@ function hashIdentity(value: string) {
 
 function mergeProfiles(base: EndUserProfile, override: EndUserProfile): EndUserProfile {
   const next: EndUserProfile = { ...base };
-  const keys: Array<keyof EndUserProfile> = [
+  const keys = [
     "display_name",
     "email",
     "phone",
@@ -105,11 +105,15 @@ function mergeProfiles(base: EndUserProfile, override: EndUserProfile): EndUserP
     "city",
     "province",
     "country",
-  ];
+  ] as const;
+  type StringKey = (typeof keys)[number];
   keys.forEach((key) => {
     const value = override[key];
-    if (value !== undefined && value !== null && String(value).trim()) {
-      next[key] = value;
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed) {
+        next[key as StringKey] = trimmed;
+      }
     }
   });
   const baseTags = Array.isArray(base.tags) ? base.tags : [];
