@@ -24,7 +24,7 @@ export type WidgetShellProps = {
   onSend: (event: FormEvent) => void;
   onNewConversation?: () => void;
   sendDisabled?: boolean;
-  scrollRef?: React.RefObject<HTMLElement>;
+  scrollRef?: React.RefObject<HTMLElement | null>;
   fill?: boolean;
   className?: string;
 };
