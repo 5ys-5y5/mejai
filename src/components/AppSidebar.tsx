@@ -31,7 +31,7 @@ import { useConversationAdminStatus } from "@/lib/conversation/client/useConvers
 function BrandMark() {
   return (
     <Link href="/" className="flex items-center gap-2" aria-label="랜딩 페이지로 이동">
-      <div className="relative h-9 w-9 overflow-hidden rounded-2xl bg-slate-200">
+      <div className="relative h-9 w-9 overflow-hidden rounded-xl bg-slate-200">
         <Image src="/brand/logo.svg" alt="Mejai logo" fill sizes="36px" className="object-cover" priority />
       </div>
       <div className="leading-tight">
@@ -169,7 +169,7 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
       publish({ type: "request" });
     }
     const supabase = getSupabaseClient();
-    if (!supabase) return () => {};
+    if (!supabase) return () => { };
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       if (event === "INITIAL_SESSION") return;
@@ -209,7 +209,7 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
         {collapsed ? (
           <div className="flex items-center justify-center w-full">
             <Link href="/" aria-label="랜딩 페이지로 이동" title="Mejai">
-              <div className="relative h-9 w-9 overflow-hidden rounded-2xl bg-slate-200">
+              <div className="relative h-9 w-9 overflow-hidden rounded-xl bg-slate-200">
                 <Image src="/brand/logo.svg" alt="Mejai logo" fill sizes="36px" className="object-cover" priority />
               </div>
             </Link>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
+import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import {
   applyConversationFeatureVisibility,
   isProviderEnabled,
@@ -8,6 +9,9 @@ import {
   type ConversationFeaturesProviderShape,
   type ConversationPageKey,
 } from "@/lib/conversation/pageFeaturePolicy";
+import { buildDebugPrefixJson, buildFailedPayload, nowIso } from "@/app/api/runtime/chat/runtime/runtimeSupport";
+import { upsertDebugLog } from "@/app/api/runtime/chat/services/auditRuntime";
+import { isUuidLike } from "@/app/api/runtime/chat/shared/slotUtils";
 
 function normalizeRoute(value?: string | null) {
   // Runtime chat is now a single core endpoint.
@@ -23,6 +27,252 @@ function parsePageKey(value: unknown): ConversationPageKey {
   const pageKey = String(value || "").trim();
   if (!pageKey) return "/app/laboratory";
   return pageKey;
+}
+
+function deriveScopeLevels(stage: string) {
+  const safeStage = String(stage || "").trim() || "lab.proxy";
+  const parts = safeStage.split(".").filter(Boolean);
+  const level5 = "lab.proxy";
+  const level2 = parts[0] || "lab";
+  const level1 = parts.slice(0, 2).join(".") || safeStage;
+  return { level5, level2, level1 };
+}
+
+async function insertLabAuditEvent(input: {
+  supabase: ReturnType<typeof createAdminSupabaseClient>;
+  sessionId: string;
+  turnId: string | null;
+  eventType: string;
+  payload: Record<string, any>;
+  botContext?: Record<string, any>;
+}) {
+  const { supabase, sessionId, turnId, eventType, payload, botContext } = input;
+  try {
+    await supabase.from("F_audit_events").insert({
+      session_id: sessionId,
+      turn_id: turnId,
+      event_type: eventType,
+      payload,
+      created_at: nowIso(),
+      bot_context: botContext || {},
+    });
+  } catch (error) {
+    console.warn("[laboratory/run] failed to insert audit event", {
+      eventType,
+      session_id: sessionId,
+      turn_id: turnId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function persistProxyFailure(input: {
+  error: unknown;
+  traceId: string;
+  body: Record<string, any> | null;
+  targetPath: string;
+  pageKey: string;
+  authHeader: string;
+  cookieHeader: string;
+  stageHistory: Array<{ stage: string; at: string }>;
+  lastStage: string;
+  requestStartedAt: number;
+  serverContext?: { userId?: string | null; orgId?: string | null } | null;
+}) {
+  const {
+    error,
+    traceId,
+    body,
+    targetPath,
+    pageKey,
+    authHeader,
+    cookieHeader,
+    stageHistory,
+    lastStage,
+    requestStartedAt,
+    serverContext,
+  } = input;
+  let supabaseAdmin;
+  try {
+    supabaseAdmin = createAdminSupabaseClient();
+  } catch (err) {
+    console.warn("[laboratory/run] admin supabase init failed", {
+      trace_id: traceId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+
+  const errorMessage = error instanceof Error ? error.message : String(error || "LAB_PROXY_FAILED");
+  const errorStack = error instanceof Error ? error.stack || null : null;
+  const providedSessionId = String(body?.session_id || "").trim();
+  const resolvedSessionId = isUuidLike(providedSessionId) ? providedSessionId : crypto.randomUUID();
+  const needsSessionInsert = !isUuidLike(providedSessionId);
+  let sessionExists = false;
+  if (!needsSessionInsert) {
+    try {
+      const { data } = await supabaseAdmin
+        .from("D_conv_sessions")
+        .select("id")
+        .eq("id", resolvedSessionId)
+        .maybeSingle();
+      sessionExists = Boolean(data?.id);
+    } catch (err) {
+      console.warn("[laboratory/run] failed to check session existence", {
+        trace_id: traceId,
+        session_id: resolvedSessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  if (needsSessionInsert || !sessionExists) {
+    try {
+      await supabaseAdmin.from("D_conv_sessions").insert({
+        id: resolvedSessionId,
+        org_id: serverContext?.orgId || null,
+        session_code: `lab_${Math.random().toString(36).slice(2, 8)}`,
+        started_at: nowIso(),
+        channel: "laboratory_proxy_error",
+        metadata: {
+          trace_id: traceId,
+          page_key: pageKey,
+          route: targetPath,
+          reason: "proxy_failed",
+        },
+      });
+    } catch (err) {
+      console.warn("[laboratory/run] failed to insert error session", {
+        trace_id: traceId,
+        session_id: resolvedSessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  const resolvedTurnId = crypto.randomUUID();
+  const fallback = "처리 중 오류가 발생했습니다. 같은 내용을 한 번 더 보내주세요.";
+  const failed = buildFailedPayload({
+    code: "LAB_PROXY_FAILED",
+    summary: errorMessage || "LAB_PROXY_FAILED",
+    stage: "lab.proxy",
+    retryable: true,
+    detail: errorStack ? { stack: errorStack } : undefined,
+  });
+  const scope = deriveScopeLevels(lastStage);
+  const messageExcerpt = String(body?.message || "").slice(0, 200) || null;
+  const eventPayload = {
+    code: "LAB_PROXY_FAILED",
+    summary: errorMessage || "LAB_PROXY_FAILED",
+    stage: "lab.proxy",
+    trace_id: traceId,
+    last_stage: lastStage,
+    scope,
+    page_key: pageKey,
+    route: targetPath,
+    message_excerpt: messageExcerpt,
+    stage_history: stageHistory,
+    duration_ms: Date.now() - requestStartedAt,
+    has_auth_header: Boolean(authHeader),
+    has_cookie: Boolean(cookieHeader),
+    error_stack: errorStack,
+  };
+
+  await insertLabAuditEvent({
+    supabase: supabaseAdmin,
+    sessionId: resolvedSessionId,
+    turnId: resolvedTurnId,
+    eventType: "LAB_PROXY_FAILURE_BEFORE_TURN_WRITE",
+    payload: { ...eventPayload, point: "before_turn_write" },
+    botContext: { trace_id: traceId, stage: "lab_proxy" },
+  });
+
+  let persistedTurnId = resolvedTurnId;
+  let persistedSeq: number | null = null;
+  try {
+    const { data, error: turnError } = await supabaseAdmin
+      .from("D_conv_turns")
+      .insert({
+        id: resolvedTurnId,
+        session_id: resolvedSessionId,
+        seq: null,
+        transcript_text: String(body?.message || ""),
+        answer_text: fallback,
+        final_answer: fallback,
+        failed,
+        bot_context: {
+          intent_name: "general",
+          entity: {},
+          error_code: "LAB_PROXY_FAILED",
+          error_stage: lastStage,
+          trace_id: traceId,
+        },
+      })
+      .select("id, session_id, seq")
+      .single();
+    if (turnError) throw new Error(turnError.message);
+    if (data?.id) persistedTurnId = String(data.id);
+    persistedSeq = data?.seq ? Number(data.seq) : null;
+  } catch (err) {
+    console.warn("[laboratory/run] failed to insert error turn", {
+      trace_id: traceId,
+      session_id: resolvedSessionId,
+      turn_id: resolvedTurnId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  const debugPrefix = buildDebugPrefixJson({
+    llmModel: null,
+    mcpTools: [],
+    mcpProviders: [],
+    mcpLastFunction: "NO_TOOL_CALLED:LAB_PROXY",
+    mcpLastStatus: "error",
+    mcpLastError: errorMessage || "LAB_PROXY_FAILED",
+    mcpLastCount: null,
+    mcpLogs: [
+      `lab_proxy_error: ${errorMessage || "LAB_PROXY_FAILED"}`,
+      `last_stage: ${lastStage}`,
+    ],
+    providerAvailable: [],
+    conversationMode: String(body?.mode || "mk2"),
+  });
+  try {
+    await upsertDebugLog(
+      { supabase: supabaseAdmin } as any,
+      {
+        sessionId: resolvedSessionId,
+        turnId: persistedTurnId,
+        seq: persistedSeq,
+        prefixJson: debugPrefix,
+      }
+    );
+  } catch (err) {
+    console.warn("[laboratory/run] failed to upsert debug log", {
+      trace_id: traceId,
+      session_id: resolvedSessionId,
+      turn_id: persistedTurnId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  await insertLabAuditEvent({
+    supabase: supabaseAdmin,
+    sessionId: resolvedSessionId,
+    turnId: persistedTurnId,
+    eventType: "LAB_PROXY_FAILURE_AFTER_TURN_WRITE",
+    payload: { ...eventPayload, point: "after_turn_write", turn_id: persistedTurnId },
+    botContext: { trace_id: traceId, stage: "lab_proxy" },
+  });
+  await insertLabAuditEvent({
+    supabase: supabaseAdmin,
+    sessionId: resolvedSessionId,
+    turnId: persistedTurnId,
+    eventType: "UNHANDLED_ERROR_CAUGHT",
+    payload: { ...eventPayload, turn_id: persistedTurnId },
+    botContext: { trace_id: traceId, stage: "lab_proxy" },
+  });
+
+  return { sessionId: resolvedSessionId, turnId: persistedTurnId };
 }
 
 function sanitizeRuntimePayloadByInteractionPolicy(
@@ -72,9 +322,26 @@ export async function POST(req: NextRequest) {
   const requestStartedAt = Date.now();
   const incomingTraceId = String(req.headers.get("x-runtime-trace-id") || "").trim();
   const traceId = incomingTraceId || makeTraceId();
+  let lastStage = "lab.proxy.start";
+  const stageHistory: Array<{ stage: string; at: string }> = [{ stage: lastStage, at: nowIso() }];
+  const markStage = (stage: string) => {
+    const safe = String(stage || "").trim();
+    if (!safe) return;
+    lastStage = safe;
+    stageHistory.push({ stage: safe, at: nowIso() });
+    if (stageHistory.length > 12) stageHistory.shift();
+  };
+  let body: Record<string, any> | null = null;
+  let targetPath = "/api/runtime/chat";
+  let pageKey: ConversationPageKey = "/app/laboratory";
+  let authHeader = "";
+  let cookieHeader = "";
+  let serverContext: { userId?: string | null; orgId?: string | null } | null = null;
   try {
     const parseStartedAt = Date.now();
-    const body = await req.json().catch(() => null);
+    markStage("lab.proxy.parse_body.start");
+    body = await req.json().catch(() => null);
+    markStage("lab.proxy.parse_body.done");
     if (!body || !body.message) {
       console.info("[laboratory/run][timing]", {
         trace_id: traceId,
@@ -85,17 +352,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
     }
 
-    const targetPath = normalizeRoute(String(body.route || ""));
+    targetPath = normalizeRoute(String(body.route || ""));
     const targetUrl = new URL(targetPath, req.nextUrl.origin);
-    const authHeader = req.headers.get("authorization") || "";
-    const cookieHeader = req.headers.get("cookie") || "";
-    const pageKey = parsePageKey(body.page_key);
+    authHeader = req.headers.get("authorization") || "";
+    cookieHeader = req.headers.get("cookie") || "";
+    pageKey = parsePageKey(body.page_key);
     const requestToolIds: unknown[] = Array.isArray(body.mcp_tool_ids) ? body.mcp_tool_ids : [];
     const requestProviderKeys: unknown[] = Array.isArray(body.mcp_provider_keys) ? body.mcp_provider_keys : [];
     let providerValue: ConversationFeaturesProviderShape | null = null;
     let isAdminUser = false;
+    markStage("lab.proxy.auth_context.start");
     const serverCtx = await getServerContext(authHeader, cookieHeader);
+    markStage("lab.proxy.auth_context.done");
     if (!("error" in serverCtx)) {
+      serverContext = { userId: serverCtx.user.id, orgId: serverCtx.orgId };
       const { data: access } = await serverCtx.supabase
         .from("A_iam_user_access_maps")
         .select("is_admin")
@@ -147,6 +417,7 @@ export async function POST(req: NextRequest) {
       : [];
 
     const fetchStartedAt = Date.now();
+    markStage("lab.proxy.runtime.fetch.start");
     const res = await fetch(targetUrl.toString(), {
       method: "POST",
       headers: {
@@ -169,6 +440,7 @@ export async function POST(req: NextRequest) {
         runtime_flags: body.runtime_flags || undefined,
       }),
     });
+    markStage("lab.proxy.runtime.fetch.done");
     const runtimeFetchMs = Date.now() - fetchStartedAt;
 
     const parseResponseStartedAt = Date.now();
@@ -190,6 +462,20 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(sanitizedData, { status: res.status });
   } catch (error) {
+    markStage("lab.proxy.error");
+    await persistProxyFailure({
+      error,
+      traceId,
+      body,
+      targetPath,
+      pageKey,
+      authHeader,
+      cookieHeader,
+      stageHistory,
+      lastStage,
+      requestStartedAt,
+      serverContext,
+    });
     console.error("[laboratory/run] proxy failed", error);
     console.info("[laboratory/run][timing]", {
       trace_id: traceId,

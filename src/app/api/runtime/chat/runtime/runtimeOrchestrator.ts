@@ -47,6 +47,7 @@ import {
   isLikelyAddressDetailOnly,
   isLikelyOrderId,
   isLikelyZipcode,
+  isUuidLike,
   findRecentEntity,
   maskPhone,
   normalizePhoneDigits,
@@ -57,7 +58,8 @@ import {
   getRecentTurns,
   resolveProductDecision,
 } from "../services/dataAccess";
-import { insertEvent, insertFinalTurn } from "../services/auditRuntime";
+import { insertEvent, insertFinalTurn, upsertDebugLog } from "../services/auditRuntime";
+import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import {
   buildRestockFinalAnswerWithChoices,
   extractEntitiesWithLlm,
@@ -144,6 +146,8 @@ export async function POST(req: NextRequest) {
   let auditIntent: string | null = null;
   let auditEntity: Record<string, any> = {};
   let pipelineStateForError: RuntimePipelineState | null = null;
+  let lastStage = "bootstrap.start";
+  const stageHistory: Array<{ stage: string; at: string }> = [];
   const runtimeCallChain: Array<{ module_path: string; function_name: string }> = [];
   const pushRuntimeCall = (modulePath: string, functionName: string) => {
     const module_path = String(modulePath || "").trim();
@@ -153,7 +157,210 @@ export async function POST(req: NextRequest) {
     if (last && last.module_path === module_path && last.function_name === function_name) return;
     runtimeCallChain.push({ module_path, function_name });
   };
+  const markStage = (stage: string) => {
+    const safeStage = String(stage || "").trim();
+    if (!safeStage) return;
+    lastStage = safeStage;
+    stageHistory.push({ stage: safeStage, at: nowIso() });
+    if (stageHistory.length > 12) stageHistory.shift();
+  };
+  const deriveScopeLevels = (stage: string) => {
+    const safeStage = String(stage || "").trim() || "bootstrap.unknown";
+    const parts = safeStage.split(".").filter(Boolean);
+    const level5 = "runtime.chat";
+    const level2 = parts[0] || "bootstrap";
+    const level1 = parts.slice(0, 2).join(".") || safeStage;
+    return { level5, level2, level1 };
+  };
+  const persistBootstrapFailure = async (input: {
+    err: unknown;
+    runtimeTraceId: string;
+    runtimeTurnId: string;
+    auditMessage: string | null;
+    auditIntent: string | null;
+    auditEntity: Record<string, any>;
+    auditConversationMode: string | null;
+    lastDebugPrefixJson: Record<string, any> | null;
+    runtimeCallChain: Array<{ module_path: string; function_name: string }>;
+    stageHistory: Array<{ stage: string; at: string }>;
+    lastStage: string;
+    sessionId: string | null;
+    debugEnabled: boolean;
+  }) => {
+    const {
+      err,
+      runtimeTraceId,
+      runtimeTurnId,
+      auditMessage,
+      auditIntent,
+      auditEntity,
+      auditConversationMode,
+      lastDebugPrefixJson,
+      runtimeCallChain,
+      stageHistory: localStages,
+      lastStage: localLastStage,
+      sessionId,
+      debugEnabled: debugFlag,
+    } = input;
+    const errorMessage = err instanceof Error ? err.message : String(err || "INTERNAL_ERROR");
+    const errorStack = err instanceof Error ? err.stack || null : null;
+    let admin;
+    try {
+      admin = createAdminSupabaseClient();
+    } catch (error) {
+      console.warn("[runtime/chat_mk2] bootstrap failure: admin supabase init failed", {
+        trace_id: runtimeTraceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }
+    const auditContext = { supabase: admin, runtimeTraceId } as RuntimeContext;
+    const scope = deriveScopeLevels(localLastStage);
+    let resolvedSessionId = sessionId;
+    if (!resolvedSessionId) {
+      resolvedSessionId = crypto.randomUUID();
+      try {
+        await admin.from("D_conv_sessions").insert({
+          id: resolvedSessionId,
+          org_id: null,
+          session_code: `err_${Math.random().toString(36).slice(2, 8)}`,
+          started_at: nowIso(),
+          channel: "runtime_error",
+          metadata: {
+            trace_id: runtimeTraceId,
+            reason: "bootstrap_failure",
+            last_stage: localLastStage,
+          },
+        });
+      } catch (error) {
+        console.warn("[runtime/chat_mk2] bootstrap failure: session insert failed", {
+          trace_id: runtimeTraceId,
+          session_id: resolvedSessionId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    const resolvedTurnId = isUuidLike(runtimeTurnId) ? runtimeTurnId : crypto.randomUUID();
+    const fallback = "처리 중 오류가 발생했습니다. 같은 내용을 한 번 더 보내주세요.";
+    const failed = buildFailedPayload({
+      code: "INTERNAL_ERROR",
+      summary: errorMessage || "INTERNAL_ERROR",
+      intent: auditIntent || undefined,
+      stage: `runtime.chat.${scope.level2}`,
+      retryable: true,
+      detail: debugFlag ? { stack: errorStack } : undefined,
+    });
+    const messageSnippet = auditMessage ? String(auditMessage).slice(0, 200) : null;
+    const errorPayloadBase = {
+      code: "BOOTSTRAP_ERROR",
+      summary: errorMessage || "INTERNAL_ERROR",
+      stage: "runtime.chat.bootstrap",
+      trace_id: runtimeTraceId,
+      runtime_turn_id: runtimeTurnId,
+      last_stage: localLastStage,
+      scope,
+      message_excerpt: messageSnippet,
+      stage_history: localStages,
+      error_stack: debugFlag ? errorStack : null,
+    };
+    await insertEvent(
+      auditContext,
+      resolvedSessionId,
+      resolvedTurnId,
+      "BOOTSTRAP_FAILURE_BEFORE_TURN_WRITE",
+      { ...errorPayloadBase, point: "before_turn_write" },
+      { trace_id: runtimeTraceId, stage: "bootstrap_failure" }
+    );
+    let persistedTurnId = resolvedTurnId;
+    let persistedSeq: number | null = null;
+    try {
+      const { data, error } = await admin
+        .from("D_conv_turns")
+        .insert({
+          id: resolvedTurnId,
+          session_id: resolvedSessionId,
+          seq: null,
+          transcript_text: auditMessage || "",
+          answer_text: fallback,
+          final_answer: fallback,
+          failed,
+          bot_context: {
+            intent_name: auditIntent || "general",
+            entity: auditEntity || {},
+            error_code: "BOOTSTRAP_ERROR",
+            error_stage: localLastStage,
+            trace_id: runtimeTraceId,
+            runtime_turn_id: runtimeTurnId,
+          },
+        })
+        .select("id, session_id, seq")
+        .single();
+      if (error) {
+        throw new Error(error.message);
+      }
+      if (data?.id) persistedTurnId = String(data.id);
+      persistedSeq = data?.seq ? Number(data.seq) : null;
+    } catch (error) {
+      console.warn("[runtime/chat_mk2] bootstrap failure: turn insert failed", {
+        trace_id: runtimeTraceId,
+        session_id: resolvedSessionId,
+        turn_id: resolvedTurnId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    const debugPrefix =
+      lastDebugPrefixJson ||
+      buildDebugPrefixJson({
+        llmModel: null,
+        mcpTools: [],
+        mcpProviders: [],
+        mcpLastFunction: "NO_TOOL_CALLED:BOOTSTRAP_ERROR",
+        mcpLastStatus: "error",
+        mcpLastError: errorMessage || "INTERNAL_ERROR",
+        mcpLastCount: null,
+        mcpLogs: [
+          `bootstrap_error: ${errorMessage || "INTERNAL_ERROR"}`,
+          `last_stage: ${localLastStage}`,
+        ],
+        providerAvailable: [],
+        conversationMode: auditConversationMode || "mk2",
+        runtimeCallChain,
+      });
+    try {
+      await upsertDebugLog(auditContext, {
+        sessionId: resolvedSessionId,
+        turnId: persistedTurnId,
+        seq: persistedSeq,
+        prefixJson: debugPrefix,
+      });
+    } catch (error) {
+      console.warn("[runtime/chat_mk2] bootstrap failure: debug log insert failed", {
+        trace_id: runtimeTraceId,
+        session_id: resolvedSessionId,
+        turn_id: persistedTurnId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    await insertEvent(
+      auditContext,
+      resolvedSessionId,
+      persistedTurnId,
+      "BOOTSTRAP_FAILURE_AFTER_TURN_WRITE",
+      { ...errorPayloadBase, point: "after_turn_write", turn_id: persistedTurnId },
+      { trace_id: runtimeTraceId, stage: "bootstrap_failure" }
+    );
+    await insertEvent(
+      auditContext,
+      resolvedSessionId,
+      persistedTurnId,
+      "UNHANDLED_ERROR_CAUGHT",
+      { ...errorPayloadBase, turn_id: persistedTurnId },
+      { trace_id: runtimeTraceId, stage: "bootstrap_failure" }
+    );
+    return { sessionId: resolvedSessionId, turnId: persistedTurnId };
+  };
   pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts", "POST");
+  markStage("bootstrap.start");
   const respond = createRuntimeResponder({
     runtimeTraceId,
     requestStartedAt,
@@ -202,6 +409,7 @@ export async function POST(req: NextRequest) {
       nextSeq,
       prevBotContext,
     } = bootstrap.state;
+    markStage("bootstrap.done");
     if (context && typeof context === "object") {
       const contextRecord = context as Record<string, any>;
       contextRecord.runtimeTraceId = runtimeTraceId;
@@ -347,6 +555,7 @@ export async function POST(req: NextRequest) {
       expectedInput,
       resolvedIntent,
     };
+    markStage("intent_disambiguation.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts", "resolveIntentDisambiguation");
     const disambiguation = await resolveIntentDisambiguation({
       context,
@@ -386,6 +595,7 @@ export async function POST(req: NextRequest) {
       expectedInput,
       derivedPhone,
     };
+    markStage("pre_turn_guard.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts", "handlePreTurnGuards");
     const preTurnGuards = await handlePreTurnGuards({
       context,
@@ -417,6 +627,7 @@ export async function POST(req: NextRequest) {
     expectedInput = preTurnGuardOutput.expectedInput;
     pipelineState.derivedPhone = derivedPhone;
     pipelineState.expectedInput = expectedInput;
+    markStage("slot_derivation.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts", "deriveSlotsForTurn");
     const slotDerivation = await deriveSlotsForTurn({
       message,
@@ -456,6 +667,7 @@ export async function POST(req: NextRequest) {
     pipelineState.derivedAddress = derivedAddress;
     pipelineState.resolvedIntent = resolvedIntent;
 
+    markStage("pending_state.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/pendingStateRuntime.ts", "handleAddressChangeRefundPending");
     const pendingState = await handleAddressChangeRefundPending({
       context,
@@ -497,6 +709,7 @@ export async function POST(req: NextRequest) {
     pipelineState.derivedAddress = derivedAddress;
     pipelineState.updateConfirmAcceptedThisTurn = updateConfirmAcceptedThisTurn;
     pipelineState.refundConfirmAcceptedThisTurn = refundConfirmAcceptedThisTurn;
+    markStage("restock_pending.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/restockPendingRuntime.ts", "handleRestockPendingStage");
     const restockPending = await handleRestockPendingStage({
       context,
@@ -531,6 +744,7 @@ export async function POST(req: NextRequest) {
     pipelineState.resolvedIntent = resolvedIntent;
     pipelineState.restockSubscribeAcceptedThisTurn = restockSubscribeAcceptedThisTurn;
     pipelineState.lockIntentToRestockSubscribe = lockIntentToRestockSubscribe;
+    markStage("post_action.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/postActionRuntime.ts", "handlePostActionStage");
     const postActionStage = await handlePostActionStage({
       context,
@@ -550,6 +764,7 @@ export async function POST(req: NextRequest) {
       respond,
     });
     if (postActionStage.response) return postActionStage.response;
+    markStage("context_resolution.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts", "resolveIntentAndPolicyContext");
     const resolvedContext = await resolveIntentAndPolicyContext({
       context,
@@ -591,6 +806,7 @@ export async function POST(req: NextRequest) {
     let policyContext: PolicyEvalContext = resolvedContext.policyContext;
     auditIntent = resolvedIntent;
     auditEntity = (policyContext.entity || {}) as Record<string, any>;
+    markStage("input_stage.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts", "runInputStageRuntime");
     const inputStage = await runInputStageRuntime({
       compiledPolicy,
@@ -667,6 +883,7 @@ export async function POST(req: NextRequest) {
     lastMcpStatus = null;
     lastMcpError = null;
     lastMcpCount = null;
+    markStage("mcp_ops.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts", "createRuntimeMcpOps");
     const { noteMcp, noteMcpSkip, flushMcpSkipLogs } = createRuntimeMcpOps({
       usedProviders,
@@ -696,6 +913,7 @@ export async function POST(req: NextRequest) {
     auditIntent = resolvedIntent;
     auditEntity = (policyContext.entity || {}) as Record<string, any>;
 
+    markStage("otp_gate.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/otpRuntime.ts", "handleOtpLifecycleAndOrderGate");
     const otpGate = await handleOtpLifecycleAndOrderGate({
       lastTurn,
@@ -743,6 +961,7 @@ export async function POST(req: NextRequest) {
     pipelineState.customerVerificationToken = customerVerificationToken;
     pipelineState.mcpCandidateCalls = mcpCandidateCalls;
 
+    markStage("product_decision.start");
     pushRuntimeCall("src/app/api/runtime/chat/services/dataAccess.ts", "resolveProductDecision");
     const productDecisionRes = await resolveProductDecision(context, message);
     if (productDecisionRes.decision) {
@@ -774,6 +993,7 @@ export async function POST(req: NextRequest) {
       label?: string;
     }> = [];
     let mcpSummary = "";
+    markStage("tool_stage.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts", "runToolStagePipeline");
     const toolStage = await runToolStagePipeline({
       compiledPolicy,
@@ -857,6 +1077,7 @@ export async function POST(req: NextRequest) {
     pipelineState.resolvedOrderId = resolvedOrderId;
     pipelineState.mcpActions = mcpActions;
 
+    markStage("restock_handler.start");
     pushRuntimeCall("src/app/api/runtime/chat/handlers/restockHandler.ts", "handleRestockIntent");
     const restockHandled = await handleRestockIntent({
       resolvedIntent,
@@ -907,6 +1128,7 @@ export async function POST(req: NextRequest) {
     });
     if (restockHandled) return restockHandled;
 
+    markStage("finalize.guard.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/finalizeRuntime.ts", "handleGeneralNoPathGuard");
     const guarded = await handleGeneralNoPathGuard({
       resolvedIntent,
@@ -960,6 +1182,7 @@ export async function POST(req: NextRequest) {
     pipelineState.mcpSkipLogs = mcpSkipLogs;
     pipelineState.mcpSkipQueue = mcpSkipQueue;
 
+    markStage("finalize.run.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/finalizeRuntime.ts", "runFinalResponseFlow");
     return runFinalResponseFlow({
       runLlm,
@@ -997,6 +1220,25 @@ export async function POST(req: NextRequest) {
       respond,
     });
   } catch (err) {
+    if (!RuntimeContextAny || !currentSessionId) {
+      const persisted = await persistBootstrapFailure({
+        err,
+        runtimeTraceId,
+        runtimeTurnId,
+        auditMessage,
+        auditIntent,
+        auditEntity,
+        auditConversationMode,
+        lastDebugPrefixJson,
+        runtimeCallChain,
+        stageHistory,
+        lastStage,
+        sessionId: currentSessionId,
+        debugEnabled,
+      });
+      if (persisted?.sessionId) currentSessionId = persisted.sessionId;
+      if (persisted?.turnId) latestTurnId = persisted.turnId;
+    }
     if (!auditIntent && pipelineStateForError) {
       auditIntent = pipelineStateForError.resolvedIntent || "general";
     }
