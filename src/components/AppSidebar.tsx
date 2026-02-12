@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -23,12 +24,13 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import { usePerformanceConfig } from "@/hooks/usePerformanceConfig";
 import { shouldRefreshOnAuthEvent } from "@/lib/performanceConfig";
 import { useMultiTabLeaderLock } from "@/lib/multiTabSync";
-import { BrandLogo } from "@/components/BrandLogo";
 
 function BrandMark() {
   return (
     <Link href="/" className="flex items-center gap-2" aria-label="랜딩 페이지로 이동">
-      <BrandLogo />
+      <div className="relative h-9 w-9 overflow-hidden rounded-2xl bg-slate-200">
+        <Image src="/brand/logo.svg" alt="Mejai logo" fill sizes="36px" className="object-cover" priority />
+      </div>
       <div className="leading-tight">
         <div className="font-semibold tracking-tight text-slate-900">Mejai</div>
       </div>
@@ -198,7 +200,9 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
         {collapsed ? (
           <div className="flex items-center justify-center w-full">
             <Link href="/" aria-label="랜딩 페이지로 이동" title="Mejai">
-              <BrandLogo />
+              <div className="relative h-9 w-9 overflow-hidden rounded-2xl bg-slate-200">
+                <Image src="/brand/logo.svg" alt="Mejai logo" fill sizes="36px" className="object-cover" priority />
+              </div>
             </Link>
           </div>
         ) : (
