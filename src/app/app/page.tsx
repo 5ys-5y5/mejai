@@ -361,7 +361,7 @@ export default function DashboardPage() {
       setCafe24ProviderMallId(mallId || "-");
       const scope = String(provider.scope || "").trim();
       if (!mallId) {
-        setCafe24ReconnectNotice("Cafe24 mall_id가 없습니다. /app/settings?tab=env에서 확인해 주세요.");
+        setCafe24ReconnectNotice("Cafe24 mall_id가 없습니다. /app/install?tab=env에서 확인해 주세요.");
         setCafe24ReconnectBusy(false);
         return;
       }

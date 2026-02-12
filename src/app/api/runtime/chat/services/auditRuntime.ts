@@ -6,6 +6,7 @@ type SupabaseLike = {
 };
 
 import type { RuntimeContext } from "../shared/runtimeTypes";
+import { syncEndUserFromTurn } from "./endUserRuntime";
 
 type RuntimeContextAny = RuntimeContext;
 
@@ -352,6 +353,12 @@ export async function insertFinalTurn(
       turnId: data.id,
       seq: data.seq,
       prefixJson: nextPrefixJson,
+    });
+    await syncEndUserFromTurn({
+      context,
+      sessionId: String(data.session_id),
+      turnId: String(data.id),
+      turnPayload: data as Record<string, any>,
     });
   }
   return { data, error };

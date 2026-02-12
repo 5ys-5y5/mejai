@@ -24,6 +24,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const p = pathname;
     if (p === "/app") return "대시보드";
     if (p.startsWith("/app/calls")) return "통화/세션";
+    if (p.startsWith("/app/contacts")) return "고객";
+    if (p.startsWith("/app/users")) return "고객";
     if (p.startsWith("/app/analytics")) return "통계/트렌드";
     if (p.startsWith("/app/review")) return "후속 지원 요청";
     if (p.startsWith("/app/agents")) return "에이전트";
@@ -31,6 +33,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (p.startsWith("/app/kb")) return "지식 베이스";
     if (p.startsWith("/app/rules")) return "규칙";
     if (p.startsWith("/app/settings")) return "설정";
+    if (p.startsWith("/app/admin")) return "어드민";
+    if (p.startsWith("/app/install")) return "설치하기";
     if (p.startsWith("/app/billing")) return "결제/플랜";
     return "";
   }, [pathname]);

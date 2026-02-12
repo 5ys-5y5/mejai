@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
+import type { User } from "@supabase/supabase-js";
 import { getServerContext, type ServerContextSuccess } from "@/lib/serverAuth";
+import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { compilePolicy, type PolicyPack } from "@/lib/policyEngine";
 import { isUuidLike, isValidLlm } from "../shared/slotUtils";
 import type { KbRow } from "../shared/types";
@@ -26,6 +28,9 @@ type Body = {
   mcp_tool_ids?: string[];
   mcp_provider_keys?: string[];
   mode?: string;
+  metadata?: Record<string, any>;
+  end_user?: Record<string, any>;
+  visitor?: Record<string, any>;
   runtime_flags?: {
     restock_lite?: boolean;
   };
@@ -86,18 +91,66 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     }
 > {
   const { req, debugEnabled, timingStages, respond } = params;
-  const authHeader = req.headers.get("authorization") || "";
-  const cookieHeader = req.headers.get("cookie") || "";
+  const widgetSecret = String(req.headers.get("x-widget-secret") || "").trim();
+  const expectedWidgetSecret = String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
+  let context: ServerContextSuccess | null = null;
+  let authContext: ServerContextSuccess | null = null;
   const authStartedAt = Date.now();
-  const context = await getServerContext(authHeader, cookieHeader);
-  pushRuntimeTimingStage(timingStages, "auth_context", authStartedAt);
-  if ("error" in context) {
-    if (debugEnabled) {
-      console.debug("[runtime/chat/mk2] auth error", context.error);
+
+  if (widgetSecret && expectedWidgetSecret && widgetSecret === expectedWidgetSecret) {
+    const orgId = String(req.headers.get("x-widget-org-id") || "").trim();
+    if (!orgId) {
+      return { response: respond({ error: "WIDGET_ORG_ID_REQUIRED" }, { status: 400 }), state: null };
     }
-    return { response: respond({ error: context.error }, { status: 401 }), state: null };
+    let supabaseAdmin;
+    try {
+      supabaseAdmin = createAdminSupabaseClient();
+    } catch (error) {
+      return {
+        response: respond(
+          { error: error instanceof Error ? error.message : "ADMIN_SUPABASE_INIT_FAILED" },
+          { status: 500 }
+        ),
+        state: null,
+      };
+    }
+    const headerUserId = String(req.headers.get("x-widget-user-id") || "").trim();
+    let userId = headerUserId;
+    let orgRole = "admin";
+    if (!userId) {
+      const { data: accessRow } = await supabaseAdmin
+        .from("A_iam_user_access_maps")
+        .select("user_id, is_admin")
+        .eq("org_id", orgId)
+        .order("is_admin", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      userId = accessRow?.user_id ? String(accessRow.user_id) : "";
+      orgRole = accessRow?.is_admin ? "admin" : "operator";
+    }
+    if (!userId) {
+      return { response: respond({ error: "WIDGET_USER_NOT_FOUND" }, { status: 400 }), state: null };
+    }
+    const user = { id: userId } as User;
+    context = { supabase: supabaseAdmin, user, orgId, orgRole };
+    authContext = context;
+    pushRuntimeTimingStage(timingStages, "auth_context", authStartedAt, { widget: true });
+  } else {
+    const authHeader = req.headers.get("authorization") || "";
+    const cookieHeader = req.headers.get("cookie") || "";
+    context = await getServerContext(authHeader, cookieHeader);
+    pushRuntimeTimingStage(timingStages, "auth_context", authStartedAt);
+    if ("error" in context) {
+      if (debugEnabled) {
+        console.debug("[runtime/chat/mk2] auth error", context.error);
+      }
+      return { response: respond({ error: context.error }, { status: 401 }), state: null };
+    }
+    authContext = context;
   }
-  const authContext = context;
+  if (!context || !authContext) {
+    return { response: respond({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 }), state: null };
+  }
 
   const parseBodyStartedAt = Date.now();
   const body = (await req.json().catch(() => null)) as Body | null;
@@ -108,6 +161,25 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const runtimeFlags = {
     restock_lite: Boolean(body?.runtime_flags?.restock_lite),
   };
+  const runtimeEndUser =
+    (body?.end_user && typeof body.end_user === "object" ? body.end_user : null) ||
+    (body?.visitor && typeof body.visitor === "object" ? body.visitor : null);
+  if (runtimeEndUser) {
+    (context as RuntimeContextAny).runtimeEndUser = runtimeEndUser as Record<string, any>;
+  }
+  const sessionMetadata =
+    body?.metadata && typeof body.metadata === "object"
+      ? ({
+          ...body.metadata,
+          ...(body?.end_user ? { end_user: body.end_user } : {}),
+          ...(body?.visitor ? { visitor: body.visitor } : {}),
+        } as Record<string, any>)
+      : body?.end_user || body?.visitor
+      ? ({
+          ...(body?.end_user ? { end_user: body.end_user } : {}),
+          ...(body?.visitor ? { visitor: body.visitor } : {}),
+        } as Record<string, any>)
+      : null;
   const overrideLlm = body?.llm;
   const overrideKbId = body?.kb_id;
   const inlineKbText = typeof body?.inline_kb === "string" ? body.inline_kb.trim() : "";
@@ -362,6 +434,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     createSession,
     getRecentTurns,
     recentTurnLimit: 15,
+    sessionMetadata,
   });
   if (!sessionStateRes.state) {
     return { response: respond({ error: sessionStateRes.error || "SESSION_CREATE_FAILED" }, { status: 400 }), state: null };

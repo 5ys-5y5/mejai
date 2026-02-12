@@ -9,6 +9,7 @@ export type RuntimeContext = {
   runtimeTraceId?: string;
   runtimeRequestStartedAt?: string;
   runtimeTurnId?: string;
+  runtimeEndUser?: Record<string, any> | null;
 };
 
 export type CompiledPolicy = ReturnType<typeof compilePolicy>;

@@ -12,7 +12,8 @@
     "validate:runtime:prompt-templates": "node scripts/validate-runtime-prompt-templates.mjs",
     "validate:runtime:template-keys": "node scripts/validate-runtime-template-keys.mjs",
     "validate:runtime:response-schema": "node scripts/validate-runtime-response-schema.mjs",
-    "validate:conversation:centralization": "node scripts/validate-conversation-centralization.mjs"
+    "validate:conversation:centralization": "node scripts/validate-conversation-centralization.mjs",
+    "test:end-user-identity": "node --experimental-specifier-resolution=node scripts/end-user-identity.test.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

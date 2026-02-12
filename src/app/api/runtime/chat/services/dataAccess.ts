@@ -113,7 +113,11 @@ export async function fetchAdminKbs(context: RuntimeContext) {
   return { data: (data || []) as KbRow[] };
 }
 
-export async function createSession(context: RuntimeContext, agentId: string | null) {
+export async function createSession(
+  context: RuntimeContext,
+  agentId: string | null,
+  metadata?: Record<string, any> | null
+) {
   const sessionCode = `p_${Math.random().toString(36).slice(2, 8)}`;
   const payload = {
     org_id: context.orgId,
@@ -121,6 +125,7 @@ export async function createSession(context: RuntimeContext, agentId: string | n
     started_at: new Date().toISOString(),
     channel: "runtime",
     agent_id: agentId,
+    metadata: metadata && typeof metadata === "object" ? metadata : {},
   };
   const { data, error } = await context.supabase.from("D_conv_sessions").insert(payload).select("*").single();
   if (error) return { error: error.message };

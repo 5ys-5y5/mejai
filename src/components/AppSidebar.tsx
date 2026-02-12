@@ -14,7 +14,9 @@ import {
   Phone,
   PhoneCall,
   Route as RouteIcon,
+  Shield,
   Settings,
+  UserRound,
   Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -24,6 +26,7 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import { usePerformanceConfig } from "@/hooks/usePerformanceConfig";
 import { shouldRefreshOnAuthEvent } from "@/lib/performanceConfig";
 import { useMultiTabLeaderLock } from "@/lib/multiTabSync";
+import { useConversationAdminStatus } from "@/lib/conversation/client/useConversationAdminStatus";
 
 function BrandMark() {
   return (
@@ -58,6 +61,7 @@ function SidebarLink({
   badge,
   onClick,
   collapsed,
+  activePaths,
 }: {
   to: string;
   icon: React.ElementType;
@@ -65,9 +69,13 @@ function SidebarLink({
   badge?: number;
   onClick?: () => void;
   collapsed: boolean;
+  activePaths?: string[];
 }) {
   const pathname = usePathname();
-  const isActive = pathname === to || (to !== "/app" && pathname.startsWith(to));
+  const hasActiveOverride = Array.isArray(activePaths) && activePaths.length > 0;
+  const isActive = hasActiveOverride
+    ? activePaths.some((path) => pathname === path || pathname.startsWith(path))
+    : pathname === to || (to !== "/app" && pathname.startsWith(to));
   return (
     <Link
       href={to}
@@ -93,6 +101,7 @@ function SidebarLink({
 export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () => void; collapsed: boolean }) {
   const pathname = usePathname();
   const [reviewCount, setReviewCount] = useState<number | null>(null);
+  const isAdminUser = useConversationAdminStatus();
   const { config } = usePerformanceConfig();
   const pollIntervalMs = pathname.startsWith("/app/review")
     ? config.sidebar_poll_review_ms
@@ -218,6 +227,14 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
         <SidebarGroup header="모니터링" collapsed={collapsed}>
           <SidebarLink to="/app/calls" icon={PhoneCall} label="통화/세션" collapsed={collapsed} onClick={onNavigate} />
           <SidebarLink
+            to="/app/contacts"
+            icon={UserRound}
+            label="고객"
+            collapsed={collapsed}
+            activePaths={["/app/contacts", "/app/users"]}
+            onClick={onNavigate}
+          />
+          <SidebarLink
             to="/app/review"
             icon={Inbox}
             label="후속 지원 요청"
@@ -254,6 +271,16 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
 
         <SidebarGroup header="설정" collapsed={collapsed}>
           <SidebarLink to="/app/settings" icon={Settings} label="설정" collapsed={collapsed} onClick={onNavigate} />
+          <SidebarLink
+            to="/app/install"
+            icon={ClipboardCheck}
+            label="설치하기"
+            collapsed={collapsed}
+            onClick={onNavigate}
+          />
+          {isAdminUser ? (
+            <SidebarLink to="/app/admin" icon={Shield} label="어드민" collapsed={collapsed} onClick={onNavigate} />
+          ) : null}
         </SidebarGroup>
       </nav>
 

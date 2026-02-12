@@ -14,15 +14,20 @@ export async function prepareSessionState(input: {
   context: RuntimeContext;
   requestedSessionId: string;
   agentId: string | null;
-  createSession: (context: RuntimeContext, agentId: string | null) => Promise<{ data?: Record<string, any>; error?: unknown }>;
+  createSession: (
+    context: RuntimeContext,
+    agentId: string | null,
+    metadata?: Record<string, any> | null
+  ) => Promise<{ data?: Record<string, any>; error?: unknown }>;
   getRecentTurns: (context: RuntimeContext, sessionId: string, limit: number) => Promise<{ data?: Array<Record<string, any>> }>;
   recentTurnLimit?: number;
+  sessionMetadata?: Record<string, any> | null;
 }): Promise<{ state?: SessionState; error?: string }> {
   const requestedSessionId = String(input.requestedSessionId || "").trim();
   let sessionId = requestedSessionId;
   if (!sessionId) {
     const agentId = String(input.agentId || "").trim() || null;
-    const sessionRes = await input.createSession(input.context, agentId);
+    const sessionRes = await input.createSession(input.context, agentId, input.sessionMetadata || null);
     if (!sessionRes?.data?.id) {
       return { error: String(sessionRes?.error || "SESSION_CREATE_FAILED") };
     }
