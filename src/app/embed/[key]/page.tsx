@@ -124,6 +124,38 @@ function groupLogsByTurn(logs: LogBundle) {
   return map;
 }
 
+function normalizeChatRenderPlan(plan?: TranscriptMessage["renderPlan"]): ChatMessage["renderPlan"] | undefined {
+  if (!plan) return undefined;
+  return {
+    view: plan.view,
+    enable_quick_replies: Boolean(plan.enable_quick_replies),
+    enable_cards: Boolean(plan.enable_cards),
+    interaction_scope: plan.interaction_scope === "any" ? "any" : "latest_only",
+    quick_reply_source: {
+      type:
+        plan.quick_reply_source?.type === "explicit" ||
+        plan.quick_reply_source?.type === "config" ||
+        plan.quick_reply_source?.type === "fallback"
+          ? plan.quick_reply_source.type
+          : "none",
+      criteria: plan.quick_reply_source?.criteria,
+      source_function: plan.quick_reply_source?.source_function,
+      source_module: plan.quick_reply_source?.source_module,
+    },
+    selection_mode: plan.selection_mode === "multi" ? "multi" : "single",
+    min_select: Number.isFinite(Number(plan.min_select)) ? Number(plan.min_select) : 1,
+    max_select: Number.isFinite(Number(plan.max_select)) ? Number(plan.max_select) : 1,
+    submit_format: plan.submit_format === "csv" ? "csv" : "single",
+    grid_columns: {
+      quick_replies: Number.isFinite(Number(plan.grid_columns?.quick_replies))
+        ? Number(plan.grid_columns?.quick_replies)
+        : 1,
+      cards: Number.isFinite(Number(plan.grid_columns?.cards)) ? Number(plan.grid_columns?.cards) : 1,
+    },
+    prompt_kind: plan.prompt_kind || null,
+  };
+}
+
 function normalizeThemeList(value: unknown) {
   if (Array.isArray(value)) {
     return value.map((item) => String(item || "").trim()).filter(Boolean);
@@ -594,6 +626,7 @@ export default function WidgetEmbedPage() {
           return;
         }
         const mapped = mapRuntimeResponseToTranscriptFields(data || {});
+        const normalizedRenderPlan = normalizeChatRenderPlan(mapped.renderPlan);
         const messageText =
           String(
             data.message ||
@@ -613,7 +646,7 @@ export default function WidgetEmbedPage() {
                   turnId: mapped.turnId || null,
                   responseSchema: mapped.responseSchema,
                   responseSchemaIssues: mapped.responseSchemaIssues,
-                  renderPlan: mapped.renderPlan,
+                  renderPlan: normalizedRenderPlan,
                   isLoading: false,
                 }
               : msg
