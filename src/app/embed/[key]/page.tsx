@@ -242,6 +242,22 @@ export default function WidgetEmbedPage() {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const isAdminUser = useConversationAdminStatus();
+  const originHost = useMemo(
+    () =>
+      extractHostFromUrl(
+        String(pendingMeta?.origin || pendingMeta?.page_url || pendingMeta?.referrer || "")
+      ),
+    [pendingMeta]
+  );
+  const debugOrigins = useMemo(
+    () => normalizeThemeList(process.env.NEXT_PUBLIC_WIDGET_DEBUG_ORIGINS || ""),
+    []
+  );
+  const debugDomainAllowed = useMemo(
+    () => (originHost ? matchAllowedDomain(originHost, debugOrigins) : false),
+    [debugOrigins, originHost]
+  );
+  const debugBypass = debugDomainAllowed;
 
   const providerPolicy = useMemo(
     () => (config?.chat_policy ? (config.chat_policy as ConversationFeaturesProviderShape) : null),
@@ -252,8 +268,8 @@ export default function WidgetEmbedPage() {
     [providerPolicy]
   );
   const pageFeatures = useMemo(
-    () => applyConversationFeatureVisibility(baseFeatures, isAdminUser),
-    [baseFeatures, isAdminUser]
+    () => applyConversationFeatureVisibility(baseFeatures, isAdminUser || debugBypass),
+    [baseFeatures, debugBypass, isAdminUser]
   );
   const setupUi = useMemo(() => resolveConversationSetupUi(WIDGET_PAGE_KEY, providerPolicy), [providerPolicy]);
   const debugOptions = useMemo(
@@ -287,7 +303,8 @@ export default function WidgetEmbedPage() {
     theme.launcher_icon_url || theme.launcherIconUrl || theme.icon_url || theme.iconUrl || ""
   );
   const headerIcon = launcherIconUrl || "/brand/logo.png";
-  const statusLabel = isAdminUser ? status : "";
+  const isAdminOrDebug = isAdminUser || debugBypass;
+  const statusLabel = isAdminOrDebug ? status : "";
   const inputDisabled = !pageFeatures.interaction.inputSubmit;
 
   const allowedAccounts = useMemo(
@@ -302,18 +319,11 @@ export default function WidgetEmbedPage() {
   const accountAllowed = allowedAccountSet.size > 0 && userIdentifiers.some((value) => allowedAccountSet.has(value));
 
   const allowedDomains = Array.isArray(config?.allowed_domains) ? config.allowed_domains : [];
-  const originHost = useMemo(
-    () =>
-      extractHostFromUrl(
-        String(pendingMeta?.origin || pendingMeta?.page_url || pendingMeta?.referrer || "")
-      ),
-    [pendingMeta]
-  );
   const domainAllowed = allowedDomains.length === 0 ? true : matchAllowedDomain(originHost, allowedDomains);
-  const showPolicyTab = domainAllowed && accountAllowed;
+  const showPolicyTab = debugBypass || (domainAllowed && accountAllowed);
   const policyFeatures = useMemo(
-    () => applyConversationFeatureVisibility(baseFeatures, isAdminUser || showPolicyTab),
-    [baseFeatures, isAdminUser, showPolicyTab]
+    () => applyConversationFeatureVisibility(baseFeatures, isAdminOrDebug || showPolicyTab),
+    [baseFeatures, isAdminOrDebug, showPolicyTab]
   );
 
   useEffect(() => {
@@ -911,7 +921,7 @@ export default function WidgetEmbedPage() {
   const chatLegoProps: ConversationModelChatColumnLegoProps = {
     model,
     visibleMessages: messages,
-    isAdminUser,
+    isAdminUser: isAdminOrDebug,
     quickReplyDrafts,
     lockedReplySelections,
     setQuickReplyDrafts,
@@ -962,7 +972,7 @@ export default function WidgetEmbedPage() {
     model,
     pageFeatures: policyFeatures,
     setupUi,
-    isAdminUser,
+    isAdminUser: isAdminOrDebug,
     agentGroupOptions: [],
     versionOptions: [],
     sessionOptions: [],
