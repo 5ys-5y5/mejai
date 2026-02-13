@@ -6,6 +6,7 @@ type WidgetMessage = {
   role: "user" | "bot";
   content: string;
   created_at?: string | null;
+  turn_id?: string | null;
 };
 
 function normalizeText(value: unknown) {
@@ -81,6 +82,7 @@ export async function GET(req: NextRequest) {
         role: "bot",
         content: botText,
         created_at: (row as Record<string, any>).created_at ?? null,
+        turn_id: String((row as Record<string, any>).id || "").trim() || null,
       });
     }
   }

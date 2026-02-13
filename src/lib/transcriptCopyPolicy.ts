@@ -7,6 +7,7 @@ import {
 } from "@/lib/debugTranscript";
 import {
   PAGE_CONVERSATION_FEATURES,
+  WIDGET_PAGE_KEY,
   type ConversationFeaturesProviderShape,
   type ConversationPageKey,
 } from "@/lib/conversation/pageFeaturePolicy";
@@ -196,6 +197,22 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
       useSelectedMessages: false,
     },
     note: "랜딩/실험실 대화 복사 정책",
+  },
+  [WIDGET_PAGE_KEY]: {
+    page: WIDGET_PAGE_KEY,
+    destinations: ["clipboard"],
+    conversation: {
+      enabled: PAGE_CONVERSATION_FEATURES[WIDGET_PAGE_KEY].adminPanel.copyConversation,
+      formatter: "debug_transcript_v1",
+      useSelectedMessages: true,
+      debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
+    },
+    issue: {
+      enabled: PAGE_CONVERSATION_FEATURES[WIDGET_PAGE_KEY].adminPanel.copyIssue,
+      formatter: "issue_transcript_v1",
+      useSelectedMessages: false,
+    },
+    note: "위젯 대화 복사 정책",
   },
 };
 

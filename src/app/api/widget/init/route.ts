@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { issueWidgetToken } from "@/lib/widgetToken";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
+import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
 
 function nowIso() {
   return new Date().toISOString();
@@ -164,6 +165,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null);
+
   return NextResponse.json({
     widget_token: widgetToken,
     session_id: sessionId,
@@ -173,6 +176,7 @@ export async function POST(req: NextRequest) {
       agent_id: widget.agent_id,
       theme: widget.theme || {},
       public_key: widget.public_key,
+      chat_policy: chatPolicy,
     },
   });
 }

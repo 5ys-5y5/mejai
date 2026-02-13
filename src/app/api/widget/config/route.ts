@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
+import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
 
 function withCors(res: NextResponse, origin?: string | null) {
   res.headers.set("Access-Control-Allow-Origin", origin || "*");
@@ -38,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   const { data: widget, error } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, name, theme, public_key, allowed_domains, is_active")
+    .select("id, org_id, name, theme, public_key, allowed_domains, is_active")
     .eq("public_key", publicKey)
     .eq("is_active", true)
     .maybeSingle();
@@ -56,6 +57,8 @@ export async function GET(req: NextRequest) {
     return withCors(NextResponse.json({ error: "DOMAIN_NOT_ALLOWED" }, { status: 403 }), originHeader);
   }
 
+  const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null);
+
   return withCors(
     NextResponse.json({
       widget: {
@@ -63,6 +66,7 @@ export async function GET(req: NextRequest) {
         name: widget.name,
         theme: widget.theme || {},
         public_key: widget.public_key,
+        chat_policy: chatPolicy,
       },
     }),
     originHeader

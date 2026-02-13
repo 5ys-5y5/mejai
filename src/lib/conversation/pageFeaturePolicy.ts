@@ -1,6 +1,8 @@
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 
 export type ConversationPageKey = string;
+
+export const WIDGET_PAGE_KEY: ConversationPageKey = "/embed";
 export type SetupFieldKey =
   | "inlineUserKbInput"
   | "llmSelector"
@@ -36,6 +38,7 @@ export type ConversationSetupUi = {
  * 적용 범위:
  * - "/" (랜딩 체험)
  * - "/app/laboratory" (실험실)
+ * - "/embed" (위젯)
  */
 type IdGate = {
   /** 허용 목록. 비어있으면 전체 허용 */
@@ -645,12 +648,87 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
     },
   },
+  [WIDGET_PAGE_KEY]: {
+    mcp: {
+      providerSelector: false,
+      actionSelector: false,
+      providers: {},
+      tools: {},
+    },
+    adminPanel: {
+      enabled: true,
+      selectionToggle: false,
+      logsToggle: false,
+      messageSelection: false,
+      messageMeta: false,
+      copyConversation: true,
+      copyIssue: true,
+    },
+    interaction: {
+      quickReplies: false,
+      productCards: false,
+      prefill: true,
+      inputSubmit: true,
+    },
+    setup: {
+      modelSelector: false,
+      agentSelector: false,
+      llmSelector: false,
+      llms: {},
+      kbSelector: false,
+      kbIds: {},
+      adminKbSelector: false,
+      adminKbIds: {},
+      modeExisting: false,
+      sessionIdSearch: false,
+      modeNew: false,
+      routeSelector: false,
+      routes: {},
+      inlineUserKbInput: false,
+      defaultSetupMode: "new",
+      defaultLlm: "chatgpt",
+    },
+    visibility: {
+      mcp: {
+        providerSelector: "admin",
+        actionSelector: "admin",
+      },
+      adminPanel: {
+        enabled: "admin",
+        selectionToggle: "admin",
+        logsToggle: "admin",
+        messageSelection: "admin",
+        messageMeta: "admin",
+        copyConversation: "admin",
+        copyIssue: "admin",
+      },
+      interaction: {
+        quickReplies: "admin",
+        productCards: "admin",
+        prefill: "user",
+        inputSubmit: "user",
+      },
+      setup: {
+        modelSelector: "admin",
+        agentSelector: "admin",
+        llmSelector: "admin",
+        kbSelector: "admin",
+        adminKbSelector: "admin",
+        modeExisting: "admin",
+        sessionIdSearch: "admin",
+        modeNew: "admin",
+        routeSelector: "admin",
+        inlineUserKbInput: "admin",
+      },
+    },
+  },
 };
 
-export function getConversationPageBaseKey(page: ConversationPageKey): "/" | "/app/laboratory" {
+export function getConversationPageBaseKey(page: ConversationPageKey): "/" | "/app/laboratory" | typeof WIDGET_PAGE_KEY {
   const normalized = String(page || "").trim();
   if (normalized === "/") return "/";
   if (normalized === "/app/laboratory") return "/app/laboratory";
+  if (normalized === WIDGET_PAGE_KEY || normalized.startsWith(`${WIDGET_PAGE_KEY}/`)) return WIDGET_PAGE_KEY;
   return "/";
 }
 

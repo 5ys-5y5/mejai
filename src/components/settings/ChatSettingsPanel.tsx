@@ -24,10 +24,11 @@ import {
   resolvePageConversationDebugOptions,
 } from "@/lib/transcriptCopyPolicy";
 
-const BASE_PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory"];
+const BASE_PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory", "/embed"];
 const SETTINGS_CARD_WIDTH_BY_PAGE: Record<ConversationPageKey, number> = {
   "/": 360,
   "/app/laboratory": 380,
+  "/embed": 360,
 };
 function normalizePages(pages: ConversationPageKey[]) {
   return Array.from(new Set([...BASE_PAGE_KEYS, ...pages.filter(Boolean)])).sort((a, b) => a.localeCompare(b));
@@ -933,7 +934,8 @@ export function ChatSettingsPanel({ authToken }: Props) {
       <Card className="p-4">
         <div className="text-sm font-semibold text-slate-900">대화 설정 관리</div>
         <div className="mt-2 text-sm text-slate-600">
-          페이지별 대화 정책을 폼으로 수정합니다. 저장 시 <code>A_iam_auth_settings.providers.chat_policy</code>에 반영됩니다.
+          서비스 전역 대화 정책을 폼으로 수정합니다. 저장 시 <code>A_iam_auth_settings.providers.chat_policy</code> (org 최신 값)에
+          반영됩니다.
         </div>
         {loading ? <div className="mt-2 text-xs text-slate-500">불러오는 중...</div> : null}
         {error ? <div className="mt-2 text-xs text-rose-600">{error}</div> : null}
@@ -973,6 +975,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
           {columnKeys.map((column) => {
             const isHeader = column === "__header";
             const page: ConversationPageKey = isHeader ? "/" : column;
+            const pageLabel = page === "/embed" ? "위젯 (/embed)" : page;
             const draft = draftByPage[page];
             const setupUiDraft = setupUiByPage[page];
             const effectiveModelSelector = true;
@@ -1001,7 +1004,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
                 }
                 style={{ width: `${isHeader ? SETTINGS_CARD_WIDTH_BY_PAGE["/"] : SETTINGS_CARD_WIDTH_BY_PAGE[page] || 380}px` }}
               >
-                <div className="text-sm font-semibold text-slate-900">{isHeader ? "헤더" : page}</div>
+                <div className="text-sm font-semibold text-slate-900">{isHeader ? "헤더" : pageLabel}</div>
                 <div className="mt-1 text-xs text-slate-500">{isHeader ? "코드 정의명/펼침 제어" : "해당 페이지에서 실제 적용될 대화 기능 설정"}</div>
 
                 <div className="mt-4 space-y-4">

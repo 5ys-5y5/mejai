@@ -2,9 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { WidgetShell, type WidgetMessage } from "@/components/design-system";
+import { toast } from "sonner";
+import {
+  ConversationAdminMenu,
+  WidgetShell,
+  type WidgetMessage,
+} from "@/components/design-system";
+import {
+  applyConversationFeatureVisibility,
+  resolveConversationPageFeatures,
+  WIDGET_PAGE_KEY,
+  type ConversationFeaturesProviderShape,
+} from "@/lib/conversation/pageFeaturePolicy";
+import { useConversationAdminStatus } from "@/lib/conversation/client/useConversationAdminStatus";
+import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
+import { fetchSessionLogs } from "@/lib/conversation/client/runtimeClient";
+import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
+import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
+import type { LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
 
-type ChatMessage = WidgetMessage;
+type ChatMessage = WidgetMessage & {
+  turnId?: string | null;
+  responseSchema?: TranscriptMessage["responseSchema"];
+  responseSchemaIssues?: TranscriptMessage["responseSchemaIssues"];
+  renderPlan?: TranscriptMessage["renderPlan"];
+  isLoading?: boolean;
+};
 
 type WidgetConfig = {
   id: string;
@@ -12,21 +35,77 @@ type WidgetConfig = {
   agent_id?: string | null;
   theme?: Record<string, unknown> | null;
   public_key?: string | null;
+  chat_policy?: ConversationFeaturesProviderShape | null;
+};
+
+type LogMap = Record<string, LogBundle>;
+
+type WidgetHistoryMessage = {
+  role?: "user" | "bot";
+  content?: string;
+  turn_id?: string | null;
 };
 
 function buildId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function parseSseEvent(chunk: string) {
-  const lines = chunk.split("\n").map((line) => line.trim());
-  let event = "message";
-  let data = "";
-  for (const line of lines) {
-    if (line.startsWith("event:")) event = line.replace("event:", "").trim();
-    if (line.startsWith("data:")) data += line.replace("data:", "").trim();
-  }
-  return { event, data };
+function makeLocalDebugLog(input: {
+  sessionId?: string | null;
+  turnId?: string | null;
+  detail: Record<string, unknown>;
+}): NonNullable<LogBundle["debug_logs"]>[number] {
+  return {
+    id: `widget-${buildId()}`,
+    session_id: input.sessionId || null,
+    turn_id: input.turnId || null,
+    seq: null,
+    prefix_json: input.detail,
+    prefix_tree: null,
+    created_at: new Date().toISOString(),
+  };
+}
+
+function mergeLogBundles(base?: LogBundle | null, next?: LogBundle | null): LogBundle {
+  return {
+    mcp_logs: [...(base?.mcp_logs || []), ...(next?.mcp_logs || [])],
+    event_logs: [...(base?.event_logs || []), ...(next?.event_logs || [])],
+    debug_logs: [...(base?.debug_logs || []), ...(next?.debug_logs || [])],
+    logsError: base?.logsError || next?.logsError || null,
+    logsLoading: false,
+  };
+}
+
+function groupLogsByTurn(logs: LogBundle) {
+  const map = new Map<string, LogBundle>();
+  (logs.mcp_logs || []).forEach((item) => {
+    const turnId = String(item.turn_id || "").trim();
+    if (!turnId) return;
+    const current = map.get(turnId) || {};
+    map.set(turnId, {
+      ...current,
+      mcp_logs: [...(current.mcp_logs || []), item],
+    });
+  });
+  (logs.event_logs || []).forEach((item) => {
+    const turnId = String(item.turn_id || "").trim();
+    if (!turnId) return;
+    const current = map.get(turnId) || {};
+    map.set(turnId, {
+      ...current,
+      event_logs: [...(current.event_logs || []), item],
+    });
+  });
+  (logs.debug_logs || []).forEach((item) => {
+    const turnId = String(item.turn_id || "").trim();
+    if (!turnId) return;
+    const current = map.get(turnId) || {};
+    map.set(turnId, {
+      ...current,
+      debug_logs: [...(current.debug_logs || []), item],
+    });
+  });
+  return map;
 }
 
 export default function WidgetEmbedPage() {
@@ -39,18 +118,58 @@ export default function WidgetEmbedPage() {
   const [sessionId, setSessionId] = useState("");
   const [config, setConfig] = useState<WidgetConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messageLogs, setMessageLogs] = useState<LogMap>({});
   const [inputValue, setInputValue] = useState("");
   const [status, setStatus] = useState("연결 중");
   const [pendingUser, setPendingUser] = useState<Record<string, any> | null>(null);
   const [pendingMeta, setPendingMeta] = useState<Record<string, any> | null>(null);
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const initCalledRef = useRef(false);
   const widgetTokenRef = useRef("");
   const sessionSeedRef = useRef(sessionSeed);
   const scrollRef = useRef<HTMLElement | null>(null);
 
-  const appendMessage = useCallback((role: ChatMessage["role"], content: string) => {
-    setMessages((prev) => [...prev, { id: buildId(), role, content }]);
-  }, []);
+  const isAdminUser = useConversationAdminStatus();
+
+  const providerPolicy = useMemo(
+    () => (config?.chat_policy ? (config.chat_policy as ConversationFeaturesProviderShape) : null),
+    [config]
+  );
+  const baseFeatures = useMemo(
+    () => resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerPolicy),
+    [providerPolicy]
+  );
+  const pageFeatures = useMemo(
+    () => applyConversationFeatureVisibility(baseFeatures, isAdminUser),
+    [baseFeatures, isAdminUser]
+  );
+  const debugOptions = useMemo(
+    () => resolvePageConversationDebugOptions(WIDGET_PAGE_KEY, providerPolicy),
+    [providerPolicy]
+  );
+
+  const appendBotNotice = useCallback(
+    (content: string, detail?: Record<string, unknown>) => {
+      const id = buildId();
+      setMessages((prev) => [...prev, { id, role: "bot", content }]);
+      if (detail) {
+        setMessageLogs((prev) => ({
+          ...prev,
+          [id]: mergeLogBundles(prev[id], {
+            debug_logs: [
+              makeLocalDebugLog({
+                sessionId: sessionId || null,
+                turnId: null,
+                detail,
+              }),
+            ],
+          }),
+        }));
+      }
+      return id;
+    },
+    [sessionId]
+  );
 
   const fetchHistory = useCallback(async (token: string) => {
     if (!token) return [] as ChatMessage[];
@@ -65,12 +184,18 @@ export default function WidgetEmbedPage() {
       const data = await res.json();
       const items = Array.isArray(data?.messages) ? data.messages : [];
       return items
-        .map((item: Record<string, any>) => ({
-          id: buildId(),
-          role: item.role === "user" ? ("user" as const) : ("bot" as const),
-          content: String(item.content || "").trim(),
-        }))
-        .filter((msg: ChatMessage) => msg.content.length > 0);
+        .map((item: WidgetHistoryMessage) => {
+          const role = item.role === "user" ? ("user" as const) : ("bot" as const);
+          const content = String(item.content || "").trim();
+          if (!content) return null;
+          return {
+            id: buildId(),
+            role,
+            content,
+            turnId: role === "bot" ? String(item.turn_id || "").trim() || null : null,
+          } satisfies ChatMessage;
+        })
+        .filter((msg: ChatMessage | null): msg is ChatMessage => Boolean(msg));
     } catch {
       return [] as ChatMessage[];
     }
@@ -105,7 +230,12 @@ export default function WidgetEmbedPage() {
         const data = await res.json();
         if (!res.ok) {
           setStatus("초기화 실패");
-          appendMessage("system", `오류: ${data?.error || "INIT_FAILED"}`);
+          appendBotNotice("연결에 실패했습니다. 잠시 후 다시 시도해 주세요.", {
+            widget_error: {
+              stage: "init",
+              error: data?.error || "INIT_FAILED",
+            },
+          });
           return;
         }
         const nextToken = String(data.widget_token || "");
@@ -113,6 +243,7 @@ export default function WidgetEmbedPage() {
         setWidgetToken(nextToken);
         setSessionId(nextSessionId);
         setConfig(data.widget_config || null);
+        setMessageLogs({});
         try {
           window.parent?.postMessage?.(
             { type: "mejai_widget_session", session_id: nextSessionId },
@@ -139,15 +270,22 @@ export default function WidgetEmbedPage() {
           (data.widget_config?.theme && (data.widget_config.theme as Record<string, any>).greeting) ||
           "안녕하세요. 무엇을 도와드릴까요?";
         const nextMessages =
-          history.length > 0 ? history : [{ id: buildId(), role: "bot" as const, content: String(greeting) }];
+          history.length > 0
+            ? history
+            : [{ id: buildId(), role: "bot" as const, content: String(greeting) }];
         setMessages(nextMessages);
         setStatus("연결됨");
       } catch (error) {
         setStatus("초기화 실패");
-        appendMessage("system", `오류: ${error instanceof Error ? error.message : "INIT_FAILED"}`);
+        appendBotNotice("연결에 실패했습니다. 잠시 후 다시 시도해 주세요.", {
+          widget_error: {
+            stage: "init",
+            error: error instanceof Error ? error.message : "INIT_FAILED",
+          },
+        });
       }
     },
-    [appendMessage, fetchHistory, key, pendingMeta, visitorId]
+    [appendBotNotice, fetchHistory, key, pendingMeta, visitorId]
   );
 
   useEffect(() => {
@@ -205,6 +343,7 @@ export default function WidgetEmbedPage() {
 
   const handleNewConversation = useCallback(() => {
     setMessages([]);
+    setMessageLogs({});
     setInputValue("");
     setStatus("새 대화 준비 중");
     setWidgetToken("");
@@ -213,62 +352,185 @@ export default function WidgetEmbedPage() {
     void callInit(pendingUser, { forceNew: true });
   }, [callInit, pendingUser]);
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const text = inputValue.trim();
-    if (!text || !widgetToken || !sessionId) return;
-    setInputValue("");
-    appendMessage("user", text);
-    setStatus("응답 중");
-    try {
-      const res = await fetch("/api/widget/stream", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "text/event-stream",
-          Authorization: `Bearer ${widgetToken}`,
-        },
-        body: JSON.stringify({ message: text, session_id: sessionId }),
-      });
-      if (!res.body) {
-        throw new Error("STREAM_UNAVAILABLE");
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      let finalMessage = "";
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() || "";
-        for (const part of parts) {
-          const parsed = parseSseEvent(part);
-          if (parsed.event === "message") {
-            try {
-              const payload = JSON.parse(parsed.data);
-              const msg = payload?.payload?.message || payload?.message || "";
-              if (msg) {
-                finalMessage = String(msg);
-              }
-            } catch {
-              // ignore
-            }
-          }
+  const handleSend = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      const text = inputValue.trim();
+      if (!text || !widgetToken || !sessionId) return;
+      setInputValue("");
+      const userId = buildId();
+      const botId = buildId();
+      setMessages((prev) => [
+        ...prev,
+        { id: userId, role: "user", content: text },
+        { id: botId, role: "bot", content: "답변 생성 중...", isLoading: true },
+      ]);
+      setStatus("응답 중");
+      try {
+        const res = await fetch("/api/widget/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${widgetToken}`,
+          },
+          body: JSON.stringify({ message: text, session_id: sessionId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setStatus("응답 오류");
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === botId
+                ? {
+                    ...msg,
+                    content: "요청에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+                    isLoading: false,
+                  }
+                : msg
+            )
+          );
+          setMessageLogs((prev) => ({
+            ...prev,
+            [botId]: mergeLogBundles(prev[botId], {
+              debug_logs: [
+                makeLocalDebugLog({
+                  sessionId,
+                  turnId: null,
+                  detail: {
+                    widget_error: {
+                      stage: "chat",
+                      status: res.status,
+                      error: data?.error || res.statusText || "REQUEST_FAILED",
+                    },
+                  },
+                }),
+              ],
+            }),
+          }));
+          return;
         }
-      }
-      if (finalMessage) {
-        appendMessage("bot", finalMessage);
+        const mapped = mapRuntimeResponseToTranscriptFields(data || {});
+        const messageText =
+          String(data.message || data.final_answer || data.answer || mapped.responseSchema?.message || "").trim() ||
+          "응답을 받지 못했습니다. 잠시 후 다시 시도해 주세요.";
+        const nextSessionId = String(data.session_id || sessionId || "");
+        setSessionId(nextSessionId);
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === botId
+              ? {
+                  ...msg,
+                  content: messageText,
+                  turnId: mapped.turnId || null,
+                  responseSchema: mapped.responseSchema,
+                  responseSchemaIssues: mapped.responseSchemaIssues,
+                  renderPlan: mapped.renderPlan,
+                  isLoading: false,
+                }
+              : msg
+          )
+        );
+        if (data.log_bundle && typeof data.log_bundle === "object") {
+          setMessageLogs((prev) => ({
+            ...prev,
+            [botId]: mergeLogBundles(prev[botId], data.log_bundle as LogBundle),
+          }));
+        }
         setStatus("연결됨");
-      } else {
-        setStatus("응답 없음");
+      } catch (error) {
+        setStatus("응답 오류");
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === botId
+              ? {
+                  ...msg,
+                  content: "요청에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+                  isLoading: false,
+                }
+              : msg
+          )
+        );
+        setMessageLogs((prev) => ({
+          ...prev,
+          [botId]: mergeLogBundles(prev[botId], {
+            debug_logs: [
+              makeLocalDebugLog({
+                sessionId,
+                turnId: null,
+                detail: {
+                  widget_error: {
+                    stage: "chat",
+                    error: error instanceof Error ? error.message : "REQUEST_FAILED",
+                  },
+                },
+              }),
+            ],
+          }),
+        }));
       }
-    } catch (error) {
-      setStatus("응답 오류");
-      appendMessage("system", `오류: ${error instanceof Error ? error.message : "REQUEST_FAILED"}`);
-    }
-  };
+    },
+    [inputValue, sessionId, widgetToken]
+  );
+
+  const copyMessages = useMemo<TranscriptMessage[]>(
+    () =>
+      messages
+        .filter((msg) => msg.role !== "system")
+        .map((msg) => ({
+          id: msg.id,
+          role: msg.role === "user" ? "user" : "bot",
+          content: msg.content,
+          turnId: msg.turnId || null,
+          responseSchema: msg.responseSchema,
+          responseSchemaIssues: msg.responseSchemaIssues,
+          renderPlan: msg.renderPlan,
+        })),
+    [messages]
+  );
+
+  const buildMergedLogs = useCallback(
+    (sessionLogs: LogBundle) => {
+      const byTurn = groupLogsByTurn(sessionLogs);
+      return messages.reduce<LogMap>((acc, msg) => {
+        const current = acc[msg.id];
+        if (msg.role !== "bot") return acc;
+        const turnKey = String(msg.turnId || "").trim();
+        if (!turnKey) return acc;
+        const fromSession = byTurn.get(turnKey);
+        if (!fromSession) return acc;
+        acc[msg.id] = mergeLogBundles(current, fromSession);
+        return acc;
+      }, { ...messageLogs });
+    },
+    [messageLogs, messages]
+  );
+
+  const copyByKind = useCallback(
+    async (kind: "conversation" | "issue") => {
+      if (!sessionId) {
+        toast.error("세션 정보가 없습니다.");
+        return;
+      }
+      let mergedLogs = messageLogs;
+      try {
+        const sessionLogs = await fetchSessionLogs(sessionId, 60);
+        mergedLogs = buildMergedLogs(sessionLogs);
+        setMessageLogs(mergedLogs);
+      } catch {
+        // ignore fetch failure, fall back to local logs
+      }
+      await executeTranscriptCopy({
+        page: WIDGET_PAGE_KEY,
+        kind,
+        messages: copyMessages,
+        messageLogs: mergedLogs,
+        enabledOverride:
+          kind === "conversation" ? pageFeatures.adminPanel.copyConversation : pageFeatures.adminPanel.copyIssue,
+        conversationDebugOptionsOverride: kind === "conversation" ? debugOptions : undefined,
+      });
+    },
+    [buildMergedLogs, copyMessages, debugOptions, messageLogs, pageFeatures, sessionId]
+  );
 
   const theme = (config?.theme || {}) as Record<string, any>;
   const brandName = String(config?.name || "Mejai");
@@ -276,12 +538,15 @@ export default function WidgetEmbedPage() {
     theme.launcher_icon_url || theme.launcherIconUrl || theme.icon_url || theme.iconUrl || ""
   );
   const headerIcon = launcherIconUrl || "/brand/logo.png";
+  const showAdminTools = isAdminUser && pageFeatures.adminPanel.enabled;
+  const statusLabel = showAdminTools ? status : "";
+  const inputDisabled = !pageFeatures.interaction.inputSubmit;
 
   return (
     <div className="h-full">
       <WidgetShell
         brandName={brandName}
-        status={status}
+        status={statusLabel}
         iconUrl={headerIcon}
         messages={messages}
         inputPlaceholder={theme.input_placeholder || "메시지를 입력하세요"}
@@ -290,8 +555,30 @@ export default function WidgetEmbedPage() {
         onInputChange={setInputValue}
         onSend={handleSend}
         onNewConversation={handleNewConversation}
-        sendDisabled={!inputValue.trim() || !widgetToken || !sessionId}
+        sendDisabled={inputDisabled || !inputValue.trim() || !widgetToken || !sessionId}
         scrollRef={scrollRef}
+        headerActions={
+          showAdminTools ? (
+            <div className="relative">
+              <ConversationAdminMenu
+                open={adminMenuOpen}
+                onToggleOpen={() => setAdminMenuOpen((prev) => !prev)}
+                selectionEnabled={false}
+                onToggleSelection={() => undefined}
+                showLogs={false}
+                onToggleLogs={() => undefined}
+                onCopyConversation={() => void copyByKind("conversation")}
+                onCopyIssue={() => void copyByKind("issue")}
+                showSelectionToggle={false}
+                showLogsToggle={false}
+                showConversationCopy={pageFeatures.adminPanel.copyConversation}
+                showIssueCopy={pageFeatures.adminPanel.copyIssue}
+                disableCopy={!sessionId}
+              />
+            </div>
+          ) : null
+        }
+        inputDisabled={inputDisabled}
       />
     </div>
   );

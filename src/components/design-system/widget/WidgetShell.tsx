@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent } from "react";
+import { type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,8 @@ export type WidgetShellProps = {
   onNewConversation?: () => void;
   sendDisabled?: boolean;
   scrollRef?: React.RefObject<HTMLElement | null>;
+  headerActions?: ReactNode;
+  inputDisabled?: boolean;
   fill?: boolean;
   className?: string;
 };
@@ -42,10 +44,13 @@ export function WidgetShell({
   onNewConversation,
   sendDisabled,
   scrollRef,
+  headerActions,
+  inputDisabled,
   fill = true,
   className,
 }: WidgetShellProps) {
   const resolvedIcon = iconUrl || "/brand/logo.png";
+  const showStatus = Boolean(status && status.trim().length > 0);
 
   return (
     <div
@@ -63,20 +68,23 @@ export function WidgetShell({
           </div>
           <div>
             <div className="text-sm font-semibold">{brandName}</div>
-            <div className="text-[11px] text-slate-500">{status}</div>
+            {showStatus ? <div className="text-[11px] text-slate-500">{status}</div> : null}
           </div>
         </div>
-        {onNewConversation ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onNewConversation}
-            className="h-8 px-3 text-[11px]"
-          >
-            새 대화
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {headerActions || null}
+          {onNewConversation ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onNewConversation}
+              className="h-8 px-3 text-[11px]"
+            >
+              새 대화
+            </Button>
+          ) : null}
+        </div>
       </header>
       <main ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scrollbar-hide">
         {messages.map((msg, idx) => {
@@ -116,6 +124,7 @@ export function WidgetShell({
             className="flex-1 h-10 rounded-full px-4"
             value={inputValue}
             onChange={(e) => onInputChange(e.target.value)}
+            disabled={inputDisabled}
           />
           <Button type="submit" size="icon" className="h-10 w-10 rounded-full" disabled={sendDisabled}>
             <Send className="h-4 w-4" />
