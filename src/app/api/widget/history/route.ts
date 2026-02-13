@@ -14,11 +14,20 @@ function normalizeText(value: unknown) {
 }
 
 export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const sessionOverride = String(url.searchParams.get("session_id") || "").trim();
   const authHeader = req.headers.get("authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
   const payload = verifyWidgetToken(token);
   if (!payload) {
     return NextResponse.json({ error: "INVALID_WIDGET_TOKEN" }, { status: 401 });
+  }
+  const targetSessionId = sessionOverride || String(payload.session_id || "").trim();
+  if (!targetSessionId) {
+    return NextResponse.json({ error: "SESSION_ID_REQUIRED" }, { status: 400 });
+  }
+  if (sessionOverride && !payload.visitor_id) {
+    return NextResponse.json({ error: "VISITOR_ID_REQUIRED" }, { status: 403 });
   }
 
   let supabaseAdmin;
@@ -43,7 +52,7 @@ export async function GET(req: NextRequest) {
   const { data: session } = await supabaseAdmin
     .from("D_conv_sessions")
     .select("id, org_id, metadata")
-    .eq("id", payload.session_id)
+    .eq("id", targetSessionId)
     .eq("org_id", widget.org_id)
     .maybeSingle();
   if (!session) {
@@ -55,11 +64,17 @@ export async function GET(req: NextRequest) {
   if (metadataWidgetId && metadataWidgetId !== String(payload.widget_id)) {
     return NextResponse.json({ error: "SESSION_WIDGET_MISMATCH" }, { status: 403 });
   }
+  const metadataVisitorId = metadata
+    ? String(metadata.visitor_id || metadata.visitorId || metadata.external_user_id || "").trim()
+    : "";
+  if (payload.visitor_id && metadataVisitorId && metadataVisitorId !== String(payload.visitor_id)) {
+    return NextResponse.json({ error: "SESSION_VISITOR_MISMATCH" }, { status: 403 });
+  }
 
   const { data: turns, error } = await supabaseAdmin
     .from("D_conv_turns")
     .select("id, seq, transcript_text, answer_text, final_answer, created_at")
-    .eq("session_id", payload.session_id)
+    .eq("session_id", targetSessionId)
     .order("seq", { ascending: true })
     .limit(80);
   if (error) {
@@ -87,5 +102,5 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ session_id: payload.session_id, messages });
+  return NextResponse.json({ session_id: targetSessionId, messages });
 }

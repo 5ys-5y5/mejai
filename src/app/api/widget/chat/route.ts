@@ -26,6 +26,13 @@ export async function POST(req: NextRequest) {
   if (!sessionId) {
     return NextResponse.json({ error: "SESSION_ID_REQUIRED" }, { status: 400 });
   }
+  const llm = body.llm;
+  const kbId = body.kb_id;
+  const inlineKb = body.inline_kb;
+  const adminKbIds = body.admin_kb_ids;
+  const mcpToolIds = body.mcp_tool_ids;
+  const mcpProviderKeys = body.mcp_provider_keys;
+  const visitor = body.visitor;
 
   let supabaseAdmin;
   try {
@@ -64,7 +71,13 @@ export async function POST(req: NextRequest) {
       session_id: sessionId,
       agent_id: widget.agent_id || undefined,
       mode: body.mode,
-      llm: body.llm,
+      llm,
+      kb_id: kbId,
+      inline_kb: inlineKb,
+      admin_kb_ids: adminKbIds,
+      mcp_tool_ids: mcpToolIds,
+      mcp_provider_keys: mcpProviderKeys,
+      visitor,
     }),
   });
 

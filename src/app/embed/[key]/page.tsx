@@ -2,15 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { List, MessageCircle, Shield } from "lucide-react";
 import { toast } from "sonner";
 import {
-  ConversationAdminMenu,
+  ConversationModelChatColumnLego,
+  ConversationModelSetupColumnLego,
+  ConversationThread,
   WidgetShell,
-  type WidgetMessage,
+  type ConversationModelChatColumnLegoProps,
+  type ConversationModelSetupColumnLegoProps,
+  type SelectOption,
 } from "@/components/design-system";
 import {
   applyConversationFeatureVisibility,
+  isEnabledByGate,
   resolveConversationPageFeatures,
+  resolveConversationSetupUi,
   WIDGET_PAGE_KEY,
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
@@ -19,15 +26,10 @@ import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 import { fetchSessionLogs } from "@/lib/conversation/client/runtimeClient";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
+import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
+import { cn } from "@/lib/utils";
 import type { LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
-
-type ChatMessage = WidgetMessage & {
-  turnId?: string | null;
-  responseSchema?: TranscriptMessage["responseSchema"];
-  responseSchemaIssues?: TranscriptMessage["responseSchemaIssues"];
-  renderPlan?: TranscriptMessage["renderPlan"];
-  isLoading?: boolean;
-};
+import type { ChatMessage } from "@/lib/conversation/client/laboratoryPageState";
 
 type WidgetConfig = {
   id: string;
@@ -36,6 +38,7 @@ type WidgetConfig = {
   theme?: Record<string, unknown> | null;
   public_key?: string | null;
   chat_policy?: ConversationFeaturesProviderShape | null;
+  allowed_domains?: string[] | null;
 };
 
 type LogMap = Record<string, LogBundle>;
@@ -44,6 +47,19 @@ type WidgetHistoryMessage = {
   role?: "user" | "bot";
   content?: string;
   turn_id?: string | null;
+};
+
+type WidgetSession = {
+  id: string;
+  session_code?: string | null;
+  started_at?: string | null;
+};
+
+type TabKey = "chat" | "list" | "policy";
+
+type PolicyConfig = {
+  llm: string;
+  inlineKb: string;
 };
 
 function buildId() {
@@ -108,26 +124,112 @@ function groupLogsByTurn(logs: LogBundle) {
   return map;
 }
 
+function normalizeThemeList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeAccountValue(value: unknown) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function collectUserIdentifiers(user?: Record<string, any> | null) {
+  if (!user) return [] as string[];
+  const values: Array<unknown> = [
+    user.id,
+    user.email,
+    user.username,
+    user.name,
+    user.user_id,
+    user.userId,
+    user.account,
+    user.account_id,
+    user.accountId,
+    user.external_id,
+    user.externalId,
+  ];
+  const profile = user.profile;
+  if (profile && typeof profile === "object") {
+    const profileRecord = profile as Record<string, any>;
+    values.push(profileRecord.id, profileRecord.email, profileRecord.username, profileRecord.name);
+  }
+  const account = user.account;
+  if (account && typeof account === "object") {
+    const accountRecord = account as Record<string, any>;
+    values.push(accountRecord.id, accountRecord.email, accountRecord.name);
+  }
+  return values.map(normalizeAccountValue).filter(Boolean);
+}
+
+function formatSessionTime(value?: string | null) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleString("ko-KR", {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return value;
+  }
+}
+
 export default function WidgetEmbedPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const key = useMemo(() => String(params?.key || ""), [params]);
   const visitorId = useMemo(() => String(searchParams?.get("vid") || "").trim(), [searchParams]);
   const sessionSeed = useMemo(() => String(searchParams?.get("sid") || "").trim(), [searchParams]);
+
+  const [activeTab, setActiveTab] = useState<TabKey>("chat");
   const [widgetToken, setWidgetToken] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [config, setConfig] = useState<WidgetConfig | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [messageLogs, setMessageLogs] = useState<LogMap>({});
   const [inputValue, setInputValue] = useState("");
+  const [sending, setSending] = useState(false);
   const [status, setStatus] = useState("연결 중");
   const [pendingUser, setPendingUser] = useState<Record<string, any> | null>(null);
   const [pendingMeta, setPendingMeta] = useState<Record<string, any> | null>(null);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
+  const [showAdminLogs, setShowAdminLogs] = useState(false);
+  const [chatSelectionEnabled, setChatSelectionEnabled] = useState(false);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
+  const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
+  const [lockedReplySelections, setLockedReplySelections] = useState<Record<string, string[]>>({});
+  const [detailsOpen, setDetailsOpen] = useState({
+    llm: false,
+    kb: false,
+    adminKb: false,
+    mcp: false,
+    route: false,
+  });
+  const [policyConfig, setPolicyConfig] = useState<PolicyConfig>({
+    llm: "chatgpt",
+    inlineKb: "",
+  });
+
+  const [sessions, setSessions] = useState<WidgetSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsError, setSessionsError] = useState("");
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const [historyMessages, setHistoryMessages] = useState<ChatMessage[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
   const initCalledRef = useRef(false);
   const widgetTokenRef = useRef("");
   const sessionSeedRef = useRef(sessionSeed);
-  const scrollRef = useRef<HTMLElement | null>(null);
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const isAdminUser = useConversationAdminStatus();
 
@@ -143,10 +245,80 @@ export default function WidgetEmbedPage() {
     () => applyConversationFeatureVisibility(baseFeatures, isAdminUser),
     [baseFeatures, isAdminUser]
   );
+  const setupUi = useMemo(() => resolveConversationSetupUi(WIDGET_PAGE_KEY, providerPolicy), [providerPolicy]);
   const debugOptions = useMemo(
     () => resolvePageConversationDebugOptions(WIDGET_PAGE_KEY, providerPolicy),
     [providerPolicy]
   );
+
+  const llmOptions = useMemo<SelectOption[]>(
+    () =>
+      ([
+        { id: "chatgpt", label: "ChatGPT" },
+        { id: "gemini", label: "Gemini" },
+      ] as const).filter((option) => isEnabledByGate(option.id, baseFeatures.setup.llms)),
+    [baseFeatures.setup.llms]
+  );
+
+  useEffect(() => {
+    if (llmOptions.length === 0) return;
+    const fallback =
+      llmOptions.find((option) => option.id === baseFeatures.setup.defaultLlm) || llmOptions[0];
+    if (!fallback) return;
+    setPolicyConfig((prev) => {
+      if (prev.llm && llmOptions.some((option) => option.id === prev.llm)) return prev;
+      return { ...prev, llm: String(fallback.id) };
+    });
+  }, [llmOptions, baseFeatures.setup.defaultLlm]);
+
+  const theme = (config?.theme || {}) as Record<string, any>;
+  const brandName = String(config?.name || "Mejai");
+  const launcherIconUrl = String(
+    theme.launcher_icon_url || theme.launcherIconUrl || theme.icon_url || theme.iconUrl || ""
+  );
+  const headerIcon = launcherIconUrl || "/brand/logo.png";
+  const statusLabel = isAdminUser ? status : "";
+  const inputDisabled = !pageFeatures.interaction.inputSubmit;
+
+  const allowedAccounts = useMemo(
+    () => normalizeThemeList(theme.allowed_accounts || theme.allowedAccounts),
+    [theme]
+  );
+  const allowedAccountSet = useMemo(
+    () => new Set(allowedAccounts.map(normalizeAccountValue).filter(Boolean)),
+    [allowedAccounts]
+  );
+  const userIdentifiers = useMemo(() => collectUserIdentifiers(pendingUser), [pendingUser]);
+  const accountAllowed = allowedAccountSet.size > 0 && userIdentifiers.some((value) => allowedAccountSet.has(value));
+
+  const allowedDomains = Array.isArray(config?.allowed_domains) ? config.allowed_domains : [];
+  const originHost = useMemo(
+    () =>
+      extractHostFromUrl(
+        String(pendingMeta?.origin || pendingMeta?.page_url || pendingMeta?.referrer || "")
+      ),
+    [pendingMeta]
+  );
+  const domainAllowed = allowedDomains.length === 0 ? true : matchAllowedDomain(originHost, allowedDomains);
+  const showPolicyTab = domainAllowed && accountAllowed;
+  const policyFeatures = useMemo(
+    () => applyConversationFeatureVisibility(baseFeatures, isAdminUser || showPolicyTab),
+    [baseFeatures, isAdminUser, showPolicyTab]
+  );
+
+  useEffect(() => {
+    if (!showPolicyTab && activeTab === "policy") {
+      setActiveTab("chat");
+    }
+  }, [showPolicyTab, activeTab]);
+
+  useEffect(() => {
+    widgetTokenRef.current = widgetToken;
+  }, [widgetToken]);
+
+  useEffect(() => {
+    sessionSeedRef.current = sessionSeed;
+  }, [sessionSeed]);
 
   const appendBotNotice = useCallback(
     (content: string, detail?: Record<string, unknown>) => {
@@ -171,10 +343,13 @@ export default function WidgetEmbedPage() {
     [sessionId]
   );
 
-  const fetchHistory = useCallback(async (token: string) => {
+  const fetchHistory = useCallback(async (token: string, sessionOverride?: string | null) => {
     if (!token) return [] as ChatMessage[];
     try {
-      const res = await fetch("/api/widget/history", {
+      const url = sessionOverride
+        ? `/api/widget/history?session_id=${encodeURIComponent(sessionOverride)}`
+        : "/api/widget/history";
+      const res = await fetch(url, {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -244,6 +419,9 @@ export default function WidgetEmbedPage() {
         setSessionId(nextSessionId);
         setConfig(data.widget_config || null);
         setMessageLogs({});
+        setSelectedMessageIds([]);
+        setQuickReplyDrafts({});
+        setLockedReplySelections({});
         try {
           window.parent?.postMessage?.(
             { type: "mejai_widget_session", session_id: nextSessionId },
@@ -289,14 +467,6 @@ export default function WidgetEmbedPage() {
   );
 
   useEffect(() => {
-    widgetTokenRef.current = widgetToken;
-  }, [widgetToken]);
-
-  useEffect(() => {
-    sessionSeedRef.current = sessionSeed;
-  }, [sessionSeed]);
-
-  useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const data = event.data || {};
       if (data.type === "mejai_widget_init") {
@@ -337,27 +507,32 @@ export default function WidgetEmbedPage() {
   }, [callInit, pendingUser]);
 
   useEffect(() => {
-    if (!scrollRef.current) return;
-    scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
+    const el = chatScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, activeTab]);
 
   const handleNewConversation = useCallback(() => {
     setMessages([]);
     setMessageLogs({});
     setInputValue("");
+    setSelectedMessageIds([]);
+    setQuickReplyDrafts({});
+    setLockedReplySelections({});
     setStatus("새 대화 준비 중");
     setWidgetToken("");
     setSessionId("");
+    setActiveTab("chat");
     initCalledRef.current = false;
     void callInit(pendingUser, { forceNew: true });
   }, [callInit, pendingUser]);
 
-  const handleSend = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      const text = inputValue.trim();
-      if (!text || !widgetToken || !sessionId) return;
+  const handleSendText = useCallback(
+    async (rawText: string) => {
+      const text = String(rawText || "").trim();
+      if (!text || !widgetToken || !sessionId || sending) return;
       setInputValue("");
+      setSending(true);
       const userId = buildId();
       const botId = buildId();
       setMessages((prev) => [
@@ -367,17 +542,26 @@ export default function WidgetEmbedPage() {
       ]);
       setStatus("응답 중");
       try {
+        const shouldSendLlm = policyFeatures.setup.llmSelector;
+        const shouldSendInlineKb = policyFeatures.setup.inlineUserKbInput;
         const res = await fetch("/api/widget/chat", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${widgetToken}`,
           },
-          body: JSON.stringify({ message: text, session_id: sessionId }),
+          body: JSON.stringify({
+            message: text,
+            session_id: sessionId,
+            llm: shouldSendLlm ? policyConfig.llm || undefined : undefined,
+            inline_kb: shouldSendInlineKb ? policyConfig.inlineKb.trim() || undefined : undefined,
+            visitor: pendingUser || undefined,
+          }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           setStatus("응답 오류");
+          setSending(false);
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === botId
@@ -411,8 +595,13 @@ export default function WidgetEmbedPage() {
         }
         const mapped = mapRuntimeResponseToTranscriptFields(data || {});
         const messageText =
-          String(data.message || data.final_answer || data.answer || mapped.responseSchema?.message || "").trim() ||
-          "응답을 받지 못했습니다. 잠시 후 다시 시도해 주세요.";
+          String(
+            data.message ||
+              data.final_answer ||
+              data.answer ||
+              mapped.responseSchema?.message ||
+              ""
+          ).trim() || "응답을 받지 못했습니다. 잠시 후 다시 시도해 주세요.";
         const nextSessionId = String(data.session_id || sessionId || "");
         setSessionId(nextSessionId);
         setMessages((prev) =>
@@ -437,8 +626,10 @@ export default function WidgetEmbedPage() {
           }));
         }
         setStatus("연결됨");
+        setSending(false);
       } catch (error) {
         setStatus("응답 오류");
+        setSending(false);
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === botId
@@ -469,8 +660,21 @@ export default function WidgetEmbedPage() {
         }));
       }
     },
-    [inputValue, sessionId, widgetToken]
+    [
+      policyFeatures,
+      pendingUser,
+      policyConfig,
+      sending,
+      sessionId,
+      widgetToken,
+    ]
   );
+
+  const handleToggleMessageSelection = useCallback((messageId: string) => {
+    setSelectedMessageIds((prev) =>
+      prev.includes(messageId) ? prev.filter((id) => id !== messageId) : [...prev, messageId]
+    );
+  }, []);
 
   const copyMessages = useMemo<TranscriptMessage[]>(
     () =>
@@ -532,15 +736,218 @@ export default function WidgetEmbedPage() {
     [buildMergedLogs, copyMessages, debugOptions, messageLogs, pageFeatures, sessionId]
   );
 
-  const theme = (config?.theme || {}) as Record<string, any>;
-  const brandName = String(config?.name || "Mejai");
-  const launcherIconUrl = String(
-    theme.launcher_icon_url || theme.launcherIconUrl || theme.icon_url || theme.iconUrl || ""
+  useEffect(() => {
+    if (activeTab !== "list") return;
+    if (!widgetToken) return;
+    let active = true;
+    setSessionsLoading(true);
+    setSessionsError("");
+    fetch("/api/widget/sessions", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${widgetToken}` },
+    })
+      .then((res) =>
+        res
+          .json()
+          .then((data) => ({ ok: res.ok, data }))
+          .catch(() => ({ ok: res.ok, data: {} }))
+      )
+      .then(({ ok, data }) => {
+        if (!active) return;
+        if (!ok) {
+          setSessionsError(String(data?.error || "SESSION_LOAD_FAILED"));
+          setSessions([]);
+          setSessionsLoading(false);
+          return;
+        }
+        const nextSessions: WidgetSession[] = Array.isArray(data?.sessions) ? data.sessions : [];
+        setSessions(nextSessions);
+        setSessionsLoading(false);
+        if (!selectedSessionId && nextSessions.length > 0) {
+          setSelectedSessionId(nextSessions[0].id);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setSessionsError("SESSION_LOAD_FAILED");
+        setSessions([]);
+        setSessionsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeTab, widgetToken, selectedSessionId]);
+
+  useEffect(() => {
+    if (activeTab !== "list") return;
+    if (!widgetToken || !selectedSessionId) {
+      setHistoryMessages([]);
+      return;
+    }
+    let active = true;
+    setHistoryLoading(true);
+    fetchHistory(widgetToken, selectedSessionId)
+      .then((items) => {
+        if (!active) return;
+        setHistoryMessages(items);
+        setHistoryLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setHistoryMessages([]);
+        setHistoryLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeTab, widgetToken, selectedSessionId, fetchHistory]);
+
+  const model = useMemo<ConversationModelChatColumnLegoProps["model"]>(
+    () => ({
+      id: "widget",
+      config: {
+        llm: policyConfig.llm,
+        kbId: "",
+        inlineKb: policyConfig.inlineKb,
+        inlineKbSampleSelectionOrder: [],
+        adminKbIds: [],
+        mcpProviderKeys: [],
+        mcpToolIds: [],
+        route: "",
+      },
+      detailsOpen,
+      setupMode: "new",
+      selectedAgentGroupId: "",
+      selectedAgentId: "",
+      sessions: [],
+      sessionsLoading: false,
+      sessionsError: null,
+      selectedSessionId: null,
+      historyMessages: [],
+      messages,
+      conversationMode: "new",
+      editSessionId: null,
+      sessionId: sessionId || null,
+      layoutExpanded: false,
+      adminLogControlsOpen: adminMenuOpen,
+      showAdminLogs,
+      chatSelectionEnabled,
+      selectedMessageIds,
+      input: inputValue,
+      sending,
+    }),
+    [
+      adminMenuOpen,
+      chatSelectionEnabled,
+      detailsOpen,
+      inputValue,
+      messages,
+      policyConfig.inlineKb,
+      policyConfig.llm,
+      selectedMessageIds,
+      sending,
+      sessionId,
+      showAdminLogs,
+    ]
   );
-  const headerIcon = launcherIconUrl || "/brand/logo.png";
-  const showAdminTools = isAdminUser && pageFeatures.adminPanel.enabled;
-  const statusLabel = showAdminTools ? status : "";
-  const inputDisabled = !pageFeatures.interaction.inputSubmit;
+
+  const chatLegoProps: ConversationModelChatColumnLegoProps = {
+    model,
+    visibleMessages: messages,
+    isAdminUser,
+    quickReplyDrafts,
+    lockedReplySelections,
+    setQuickReplyDrafts,
+    setLockedReplySelections,
+    adminFeatures: {
+      enabled: pageFeatures.adminPanel.enabled,
+      selectionToggle: pageFeatures.adminPanel.selectionToggle,
+      logsToggle: pageFeatures.adminPanel.logsToggle,
+      messageSelection: pageFeatures.adminPanel.messageSelection,
+      copyConversation: pageFeatures.adminPanel.copyConversation,
+      copyIssue: pageFeatures.adminPanel.copyIssue,
+    },
+    interactionFeatures: {
+      quickReplies: pageFeatures.interaction.quickReplies,
+      productCards: pageFeatures.interaction.productCards,
+      prefill: pageFeatures.interaction.prefill,
+      inputSubmit: pageFeatures.interaction.inputSubmit,
+    },
+    onToggleAdminOpen: () => setAdminMenuOpen((prev) => !prev),
+    onToggleSelectionMode: () =>
+      setChatSelectionEnabled((prev) => {
+        if (prev) setSelectedMessageIds([]);
+        return !prev;
+      }),
+    onToggleLogs: () => setShowAdminLogs((prev) => !prev),
+    onCopyConversation: () => void copyByKind("conversation"),
+    onCopyIssue: () => void copyByKind("issue"),
+    onToggleMessageSelection: handleToggleMessageSelection,
+    onSubmitMessage: handleSendText,
+    onExpand: () => undefined,
+    onCollapse: () => undefined,
+    onInputChange: setInputValue,
+    onSetChatScrollRef: (el) => {
+      chatScrollRef.current = el;
+    },
+  };
+
+  const newModelControlOrder = useMemo<ConversationModelSetupColumnLegoProps["newModelControlOrder"]>(
+    () =>
+      setupUi.order.filter(
+        (key): key is "kbSelector" | "adminKbSelector" | "routeSelector" =>
+          key === "kbSelector" || key === "adminKbSelector" || key === "routeSelector"
+      ),
+    [setupUi.order]
+  );
+
+  const setupLegoProps: ConversationModelSetupColumnLegoProps = {
+    model,
+    pageFeatures: policyFeatures,
+    setupUi,
+    isAdminUser,
+    agentGroupOptions: [],
+    versionOptions: [],
+    sessionOptions: [],
+    inlineKbSamples: [],
+    inlineKbSampleConflict: false,
+    llmOptions,
+    kbOptions: [],
+    adminKbOptions: [],
+    providerOptions: [],
+    routeOptions: [],
+    filteredToolOptions: [],
+    kbInfoText: "선택된 KB 없음",
+    adminKbInfoText: "선택된 관리자 KB 없음",
+    mcpInfoText: "MCP 기능 비활성화",
+    newModelControlOrder,
+    onSetLeftPaneRef: () => undefined,
+    onSelectExisting: () => undefined,
+    onSelectNew: () => undefined,
+    onSelectAgentGroup: () => undefined,
+    onSelectAgentVersion: () => undefined,
+    onSelectSession: () => undefined,
+    onSearchSessionById: () => undefined,
+    onChangeConversationMode: () => undefined,
+    onInlineKbChange: (value) => setPolicyConfig((prev) => ({ ...prev, inlineKb: value })),
+    onInlineKbSampleApply: () => undefined,
+    onLlmChange: (value) => setPolicyConfig((prev) => ({ ...prev, llm: value })),
+    onToggleLlmInfo: () => setDetailsOpen((prev) => ({ ...prev, llm: !prev.llm })),
+    onKbChange: () => undefined,
+    onToggleKbInfo: () => setDetailsOpen((prev) => ({ ...prev, kb: !prev.kb })),
+    onAdminKbChange: () => undefined,
+    onToggleAdminKbInfo: () => setDetailsOpen((prev) => ({ ...prev, adminKb: !prev.adminKb })),
+    onRouteChange: () => undefined,
+    onToggleRouteInfo: () => setDetailsOpen((prev) => ({ ...prev, route: !prev.route })),
+    onProviderChange: () => undefined,
+    onToggleMcpInfo: () => setDetailsOpen((prev) => ({ ...prev, mcp: !prev.mcp })),
+    onActionChange: () => undefined,
+    describeLlm: (value) =>
+      llmOptions.find((option) => option.id === value)?.label || "선택된 LLM 정보 없음",
+    describeRoute: (value) => (value ? `Runtime: ${value}` : "선택된 Runtime 없음"),
+  };
+
+  const tabGridClass = showPolicyTab ? "grid-cols-3" : "grid-cols-2";
 
   return (
     <div className="h-full">
@@ -553,33 +960,137 @@ export default function WidgetEmbedPage() {
         disclaimer={theme.disclaimer ? String(theme.disclaimer) : ""}
         inputValue={inputValue}
         onInputChange={setInputValue}
-        onSend={handleSend}
+        onSend={(event) => {
+          event.preventDefault();
+          void handleSendText(inputValue);
+        }}
         onNewConversation={handleNewConversation}
         sendDisabled={inputDisabled || !inputValue.trim() || !widgetToken || !sessionId}
-        scrollRef={scrollRef}
-        headerActions={
-          showAdminTools ? (
-            <div className="relative">
-              <ConversationAdminMenu
-                open={adminMenuOpen}
-                onToggleOpen={() => setAdminMenuOpen((prev) => !prev)}
-                selectionEnabled={false}
-                onToggleSelection={() => undefined}
-                showLogs={false}
-                onToggleLogs={() => undefined}
-                onCopyConversation={() => void copyByKind("conversation")}
-                onCopyIssue={() => void copyByKind("issue")}
-                showSelectionToggle={false}
-                showLogsToggle={false}
-                showConversationCopy={pageFeatures.adminPanel.copyConversation}
-                showIssueCopy={pageFeatures.adminPanel.copyIssue}
-                disableCopy={!sessionId}
-              />
-            </div>
-          ) : null
-        }
         inputDisabled={inputDisabled}
-      />
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="flex-1 min-h-0">
+            {activeTab === "chat" ? (
+              <div className="h-full">
+                <ConversationModelChatColumnLego {...chatLegoProps} />
+              </div>
+            ) : null}
+            {activeTab === "list" ? (
+              <div className="h-full min-h-0 flex flex-col bg-white">
+                <div className="border-b border-slate-200 px-4 py-2 text-[11px] text-slate-500">
+                  과거 대화 목록
+                </div>
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <div className="max-h-44 overflow-auto border-b border-slate-200 bg-slate-50 px-2 py-2">
+                    {sessionsLoading ? (
+                      <div className="px-2 py-2 text-xs text-slate-500">불러오는 중...</div>
+                    ) : sessionsError ? (
+                      <div className="px-2 py-2 text-xs text-rose-500">{sessionsError}</div>
+                    ) : sessions.length === 0 ? (
+                      <div className="px-2 py-2 text-xs text-slate-500">대화 기록이 없습니다.</div>
+                    ) : (
+                      <div className="space-y-1">
+                        {sessions.map((session) => {
+                          const isActive = session.id === selectedSessionId;
+                          return (
+                            <button
+                              key={session.id}
+                              type="button"
+                              onClick={() => setSelectedSessionId(session.id)}
+                              className={cn(
+                                "w-full rounded-md border px-2 py-1 text-left text-xs",
+                                isActive
+                                  ? "border-slate-900 bg-white text-slate-900"
+                                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
+                              )}
+                            >
+                              <div className="font-semibold">
+                                {session.session_code || session.id.slice(0, 8)}
+                              </div>
+                              <div className="text-[10px] text-slate-400">
+                                {formatSessionTime(session.started_at)}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-h-0 overflow-auto bg-slate-50 px-4 py-4">
+                    {historyLoading ? (
+                      <div className="text-xs text-slate-500">대화를 불러오는 중...</div>
+                    ) : historyMessages.length === 0 ? (
+                      <div className="text-xs text-slate-500">선택된 대화가 없습니다.</div>
+                    ) : (
+                      <ConversationThread
+                        messages={historyMessages}
+                        selectedMessageIds={[]}
+                        selectionEnabled={false}
+                        onToggleSelection={() => undefined}
+                        renderContent={(msg) => msg.content}
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            {activeTab === "policy" ? (
+              showPolicyTab ? (
+                <div className="h-full">
+                  <ConversationModelSetupColumnLego {...setupLegoProps} />
+                </div>
+              ) : (
+                <div className="flex h-full items-center justify-center bg-white text-sm text-slate-500">
+                  접근 권한이 없습니다.
+                </div>
+              )
+            ) : null}
+          </div>
+          <div className={cn("grid gap-2 border-t border-slate-200 bg-white px-3 py-2", tabGridClass)}>
+            <button
+              type="button"
+              onClick={() => setActiveTab("chat")}
+              className={cn(
+                "flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold",
+                activeTab === "chat"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-500 hover:bg-slate-100"
+              )}
+            >
+              <MessageCircle className="h-4 w-4" />
+              <span>대화</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("list")}
+              className={cn(
+                "flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold",
+                activeTab === "list"
+                  ? "bg-slate-900 text-white"
+                  : "text-slate-500 hover:bg-slate-100"
+              )}
+            >
+              <List className="h-4 w-4" />
+              <span>리스트</span>
+            </button>
+            {showPolicyTab ? (
+              <button
+                type="button"
+                onClick={() => setActiveTab("policy")}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold",
+                  activeTab === "policy"
+                    ? "bg-slate-900 text-white"
+                    : "text-slate-500 hover:bg-slate-100"
+                )}
+              >
+                <Shield className="h-4 w-4" />
+                <span>정책</span>
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </WidgetShell>
     </div>
   );
 }

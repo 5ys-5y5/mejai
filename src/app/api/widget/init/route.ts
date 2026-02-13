@@ -174,6 +174,7 @@ export async function POST(req: NextRequest) {
       id: widget.id,
       name: widget.name,
       agent_id: widget.agent_id,
+      allowed_domains: widget.allowed_domains || [],
       theme: widget.theme || {},
       public_key: widget.public_key,
       chat_policy: chatPolicy,

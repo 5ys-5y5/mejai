@@ -33,6 +33,16 @@ function normalizeListInput(value: string) {
     .filter(Boolean);
 }
 
+function normalizeThemeList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return normalizeListInput(value);
+  }
+  return [];
+}
+
 export function WidgetSettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -126,6 +136,8 @@ export function WidgetSettingsPanel() {
   const greeting = String((draft.theme || {}).greeting || "");
   const inputPlaceholder = String((draft.theme || {}).input_placeholder || "");
   const launcherIconUrl = String((draft.theme || {}).launcher_icon_url || "");
+  const allowedAccounts = normalizeThemeList((draft.theme || {}).allowed_accounts || (draft.theme || {}).allowedAccounts);
+  const allowedAccountsInput = useMemo(() => allowedAccounts.join("\n"), [allowedAccounts]);
 
   return (
     <div className="space-y-4">
@@ -174,6 +186,20 @@ export function WidgetSettingsPanel() {
             }
             className="w-full min-h-[70px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
           />
+        </label>
+        <label className="block">
+          <div className="mb-1 text-xs text-slate-600">허용 계정 (줄바꿈 또는 콤마)</div>
+          <textarea
+            value={allowedAccountsInput}
+            onChange={(e) =>
+              setDraft((prev) => ({
+                ...prev,
+                theme: { ...(prev.theme || {}), allowed_accounts: normalizeListInput(e.target.value) },
+              }))
+            }
+            className="w-full min-h-[70px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
+          />
+          <div className="mt-1 text-[11px] text-slate-500">이메일/아이디 등 로그인 식별자를 입력하세요.</div>
         </label>
         <label className="block">
           <div className="mb-1 text-xs text-slate-600">환영 메시지</div>

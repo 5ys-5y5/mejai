@@ -66,6 +66,7 @@ export async function GET(req: NextRequest) {
         name: widget.name,
         theme: widget.theme || {},
         public_key: widget.public_key,
+        allowed_domains: widget.allowed_domains || [],
         chat_policy: chatPolicy,
       },
     }),
