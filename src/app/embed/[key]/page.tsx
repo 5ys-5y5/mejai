@@ -510,6 +510,25 @@ export default function WidgetEmbedPage() {
   }, []);
 
   useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlHeight = html.style.height;
+    const prevBodyHeight = body.style.height;
+    const prevBodyMargin = body.style.margin;
+    const prevBodyOverflow = body.style.overflow;
+    html.style.height = "100%";
+    body.style.height = "100%";
+    body.style.margin = "0";
+    body.style.overflow = "hidden";
+    return () => {
+      html.style.height = prevHtmlHeight;
+      body.style.height = prevBodyHeight;
+      body.style.margin = prevBodyMargin;
+      body.style.overflow = prevBodyOverflow;
+    };
+  }, []);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
       void callInit(pendingUser);
     }, 200);
@@ -962,7 +981,7 @@ export default function WidgetEmbedPage() {
   );
 
   return (
-    <div className="h-full">
+    <div className="h-full min-h-0">
       <WidgetConversationLayout
         brandName={brandName}
         status={statusLabel}
@@ -979,6 +998,8 @@ export default function WidgetEmbedPage() {
         onNewConversation={handleNewConversation}
         sendDisabled={inputDisabled || !inputValue.trim() || !widgetToken || !sessionId}
         inputDisabled={inputDisabled}
+        fill={false}
+        className="h-full min-h-0"
         activeTab={activeTab}
         onTabChange={setActiveTab}
         showPolicyTab={showPolicyTab}
