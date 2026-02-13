@@ -39,8 +39,9 @@ import {
   SidebarNavigationShell,
   TopHeaderShell,
   TypographyScaleShell,
-  WidgetShell,
-  type WidgetMessage,
+  WidgetConversationLayout,
+  type WidgetConversationTab,
+  type WidgetConversationSession,
   type SelectOption,
 } from "@/components/design-system";
 import {
@@ -61,6 +62,8 @@ import { cn } from "@/lib/utils";
 import { RENDER_POLICY } from "@/app/api/runtime/chat/policies/renderPolicy";
 import {
   getDefaultConversationPageFeatures,
+  applyConversationFeatureVisibility,
+  WIDGET_PAGE_KEY,
   resolveConversationSetupUi,
 } from "@/lib/conversation/pageFeaturePolicy";
 import {
@@ -664,13 +667,19 @@ export function DesignSystemContent() {
   const [widgetGreeting, setWidgetGreeting] = useState("안녕하세요. 무엇을 도와드릴까요?");
   const [widgetPlaceholder, setWidgetPlaceholder] = useState("메시지를 입력하세요");
   const [widgetDisclaimer, setWidgetDisclaimer] = useState("");
-  const [widgetInputValue, setWidgetInputValue] = useState("");
-  const [widgetMessages, setWidgetMessages] = useState<WidgetMessage[]>(() => [
+  const [widgetActiveTab, setWidgetActiveTab] = useState<WidgetConversationTab>("chat");
+  const [widgetPreviewMessages, setWidgetPreviewMessages] = useState<ChatMessage[]>(() => [
     { id: buildWidgetId(), role: "bot", content: "안녕하세요. 무엇을 도와드릴까요?" },
   ]);
+  const [widgetPreviewInput, setWidgetPreviewInput] = useState("");
+  const [widgetPreviewSending, setWidgetPreviewSending] = useState(false);
+  const [widgetPreviewPolicyConfig, setWidgetPreviewPolicyConfig] = useState({ llm: "chatgpt", inlineKb: "" });
+  const [widgetPreviewSelectedMessageIds, setWidgetPreviewSelectedMessageIds] = useState<string[]>([]);
+  const [widgetPreviewQuickReplyDrafts, setWidgetPreviewQuickReplyDrafts] = useState<Record<string, string[]>>({});
+  const [widgetPreviewLockedReplySelections, setWidgetPreviewLockedReplySelections] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
-    setWidgetMessages((prev) => {
+    setWidgetPreviewMessages((prev) => {
       if (prev.length === 0) {
         return [{ id: buildWidgetId(), role: "bot", content: widgetGreeting }];
       }
@@ -709,21 +718,62 @@ export function DesignSystemContent() {
   const safeIconPage = Math.min(iconPage, iconTotalPages);
   const iconPageEntries = filteredIconEntries.slice((safeIconPage - 1) * iconPageSize, safeIconPage * iconPageSize);
 
-  const handleWidgetSend = (event: FormEvent) => {
-    event.preventDefault();
-    const text = widgetInputValue.trim();
+  const handleWidgetPreviewSubmit = (rawText: string) => {
+    const text = rawText.trim();
     if (!text) return;
-    setWidgetInputValue("");
-    setWidgetMessages((prev) => [
+    setWidgetPreviewInput("");
+    setWidgetPreviewSending(true);
+    setWidgetPreviewMessages((prev) => [
       ...prev,
       { id: buildWidgetId(), role: "user", content: text },
       { id: buildWidgetId(), role: "bot", content: "샘플 응답입니다. 실제 위젯에서는 응답이 이어집니다." },
     ]);
+    setWidgetPreviewSending(false);
+  };
+
+  const handleWidgetSend = (event: FormEvent) => {
+    event.preventDefault();
+    handleWidgetPreviewSubmit(widgetPreviewInput);
   };
 
   const handleWidgetReset = () => {
-    setWidgetMessages([{ id: buildWidgetId(), role: "bot", content: widgetGreeting }]);
+    setWidgetPreviewInput("");
+    setWidgetPreviewSelectedMessageIds([]);
+    setWidgetPreviewMessages([{ id: buildWidgetId(), role: "bot", content: widgetGreeting }]);
   };
+
+  const widgetPreviewSessions = useMemo<WidgetConversationSession[]>(
+    () => [
+      { id: "sess-demo-101", session_code: "W-2026-02-01", started_at: "2026-02-12T06:32:00Z" },
+      { id: "sess-demo-102", session_code: "W-2026-01-20", started_at: "2026-02-10T08:05:00Z" },
+      { id: "sess-demo-103", session_code: "W-2026-01-11", started_at: "2026-02-08T03:40:00Z" },
+    ],
+    []
+  );
+  const [widgetPreviewSessionId, setWidgetPreviewSessionId] = useState<string | null>(
+    () => widgetPreviewSessions[0]?.id ?? null
+  );
+  const widgetPreviewHistoryMap = useMemo<Record<string, ChatMessage[]>>(
+    () => ({
+      "sess-demo-101": [
+        { id: "sess-demo-101-u1", role: "user", content: "배송 상태 알려줘" },
+        { id: "sess-demo-101-b1", role: "bot", content: "현재 출고 준비 중입니다." },
+      ],
+      "sess-demo-102": [
+        { id: "sess-demo-102-u1", role: "user", content: "반품 절차 알려줘" },
+        { id: "sess-demo-102-b1", role: "bot", content: "주문 상세에서 반품 신청을 진행할 수 있습니다." },
+      ],
+      "sess-demo-103": [
+        { id: "sess-demo-103-u1", role: "user", content: "교환 가능한가요?" },
+        { id: "sess-demo-103-b1", role: "bot", content: "상품 수령 후 7일 이내 교환 가능합니다." },
+      ],
+    }),
+    []
+  );
+  const widgetPreviewHistoryMessages = useMemo(
+    () => (widgetPreviewSessionId ? widgetPreviewHistoryMap[widgetPreviewSessionId] || [] : []),
+    [widgetPreviewHistoryMap, widgetPreviewSessionId]
+  );
 
   const conversationLeadDayMessage: ConversationReplyDemoMessage = {
     id: "catalog-choice-lead-day",
@@ -856,6 +906,138 @@ export function DesignSystemContent() {
     describeRoute: (route) => `Route(${route}) 샘플 설명`,
   };
   const demoAssembly = createConversationModelLegos(demoAssemblyProps);
+
+  const widgetPreviewPageFeatures = useMemo(
+    () => applyConversationFeatureVisibility(getDefaultConversationPageFeatures(WIDGET_PAGE_KEY), true),
+    []
+  );
+  const widgetPreviewSetupUi = useMemo(() => resolveConversationSetupUi(WIDGET_PAGE_KEY), []);
+  const widgetPreviewSetupOrder = useMemo(
+    () =>
+      widgetPreviewSetupUi.order.filter(
+        (key): key is "kbSelector" | "adminKbSelector" | "routeSelector" =>
+          key === "kbSelector" || key === "adminKbSelector" || key === "routeSelector"
+      ),
+    [widgetPreviewSetupUi.order]
+  );
+  const widgetPreviewModel = useMemo(
+    () => ({
+      id: "widget-preview",
+      config: {
+        llm: widgetPreviewPolicyConfig.llm,
+        kbId: "",
+        inlineKb: widgetPreviewPolicyConfig.inlineKb,
+        inlineKbSampleSelectionOrder: [],
+        adminKbIds: [],
+        mcpProviderKeys: [],
+        mcpToolIds: [],
+        route: "",
+      },
+      detailsOpen: {
+        llm: false,
+        kb: false,
+        adminKb: false,
+        mcp: false,
+        route: false,
+      },
+      setupMode: "new" as const,
+      selectedAgentGroupId: "",
+      selectedAgentId: "",
+      sessions: [],
+      sessionsLoading: false,
+      sessionsError: null,
+      selectedSessionId: null,
+      historyMessages: [],
+      messages: widgetPreviewMessages,
+      conversationMode: "new" as const,
+      editSessionId: null,
+      sessionId: null,
+      layoutExpanded: false,
+      adminLogControlsOpen: false,
+      showAdminLogs: false,
+      chatSelectionEnabled: false,
+      selectedMessageIds: widgetPreviewSelectedMessageIds,
+      input: widgetPreviewInput,
+      sending: widgetPreviewSending,
+    }),
+    [
+      widgetPreviewInput,
+      widgetPreviewMessages,
+      widgetPreviewPolicyConfig.inlineKb,
+      widgetPreviewPolicyConfig.llm,
+      widgetPreviewSelectedMessageIds,
+      widgetPreviewSending,
+    ]
+  );
+  const widgetPreviewChatProps = useMemo(
+    () => ({
+      model: widgetPreviewModel,
+      visibleMessages: widgetPreviewMessages,
+      isAdminUser: false,
+      quickReplyDrafts: widgetPreviewQuickReplyDrafts,
+      lockedReplySelections: widgetPreviewLockedReplySelections,
+      setQuickReplyDrafts: setWidgetPreviewQuickReplyDrafts,
+      setLockedReplySelections: setWidgetPreviewLockedReplySelections,
+      adminFeatures: {
+        enabled: false,
+        selectionToggle: false,
+        logsToggle: false,
+        messageSelection: false,
+        copyConversation: false,
+        copyIssue: false,
+      },
+      interactionFeatures: {
+        quickReplies: false,
+        productCards: false,
+        prefill: false,
+        inputSubmit: true,
+      },
+      onToggleAdminOpen: () => undefined,
+      onToggleSelectionMode: () => undefined,
+      onToggleLogs: () => undefined,
+      onCopyConversation: () => undefined,
+      onCopyIssue: () => undefined,
+      onToggleMessageSelection: (messageId: string) => {
+        setWidgetPreviewSelectedMessageIds((prev) =>
+          prev.includes(messageId) ? prev.filter((id) => id !== messageId) : [...prev, messageId]
+        );
+      },
+      onSubmitMessage: (text: string) => {
+        handleWidgetPreviewSubmit(text);
+      },
+      onExpand: () => undefined,
+      onCollapse: () => undefined,
+      onInputChange: setWidgetPreviewInput,
+      onSetChatScrollRef: () => undefined,
+    }),
+    [
+      handleWidgetPreviewSubmit,
+      widgetPreviewLockedReplySelections,
+      widgetPreviewMessages,
+      widgetPreviewModel,
+      widgetPreviewQuickReplyDrafts,
+    ]
+  );
+  const widgetPreviewSetupProps = useMemo(
+    () => ({
+      ...demoAssembly.setupLegoProps,
+      model: widgetPreviewModel,
+      pageFeatures: widgetPreviewPageFeatures,
+      setupUi: widgetPreviewSetupUi,
+      isAdminUser: true,
+      newModelControlOrder: widgetPreviewSetupOrder,
+      onInlineKbChange: (value: string) =>
+        setWidgetPreviewPolicyConfig((prev) => ({ ...prev, inlineKb: value })),
+      onLlmChange: (value: string) => setWidgetPreviewPolicyConfig((prev) => ({ ...prev, llm: value })),
+    }),
+    [
+      demoAssembly.setupLegoProps,
+      widgetPreviewModel,
+      widgetPreviewPageFeatures,
+      widgetPreviewSetupOrder,
+      widgetPreviewSetupUi,
+    ]
+  );
 
   const conversationDemoEntries: Array<{ name: string; node: ReactNode }> = [
     {
@@ -1482,26 +1664,39 @@ export function DesignSystemContent() {
               </div>
               <div className="mx-auto w-full max-w-[380px]">
                 <div className="h-[560px] overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  <WidgetShell
+                  <WidgetConversationLayout
                     brandName={widgetBrandName}
                     status={widgetStatus}
                     iconUrl={widgetIconUrl || "/brand/logo.png"}
-                    messages={widgetMessages}
+                    messages={[]}
                     inputPlaceholder={widgetPlaceholder}
                     disclaimer={widgetDisclaimer}
-                    inputValue={widgetInputValue}
-                    onInputChange={setWidgetInputValue}
+                    inputValue={widgetPreviewInput}
+                    onInputChange={setWidgetPreviewInput}
                     onSend={handleWidgetSend}
                     onNewConversation={handleWidgetReset}
-                    sendDisabled={!widgetInputValue.trim()}
+                    sendDisabled={!widgetPreviewInput.trim()}
                     fill={false}
                     className="h-full"
+                    activeTab={widgetActiveTab}
+                    onTabChange={setWidgetActiveTab}
+                    showPolicyTab
+                    chatPanel={<ConversationModelChatColumnLego {...widgetPreviewChatProps} />}
+                    policyPanel={<ConversationModelSetupColumnLego {...widgetPreviewSetupProps} />}
+                    sessions={widgetPreviewSessions}
+                    sessionsLoading={false}
+                    sessionsError=""
+                    selectedSessionId={widgetPreviewSessionId}
+                    onSelectSession={setWidgetPreviewSessionId}
+                    historyMessages={widgetPreviewHistoryMessages}
+                    historyLoading={false}
                   />
                 </div>
               </div>
               <UsedInPages
                 pages={[
                   "src/components/design-system/widget/WidgetShell.tsx",
+                  "src/components/design-system/widget/WidgetConversationLayout.tsx",
                   "src/app/embed/[key]/page.tsx",
                 ]}
               />

@@ -64,4 +64,10 @@ export {
 } from "@/components/design-system/conversation/ConversationUI.parts";
 
 export { WidgetShell, type WidgetShellProps, type WidgetMessage } from "@/components/design-system/widget/WidgetShell";
+export {
+  WidgetConversationLayout,
+  type WidgetConversationLayoutProps,
+  type WidgetConversationTab,
+  type WidgetConversationSession,
+} from "@/components/design-system/widget/WidgetConversationLayout";
 

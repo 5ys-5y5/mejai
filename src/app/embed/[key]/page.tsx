@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { List, MessageCircle, Shield } from "lucide-react";
 import { toast } from "sonner";
 import {
   ConversationModelChatColumnLego,
   ConversationModelSetupColumnLego,
-  ConversationThread,
-  WidgetShell,
+  WidgetConversationLayout,
+  type WidgetConversationSession,
+  type WidgetConversationTab,
+  type WidgetMessage,
   type ConversationModelChatColumnLegoProps,
   type ConversationModelSetupColumnLegoProps,
   type SelectOption,
@@ -27,7 +28,6 @@ import { fetchSessionLogs } from "@/lib/conversation/client/runtimeClient";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
-import { cn } from "@/lib/utils";
 import type { LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
 import type { ChatMessage } from "@/lib/conversation/client/laboratoryPageState";
 
@@ -48,14 +48,6 @@ type WidgetHistoryMessage = {
   content?: string;
   turn_id?: string | null;
 };
-
-type WidgetSession = {
-  id: string;
-  session_code?: string | null;
-  started_at?: string | null;
-};
-
-type TabKey = "chat" | "list" | "policy";
 
 type PolicyConfig = {
   llm: string;
@@ -201,20 +193,6 @@ function collectUserIdentifiers(user?: Record<string, any> | null) {
   return values.map(normalizeAccountValue).filter(Boolean);
 }
 
-function formatSessionTime(value?: string | null) {
-  if (!value) return "";
-  try {
-    return new Date(value).toLocaleString("ko-KR", {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return value;
-  }
-}
-
 export default function WidgetEmbedPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -222,7 +200,7 @@ export default function WidgetEmbedPage() {
   const visitorId = useMemo(() => String(searchParams?.get("vid") || "").trim(), [searchParams]);
   const sessionSeed = useMemo(() => String(searchParams?.get("sid") || "").trim(), [searchParams]);
 
-  const [activeTab, setActiveTab] = useState<TabKey>("chat");
+  const [activeTab, setActiveTab] = useState<WidgetConversationTab>("chat");
   const [widgetToken, setWidgetToken] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [config, setConfig] = useState<WidgetConfig | null>(null);
@@ -251,7 +229,7 @@ export default function WidgetEmbedPage() {
     inlineKb: "",
   });
 
-  const [sessions, setSessions] = useState<WidgetSession[]>([]);
+  const [sessions, setSessions] = useState<WidgetConversationSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionsError, setSessionsError] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -791,7 +769,7 @@ export default function WidgetEmbedPage() {
           setSessionsLoading(false);
           return;
         }
-        const nextSessions: WidgetSession[] = Array.isArray(data?.sessions) ? data.sessions : [];
+        const nextSessions: WidgetConversationSession[] = Array.isArray(data?.sessions) ? data.sessions : [];
         setSessions(nextSessions);
         setSessionsLoading(false);
         if (!selectedSessionId && nextSessions.length > 0) {
@@ -978,15 +956,18 @@ export default function WidgetEmbedPage() {
     describeRoute: (value) => (value ? `Runtime: ${value}` : "선택된 Runtime 없음"),
   };
 
-  const tabGridClass = showPolicyTab ? "grid-cols-3" : "grid-cols-2";
+  const shellMessages = useMemo<WidgetMessage[]>(
+    () => messages.map((msg) => ({ id: msg.id, role: msg.role, content: msg.content })),
+    [messages]
+  );
 
   return (
     <div className="h-full">
-      <WidgetShell
+      <WidgetConversationLayout
         brandName={brandName}
         status={statusLabel}
         iconUrl={headerIcon}
-        messages={messages}
+        messages={shellMessages}
         inputPlaceholder={theme.input_placeholder || "메시지를 입력하세요"}
         disclaimer={theme.disclaimer ? String(theme.disclaimer) : ""}
         inputValue={inputValue}
@@ -998,130 +979,19 @@ export default function WidgetEmbedPage() {
         onNewConversation={handleNewConversation}
         sendDisabled={inputDisabled || !inputValue.trim() || !widgetToken || !sessionId}
         inputDisabled={inputDisabled}
-      >
-        <div className="flex h-full min-h-0 flex-col">
-          <div className="flex-1 min-h-0">
-            {activeTab === "chat" ? (
-              <div className="h-full">
-                <ConversationModelChatColumnLego {...chatLegoProps} />
-              </div>
-            ) : null}
-            {activeTab === "list" ? (
-              <div className="h-full min-h-0 flex flex-col bg-white">
-                <div className="border-b border-slate-200 px-4 py-2 text-[11px] text-slate-500">
-                  과거 대화 목록
-                </div>
-                <div className="flex min-h-0 flex-1 flex-col">
-                  <div className="max-h-44 overflow-auto border-b border-slate-200 bg-slate-50 px-2 py-2">
-                    {sessionsLoading ? (
-                      <div className="px-2 py-2 text-xs text-slate-500">불러오는 중...</div>
-                    ) : sessionsError ? (
-                      <div className="px-2 py-2 text-xs text-rose-500">{sessionsError}</div>
-                    ) : sessions.length === 0 ? (
-                      <div className="px-2 py-2 text-xs text-slate-500">대화 기록이 없습니다.</div>
-                    ) : (
-                      <div className="space-y-1">
-                        {sessions.map((session) => {
-                          const isActive = session.id === selectedSessionId;
-                          return (
-                            <button
-                              key={session.id}
-                              type="button"
-                              onClick={() => setSelectedSessionId(session.id)}
-                              className={cn(
-                                "w-full rounded-md border px-2 py-1 text-left text-xs",
-                                isActive
-                                  ? "border-slate-900 bg-white text-slate-900"
-                                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
-                              )}
-                            >
-                              <div className="font-semibold">
-                                {session.session_code || session.id.slice(0, 8)}
-                              </div>
-                              <div className="text-[10px] text-slate-400">
-                                {formatSessionTime(session.started_at)}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-h-0 overflow-auto bg-slate-50 px-4 py-4">
-                    {historyLoading ? (
-                      <div className="text-xs text-slate-500">대화를 불러오는 중...</div>
-                    ) : historyMessages.length === 0 ? (
-                      <div className="text-xs text-slate-500">선택된 대화가 없습니다.</div>
-                    ) : (
-                      <ConversationThread
-                        messages={historyMessages}
-                        selectedMessageIds={[]}
-                        selectionEnabled={false}
-                        onToggleSelection={() => undefined}
-                        renderContent={(msg) => msg.content}
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : null}
-            {activeTab === "policy" ? (
-              showPolicyTab ? (
-                <div className="h-full">
-                  <ConversationModelSetupColumnLego {...setupLegoProps} />
-                </div>
-              ) : (
-                <div className="flex h-full items-center justify-center bg-white text-sm text-slate-500">
-                  접근 권한이 없습니다.
-                </div>
-              )
-            ) : null}
-          </div>
-          <div className={cn("grid gap-2 border-t border-slate-200 bg-white px-3 py-2", tabGridClass)}>
-            <button
-              type="button"
-              onClick={() => setActiveTab("chat")}
-              className={cn(
-                "flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold",
-                activeTab === "chat"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-500 hover:bg-slate-100"
-              )}
-            >
-              <MessageCircle className="h-4 w-4" />
-              <span>대화</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("list")}
-              className={cn(
-                "flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold",
-                activeTab === "list"
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-500 hover:bg-slate-100"
-              )}
-            >
-              <List className="h-4 w-4" />
-              <span>리스트</span>
-            </button>
-            {showPolicyTab ? (
-              <button
-                type="button"
-                onClick={() => setActiveTab("policy")}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2 text-xs font-semibold",
-                  activeTab === "policy"
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-500 hover:bg-slate-100"
-                )}
-              >
-                <Shield className="h-4 w-4" />
-                <span>정책</span>
-              </button>
-            ) : null}
-          </div>
-        </div>
-      </WidgetShell>
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        showPolicyTab={showPolicyTab}
+        chatPanel={<ConversationModelChatColumnLego {...chatLegoProps} />}
+        policyPanel={<ConversationModelSetupColumnLego {...setupLegoProps} />}
+        sessions={sessions}
+        sessionsLoading={sessionsLoading}
+        sessionsError={sessionsError}
+        selectedSessionId={selectedSessionId}
+        onSelectSession={setSelectedSessionId}
+        historyMessages={historyMessages}
+        historyLoading={historyLoading}
+      />
     </div>
   );
 }
