@@ -3,6 +3,7 @@
 import { type FormEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { WidgetHeaderLego } from "@/components/design-system/widget/WidgetUI.parts";
 import { cn } from "@/lib/utils";
 import { Send } from "lucide-react";
 
@@ -51,9 +52,6 @@ export function WidgetShell({
   fill = true,
   className,
 }: WidgetShellProps) {
-  const resolvedIcon = iconUrl || "/brand/logo.png";
-  const showStatus = Boolean(status && status.trim().length > 0);
-
   return (
     <div
       className={cn(
@@ -62,32 +60,14 @@ export function WidgetShell({
         className
       )}
     >
-      <header className="flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={resolvedIcon} alt="" className="h-full w-full object-cover" />
-          </div>
-          <div>
-            <div className="text-sm font-semibold">{brandName}</div>
-            {showStatus ? <div className="text-[11px] text-slate-500">{status}</div> : null}
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {headerActions || null}
-          {onNewConversation ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onNewConversation}
-              className="h-8 px-3 text-[11px]"
-            >
-              새 대화
-            </Button>
-          ) : null}
-        </div>
-      </header>
+      <WidgetHeaderLego
+        brandName={brandName}
+        status={status}
+        iconUrl={iconUrl}
+        headerActions={headerActions}
+        onNewConversation={onNewConversation}
+        showNewConversation={Boolean(onNewConversation)}
+      />
       {children ? (
         <div className="flex-1 min-h-0 overflow-hidden">{children}</div>
       ) : (

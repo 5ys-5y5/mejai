@@ -65,9 +65,17 @@ export {
 
 export { WidgetShell, type WidgetShellProps, type WidgetMessage } from "@/components/design-system/widget/WidgetShell";
 export {
-  WidgetConversationLayout,
-  type WidgetConversationLayoutProps,
+  WidgetHeaderLego,
+  WidgetTabBarLego,
+  WidgetHistoryPanelLego,
+  type WidgetHeaderLegoProps,
+  type WidgetTabBarLegoProps,
+  type WidgetHistoryPanelLegoProps,
   type WidgetConversationTab,
   type WidgetConversationSession,
+} from "@/components/design-system/widget/WidgetUI.parts";
+export {
+  WidgetConversationLayout,
+  type WidgetConversationLayoutProps,
 } from "@/components/design-system/widget/WidgetConversationLayout";
 

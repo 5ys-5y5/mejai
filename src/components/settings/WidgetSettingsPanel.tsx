@@ -246,7 +246,7 @@ export function WidgetSettingsPanel() {
               <img
                 src={launcherIconUrl || "/brand/logo.png"}
                 alt="Widget Icon Preview"
-                className="h-full w-full object-cover"
+                className="block h-full w-full object-cover"
               />
             </div>
           </div>
