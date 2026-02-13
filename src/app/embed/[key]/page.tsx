@@ -981,7 +981,7 @@ export default function WidgetEmbedPage() {
   );
 
   return (
-    <div className="h-full min-h-0">
+    <div className="min-h-screen">
       <WidgetConversationLayout
         brandName={brandName}
         status={statusLabel}
@@ -998,8 +998,7 @@ export default function WidgetEmbedPage() {
         onNewConversation={handleNewConversation}
         sendDisabled={inputDisabled || !inputValue.trim() || !widgetToken || !sessionId}
         inputDisabled={inputDisabled}
-        fill={false}
-        className="h-full min-h-0"
+        className="min-h-screen"
         activeTab={activeTab}
         onTabChange={setActiveTab}
         showPolicyTab={showPolicyTab}
