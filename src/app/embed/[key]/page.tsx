@@ -512,19 +512,48 @@ export default function WidgetEmbedPage() {
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
+    const main = document.querySelector("main") as HTMLElement | null;
     const prevHtmlHeight = html.style.height;
+    const prevHtmlMinHeight = html.style.minHeight;
+    const prevHtmlOverflow = html.style.overflow;
     const prevBodyHeight = body.style.height;
+    const prevBodyMinHeight = body.style.minHeight;
     const prevBodyMargin = body.style.margin;
     const prevBodyOverflow = body.style.overflow;
+    const prevMainHeight = main?.style.height;
+    const prevMainMinHeight = main?.style.minHeight;
+    const prevMainDisplay = main?.style.display;
+    const prevMainFlexDirection = main?.style.flexDirection;
+    const prevMainOverflow = main?.style.overflow;
     html.style.height = "100%";
+    html.style.minHeight = "100%";
+    html.style.overflow = "hidden";
     body.style.height = "100%";
+    body.style.minHeight = "100%";
     body.style.margin = "0";
     body.style.overflow = "hidden";
+    if (main) {
+      main.style.height = "100%";
+      main.style.minHeight = "100%";
+      main.style.display = "flex";
+      main.style.flexDirection = "column";
+      main.style.overflow = "hidden";
+    }
     return () => {
       html.style.height = prevHtmlHeight;
+      html.style.minHeight = prevHtmlMinHeight;
+      html.style.overflow = prevHtmlOverflow;
       body.style.height = prevBodyHeight;
+      body.style.minHeight = prevBodyMinHeight;
       body.style.margin = prevBodyMargin;
       body.style.overflow = prevBodyOverflow;
+      if (main) {
+        main.style.height = prevMainHeight || "";
+        main.style.minHeight = prevMainMinHeight || "";
+        main.style.display = prevMainDisplay || "";
+        main.style.flexDirection = prevMainFlexDirection || "";
+        main.style.overflow = prevMainOverflow || "";
+      }
     };
   }, []);
 
@@ -981,7 +1010,7 @@ export default function WidgetEmbedPage() {
   );
 
   return (
-    <div className="min-h-screen">
+    <div className="h-full min-h-0">
       <WidgetConversationLayout
         brandName={brandName}
         status={statusLabel}
@@ -998,7 +1027,8 @@ export default function WidgetEmbedPage() {
         onNewConversation={handleNewConversation}
         sendDisabled={inputDisabled || !inputValue.trim() || !widgetToken || !sessionId}
         inputDisabled={inputDisabled}
-        className="min-h-screen"
+        fill={false}
+        className="h-full"
         activeTab={activeTab}
         onTabChange={setActiveTab}
         showPolicyTab={showPolicyTab}
