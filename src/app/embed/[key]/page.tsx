@@ -711,17 +711,15 @@ export default function WidgetEmbedPage() {
 
   const copyMessages = useMemo<TranscriptMessage[]>(
     () =>
-      messages
-        .filter((msg) => msg.role !== "system")
-        .map((msg) => ({
-          id: msg.id,
-          role: msg.role === "user" ? "user" : "bot",
-          content: msg.content,
-          turnId: msg.turnId || null,
-          responseSchema: msg.responseSchema,
-          responseSchemaIssues: msg.responseSchemaIssues,
-          renderPlan: msg.renderPlan,
-        })),
+      messages.map((msg) => ({
+        id: msg.id,
+        role: msg.role === "user" ? "user" : "bot",
+        content: msg.content,
+        turnId: msg.turnId || null,
+        responseSchema: msg.responseSchema,
+        responseSchemaIssues: msg.responseSchemaIssues,
+        renderPlan: msg.renderPlan,
+      })),
     [messages]
   );
 
