@@ -93,9 +93,30 @@ export async function POST(req: NextRequest) {
   }
 
   const targetUrl = new URL("/api/runtime/chat", req.nextUrl.origin);
+  const targetUrl = new URL("/api/runtime/chat", req.nextUrl.origin).toString();
+  const requestMeta = {
+    target_url: targetUrl,
+    req_origin: req.nextUrl.origin,
+    req_host: req.headers.get("host") || "",
+    req_forwarded_host: req.headers.get("x-forwarded-host") || "",
+    req_forwarded_proto: req.headers.get("x-forwarded-proto") || "",
+  };
+  await logWidgetProxyEvent({
+    supabase: supabaseAdmin,
+    sessionId,
+    widgetId: String(widget.id),
+    orgId: String(widget.org_id),
+    agentId: widget.agent_id || null,
+    eventType: "WIDGET_RUNTIME_PROXY_START",
+    payload: {
+      ...requestMeta,
+      message_length: message.length,
+    },
+  });
+
   let res: Response;
   try {
-    res = await fetch(targetUrl.toString(), {
+    res = await fetch(targetUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -125,6 +146,7 @@ export async function POST(req: NextRequest) {
       agentId: widget.agent_id || null,
       eventType: "WIDGET_RUNTIME_PROXY_FETCH_FAILED",
       payload: {
+        ...requestMeta,
         error: error instanceof Error ? error.message : String(error),
       },
     });
@@ -147,6 +169,7 @@ export async function POST(req: NextRequest) {
       agentId: widget.agent_id || null,
       eventType: "WIDGET_RUNTIME_PROXY_INVALID_JSON",
       payload: {
+        ...requestMeta,
         status: res.status,
         body_snippet: rawText.slice(0, 800),
       },
@@ -166,12 +189,26 @@ export async function POST(req: NextRequest) {
       agentId: widget.agent_id || null,
       eventType: "WIDGET_RUNTIME_PROXY_ERROR",
       payload: {
+        ...requestMeta,
         status: res.status,
         runtime_error: data.error || null,
         runtime_detail: data.detail || null,
       },
     });
   }
+  await logWidgetProxyEvent({
+    supabase: supabaseAdmin,
+    sessionId,
+    widgetId: String(widget.id),
+    orgId: String(widget.org_id),
+    agentId: widget.agent_id || null,
+    eventType: "WIDGET_RUNTIME_PROXY_END",
+    payload: {
+      ...requestMeta,
+      status: res.status,
+      ok: res.ok,
+    },
+  });
 
   return NextResponse.json(data, { status: res.status });
 }
