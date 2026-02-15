@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { verifyWidgetToken } from "@/lib/widgetToken";
 
@@ -92,8 +93,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "WIDGET_RUNTIME_SECRET_MISSING" }, { status: 500 });
   }
 
+  const proxyTraceId = crypto.randomUUID();
   const targetUrl = new URL("/api/runtime/chat", req.nextUrl.origin).toString();
   const requestMeta = {
+    proxy_trace_id: proxyTraceId,
     target_url: targetUrl,
     req_origin: req.nextUrl.origin,
     req_host: req.headers.get("host") || "",
@@ -149,8 +152,25 @@ export async function POST(req: NextRequest) {
         error: error instanceof Error ? error.message : String(error),
       },
     });
+    await logWidgetProxyEvent({
+      supabase: supabaseAdmin,
+      sessionId,
+      widgetId: String(widget.id),
+      orgId: String(widget.org_id),
+      agentId: widget.agent_id || null,
+      eventType: "WIDGET_RUNTIME_PROXY_END",
+      payload: {
+        ...requestMeta,
+        ok: false,
+        status: 0,
+      },
+    });
     return NextResponse.json(
-      { error: "WIDGET_RUNTIME_PROXY_FETCH_FAILED", detail: error instanceof Error ? error.message : String(error) },
+      {
+        error: "WIDGET_RUNTIME_PROXY_FETCH_FAILED",
+        detail: error instanceof Error ? error.message : String(error),
+        proxy_trace_id: proxyTraceId,
+      },
       { status: 502 }
     );
   }
@@ -173,8 +193,25 @@ export async function POST(req: NextRequest) {
         body_snippet: rawText.slice(0, 800),
       },
     });
+    await logWidgetProxyEvent({
+      supabase: supabaseAdmin,
+      sessionId,
+      widgetId: String(widget.id),
+      orgId: String(widget.org_id),
+      agentId: widget.agent_id || null,
+      eventType: "WIDGET_RUNTIME_PROXY_END",
+      payload: {
+        ...requestMeta,
+        ok: false,
+        status: res.status,
+      },
+    });
     return NextResponse.json(
-      { error: "WIDGET_RUNTIME_INVALID_RESPONSE", status: res.status },
+      {
+        error: "WIDGET_RUNTIME_INVALID_RESPONSE",
+        status: res.status,
+        proxy_trace_id: proxyTraceId,
+      },
       { status: 502 }
     );
   }
@@ -209,5 +246,11 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json(data, { status: res.status });
+  return NextResponse.json(
+    {
+      ...data,
+      proxy_trace_id: proxyTraceId,
+    },
+    { status: res.status }
+  );
 }

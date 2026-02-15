@@ -707,6 +707,8 @@ export default function WidgetEmbedPage() {
                       stage: "chat",
                       status: res.status,
                       error: data?.error || res.statusText || "REQUEST_FAILED",
+                      detail: data?.detail || null,
+                      proxy_trace_id: data?.proxy_trace_id || null,
                     },
                   },
                 }),
@@ -775,6 +777,7 @@ export default function WidgetEmbedPage() {
                   widget_error: {
                     stage: "chat",
                     error: error instanceof Error ? error.message : "REQUEST_FAILED",
+                    detail: error instanceof Error ? error.stack || null : null,
                   },
                 },
               }),
