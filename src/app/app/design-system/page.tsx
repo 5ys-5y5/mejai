@@ -39,6 +39,9 @@ import {
   SidebarNavigationShell,
   TopHeaderShell,
   TypographyScaleShell,
+  WidgetLauncherButton,
+  WidgetLauncherContainer,
+  WidgetLauncherIframe,
   WidgetConversationLayout,
   WidgetHeaderLego,
   WidgetHistoryPanelLego,
@@ -229,8 +232,8 @@ type DefinitionCatalogItem = {
 
 const CONVERSATION_PARTS_FILE = "src/components/design-system/conversation/ConversationUI.parts.tsx";
 const WIDGET_PARTS_FILE = "src/components/design-system/widget/WidgetUI.parts.tsx";
-const WIDGET_SHELL_FILE = "src/components/design-system/widget/WidgetShell.tsx";
-const WIDGET_LAYOUT_FILE = "src/components/design-system/widget/WidgetConversationLayout.tsx";
+const WIDGET_SHELL_FILE = "src/components/design-system/widget/WidgetUI.parts.tsx";
+const WIDGET_LAYOUT_FILE = "src/components/design-system/widget/WidgetUI.parts.tsx";
 const COVERAGE_HIDDEN_NAMES = new Set<string>([
   "ConversationWorkbenchTopBar",
   "ConversationSessionHeader",
@@ -338,46 +341,88 @@ const widgetDefinitionGroups: Array<{ label: string; items: WidgetDefinitionItem
     label: "Widget Types",
     items: [
       {
+        name: "WidgetLauncherPosition",
+        type: "Type Alias",
+        depends: "WidgetLauncherContainer, WidgetLauncherIframe",
+        role: "런처 위치 타입(bottom-right/left)",
+        definedAt: `${WIDGET_PARTS_FILE}:23`,
+      },
+      {
+        name: "WidgetLauncherContainerProps",
+        type: "Type Alias",
+        depends: "WidgetLauncherContainer",
+        role: "런처 컨테이너 props 계약",
+        definedAt: `${WIDGET_PARTS_FILE}:25`,
+      },
+      {
+        name: "WidgetLauncherIconProps",
+        type: "Type Alias",
+        depends: "WidgetLauncherIcon",
+        role: "런처 아이콘 props 계약",
+        definedAt: `${WIDGET_PARTS_FILE}:101`,
+      },
+      {
+        name: "WidgetLauncherLabelProps",
+        type: "Type Alias",
+        depends: "WidgetLauncherLabel",
+        role: "런처 라벨 props 계약",
+        definedAt: `${WIDGET_PARTS_FILE}:142`,
+      },
+      {
+        name: "WidgetLauncherButtonProps",
+        type: "Type Alias",
+        depends: "WidgetLauncherButton",
+        role: "런처 버튼 props 계약",
+        definedAt: `${WIDGET_PARTS_FILE}:173`,
+      },
+      {
+        name: "WidgetLauncherIframeProps",
+        type: "Type Alias",
+        depends: "WidgetLauncherIframe",
+        role: "런처 iframe props 계약",
+        definedAt: `${WIDGET_PARTS_FILE}:242`,
+      },
+      {
         name: "WidgetShellProps",
         type: "Type Alias",
         depends: "WidgetShell, WidgetHeaderLegoProps, ConversationModelChatColumnLegoProps",
         role: "채팅 셸 props 계약",
-        definedAt: `${WIDGET_SHELL_FILE}:8`,
+        definedAt: `${WIDGET_SHELL_FILE}:836`,
       },
       {
         name: "WidgetHeaderLegoProps",
         type: "Type Alias",
         depends: "WidgetHeaderLego",
         role: "위젯 헤더 레고 props 계약",
-        definedAt: `${WIDGET_PARTS_FILE}:11`,
+        definedAt: `${WIDGET_PARTS_FILE}:612`,
       },
       {
         name: "WidgetConversationTab",
         type: "Type Alias",
         depends: "WidgetTabBarLego",
         role: "위젯 탭 타입(chat/list/policy)",
-        definedAt: `${WIDGET_PARTS_FILE}:62`,
+        definedAt: `${WIDGET_PARTS_FILE}:666`,
       },
       {
         name: "WidgetTabBarLegoProps",
         type: "Type Alias",
         depends: "WidgetTabBarLego",
         role: "하단 탭바 레고 props 계약",
-        definedAt: `${WIDGET_PARTS_FILE}:64`,
+        definedAt: `${WIDGET_PARTS_FILE}:668`,
       },
       {
         name: "WidgetConversationSession",
         type: "Type Alias",
         depends: "WidgetHistoryPanelLego",
         role: "히스토리 세션 아이템 타입",
-        definedAt: `${WIDGET_PARTS_FILE}:117`,
+        definedAt: `${WIDGET_PARTS_FILE}:724`,
       },
       {
         name: "WidgetHistoryPanelLegoProps",
         type: "Type Alias",
         depends: "WidgetHistoryPanelLego",
         role: "히스토리 패널 props 계약(세션 선택 → ConversationThread)",
-        definedAt: `${WIDGET_PARTS_FILE}:123`,
+        definedAt: `${WIDGET_PARTS_FILE}:730`,
       },
       {
         name: "WidgetConversationLayoutProps",
@@ -385,7 +430,7 @@ const widgetDefinitionGroups: Array<{ label: string; items: WidgetDefinitionItem
         depends:
           "WidgetConversationLayout, WidgetHeaderLegoProps, WidgetTabBarLegoProps, WidgetHistoryPanelLegoProps, ConversationModelChatColumnLegoProps, ConversationModelSetupColumnLegoProps",
         role: "위젯 탭 조립 props 계약",
-        definedAt: `${WIDGET_LAYOUT_FILE}:15`,
+        definedAt: `${WIDGET_LAYOUT_FILE}:876`,
       },
     ],
   },
@@ -393,32 +438,67 @@ const widgetDefinitionGroups: Array<{ label: string; items: WidgetDefinitionItem
     label: "Widget UI Components",
     items: [
       {
+        name: "WidgetLauncherContainer",
+        type: "UI Component",
+        depends: "WidgetLauncherContainerProps, WidgetLauncherPosition, WidgetLauncherButton, WidgetLauncherIframe",
+        role: "런처 컨테이너(확장 전 위치, ID 제공)",
+        definedAt: `${WIDGET_PARTS_FILE}:41`,
+      },
+      {
+        name: "WidgetLauncherIcon",
+        type: "UI Component",
+        depends: "WidgetLauncherIconProps",
+        role: "런처 아이콘 이미지",
+        definedAt: `${WIDGET_PARTS_FILE}:111`,
+      },
+      {
+        name: "WidgetLauncherLabel",
+        type: "UI Component",
+        depends: "WidgetLauncherLabelProps",
+        role: "아이콘 실패 시 표시 라벨",
+        definedAt: `${WIDGET_PARTS_FILE}:150`,
+      },
+      {
+        name: "WidgetLauncherButton",
+        type: "UI Component",
+        depends: "WidgetLauncherButtonProps, WidgetLauncherIcon, WidgetLauncherLabel",
+        role: "확장 전 런처 버튼",
+        definedAt: `${WIDGET_PARTS_FILE}:184`,
+      },
+      {
+        name: "WidgetLauncherIframe",
+        type: "UI Component",
+        depends: "WidgetLauncherIframeProps, WidgetLauncherPosition, WidgetConversationLayout",
+        role: "위젯 본문 iframe (display:none / placeholder 지원)",
+        definedAt: `${WIDGET_PARTS_FILE}:264`,
+      },
+      {
         name: "WidgetHeaderLego",
         type: "UI Component",
         depends: "WidgetHeaderLegoProps",
         role: "헤더(브랜드/상태/아이콘)",
-        definedAt: `${WIDGET_PARTS_FILE}:20`,
+        definedAt: `${WIDGET_PARTS_FILE}:621`,
       },
       {
         name: "WidgetTabBarLego",
         type: "UI Component",
         depends: "WidgetTabBarLegoProps, WidgetConversationTab",
         role: "하단 탭바(대화/리스트/정책)",
-        definedAt: `${WIDGET_PARTS_FILE}:70`,
+        definedAt: `${WIDGET_PARTS_FILE}:674`,
       },
       {
         name: "WidgetHistoryPanelLego",
         type: "UI Component",
         depends: "WidgetHistoryPanelLegoProps, ConversationThread",
         role: "리스트 탭 패널(세션 선택 → ConversationThread)",
-        definedAt: `${WIDGET_PARTS_FILE}:148`,
+        definedAt: `${WIDGET_PARTS_FILE}:755`,
       },
       {
         name: "WidgetShell",
         type: "UI Component",
         depends: "WidgetHeaderLego, ConversationModelChatColumnLego, WidgetShellProps",
         role: "채팅 셸(헤더 + 대화 패널)",
-        definedAt: `${WIDGET_SHELL_FILE}:19`,
+        definedAt: `${WIDGET_SHELL_FILE}:847`,
       },
       {
         name: "WidgetConversationLayout",
@@ -426,7 +506,7 @@ const widgetDefinitionGroups: Array<{ label: string; items: WidgetDefinitionItem
         depends:
           "WidgetHeaderLego, ConversationModelChatColumnLego, WidgetHistoryPanelLego, ConversationModelSetupColumnLego, WidgetTabBarLego",
         role: "대화/리스트/정책 탭 조립(헤더 + 콘텐츠 + 탭바)",
-        definedAt: `${WIDGET_LAYOUT_FILE}:39`,
+        definedAt: `${WIDGET_LAYOUT_FILE}:900`,
       },
     ],
   },
@@ -1319,6 +1399,24 @@ export function DesignSystemContent() {
 
   const widgetDemoEntries: Array<{ name: string; node: ReactNode }> = [
     {
+      name: "WidgetLauncherContainer",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderWidgetDefinitionMetaByName("WidgetLauncherContainer")}
+          {renderWidgetDefinitionMetaByName("WidgetLauncherButton")}
+          {renderWidgetDefinitionMetaByName("WidgetLauncherIcon")}
+          {renderWidgetDefinitionMetaByName("WidgetLauncherLabel")}
+          {renderWidgetDefinitionMetaByName("WidgetLauncherIframe")}
+          <div className="relative mt-3 h-28 rounded-lg border border-slate-200 bg-white">
+            <WidgetLauncherContainer layout="absolute" bottom="16px" right="16px" zIndex={1} stack>
+              <WidgetLauncherButton brandName={WIDGET_DEMO_BRAND_NAME} iconUrl={WIDGET_DEMO_ICON_URL} />
+              <WidgetLauncherIframe asPlaceholder />
+            </WidgetLauncherContainer>
+          </div>
+        </div>
+      ),
+    },
+    {
       name: "WidgetHeaderLego",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -1710,8 +1808,7 @@ export function DesignSystemContent() {
               </div>
               <UsedInPages
                 pages={[
-                  "src/components/design-system/widget/WidgetShell.tsx",
-                  "src/components/design-system/widget/WidgetConversationLayout.tsx",
+                  "src/components/design-system/widget/WidgetUI.parts.tsx",
                   "src/app/embed/[key]/page.tsx",
                 ]}
               />
@@ -1739,8 +1836,6 @@ export function DesignSystemContent() {
               <UsedInPages
                 pages={[
                   "src/components/design-system/widget/WidgetUI.parts.tsx",
-                  "src/components/design-system/widget/WidgetShell.tsx",
-                  "src/components/design-system/widget/WidgetConversationLayout.tsx",
                   "src/app/embed/[key]/page.tsx",
                 ]}
               />

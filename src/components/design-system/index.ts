@@ -40,13 +40,8 @@ export {
   ConversationQuickReplyButton,
   ConversationConfirmButton,
   ConversationProductCard,
-  type ConversationProductCardItem,
-} from "@/components/design-system/conversation/ui";
-export {
   ConversationSplitLayout,
   ConversationSetupPanel,
-} from "@/components/design-system/conversation/panels";
-export {
   ConversationSetupBox,
   ConversationAdminMenu,
   ConversationSessionHeader,
@@ -58,24 +53,35 @@ export {
   ConversationModelChatColumnLego,
   ConversationModelComposedLego,
   createConversationModelLegos,
+  type ConversationProductCardItem,
   type ConversationModelSetupColumnLegoProps,
   type ConversationModelChatColumnLegoProps,
   type ConversationModelLegoAssembly,
 } from "@/components/design-system/conversation/ConversationUI.parts";
 
-export { WidgetShell, type WidgetShellProps } from "@/components/design-system/widget/WidgetShell";
 export {
+  WidgetLauncherContainer,
+  WidgetLauncherButton,
+  WidgetLauncherIcon,
+  WidgetLauncherLabel,
+  WidgetLauncherIframe,
+  WidgetShell,
+  WidgetConversationLayout,
   WidgetHeaderLego,
   WidgetTabBarLego,
   WidgetHistoryPanelLego,
+  type WidgetLauncherContainerProps,
+  type WidgetLauncherButtonProps,
+  type WidgetLauncherIconProps,
+  type WidgetLauncherLabelProps,
+  type WidgetLauncherIframeProps,
+  type WidgetLauncherPosition,
+  type WidgetShellProps,
+  type WidgetConversationLayoutProps,
   type WidgetHeaderLegoProps,
   type WidgetTabBarLegoProps,
   type WidgetHistoryPanelLegoProps,
   type WidgetConversationTab,
   type WidgetConversationSession,
 } from "@/components/design-system/widget/WidgetUI.parts";
-export {
-  WidgetConversationLayout,
-  type WidgetConversationLayoutProps,
-} from "@/components/design-system/widget/WidgetConversationLayout";
 

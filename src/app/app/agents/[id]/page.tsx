@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/apiClient";
 import { MultiSelectPopover, SelectPopover } from "@/components/SelectPopover";
 import { formatKstDateTime } from "@/lib/kst";
-import { Bot, PencilLine, Trash2 } from "lucide-react";
+import { Bot, Info, PencilLine, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { isAdminKbValue } from "@/lib/kbType";
 
@@ -36,6 +36,7 @@ type KbItem = {
   is_admin?: boolean | string | null;
   is_sample?: boolean | null;
   org_id?: string | null;
+  content?: string | null;
 };
 
 type MpcTool = {
@@ -216,6 +217,8 @@ export default function AgentDetailPage() {
   const [activeUpdateId, setActiveUpdateId] = useState<string | null>(null);
   const [userOrgId, setUserOrgId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [kbInfoOpen, setKbInfoOpen] = useState(false);
+  const [mcpInfoOpen, setMcpInfoOpen] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -310,6 +313,37 @@ export default function AgentDetailPage() {
   const selectedKbParentId = selectedKb ? selectedKb.parent_id ?? selectedKb.id : null;
   const activeKb = selectedKbParentId ? activeKbByParent.get(selectedKbParentId) ?? null : null;
   const kbUpdateAvailable = Boolean(selectedKb && activeKb && activeKb.id !== selectedKb.id);
+  const kbInfoText = useMemo(() => {
+    if (!selectedKb) return "선택된 KB가 없습니다.";
+    const adminFlag = isAdminKbValue(selectedKb.is_admin);
+    return [
+      `제목: ${selectedKb.title || "-"}`,
+      `버전: ${selectedKb.version || "-"}`,
+      `상태: ${selectedKb.is_active ? "배포" : "비활성"}`,
+      `유형: ${adminFlag ? "ADMIN" : "일반"}`,
+      `내용:\n${selectedKb.content || "-"}`,
+      `ID: ${selectedKb.id}`,
+    ].join("\n");
+  }, [selectedKb]);
+
+  const mcpInfoText = useMemo(() => {
+    if (mcpToolIds.length === 0) return "선택된 MCP 도구가 없습니다.";
+    const byId = new Map(mcpTools.map((tool) => [tool.id, tool]));
+    return mcpToolIds
+      .map((id) => {
+        const tool = byId.get(id);
+        if (!tool) return `알 수 없는 도구 (${id})`;
+        const label = tool.tool_key || (tool.provider_key ? `${tool.provider_key}:${tool.name}` : tool.name);
+        const lines = [
+          `도구: ${label}`,
+          `프로바이더: ${tool.provider_key || "-"}`,
+          `설명: ${tool.description || "-"}`,
+          `ID: ${tool.id}`,
+        ];
+        return lines.join("\n");
+      })
+      .join("\n\n");
+  }, [mcpToolIds, mcpTools]);
 
   const kbOptions = useMemo(() => {
     return [...scopedKbItems]
@@ -333,6 +367,7 @@ export default function AgentDetailPage() {
         id: tool.id,
         label: tool.tool_key || (tool.provider_key ? `${tool.provider_key}:${tool.name}` : tool.name),
         description: tool.description || undefined,
+        group: tool.provider_key || "기타",
       })),
     [mcpTools]
   );
@@ -560,7 +595,7 @@ export default function AgentDetailPage() {
                 />
               </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4">
                 <div
                   className={cn(
                     "grid gap-2 rounded-xl",
@@ -583,54 +618,72 @@ export default function AgentDetailPage() {
                   )}
                 >
                   <label className="text-sm font-medium text-slate-900">KB 버전 *</label>
-                  <SelectPopover
-                    value={kbId}
-                    onChange={setKbId}
-                    options={kbOptions}
-                    placeholder="KB 선택"
-                    searchable
-                    renderValue={(selected) => (
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 truncate">
-                          {selected?.id ? (
-                            <span
-                              className={cn(
-                                "h-2 w-2 rounded-full",
-                                scopedKbItems.find((kb) => kb.id === selected.id)?.is_active
-                                  ? "bg-emerald-500"
-                                  : "bg-slate-300"
-                              )}
-                            />
-                          ) : null}
-                          <span className="truncate">{selected?.label || "KB 선택"}</span>
-                        </div>
-                        {selected?.id ? (
-                          <div className="text-[11px] text-slate-500 truncate">ID: {selected.id}</div>
-                        ) : null}
-                      </div>
-                    )}
-                    renderOption={(option) => {
-                      const item = scopedKbItems.find((kb) => kb.id === option.id);
-                      const isActive = Boolean(item?.is_active);
-                      return (
-                        <div className="min-w-0 text-left">
+                  <div className="flex items-center gap-2">
+                    <SelectPopover
+                      value={kbId}
+                      onChange={setKbId}
+                      options={kbOptions}
+                      placeholder="KB 선택"
+                      searchable
+                      className="flex-1 min-w-0"
+                      renderValue={(selected) => (
+                        <div className="min-w-0">
                           <div className="flex items-center gap-2 truncate">
-                            <span
-                              className={cn(
-                                "h-2 w-2 rounded-full",
-                                isActive ? "bg-emerald-500" : "bg-slate-300"
-                              )}
-                            />
-                            <span className="text-slate-900">{option.label}</span>
-                            {option.description ? (
-                              <span className="text-[10px] text-slate-500 whitespace-nowrap">{option.description}</span>
+                            {selected?.id ? (
+                              <span
+                                className={cn(
+                                  "h-2 w-2 rounded-full",
+                                  scopedKbItems.find((kb) => kb.id === selected.id)?.is_active
+                                    ? "bg-emerald-500"
+                                    : "bg-slate-300"
+                                )}
+                              />
                             ) : null}
+                            <span className="truncate">{selected?.label || "KB 선택"}</span>
                           </div>
-                          <div className="text-[10px] text-slate-500 truncate">ID: {option.id}</div>
+                          {selected?.id ? (
+                            <div className="text-[11px] text-slate-500 truncate">ID: {selected.id}</div>
+                          ) : null}
                         </div>
-                      );
-                    }}
-                  />
+                      )}
+                      renderOption={(option) => {
+                        const item = scopedKbItems.find((kb) => kb.id === option.id);
+                        const isActive = Boolean(item?.is_active);
+                        return (
+                          <div className="min-w-0 text-left">
+                            <div className="flex items-center gap-2 truncate">
+                              <span
+                                className={cn(
+                                  "h-2 w-2 rounded-full",
+                                  isActive ? "bg-emerald-500" : "bg-slate-300"
+                                )}
+                              />
+                              <span className="text-slate-900">{option.label}</span>
+                              {option.description ? (
+                                <span className="text-[10px] text-slate-500 whitespace-nowrap">{option.description}</span>
+                              ) : null}
+                            </div>
+                            <div className="text-[10px] text-slate-500 truncate">ID: {option.id}</div>
+                          </div>
+                        );
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setKbInfoOpen((prev) => !prev)}
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+                      aria-label="KB 정보"
+                    >
+                      <Info className="h-4 w-4" />
+                    </button>
+                  </div>
+                  {kbInfoOpen ? (
+                    <textarea
+                      readOnly
+                      value={kbInfoText}
+                      className="mt-2 min-h-[60px] w-full resize-y rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap break-words"
+                    />
+                  ) : null}
                   {kbUpdateAvailable ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                       최신 KB 버전이 있습니다 ({selectedKb?.version || "-"} → {activeKb?.version || "-"}).
@@ -647,7 +700,12 @@ export default function AgentDetailPage() {
                   ) : null}
                   {isAdmin ? (
                     <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                      <div className="text-[11px] font-semibold text-slate-600">admin KB</div>
+                      <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+                        <span>admin KB</span>
+                        <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                          ADMIN
+                        </span>
+                      </div>
                       {adminKbItems.length > 0 ? (
                         <div className="mt-2 space-y-1">
                           {adminKbItems.map((item) => (
@@ -672,13 +730,32 @@ export default function AgentDetailPage() {
                 )}
               >
                 <label className="text-sm font-medium text-slate-900">MCP 도구</label>
-                <MultiSelectPopover
-                  values={mcpToolIds}
-                  onChange={setMcpToolIds}
-                  options={mcpOptions}
-                  placeholder="MCP 도구 선택"
-                  displayMode="count"
-                />
+                <div className="flex items-center gap-2">
+                  <MultiSelectPopover
+                    values={mcpToolIds}
+                    onChange={setMcpToolIds}
+                    options={mcpOptions}
+                    placeholder="MCP 도구 선택"
+                    displayMode="count"
+                    showBulkActions
+                    className="flex-1 min-w-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setMcpInfoOpen((prev) => !prev)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
+                    aria-label="MCP 정보"
+                  >
+                    <Info className="h-4 w-4" />
+                  </button>
+                </div>
+                {mcpInfoOpen ? (
+                  <textarea
+                    readOnly
+                    value={mcpInfoText}
+                    className="mt-2 min-h-[80px] w-full resize-y rounded-md border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-600 whitespace-pre-wrap break-words"
+                  />
+                ) : null}
               </div>
 
               <div className="grid gap-2">

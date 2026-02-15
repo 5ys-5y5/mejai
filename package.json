@@ -4,11 +4,12 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/validate-imports-no-ts-extension.mjs",
+    "prebuild": "node scripts/validate-imports-no-ts-extension.mjs && node scripts/build-widget-launcher.mjs",
     "build": "next build",
     "start": "next start",
     "ws": "node ws-server.mjs",
     "lint": "eslint",
+    "build:widget-launcher": "node scripts/build-widget-launcher.mjs",
     "validate:runtime:quick-reply": "node scripts/validate-runtime-quick-reply-config.mjs",
     "validate:runtime:prompt-templates": "node scripts/validate-runtime-prompt-templates.mjs",
     "validate:runtime:template-keys": "node scripts/validate-runtime-template-keys.mjs",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "esbuild": "^0.25.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

@@ -25,6 +25,49 @@ function compactWhitespaceByLine(value: string) {
     .trim();
 }
 
+const TRAILING_TAIL_CHARS = new Set([
+  ".",
+  "!",
+  "?",
+  "~",
+  "…",
+  ")",
+  "]",
+  "}",
+  ">",
+  "\"",
+  "'",
+  "”",
+  "’",
+  "）",
+  "］",
+  "｝",
+  "〉",
+  "》",
+  "」",
+  "』",
+  "】",
+]);
+
+function splitTrailingTail(value: string) {
+  const raw = String(value || "");
+  const trailingWhitespaceMatch = raw.match(/\s+$/);
+  const trailingWhitespace = trailingWhitespaceMatch ? trailingWhitespaceMatch[0] : "";
+  let trimmed = trailingWhitespace ? raw.slice(0, -trailingWhitespace.length) : raw;
+  let tail = "";
+  while (trimmed.length > 0) {
+    const ch = trimmed[trimmed.length - 1];
+    if (!TRAILING_TAIL_CHARS.has(ch)) break;
+    tail = ch + tail;
+    trimmed = trimmed.slice(0, -1);
+  }
+  return { body: trimmed, tail, trailingWhitespace };
+}
+
+function hasTerminalPunctuation(value: string) {
+  return /[.!?~…]/.test(value);
+}
+
 function hasForceEndingYongRule(text: string) {
   const normalized = normalizeText(text);
   if (!normalized) return false;
@@ -67,42 +110,65 @@ function resolveSpeechLevel(styleTexts: string[], fullText: string): ReplyStyleD
   return null;
 }
 
-function splitTailPunctuation(value: string) {
-  const match = String(value || "").match(/^([\s\S]*?)([.!?~…]*)$/);
-  if (!match) return { body: String(value || ""), punct: "" };
-  return { body: match[1] || "", punct: match[2] || "" };
-}
-
 function applyCalmPunctuation(value: string) {
-  return value.replace(/!+/g, ".").replace(/\?{2,}/g, "?");
+  return value.replace(/!{2,}/g, "!").replace(/\?{2,}/g, "?");
 }
 
 function applyBrightPunctuation(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return trimmed;
-  if (/[!?~…]$/.test(trimmed)) return trimmed;
-  if (/[.]$/.test(trimmed)) return `${trimmed.slice(0, -1)}!`;
-  return `${trimmed}!`;
+  return trimmed;
+}
+
+function normalizeLines(value: string) {
+  return normalizeLineBreaks(String(value || "")).split("\n");
+}
+
+function findLastNonEmptyLineIndex(lines: string[]) {
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    if (String(lines[i] || "").trim()) return i;
+  }
+  return -1;
+}
+
+function applySpeechEndingToLine(line: string, speechLevel: ReplyStyleDirective["speechLevel"]) {
+  const { body, tail, trailingWhitespace } = splitTrailingTail(line);
+  let core = String(body || "").trimEnd();
+  if (!core) return line;
+
+  if (hasTerminalPunctuation(tail)) return line;
+  if (/(용)$/.test(core)) return line;
+
+  if (speechLevel === "formal") {
+    if (/(이에요|예요)$/.test(core)) {
+      core = core.replace(/(이에요|예요)$/, "입니다");
+    } else if (/(돼요|되요)$/.test(core)) {
+      core = core.replace(/(돼요|되요)$/, "됩니다");
+    } else if (/해요$/.test(core)) {
+      core = core.replace(/해요$/, "합니다");
+    } else if (/(습니다|입니다|됩니다|드립니다|다|요)$/.test(core)) {
+      return line;
+    } else {
+      return line;
+    }
+  } else if (speechLevel === "polite") {
+    return line;
+  } else if (speechLevel === "casual") {
+    return line;
+  }
+
+  return `${core}${tail}${trailingWhitespace}`;
 }
 
 function applySpeechEnding(value: string, speechLevel: ReplyStyleDirective["speechLevel"]) {
   if (!speechLevel) return value;
-  const text = String(value || "").trim();
-  if (!text) return text;
-  const { body, punct } = splitTailPunctuation(text);
-  let nextBody = body.trim();
-
-  if (speechLevel === "formal") {
-    if (/요$/.test(nextBody)) nextBody = nextBody.replace(/요$/, "습니다");
-    else if (!/(니다|다|용)$/.test(nextBody)) nextBody = `${nextBody}습니다`;
-  } else if (speechLevel === "polite") {
-    if (!/(요|니다|용)$/.test(nextBody)) nextBody = `${nextBody}요`;
-  } else if (speechLevel === "casual") {
-    if (/요$/.test(nextBody) && !/용$/.test(nextBody)) nextBody = nextBody.replace(/요$/, "");
-  }
-
-  const nextPunct = punct || ".";
-  return `${nextBody}${nextPunct}`;
+  const text = String(value || "");
+  if (!text.trim()) return text;
+  const lines = normalizeLines(text);
+  const lastIndex = findLastNonEmptyLineIndex(lines);
+  if (lastIndex < 0) return text;
+  lines[lastIndex] = applySpeechEndingToLine(lines[lastIndex], speechLevel);
+  return lines.join("\n");
 }
 
 function applyWarmTail(value: string, speechLevel: ReplyStyleDirective["speechLevel"], respectful: boolean) {
@@ -110,6 +176,13 @@ function applyWarmTail(value: string, speechLevel: ReplyStyleDirective["speechLe
   if (!text) return text;
   const alreadyHasTail = /(도와드릴|도와줄|안내해드릴|안내할게|필요하시면|원하시면)/.test(text);
   if (alreadyHasTail) return text;
+  const lines = normalizeLines(text);
+  const lastIndex = findLastNonEmptyLineIndex(lines);
+  const lastLine = lastIndex >= 0 ? String(lines[lastIndex] || "").trim() : "";
+  if (!lastLine) return text;
+  if (/[?？]$/.test(lastLine)) return text;
+  if (/(주세요|부탁|알려|입력해|선택해|확인해)\s*[.!?~…]?$/.test(lastLine)) return text;
+  if (lastLine.length < 12) return text;
   if (speechLevel === "casual") return `${text}\n필요하면 더 도와줄게.`;
   if (speechLevel === "formal" || respectful) return `${text}\n필요하시면 이어서 도와드리겠습니다.`;
   return `${text}\n필요하시면 이어서 도와드릴게요.`;
@@ -118,33 +191,31 @@ function applyWarmTail(value: string, speechLevel: ReplyStyleDirective["speechLe
 function applyYongEndingToSegment(value: string) {
   const text = String(value || "");
   if (!text.trim()) return text;
-  let out = text;
+  const { body, tail, trailingWhitespace } = splitTrailingTail(text);
+  let core = String(body || "").trimEnd();
+  if (!core) return text;
+  if (hasTerminalPunctuation(tail)) return text;
+  if (/용$/.test(core)) return text;
 
-  // 과거 규칙으로 생성된 중복 접미 정리 (예: "요.용" -> "용.")
-  out = out.replace(/요([.!?~…]?)용(?=\s|$)/g, (_match, punct) => `용${punct || ""}`);
+  const politeConverted =
+    core
+      .replace(/(해요|돼요|되요|줘요|져요|세요|이에요|예요)$/, (match) => {
+        const mapped = match.replace(/요$/, "용");
+        return mapped;
+      })
+      .replace(/([가-힣]{2,})요$/, (match, stem) => {
+        if (/(필|중요|개요|수요|비용|허용)$/.test(stem)) return match;
+        return `${stem}용`;
+      })
+      .replace(/([0-9,\s]{1,})요$/, (_match, stem) => `${String(stem)}용`);
 
-  // 해요체 계열: 요를 용으로 교체 (문장 종결부)
-  out = out
-    .replace(/(해요|돼요|되요|줘요|져요|세요|이에요|예요)([.!?~…]?)(?=\s|$)/g, (match, ending, punct) => {
-      if (String(match).includes("용")) return match;
-      const mapped = String(ending).replace(/요$/, "용");
-      return `${mapped}${punct || ""}`;
-    })
-    .replace(/([가-힣]{2,})요([.!?~…]?)(?=\s|$)/g, (match, stem, punct) => {
-      if (String(match).includes("용")) return match;
-      // 명사형(예: 필요) 오변환 방지용 최소 예외
-      if (/(필|중요|개요|수요|비용|허용)$/.test(stem)) return match;
-      return `${stem}용${punct || ""}`;
-    })
-    .replace(/([0-9,\s]{1,})요([.!?~…]?)(?=\s|$)/g, (_match, stem, punct) => `${String(stem)}용${punct || ""}`);
+  let next = politeConverted;
+  if (next === core) {
+    next = core.replace(/(입니다|습니다|드립니다|됩니다)$/, (ending) => `${ending}용`);
+  }
 
-  // 합니다체 계열: 문장 종결일 때만 "용" 부여
-  out = out.replace(/(입니다|습니다|드립니다|됩니다)([.!?~…]?)(?=\s|$)/g, (match, ending, punct) => {
-    if (String(match).includes("용")) return match;
-    return `${ending}용${punct || ""}`;
-  });
-
-  return out;
+  if (next === core) return text;
+  return `${next}${tail}${trailingWhitespace}`;
 }
 
 function applyYongEndingByLine(value: string) {
