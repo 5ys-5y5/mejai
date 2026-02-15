@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ComponentType, type ReactNode, type FormEvent } from "react";
+import { useMemo, useState, type ComponentType, type ReactNode } from "react";
 import {
   AdminTag,
   AgentSelectPopover,
@@ -40,6 +40,10 @@ import {
   TopHeaderShell,
   TypographyScaleShell,
   WidgetConversationLayout,
+  WidgetHeaderLego,
+  WidgetHistoryPanelLego,
+  WidgetShell,
+  WidgetTabBarLego,
   type WidgetConversationTab,
   type WidgetConversationSession,
   type SelectOption,
@@ -60,11 +64,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RENDER_POLICY } from "@/app/api/runtime/chat/policies/renderPolicy";
-import { apiFetch } from "@/lib/apiClient";
 import {
   getDefaultConversationPageFeatures,
-  applyConversationFeatureVisibility,
-  WIDGET_PAGE_KEY,
   resolveConversationSetupUi,
 } from "@/lib/conversation/pageFeaturePolicy";
 import {
@@ -73,7 +74,6 @@ import {
   type ModelState,
 } from "@/lib/conversation/client/laboratoryPageState";
 import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
-import { toast } from "sonner";
 
 type CategoryKey =
   | "all"
@@ -82,7 +82,6 @@ type CategoryKey =
   | "input"
   | "select"
   | "conversation"
-  | "widget"
   | "display"
   | "feedback"
   | "overlay"
@@ -95,8 +94,7 @@ const categoryLabels: Array<{ key: CategoryKey; label: string }> = [
   { key: "action", label: "Action" },
   { key: "input", label: "Input" },
   { key: "select", label: "Select" },
-  { key: "conversation", label: "Conversation" },
-  { key: "widget", label: "Widget" },
+  { key: "conversation", label: "Conversation + Widget" },
   { key: "display", label: "Display" },
   { key: "feedback", label: "Feedback" },
   { key: "overlay", label: "Overlay" },
@@ -229,17 +227,6 @@ type DefinitionCatalogItem = {
   note: string;
 };
 
-type WidgetConfig = {
-  id?: string;
-  name?: string | null;
-  agent_id?: string | null;
-  public_key?: string | null;
-  allowed_domains?: string[] | null;
-  allowed_paths?: string[] | null;
-  theme?: Record<string, unknown> | null;
-  is_active?: boolean | null;
-};
-
 const CONVERSATION_PARTS_FILE = "src/components/design-system/conversation/ConversationUI.parts.tsx";
 const WIDGET_PARTS_FILE = "src/components/design-system/widget/WidgetUI.parts.tsx";
 const WIDGET_SHELL_FILE = "src/components/design-system/widget/WidgetShell.tsx";
@@ -351,60 +338,54 @@ const widgetDefinitionGroups: Array<{ label: string; items: WidgetDefinitionItem
     label: "Widget Types",
     items: [
       {
-        name: "WidgetMessage",
-        type: "Type Alias",
-        depends: "WidgetShell",
-        role: "위젯 메시지 최소 타입",
-        definedAt: `${WIDGET_SHELL_FILE}:10`,
-      },
-      {
         name: "WidgetShellProps",
         type: "Type Alias",
-        depends: "WidgetShell",
-        role: "WidgetShell props 계약",
-        definedAt: `${WIDGET_SHELL_FILE}:16`,
+        depends: "WidgetShell, WidgetHeaderLegoProps, ConversationModelChatColumnLegoProps",
+        role: "채팅 셸 props 계약",
+        definedAt: `${WIDGET_SHELL_FILE}:8`,
       },
       {
         name: "WidgetHeaderLegoProps",
         type: "Type Alias",
         depends: "WidgetHeaderLego",
         role: "위젯 헤더 레고 props 계약",
-        definedAt: `${WIDGET_PARTS_FILE}:10`,
+        definedAt: `${WIDGET_PARTS_FILE}:11`,
       },
       {
         name: "WidgetConversationTab",
         type: "Type Alias",
         depends: "WidgetTabBarLego",
         role: "위젯 탭 타입(chat/list/policy)",
-        definedAt: `${WIDGET_PARTS_FILE}:61`,
+        definedAt: `${WIDGET_PARTS_FILE}:62`,
       },
       {
         name: "WidgetTabBarLegoProps",
         type: "Type Alias",
         depends: "WidgetTabBarLego",
         role: "하단 탭바 레고 props 계약",
-        definedAt: `${WIDGET_PARTS_FILE}:63`,
+        definedAt: `${WIDGET_PARTS_FILE}:64`,
       },
       {
         name: "WidgetConversationSession",
         type: "Type Alias",
         depends: "WidgetHistoryPanelLego",
         role: "히스토리 세션 아이템 타입",
-        definedAt: `${WIDGET_PARTS_FILE}:116`,
+        definedAt: `${WIDGET_PARTS_FILE}:117`,
       },
       {
         name: "WidgetHistoryPanelLegoProps",
         type: "Type Alias",
         depends: "WidgetHistoryPanelLego",
-        role: "히스토리 패널 레고 props 계약",
-        definedAt: `${WIDGET_PARTS_FILE}:122`,
+        role: "히스토리 패널 props 계약(세션 선택 → ConversationThread)",
+        definedAt: `${WIDGET_PARTS_FILE}:123`,
       },
       {
         name: "WidgetConversationLayoutProps",
         type: "Type Alias",
-        depends: "WidgetConversationLayout",
-        role: "위젯 레이아웃 조립 props 계약",
-        definedAt: `${WIDGET_LAYOUT_FILE}:13`,
+        depends:
+          "WidgetConversationLayout, WidgetHeaderLegoProps, WidgetTabBarLegoProps, WidgetHistoryPanelLegoProps, ConversationModelChatColumnLegoProps, ConversationModelSetupColumnLegoProps",
+        role: "위젯 탭 조립 props 계약",
+        definedAt: `${WIDGET_LAYOUT_FILE}:15`,
       },
     ],
   },
@@ -416,35 +397,36 @@ const widgetDefinitionGroups: Array<{ label: string; items: WidgetDefinitionItem
         type: "UI Component",
         depends: "WidgetHeaderLegoProps",
         role: "헤더(브랜드/상태/아이콘)",
-        definedAt: `${WIDGET_PARTS_FILE}:19`,
+        definedAt: `${WIDGET_PARTS_FILE}:20`,
       },
       {
         name: "WidgetTabBarLego",
         type: "UI Component",
         depends: "WidgetTabBarLegoProps, WidgetConversationTab",
         role: "하단 탭바(대화/리스트/정책)",
-        definedAt: `${WIDGET_PARTS_FILE}:69`,
+        definedAt: `${WIDGET_PARTS_FILE}:70`,
       },
       {
         name: "WidgetHistoryPanelLego",
         type: "UI Component",
         depends: "WidgetHistoryPanelLegoProps, ConversationThread",
-        role: "대화 이력 패널",
-        definedAt: `${WIDGET_PARTS_FILE}:147`,
+        role: "리스트 탭 패널(세션 선택 → ConversationThread)",
+        definedAt: `${WIDGET_PARTS_FILE}:148`,
       },
       {
         name: "WidgetShell",
         type: "UI Component",
-        depends: "WidgetHeaderLego, WidgetShellProps",
-        role: "위젯 전체 셸(헤더+본문+푸터)",
-        definedAt: `${WIDGET_SHELL_FILE}:36`,
+        depends: "WidgetHeaderLego, ConversationModelChatColumnLego, WidgetShellProps",
+        role: "채팅 셸(헤더 + 대화 패널)",
+        definedAt: `${WIDGET_SHELL_FILE}:19`,
       },
       {
         name: "WidgetConversationLayout",
         type: "UI Component",
-        depends: "WidgetShell, WidgetTabBarLego, WidgetHistoryPanelLego",
-        role: "위젯 탭/콘텐츠 조립 레이아웃",
-        definedAt: `${WIDGET_LAYOUT_FILE}:29`,
+        depends:
+          "WidgetHeaderLego, ConversationModelChatColumnLego, WidgetHistoryPanelLego, ConversationModelSetupColumnLego, WidgetTabBarLego",
+        role: "대화/리스트/정책 탭 조립(헤더 + 콘텐츠 + 탭바)",
+        definedAt: `${WIDGET_LAYOUT_FILE}:39`,
       },
     ],
   },
@@ -637,6 +619,67 @@ function sortConversationEntries<T extends { name: string }>(items: T[]): T[] {
   return ordered.map((name) => byName.get(name)!).filter(Boolean);
 }
 
+function getWidgetDepends(name: string): string {
+  const found = findWidgetDefinition(name);
+  return found?.depends || "";
+}
+
+function sortWidgetEntries<T extends { name: string }>(items: T[]): T[] {
+  const indexByName = new Map(items.map((item, idx) => [item.name, idx]));
+  const dependsByName = new Map(
+    items.map((item) => [
+      item.name,
+      getWidgetDepends(item.name)
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0),
+    ])
+  );
+  const inDegree = new Map<string, number>();
+  const edges = new Map<string, Set<string>>();
+
+  items.forEach((item) => {
+    inDegree.set(item.name, 0);
+    edges.set(item.name, new Set());
+  });
+
+  items.forEach((item) => {
+    const deps = dependsByName.get(item.name) || [];
+    deps.forEach((dep) => {
+      if (!indexByName.has(dep)) return;
+      edges.get(dep)?.add(item.name);
+      inDegree.set(item.name, (inDegree.get(item.name) || 0) + 1);
+    });
+  });
+
+  const queue = items
+    .map((item) => item.name)
+    .filter((name) => (inDegree.get(name) || 0) === 0)
+    .sort((a, b) => (indexByName.get(a) || 0) - (indexByName.get(b) || 0));
+
+  const ordered: string[] = [];
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    ordered.push(current);
+    const nextSet = edges.get(current);
+    if (!nextSet) continue;
+    nextSet.forEach((next) => {
+      inDegree.set(next, (inDegree.get(next) || 0) - 1);
+      if ((inDegree.get(next) || 0) === 0) {
+        queue.push(next);
+        queue.sort((a, b) => (indexByName.get(a) || 0) - (indexByName.get(b) || 0));
+      }
+    });
+  }
+
+  if (ordered.length !== items.length) {
+    return items.slice();
+  }
+
+  const byName = new Map(items.map((item) => [item.name, item]));
+  return ordered.map((name) => byName.get(name)!).filter(Boolean);
+}
+
 function renderConversationDefinitionMeta(name: string) {
   const found = findConversationDefinition(name);
   if (!found) return <DependencyMeta type="Unknown" name={name} depends="none" />;
@@ -664,6 +707,20 @@ function renderWidgetDefinitionMeta(item: WidgetDefinitionItem) {
       definedAt={item.definedAt}
     />
   );
+}
+
+function findWidgetDefinition(name: string): WidgetDefinitionItem | null {
+  for (const group of widgetDefinitionGroups) {
+    const item = group.items.find((entry) => entry.name === name);
+    if (item) return item;
+  }
+  return null;
+}
+
+function renderWidgetDefinitionMetaByName(name: string) {
+  const found = findWidgetDefinition(name);
+  if (!found) return <DependencyMeta type="Unknown" name={name} depends="none" />;
+  return renderWidgetDefinitionMeta(found);
 }
 
 
@@ -758,9 +815,30 @@ function createDemoModelState(): ModelState {
   };
 }
 
-function buildWidgetId() {
-  return `widget_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
+const WIDGET_DEMO_BRAND_NAME = "Mejai";
+const WIDGET_DEMO_STATUS = "연결됨";
+const WIDGET_DEMO_ICON_URL = "/brand/logo.png";
+
+const WIDGET_DEMO_SESSIONS: WidgetConversationSession[] = [
+  { id: "sess-demo-101", session_code: "W-2026-02-01", started_at: "2026-02-12T06:32:00Z" },
+  { id: "sess-demo-102", session_code: "W-2026-01-20", started_at: "2026-02-10T08:05:00Z" },
+  { id: "sess-demo-103", session_code: "W-2026-01-11", started_at: "2026-02-08T03:40:00Z" },
+];
+
+const WIDGET_DEMO_HISTORY: Record<string, ChatMessage[]> = {
+  "sess-demo-101": [
+    { id: "sess-demo-101-u1", role: "user", content: "배송 상태 알려줘" },
+    { id: "sess-demo-101-b1", role: "bot", content: "현재 출고 준비 중입니다." },
+  ],
+  "sess-demo-102": [
+    { id: "sess-demo-102-u1", role: "user", content: "반품 절차 알려줘" },
+    { id: "sess-demo-102-b1", role: "bot", content: "주문 상세에서 반품 신청을 진행할 수 있습니다." },
+  ],
+  "sess-demo-103": [
+    { id: "sess-demo-103-u1", role: "user", content: "교환 가능한가요?" },
+    { id: "sess-demo-103-b1", role: "bot", content: "상품 수령 후 7일 이내 교환 가능합니다." },
+  ],
+};
 
 export function DesignSystemContent() {
   const [activeCategory, setActiveCategory] = useState<CategoryKey>("all");
@@ -803,85 +881,10 @@ export function DesignSystemContent() {
   const [iconSearch, setIconSearch] = useState("");
   const [iconPage, setIconPage] = useState(1);
 
-  const [widgetBrandName, setWidgetBrandName] = useState("Mejai");
-  const [widgetStatus, setWidgetStatus] = useState("연결됨");
-  const [widgetIconUrl, setWidgetIconUrl] = useState("/brand/logo.png");
-  const [widgetGreeting, setWidgetGreeting] = useState("안녕하세요. 무엇을 도와드릴까요?");
-  const [widgetPlaceholder, setWidgetPlaceholder] = useState("메시지를 입력하세요");
-  const [widgetDisclaimer, setWidgetDisclaimer] = useState("");
-  const [widgetConfig, setWidgetConfig] = useState<WidgetConfig | null>(null);
-  const [widgetConfigLoading, setWidgetConfigLoading] = useState(true);
-  const [widgetConfigSaving, setWidgetConfigSaving] = useState(false);
-  const [widgetConfigError, setWidgetConfigError] = useState<string | null>(null);
-  const [widgetAdminPreview, setWidgetAdminPreview] = useState(false);
-  const [widgetShowPolicyTab, setWidgetShowPolicyTab] = useState(false);
-  const [widgetActiveTab, setWidgetActiveTab] = useState<WidgetConversationTab>("chat");
-  const [widgetPreviewMessages, setWidgetPreviewMessages] = useState<ChatMessage[]>(() => [
-    { id: buildWidgetId(), role: "bot", content: "안녕하세요. 무엇을 도와드릴까요?" },
-  ]);
-  const [widgetPreviewInput, setWidgetPreviewInput] = useState("");
-  const [widgetPreviewSending, setWidgetPreviewSending] = useState(false);
-  const [widgetPreviewPolicyConfig, setWidgetPreviewPolicyConfig] = useState({ llm: "chatgpt", inlineKb: "" });
-  const [widgetPreviewSelectedMessageIds, setWidgetPreviewSelectedMessageIds] = useState<string[]>([]);
-  const [widgetPreviewQuickReplyDrafts, setWidgetPreviewQuickReplyDrafts] = useState<Record<string, string[]>>({});
-  const [widgetPreviewLockedReplySelections, setWidgetPreviewLockedReplySelections] = useState<Record<string, string[]>>({});
-
-  useEffect(() => {
-    let active = true;
-    const loadWidgetConfig = async () => {
-      setWidgetConfigLoading(true);
-      try {
-        const res = await apiFetch<{ item: WidgetConfig | null }>("/api/widgets");
-        if (!active) return;
-        const item = res.item;
-        setWidgetConfig(item);
-        const theme = (item?.theme || {}) as Record<string, any>;
-        setWidgetBrandName(String(item?.name || "Web Widget"));
-        setWidgetIconUrl(
-          String(
-            theme.launcher_icon_url ||
-              theme.launcherIconUrl ||
-              theme.icon_url ||
-              theme.iconUrl ||
-              ""
-          )
-        );
-        setWidgetGreeting(String(theme.greeting || "안녕하세요. 무엇을 도와드릴까요?"));
-        setWidgetPlaceholder(String(theme.input_placeholder || "메시지를 입력하세요"));
-        setWidgetDisclaimer(String(theme.disclaimer || ""));
-        setWidgetConfigError(null);
-      } catch (error) {
-        if (!active) return;
-        setWidgetConfigError("위젯 설정을 불러오지 못했습니다.");
-      } finally {
-        if (active) setWidgetConfigLoading(false);
-      }
-    };
-    void loadWidgetConfig();
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!widgetShowPolicyTab && widgetActiveTab === "policy") {
-      setWidgetActiveTab("chat");
-    }
-  }, [widgetActiveTab, widgetShowPolicyTab]);
-
-  useEffect(() => {
-    setWidgetPreviewMessages((prev) => {
-      if (prev.length === 0) {
-        return [{ id: buildWidgetId(), role: "bot", content: widgetGreeting }];
-      }
-      if (prev.length === 1 && prev[0].role === "bot") {
-        return [{ ...prev[0], content: widgetGreeting }];
-      }
-      return prev;
-    });
-  }, [widgetGreeting]);
-
-  const widgetControlsDisabled = widgetConfigLoading || widgetConfigSaving;
+  const [widgetDemoActiveTab, setWidgetDemoActiveTab] = useState<WidgetConversationTab>("chat");
+  const [widgetDemoSessionId, setWidgetDemoSessionId] = useState<string | null>(
+    () => WIDGET_DEMO_SESSIONS[0]?.id ?? null
+  );
 
   const selectedMultiLabel = useMemo(() => {
     if (!multiValues.length) return "-";
@@ -911,95 +914,9 @@ export function DesignSystemContent() {
   const safeIconPage = Math.min(iconPage, iconTotalPages);
   const iconPageEntries = filteredIconEntries.slice((safeIconPage - 1) * iconPageSize, safeIconPage * iconPageSize);
 
-  const handleWidgetPreviewSubmit = (rawText: string) => {
-    const text = rawText.trim();
-    if (!text) return;
-    setWidgetPreviewInput("");
-    setWidgetPreviewSending(true);
-    setWidgetPreviewMessages((prev) => [
-      ...prev,
-      { id: buildWidgetId(), role: "user", content: text },
-      { id: buildWidgetId(), role: "bot", content: "샘플 응답입니다. 실제 위젯에서는 응답이 이어집니다." },
-    ]);
-    setWidgetPreviewSending(false);
-  };
-
-  const handleWidgetSend = (event: FormEvent) => {
-    event.preventDefault();
-    handleWidgetPreviewSubmit(widgetPreviewInput);
-  };
-
-  const handleWidgetReset = () => {
-    setWidgetPreviewInput("");
-    setWidgetPreviewSelectedMessageIds([]);
-    setWidgetPreviewMessages([{ id: buildWidgetId(), role: "bot", content: widgetGreeting }]);
-  };
-
-  const handleWidgetSave = async () => {
-    setWidgetConfigSaving(true);
-    try {
-      const baseTheme = (widgetConfig?.theme || {}) as Record<string, unknown>;
-      const nextTheme = {
-        ...baseTheme,
-        greeting: widgetGreeting,
-        input_placeholder: widgetPlaceholder,
-        launcher_icon_url: widgetIconUrl || "",
-        disclaimer: widgetDisclaimer,
-      };
-      const payload = {
-        name: widgetBrandName || "Web Widget",
-        agent_id: widgetConfig?.agent_id || null,
-        allowed_domains: widgetConfig?.allowed_domains || [],
-        allowed_paths: widgetConfig?.allowed_paths || [],
-        theme: nextTheme,
-        is_active: typeof widgetConfig?.is_active === "boolean" ? widgetConfig?.is_active : true,
-        rotate_key: false,
-      };
-      const res = await apiFetch<{ item: WidgetConfig }>("/api/widgets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      setWidgetConfig(res.item);
-      toast.success("위젯 UI 설정이 저장되었습니다.");
-    } catch (error) {
-      toast.error("위젯 설정 저장에 실패했습니다.");
-    } finally {
-      setWidgetConfigSaving(false);
-    }
-  };
-
-  const widgetPreviewSessions = useMemo<WidgetConversationSession[]>(
-    () => [
-      { id: "sess-demo-101", session_code: "W-2026-02-01", started_at: "2026-02-12T06:32:00Z" },
-      { id: "sess-demo-102", session_code: "W-2026-01-20", started_at: "2026-02-10T08:05:00Z" },
-      { id: "sess-demo-103", session_code: "W-2026-01-11", started_at: "2026-02-08T03:40:00Z" },
-    ],
-    []
-  );
-  const [widgetPreviewSessionId, setWidgetPreviewSessionId] = useState<string | null>(
-    () => widgetPreviewSessions[0]?.id ?? null
-  );
-  const widgetPreviewHistoryMap = useMemo<Record<string, ChatMessage[]>>(
-    () => ({
-      "sess-demo-101": [
-        { id: "sess-demo-101-u1", role: "user", content: "배송 상태 알려줘" },
-        { id: "sess-demo-101-b1", role: "bot", content: "현재 출고 준비 중입니다." },
-      ],
-      "sess-demo-102": [
-        { id: "sess-demo-102-u1", role: "user", content: "반품 절차 알려줘" },
-        { id: "sess-demo-102-b1", role: "bot", content: "주문 상세에서 반품 신청을 진행할 수 있습니다." },
-      ],
-      "sess-demo-103": [
-        { id: "sess-demo-103-u1", role: "user", content: "교환 가능한가요?" },
-        { id: "sess-demo-103-b1", role: "bot", content: "상품 수령 후 7일 이내 교환 가능합니다." },
-      ],
-    }),
-    []
-  );
-  const widgetPreviewHistoryMessages = useMemo(
-    () => (widgetPreviewSessionId ? widgetPreviewHistoryMap[widgetPreviewSessionId] || [] : []),
-    [widgetPreviewHistoryMap, widgetPreviewSessionId]
+  const widgetDemoHistoryMessages = useMemo(
+    () => (widgetDemoSessionId ? WIDGET_DEMO_HISTORY[widgetDemoSessionId] || [] : []),
+    [widgetDemoSessionId]
   );
 
   const conversationLeadDayMessage: ConversationReplyDemoMessage = {
@@ -1133,150 +1050,6 @@ export function DesignSystemContent() {
     describeRoute: (route) => `Route(${route}) 샘플 설명`,
   };
   const demoAssembly = createConversationModelLegos(demoAssemblyProps);
-
-  const widgetPreviewPageFeatures = useMemo(
-    () =>
-      applyConversationFeatureVisibility(getDefaultConversationPageFeatures(WIDGET_PAGE_KEY), widgetAdminPreview),
-    [widgetAdminPreview]
-  );
-  const widgetPreviewPolicyFeatures = useMemo(
-    () =>
-      applyConversationFeatureVisibility(
-        getDefaultConversationPageFeatures(WIDGET_PAGE_KEY),
-        widgetAdminPreview || widgetShowPolicyTab
-      ),
-    [widgetAdminPreview, widgetShowPolicyTab]
-  );
-  const widgetPreviewSetupUi = useMemo(() => resolveConversationSetupUi(WIDGET_PAGE_KEY), []);
-  const widgetPreviewSetupOrder = useMemo(
-    () =>
-      widgetPreviewSetupUi.order.filter(
-        (key): key is "kbSelector" | "adminKbSelector" | "routeSelector" =>
-          key === "kbSelector" || key === "adminKbSelector" || key === "routeSelector"
-      ),
-    [widgetPreviewSetupUi.order]
-  );
-  const widgetPreviewModel = useMemo(
-    () => ({
-      id: "widget-preview",
-      config: {
-        llm: widgetPreviewPolicyConfig.llm,
-        kbId: "",
-        inlineKb: widgetPreviewPolicyConfig.inlineKb,
-        inlineKbSampleSelectionOrder: [],
-        adminKbIds: [],
-        mcpProviderKeys: [],
-        mcpToolIds: [],
-        route: "",
-      },
-      detailsOpen: {
-        llm: false,
-        kb: false,
-        adminKb: false,
-        mcp: false,
-        route: false,
-      },
-      setupMode: "new" as const,
-      selectedAgentGroupId: "",
-      selectedAgentId: "",
-      sessions: [],
-      sessionsLoading: false,
-      sessionsError: null,
-      selectedSessionId: null,
-      historyMessages: [],
-      messages: widgetPreviewMessages,
-      conversationMode: "new" as const,
-      editSessionId: null,
-      sessionId: null,
-      layoutExpanded: false,
-      adminLogControlsOpen: false,
-      showAdminLogs: false,
-      chatSelectionEnabled: false,
-      selectedMessageIds: widgetPreviewSelectedMessageIds,
-      input: widgetPreviewInput,
-      sending: widgetPreviewSending,
-    }),
-    [
-      widgetPreviewInput,
-      widgetPreviewMessages,
-      widgetPreviewPolicyConfig.inlineKb,
-      widgetPreviewPolicyConfig.llm,
-      widgetPreviewSelectedMessageIds,
-      widgetPreviewSending,
-    ]
-  );
-  const widgetPreviewChatProps = useMemo(
-    () => ({
-      model: widgetPreviewModel,
-      visibleMessages: widgetPreviewMessages,
-      isAdminUser: widgetAdminPreview,
-      quickReplyDrafts: widgetPreviewQuickReplyDrafts,
-      lockedReplySelections: widgetPreviewLockedReplySelections,
-      setQuickReplyDrafts: setWidgetPreviewQuickReplyDrafts,
-      setLockedReplySelections: setWidgetPreviewLockedReplySelections,
-      adminFeatures: {
-        enabled: widgetPreviewPageFeatures.adminPanel.enabled,
-        selectionToggle: widgetPreviewPageFeatures.adminPanel.selectionToggle,
-        logsToggle: widgetPreviewPageFeatures.adminPanel.logsToggle,
-        messageSelection: widgetPreviewPageFeatures.adminPanel.messageSelection,
-        copyConversation: widgetPreviewPageFeatures.adminPanel.copyConversation,
-        copyIssue: widgetPreviewPageFeatures.adminPanel.copyIssue,
-      },
-      interactionFeatures: {
-        quickReplies: widgetPreviewPageFeatures.interaction.quickReplies,
-        productCards: widgetPreviewPageFeatures.interaction.productCards,
-        prefill: widgetPreviewPageFeatures.interaction.prefill,
-        inputSubmit: widgetPreviewPageFeatures.interaction.inputSubmit,
-      },
-      onToggleAdminOpen: () => undefined,
-      onToggleSelectionMode: () => undefined,
-      onToggleLogs: () => undefined,
-      onCopyConversation: () => undefined,
-      onCopyIssue: () => undefined,
-      onToggleMessageSelection: (messageId: string) => {
-        setWidgetPreviewSelectedMessageIds((prev) =>
-          prev.includes(messageId) ? prev.filter((id) => id !== messageId) : [...prev, messageId]
-        );
-      },
-      onSubmitMessage: (text: string) => {
-        handleWidgetPreviewSubmit(text);
-      },
-      onExpand: () => undefined,
-      onCollapse: () => undefined,
-      onInputChange: setWidgetPreviewInput,
-      onSetChatScrollRef: () => undefined,
-    }),
-    [
-      handleWidgetPreviewSubmit,
-      widgetPreviewLockedReplySelections,
-      widgetPreviewMessages,
-      widgetPreviewModel,
-      widgetPreviewPageFeatures,
-      widgetPreviewQuickReplyDrafts,
-      widgetAdminPreview,
-    ]
-  );
-  const widgetPreviewSetupProps = useMemo(
-    () => ({
-      ...demoAssembly.setupLegoProps,
-      model: widgetPreviewModel,
-      pageFeatures: widgetPreviewPolicyFeatures,
-      setupUi: widgetPreviewSetupUi,
-      isAdminUser: widgetAdminPreview,
-      newModelControlOrder: widgetPreviewSetupOrder,
-      onInlineKbChange: (value: string) =>
-        setWidgetPreviewPolicyConfig((prev) => ({ ...prev, inlineKb: value })),
-      onLlmChange: (value: string) => setWidgetPreviewPolicyConfig((prev) => ({ ...prev, llm: value })),
-    }),
-    [
-      demoAssembly.setupLegoProps,
-      widgetPreviewModel,
-      widgetPreviewPolicyFeatures,
-      widgetPreviewSetupOrder,
-      widgetPreviewSetupUi,
-      widgetAdminPreview,
-    ]
-  );
 
   const conversationDemoEntries: Array<{ name: string; node: ReactNode }> = [
     {
@@ -1544,6 +1317,107 @@ export function DesignSystemContent() {
     },
   ];
 
+  const widgetDemoEntries: Array<{ name: string; node: ReactNode }> = [
+    {
+      name: "WidgetHeaderLego",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderWidgetDefinitionMetaByName("WidgetHeaderLego")}
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <WidgetHeaderLego
+              brandName={WIDGET_DEMO_BRAND_NAME}
+              status={WIDGET_DEMO_STATUS}
+              iconUrl={WIDGET_DEMO_ICON_URL}
+              headerActions={(
+                <Button variant="outline" size="sm" className="h-8 px-3 text-[11px]">
+                  상담원 연결
+                </Button>
+              )}
+              onNewConversation={() => undefined}
+              showNewConversation
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: "WidgetTabBarLego",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderWidgetDefinitionMetaByName("WidgetTabBarLego")}
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <WidgetTabBarLego
+              activeTab={widgetDemoActiveTab}
+              onTabChange={setWidgetDemoActiveTab}
+              showPolicyTab
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: "WidgetHistoryPanelLego",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderWidgetDefinitionMetaByName("WidgetHistoryPanelLego")}
+          <div className="h-[280px] overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <WidgetHistoryPanelLego
+              sessions={WIDGET_DEMO_SESSIONS}
+              selectedSessionId={widgetDemoSessionId}
+              onSelectSession={setWidgetDemoSessionId}
+              historyMessages={widgetDemoHistoryMessages}
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: "WidgetShell",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderWidgetDefinitionMetaByName("WidgetShell")}
+          <div className="h-[420px] overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+            <WidgetShell
+              brandName={WIDGET_DEMO_BRAND_NAME}
+              status={WIDGET_DEMO_STATUS}
+              iconUrl={WIDGET_DEMO_ICON_URL}
+              chatLegoProps={demoAssembly.chatLegoProps}
+              onNewConversation={() => undefined}
+              showNewConversation={false}
+              className="h-full"
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      name: "WidgetConversationLayout",
+      node: (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {renderWidgetDefinitionMetaByName("WidgetConversationLayout")}
+          <div className="h-[560px] overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            <WidgetConversationLayout
+              brandName={WIDGET_DEMO_BRAND_NAME}
+              status={WIDGET_DEMO_STATUS}
+              iconUrl={WIDGET_DEMO_ICON_URL}
+              chatLegoProps={demoAssembly.chatLegoProps}
+              setupLegoProps={demoAssembly.setupLegoProps}
+              fill={false}
+              className="h-full"
+              activeTab={widgetDemoActiveTab}
+              onTabChange={setWidgetDemoActiveTab}
+              showPolicyTab
+              sessions={WIDGET_DEMO_SESSIONS}
+              selectedSessionId={widgetDemoSessionId}
+              onSelectSession={setWidgetDemoSessionId}
+              historyMessages={widgetDemoHistoryMessages}
+            />
+          </div>
+        </div>
+      ),
+    },
+  ];
+
   const sections: DemoSection[] = [
     {
       key: "foundation",
@@ -1764,8 +1638,8 @@ export function DesignSystemContent() {
       node: (
         <SectionBlock
           id="conversation"
-          title="Conversation Dependency View"
-          description="각 항목을 type / name / depends 기준으로 보여주는 페이지"
+          title="Conversation + Widget UI"
+          description="Conversation/Widget UI 구성 요소의 정의, 의존성, 샘플 UI를 한 곳에서 관리합니다."
         >
           <div className="grid grid-cols-1 gap-4">
             <Card className="p-4">
@@ -1827,162 +1701,12 @@ export function DesignSystemContent() {
               />
             </Card>
 
-          </div>
-        </SectionBlock>
-      ),
-    },
-    {
-      key: "widget",
-      category: "widget",
-      node: (
-        <SectionBlock
-          id="widget"
-          title="Widget UI"
-          description="웹 위젯 UI 구성 요소를 디자인 시스템 컴포넌트로 조합하고, 입력값을 즉시 반영합니다."
-        >
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <Card className="p-4 space-y-3">
-              <div className="text-sm font-semibold text-slate-900">Widget Controls</div>
-              <div className="grid gap-2">
-                <button
-                  type="button"
-                  onClick={() => setWidgetAdminPreview((prev) => !prev)}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
-                >
-                  <span>관리자 미리보기</span>
-                  <InlineToggle checked={widgetAdminPreview} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setWidgetShowPolicyTab((prev) => !prev)}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
-                >
-                  <span>정책 탭 표시 (허용 계정 시)</span>
-                  <InlineToggle checked={widgetShowPolicyTab} />
-                </button>
-                <div className="text-[11px] text-slate-500">
-                  정책 탭은 실제 위젯에서는 허용 계정/도메인 조건으로 결정됩니다.
-                </div>
-              </div>
-              {widgetConfigError ? (
-                <StateBanner tone="danger" title="위젯 설정 로드 실패" description={widgetConfigError} />
-              ) : null}
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">브랜드 이름</div>
-                <Input
-                  value={widgetBrandName}
-                  onChange={(e) => setWidgetBrandName(e.target.value)}
-                  className="h-9"
-                  disabled={widgetControlsDisabled}
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">상태 텍스트</div>
-                <Input
-                  value={widgetStatus}
-                  onChange={(e) => setWidgetStatus(e.target.value)}
-                  className="h-9"
-                  disabled={widgetControlsDisabled}
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">아이콘 URL (런처/헤더 공통)</div>
-                <Input
-                  value={widgetIconUrl}
-                  onChange={(e) => setWidgetIconUrl(e.target.value)}
-                  placeholder="/brand/logo.png"
-                  className="h-9"
-                  disabled={widgetControlsDisabled}
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">환영 메시지</div>
-                <Input
-                  value={widgetGreeting}
-                  onChange={(e) => setWidgetGreeting(e.target.value)}
-                  className="h-9"
-                  disabled={widgetControlsDisabled}
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">입력 안내 문구</div>
-                <Input
-                  value={widgetPlaceholder}
-                  onChange={(e) => setWidgetPlaceholder(e.target.value)}
-                  className="h-9"
-                  disabled={widgetControlsDisabled}
-                />
-              </label>
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">하단 안내 문구</div>
-                <Input
-                  value={widgetDisclaimer}
-                  onChange={(e) => setWidgetDisclaimer(e.target.value)}
-                  placeholder="예: 개인정보는 안전하게 처리됩니다."
-                  className="h-9"
-                  disabled={widgetControlsDisabled}
-                />
-              </label>
-              <div className="flex items-center gap-2">
-                <Button type="button" onClick={handleWidgetSave} disabled={widgetControlsDisabled}>
-                  {widgetConfigSaving ? "저장 중..." : "저장"}
-                </Button>
-                <div className="text-[11px] text-slate-500">저장 시 실제 위젯 UI에 즉시 반영됩니다.</div>
-              </div>
-              <StateBanner
-                tone="info"
-                title="미리보기 안내"
-                description="좌측 값을 변경하면 우측 위젯 UI에 즉시 반영됩니다."
-              />
-            </Card>
             <Card className="p-4">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="text-sm font-semibold text-slate-900">Widget Preview</div>
-                <Button variant="outline" size="sm" onClick={handleWidgetReset}>
-                  대화 초기화
-                </Button>
-              </div>
-              <div className="mb-3 flex items-center gap-3">
-                <div className="text-xs font-semibold text-slate-600">런처(확장 전)</div>
-                <div className="h-14 w-14 rounded-full border border-slate-200 bg-white overflow-hidden shadow-sm">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={widgetIconUrl || "/brand/logo.png"}
-                    alt=""
-                    className="block h-full w-full object-cover"
-                  />
-                </div>
-              </div>
-              <div className="mx-auto w-full max-w-[380px]">
-                <div className="h-[560px] overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  <WidgetConversationLayout
-                    brandName={widgetBrandName}
-                    status={widgetAdminPreview ? widgetStatus : ""}
-                    iconUrl={widgetIconUrl || "/brand/logo.png"}
-                    messages={[]}
-                    inputPlaceholder={widgetPlaceholder}
-                    disclaimer={widgetDisclaimer}
-                    inputValue={widgetPreviewInput}
-                    onInputChange={setWidgetPreviewInput}
-                    onSend={handleWidgetSend}
-                    onNewConversation={handleWidgetReset}
-                    sendDisabled={!widgetPreviewInput.trim()}
-                    fill={false}
-                    className="h-full"
-                    activeTab={widgetActiveTab}
-                    onTabChange={setWidgetActiveTab}
-                    showPolicyTab={widgetShowPolicyTab}
-                    chatPanel={<ConversationModelChatColumnLego {...widgetPreviewChatProps} />}
-                    policyPanel={<ConversationModelSetupColumnLego {...widgetPreviewSetupProps} />}
-                    sessions={widgetPreviewSessions}
-                    sessionsLoading={false}
-                    sessionsError=""
-                    selectedSessionId={widgetPreviewSessionId}
-                    onSelectSession={setWidgetPreviewSessionId}
-                    historyMessages={widgetPreviewHistoryMessages}
-                    historyLoading={false}
-                  />
-                </div>
+              <div className="mb-2 text-sm font-semibold text-slate-900">Widget UI 구성 샘플</div>
+              <div className="grid grid-cols-1 gap-3">
+                {sortWidgetEntries(widgetDemoEntries).map((entry) => (
+                  <div key={entry.name}>{entry.node}</div>
+                ))}
               </div>
               <UsedInPages
                 pages={[
@@ -1992,35 +1716,36 @@ export function DesignSystemContent() {
                 ]}
               />
             </Card>
-          </div>
-          <Card className="mt-4 p-4">
-            <div className="mb-2 text-sm font-semibold text-slate-900">Widget Definition Coverage</div>
-            <div className="mb-3 text-xs text-slate-500">
-              위젯 레고 구성 요소와 타입 계약을 type / name / depends / role 기준으로 정리합니다.
-            </div>
-            <div className="space-y-4">
-              {widgetDefinitionGroups.map((group) => (
-                <div key={group.label}>
-                  <div className="mb-2 text-xs font-semibold text-slate-700">{group.label}</div>
-                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                    {group.items.map((item) => (
-                      <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                        {renderWidgetDefinitionMeta(item)}
-                      </div>
-                    ))}
+
+            <Card className="p-4">
+              <div className="mb-2 text-sm font-semibold text-slate-900">Widget Definition Coverage</div>
+              <div className="mb-3 text-xs text-slate-500">
+                위젯 레고 구성 요소와 타입 계약을 type / name / depends / role 기준으로 정리합니다.
+              </div>
+              <div className="space-y-4">
+                {widgetDefinitionGroups.map((group) => (
+                  <div key={group.label}>
+                    <div className="mb-2 text-xs font-semibold text-slate-700">{group.label}</div>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      {sortWidgetEntries(group.items).map((item) => (
+                        <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                          {renderWidgetDefinitionMeta(item)}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-            <UsedInPages
-              pages={[
-                "src/components/design-system/widget/WidgetUI.parts.tsx",
-                "src/components/design-system/widget/WidgetShell.tsx",
-                "src/components/design-system/widget/WidgetConversationLayout.tsx",
-                "src/app/embed/[key]/page.tsx",
-              ]}
-            />
-          </Card>
+                ))}
+              </div>
+              <UsedInPages
+                pages={[
+                  "src/components/design-system/widget/WidgetUI.parts.tsx",
+                  "src/components/design-system/widget/WidgetShell.tsx",
+                  "src/components/design-system/widget/WidgetConversationLayout.tsx",
+                  "src/app/embed/[key]/page.tsx",
+                ]}
+              />
+            </Card>
+          </div>
         </SectionBlock>
       ),
     },

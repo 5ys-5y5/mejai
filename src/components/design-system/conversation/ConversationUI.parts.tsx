@@ -2,7 +2,7 @@
 
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction, WheelEvent } from "react";
 import { Fragment, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Bot, Check, Copy, ExternalLink, Info, Loader2, Minus, Plus, RefreshCw, Send, Settings2, Trash2, User, X } from "lucide-react";
+import { AlertTriangle, Bot, Check, Copy, ExternalLink, Info, Loader, Loader2, Minus, Plus, RefreshCw, Send, Settings2, Trash2, User, X } from "lucide-react";
 import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -1447,9 +1447,8 @@ function ConversationModelChatColumnCore({
             }
             className="flex-1"
           />
-          <Button type="submit" disabled={submitDisabled}>
-            <Send className="mr-2 h-4 w-4" />
-            {model.sending ? "전송 중" : "전송"}
+          <Button type="submit" disabled={submitDisabled} aria-label={model.sending ? "전송 중" : "전송"}>
+            {model.sending ? <Loader className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </Button>
         </form>
       ) : null}

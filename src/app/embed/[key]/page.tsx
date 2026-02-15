@@ -4,12 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
-  ConversationModelChatColumnLego,
-  ConversationModelSetupColumnLego,
   WidgetConversationLayout,
   type WidgetConversationSession,
   type WidgetConversationTab,
-  type WidgetMessage,
   type ConversationModelChatColumnLegoProps,
   type ConversationModelSetupColumnLegoProps,
   type SelectOption,
@@ -359,8 +356,6 @@ export default function WidgetEmbedPage() {
   const headerIcon = launcherIconUrl || "/brand/logo.png";
   const isAdminOrDebug = isAdminUser || debugBypass;
   const statusLabel = isAdminOrDebug ? status : "";
-  const inputDisabled = !pageFeatures.interaction.inputSubmit;
-
   const allowedAccounts = useMemo(
     () => normalizeThemeList(theme.allowed_accounts || theme.allowedAccounts),
     [theme]
@@ -1071,36 +1066,20 @@ export default function WidgetEmbedPage() {
     describeRoute: (value) => (value ? `Runtime: ${value}` : "선택된 Runtime 없음"),
   };
 
-  const shellMessages = useMemo<WidgetMessage[]>(
-    () => messages.map((msg) => ({ id: msg.id, role: msg.role, content: msg.content })),
-    [messages]
-  );
-
   return (
     <div className="h-full min-h-0">
       <WidgetConversationLayout
         brandName={brandName}
         status={statusLabel}
         iconUrl={headerIcon}
-        messages={shellMessages}
-        inputPlaceholder={theme.input_placeholder || "메시지를 입력하세요"}
-        disclaimer={theme.disclaimer ? String(theme.disclaimer) : ""}
-        inputValue={inputValue}
-        onInputChange={setInputValue}
-        onSend={(event) => {
-          event.preventDefault();
-          void handleSendText(inputValue);
-        }}
         onNewConversation={handleNewConversation}
-        sendDisabled={inputDisabled || !inputValue.trim() || !widgetToken || !sessionId}
-        inputDisabled={inputDisabled}
         fill={false}
         className="h-full"
         activeTab={activeTab}
         onTabChange={setActiveTab}
         showPolicyTab={showPolicyTab}
-        chatPanel={<ConversationModelChatColumnLego {...chatLegoProps} />}
-        policyPanel={<ConversationModelSetupColumnLego {...setupLegoProps} />}
+        chatLegoProps={chatLegoProps}
+        setupLegoProps={setupLegoProps}
         sessions={sessions}
         sessionsLoading={sessionsLoading}
         sessionsError={sessionsError}

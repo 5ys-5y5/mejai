@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { List, MessageCircle, Shield } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { ConversationThread } from "@/components/design-system/conversation/ConversationUI.parts";
+import { renderBotContent } from "@/lib/conversation/messageRenderUtils";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/conversation/client/laboratoryPageState";
 
@@ -189,19 +190,35 @@ export function WidgetHistoryPanelLego({
             </div>
           )}
         </div>
-        <div className="flex-1 min-h-0 overflow-auto bg-slate-50 px-4 py-4">
+        <div className="flex-1 min-h-0 overflow-hidden bg-slate-50 px-4 py-4">
           {historyLoading ? (
             <div className="text-xs text-slate-500">대화를 불러오는 중...</div>
           ) : historyMessages.length === 0 ? (
             <div className="text-xs text-slate-500">선택된 대화가 없습니다.</div>
           ) : (
-            <ConversationThread
-              messages={historyMessages}
-              selectedMessageIds={[]}
-              selectionEnabled={false}
-              onToggleSelection={() => undefined}
-              renderContent={(msg) => msg.content}
-            />
+            <div className="h-full overflow-auto rounded-xl bg-slate-50 px-2 pb-4 pt-2 scrollbar-hide">
+              <ConversationThread
+                messages={historyMessages}
+                selectedMessageIds={[]}
+                selectionEnabled={false}
+                onToggleSelection={() => undefined}
+                avatarSelectionStyle="both"
+                renderContent={(msg) => {
+                  if (msg.role === "bot" && msg.richHtml) {
+                    return (
+                      <div
+                        style={{ margin: 0, padding: 0, lineHeight: "inherit", whiteSpace: "normal" }}
+                        dangerouslySetInnerHTML={{ __html: msg.richHtml }}
+                      />
+                    );
+                  }
+                  if (msg.role === "bot") {
+                    return renderBotContent(msg.content);
+                  }
+                  return msg.content;
+                }}
+              />
+            </div>
           )}
         </div>
       </div>
