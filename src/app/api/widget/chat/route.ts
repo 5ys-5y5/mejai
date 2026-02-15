@@ -92,7 +92,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "WIDGET_RUNTIME_SECRET_MISSING" }, { status: 500 });
   }
 
-  const targetUrl = new URL("/api/runtime/chat", req.nextUrl.origin);
   const targetUrl = new URL("/api/runtime/chat", req.nextUrl.origin).toString();
   const requestMeta = {
     target_url: targetUrl,
