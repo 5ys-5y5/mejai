@@ -56,6 +56,9 @@ export function WidgetSettingsPanel() {
     theme: {},
     is_active: true,
   });
+  const [domainText, setDomainText] = useState("");
+  const [pathText, setPathText] = useState("");
+  const [allowedAccountsText, setAllowedAccountsText] = useState("");
 
   const agentOptions = useMemo<SelectOption[]>(
     () =>
@@ -78,14 +81,26 @@ export function WidgetSettingsPanel() {
       setAgents(agentRes.items || []);
       const current = widgetRes.item;
       if (current) {
+        const nextDomains = current.allowed_domains || [];
+        const nextPaths = current.allowed_paths || [];
+        const nextAccounts = normalizeThemeList(
+          (current.theme || {}).allowed_accounts || (current.theme || {}).allowedAccounts
+        );
         setDraft({
           name: current.name || "Web Widget",
           agent_id: current.agent_id || "",
-          allowed_domains: current.allowed_domains || [],
-          allowed_paths: current.allowed_paths || [],
+          allowed_domains: nextDomains,
+          allowed_paths: nextPaths,
           theme: current.theme || {},
           is_active: typeof current.is_active === "boolean" ? current.is_active : true,
         });
+        setDomainText(nextDomains.join("\n"));
+        setPathText(nextPaths.join("\n"));
+        setAllowedAccountsText(nextAccounts.join("\n"));
+      } else {
+        setDomainText("");
+        setPathText("");
+        setAllowedAccountsText("");
       }
     } catch (error) {
       setWidget(null);
@@ -98,24 +113,18 @@ export function WidgetSettingsPanel() {
     void loadWidget();
   }, [loadWidget]);
 
-  const domainInput = useMemo(
-    () => (draft.allowed_domains || []).join("\n"),
-    [draft.allowed_domains]
-  );
-  const pathInput = useMemo(
-    () => (draft.allowed_paths || []).join("\n"),
-    [draft.allowed_paths]
-  );
-
   const handleSave = async (rotateKey = false) => {
     setSaving(true);
     try {
+      const allowedDomains = normalizeListInput(domainText);
+      const allowedPaths = normalizeListInput(pathText);
+      const allowedAccounts = normalizeListInput(allowedAccountsText);
       const payload = {
         name: draft.name,
         agent_id: draft.agent_id || null,
-        allowed_domains: draft.allowed_domains || [],
-        allowed_paths: draft.allowed_paths || [],
-        theme: draft.theme || {},
+        allowed_domains: allowedDomains,
+        allowed_paths: allowedPaths,
+        theme: { ...(draft.theme || {}), allowed_accounts: allowedAccounts },
         is_active: Boolean(draft.is_active),
         rotate_key: rotateKey,
       };
@@ -125,6 +134,12 @@ export function WidgetSettingsPanel() {
         body: JSON.stringify(payload),
       });
       setWidget(res.item);
+      setDraft((prev) => ({
+        ...prev,
+        allowed_domains: allowedDomains,
+        allowed_paths: allowedPaths,
+        theme: { ...(prev.theme || {}), allowed_accounts: allowedAccounts },
+      }));
       toast.success("위젯 설정이 저장되었습니다.");
     } catch (error) {
       toast.error("저장에 실패했습니다.");
@@ -136,8 +151,6 @@ export function WidgetSettingsPanel() {
   const greeting = String((draft.theme || {}).greeting || "");
   const inputPlaceholder = String((draft.theme || {}).input_placeholder || "");
   const launcherIconUrl = String((draft.theme || {}).launcher_icon_url || "");
-  const allowedAccounts = normalizeThemeList((draft.theme || {}).allowed_accounts || (draft.theme || {}).allowedAccounts);
-  const allowedAccountsInput = useMemo(() => allowedAccounts.join("\n"), [allowedAccounts]);
 
   return (
     <div className="space-y-4">
@@ -164,42 +177,42 @@ export function WidgetSettingsPanel() {
         <label className="block">
           <div className="mb-1 text-xs text-slate-600">허용 도메인 (줄바꿈 또는 콤마)</div>
           <textarea
-            value={domainInput}
-            onChange={(e) =>
-              setDraft((prev) => ({
-                ...prev,
-                allowed_domains: normalizeListInput(e.target.value),
-              }))
-            }
+            value={domainText}
+            onChange={(e) => setDomainText(e.target.value)}
             className="w-full min-h-[90px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
           />
+          <div className="mt-1 text-[11px] text-slate-500">
+            위젯을 띄울 웹사이트 주소를 적습니다. 예: <span className="font-mono">example.com</span>,{" "}
+            <span className="font-mono">shop.example.com</span>.{" "}
+            <span className="font-mono">https://</span>는 있어도 무시되며,{" "}
+            <span className="font-mono">*.example.com</span> 형태로 모든 서브도메인을 허용할 수 있습니다.
+            이 목록에 없는 도메인에서는 위젯이 열리지 않습니다.
+          </div>
         </label>
         <label className="block">
           <div className="mb-1 text-xs text-slate-600">허용 경로 (선택, 줄바꿈)</div>
           <textarea
-            value={pathInput}
-            onChange={(e) =>
-              setDraft((prev) => ({
-                ...prev,
-                allowed_paths: normalizeListInput(e.target.value),
-              }))
-            }
+            value={pathText}
+            onChange={(e) => setPathText(e.target.value)}
             className="w-full min-h-[70px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
           />
+          <div className="mt-1 text-[11px] text-slate-500">
+            도메인 안에서 위젯이 보일 페이지를 제한합니다. 비워두면 도메인 내 모든 페이지에서 작동합니다.{" "}
+            <span className="font-mono">/support</span>처럼 입력하면 해당 경로로 시작하는 페이지에서만 보이고,{" "}
+            <span className="font-mono">*</span>는 모든 경로 허용입니다.
+          </div>
         </label>
         <label className="block">
           <div className="mb-1 text-xs text-slate-600">허용 계정 (줄바꿈 또는 콤마)</div>
           <textarea
-            value={allowedAccountsInput}
-            onChange={(e) =>
-              setDraft((prev) => ({
-                ...prev,
-                theme: { ...(prev.theme || {}), allowed_accounts: normalizeListInput(e.target.value) },
-              }))
-            }
+            value={allowedAccountsText}
+            onChange={(e) => setAllowedAccountsText(e.target.value)}
             className="w-full min-h-[70px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
           />
-          <div className="mt-1 text-[11px] text-slate-500">이메일/아이디 등 로그인 식별자를 입력하세요.</div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            로그인 사용자 식별자를 입력합니다. 여기 등록된 계정에만 위젯의 <span className="font-semibold">정책 탭</span>
+            등 운영용 기능이 노출됩니다. 일반 고객 채팅에는 영향이 없습니다.
+          </div>
         </label>
         <label className="block">
           <div className="mb-1 text-xs text-slate-600">환영 메시지</div>

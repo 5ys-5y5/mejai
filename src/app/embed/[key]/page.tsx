@@ -280,12 +280,28 @@ export default function WidgetEmbedPage() {
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const isAdminUser = useConversationAdminStatus();
+  const fallbackReferrer = useMemo(
+    () => (typeof document !== "undefined" ? document.referrer : ""),
+    []
+  );
+  const fallbackAncestor = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    const ancestor = window.location.ancestorOrigins;
+    return ancestor && ancestor.length > 0 ? String(ancestor[0]) : "";
+  }, []);
   const originHost = useMemo(
     () =>
       extractHostFromUrl(
-        String(pendingMeta?.origin || pendingMeta?.page_url || pendingMeta?.referrer || "")
+        String(
+          pendingMeta?.origin ||
+            pendingMeta?.page_url ||
+            pendingMeta?.referrer ||
+            fallbackAncestor ||
+            fallbackReferrer ||
+            ""
+        )
       ),
-    [pendingMeta]
+    [pendingMeta, fallbackAncestor, fallbackReferrer]
   );
   const debugOrigins = useMemo(
     () => normalizeOriginList(process.env.NEXT_PUBLIC_WIDGET_DEBUG_ORIGINS || ""),
