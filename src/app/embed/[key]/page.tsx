@@ -161,6 +161,10 @@ function normalizeThemeList(value: unknown) {
   return [];
 }
 
+function normalizeOriginList(value: unknown) {
+  return normalizeThemeList(value).map((item) => item.replace(/^['"]|['"]$/g, ""));
+}
+
 function normalizeAccountValue(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
@@ -250,7 +254,7 @@ export default function WidgetEmbedPage() {
     [pendingMeta]
   );
   const debugOrigins = useMemo(
-    () => normalizeThemeList(process.env.NEXT_PUBLIC_WIDGET_DEBUG_ORIGINS || ""),
+    () => normalizeOriginList(process.env.NEXT_PUBLIC_WIDGET_DEBUG_ORIGINS || ""),
     []
   );
   const debugDomainAllowed = useMemo(
