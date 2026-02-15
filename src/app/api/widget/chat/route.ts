@@ -3,6 +3,23 @@ import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { verifyWidgetToken } from "@/lib/widgetToken";
 
+function resolveRuntimeBaseUrl(req: NextRequest) {
+  const override = String(process.env.WIDGET_RUNTIME_BASE_URL || "").trim();
+  if (override) return override.replace(/\/+$/, "");
+  const forwardedHost = String(req.headers.get("x-forwarded-host") || "").trim();
+  const forwardedProto = String(req.headers.get("x-forwarded-proto") || "").trim();
+  if (forwardedHost) {
+    const proto = forwardedProto || "https";
+    return `${proto}://${forwardedHost}`;
+  }
+  const host = String(req.headers.get("host") || "").trim();
+  if (host) {
+    const proto = forwardedProto || req.nextUrl.protocol.replace(":", "") || "http";
+    return `${proto}://${host}`;
+  }
+  return req.nextUrl.origin;
+}
+
 async function logWidgetProxyEvent(input: {
   supabase: ReturnType<typeof createAdminSupabaseClient>;
   sessionId: string;
@@ -94,9 +111,11 @@ export async function POST(req: NextRequest) {
   }
 
   const proxyTraceId = crypto.randomUUID();
-  const targetUrl = new URL("/api/runtime/chat", req.nextUrl.origin).toString();
+  const runtimeBaseUrl = resolveRuntimeBaseUrl(req);
+  const targetUrl = new URL("/api/runtime/chat", runtimeBaseUrl).toString();
   const requestMeta = {
     proxy_trace_id: proxyTraceId,
+    runtime_base_url: runtimeBaseUrl,
     target_url: targetUrl,
     req_origin: req.nextUrl.origin,
     req_host: req.headers.get("host") || "",
