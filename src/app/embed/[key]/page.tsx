@@ -63,12 +63,46 @@ function makeLocalDebugLog(input: {
   turnId?: string | null;
   detail: Record<string, unknown>;
 }): NonNullable<LogBundle["debug_logs"]>[number] {
+  const detail = input.detail || {};
+  const widgetError = (detail as Record<string, any>).widget_error || {};
+  const stage = String(widgetError.stage || "widget_chat").trim() || "widget_chat";
+  const errorValue =
+    widgetError.error !== undefined && widgetError.error !== null
+      ? String(widgetError.error)
+      : widgetError.status !== undefined && widgetError.status !== null
+        ? String(widgetError.status)
+        : "REQUEST_FAILED";
+  const lastFunction = `NO_TOOL_CALLED:${stage}`;
+  const entries = Array.isArray((detail as Record<string, any>).entries)
+    ? ([...(detail as Record<string, any>).entries] as Array<{ key: string; value: string }>)
+    : [];
+  if (!entries.some((entry) => entry.key === "MCP.last_function")) {
+    entries.push({ key: "MCP.last_function", value: lastFunction });
+  }
+  if (!entries.some((entry) => entry.key === "MCP.last_status")) {
+    entries.push({ key: "MCP.last_status", value: "error" });
+  }
+  if (!entries.some((entry) => entry.key === "MCP.last_error")) {
+    entries.push({ key: "MCP.last_error", value: errorValue });
+  }
   return {
     id: `widget-${buildId()}`,
     session_id: input.sessionId || null,
     turn_id: input.turnId || null,
     seq: null,
-    prefix_json: input.detail,
+    prefix_json: {
+      ...detail,
+      entries,
+      mcp: {
+        ...((detail as Record<string, any>).mcp || {}),
+        last: {
+          function: lastFunction,
+          status: "error",
+          error: errorValue,
+          result_count: null,
+        },
+      },
+    },
     prefix_tree: null,
     created_at: new Date().toISOString(),
   };
