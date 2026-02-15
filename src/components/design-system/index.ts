@@ -20,6 +20,7 @@ export {
   InlineToggle,
   SectionBlock,
 } from "@/components/design-system/patterns";
+export { UnderlineTabs, PillTabs, type TabItem } from "@/components/design-system/tabs";
 
 export {
   SelectPopover,

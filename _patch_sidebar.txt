@@ -1,0 +1,5 @@
+*** Begin Patch
+*** Update File: src/components/AppSidebar.tsx
+@@
+-          <SidebarLink to="/app/totalagent" icon={Bot} label="통합 관리" collapsed={collapsed} onClick={onNavigate} />
+*** End Patch

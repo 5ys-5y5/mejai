@@ -19,6 +19,7 @@ import {
   Metric,
   MultiSelectPopover,
   PanelCard,
+  PillTabs,
   SectionBlock,
   SelectPopover,
   Skeleton,
@@ -2055,23 +2056,11 @@ export function DesignSystemContent() {
         </p>
       </div>
 
-        <div className="sticky top-0 z-20 flex flex-wrap rounded-3xl border border-slate-200 gap-2 bg-white/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-white/80">
-          {categoryLabels.map((category) => (
-            <button
-              key={category.key}
-              type="button"
-              onClick={() => setActiveCategory(category.key)}
-              className={cn(
-                "rounded-full border px-3 py-1.5 text-xs font-semibold",
-                activeCategory === category.key
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-              )}
-            >
-              {category.label}
-            </button>
-          ))}
-        </div>
+        <PillTabs
+          tabs={categoryLabels}
+          activeKey={activeCategory}
+          onSelect={setActiveCategory}
+        />
 
       <div className="space-y-4">{visibleSections.map((section) => <div key={section.key}>{section.node}</div>)}</div>
     </div>

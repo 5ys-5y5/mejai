@@ -2,22 +2,23 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/Card";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { ChatSettingsPanel } from "@/components/settings/ChatSettingsPanel";
 import { ProposalSettingsPanel } from "@/components/settings/ProposalSettingsPanel";
 import { PerformanceSettingsPanel } from "@/components/settings/PerformanceSettingsPanel";
+import { PolicySettingsPanel } from "@/components/settings/PolicySettingsPanel";
 import { DesignSystemContent } from "@/app/app/design-system/page";
+import { UnderlineTabs, type TabItem } from "@/components/design-system";
 
-type TabKey = "chat" | "proposal" | "performance" | "design-system";
+type TabKey = "chat" | "proposal" | "performance" | "design-system" | "policies";
 
 export default function AdminPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawTab = (searchParams.get("tab") || "chat").toLowerCase();
   const tab: TabKey =
-    rawTab === "proposal" || rawTab === "performance" || rawTab === "design-system"
+    rawTab === "proposal" || rawTab === "performance" || rawTab === "design-system" || rawTab === "policies"
       ? (rawTab as TabKey)
       : "chat";
 
@@ -60,11 +61,12 @@ export default function AdminPage() {
     };
   }, []);
 
-  const tabs = useMemo(
+  const tabs = useMemo<TabItem<TabKey>[]>(
     () => [
       { key: "chat", label: "대화 설정" },
       { key: "proposal", label: "제안" },
       { key: "performance", label: "성능" },
+      { key: "policies", label: "Policies" },
       { key: "design-system", label: "디자인 시스템" },
     ],
     []
@@ -73,24 +75,11 @@ export default function AdminPage() {
   return (
     <div className="px-5 md:px-8 pt-6 pb-[100px]">
       <div className="mx-auto w-full max-w-6xl">
-        <div className="border-b border-slate-200 pb-2">
-          <nav className="flex gap-2 overflow-x-auto">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                onClick={() => router.push(`/app/admin?tab=${t.key}`)}
-                className={cn(
-                  "whitespace-nowrap rounded-xl border px-3 py-2 text-sm",
-                  tab === t.key
-                    ? "border-slate-300 bg-slate-100 text-slate-900"
-                    : "border-transparent bg-transparent text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                {t.label}
-              </button>
-            ))}
-          </nav>
-        </div>
+        <UnderlineTabs
+          tabs={tabs}
+          activeKey={tab}
+          onSelect={(key) => router.push(`/app/admin?tab=${key}`)}
+        />
 
         <div className="mt-6">
           {adminReady && !isAdmin ? (
@@ -101,6 +90,8 @@ export default function AdminPage() {
             <ProposalSettingsPanel authToken={authToken} />
           ) : tab === "design-system" ? (
             <DesignSystemContent />
+          ) : tab === "policies" ? (
+            <PolicySettingsPanel />
           ) : (
             <PerformanceSettingsPanel />
           )}
