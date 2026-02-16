@@ -20,6 +20,7 @@ import {
   MultiSelectPopover,
   PanelCard,
   PillTabs,
+  UnderlineTabs,
   SectionBlock,
   SelectPopover,
   Skeleton,
@@ -48,6 +49,7 @@ import {
   WidgetHistoryPanelLego,
   WidgetShell,
   WidgetTabBarLego,
+  type TabItem,
   type WidgetConversationTab,
   type WidgetConversationSession,
   type SelectOption,
@@ -104,6 +106,28 @@ const categoryLabels: Array<{ key: CategoryKey; label: string }> = [
   { key: "overlay", label: "Overlay" },
   { key: "navigation", label: "Navigation" },
   { key: "icon", label: "Icon" },
+];
+
+type UnderlineDemoKey = "overview" | "usage" | "tokens";
+const underlineDemoTabs: Array<TabItem<UnderlineDemoKey>> = [
+  { key: "overview", label: "Overview" },
+  { key: "usage", label: "Usage" },
+  { key: "tokens", label: "Tokens" },
+];
+
+type PillDemoKey = "all" | "design" | "product" | "billing";
+const pillDemoTabs: Array<TabItem<PillDemoKey>> = [
+  { key: "all", label: "All" },
+  { key: "design", label: "Design" },
+  { key: "product", label: "Product" },
+  { key: "billing", label: "Billing" },
+];
+
+type StepTabKey = "setup" | "train" | "review";
+const stepTabItems: Array<TabItem<StepTabKey>> = [
+  { key: "setup", label: "Setup" },
+  { key: "train", label: "Training" },
+  { key: "review", label: "Review" },
 ];
 
 const singleOptions: SelectOption[] = [
@@ -923,6 +947,9 @@ const WIDGET_DEMO_HISTORY: Record<string, ChatMessage[]> = {
 
 export function DesignSystemContent() {
   const [activeCategory, setActiveCategory] = useState<CategoryKey>("all");
+  const [underlineDemoTab, setUnderlineDemoTab] = useState<UnderlineDemoKey>("overview");
+  const [pillDemoTab, setPillDemoTab] = useState<PillDemoKey>("all");
+  const [stepTab, setStepTab] = useState<StepTabKey>("setup");
 
   const [singleValue, setSingleValue] = useState("chatgpt");
   const [inputSelectValue, setInputSelectValue] = useState("chatgpt");
@@ -1947,18 +1974,32 @@ export function DesignSystemContent() {
             </Card>
 
             <Card className="p-4">
+              <div className="mb-2 text-sm font-semibold text-slate-900">UnderlineTabs</div>
+              <UnderlineTabs
+                tabs={underlineDemoTabs}
+                activeKey={underlineDemoTab}
+                onSelect={setUnderlineDemoTab}
+              />
+              <div className="mt-3 text-xs text-slate-500">Active: {underlineDemoTab}</div>
+              <UsedInPages pages={["src/app/app/admin/page.tsx"]} />
+            </Card>
+
+            <Card className="p-4">
+              <div className="mb-2 text-sm font-semibold text-slate-900">PillTabs</div>
+              <PillTabs
+                tabs={pillDemoTabs}
+                activeKey={pillDemoTab}
+                onSelect={setPillDemoTab}
+                sticky={false}
+              />
+              <div className="mt-3 text-xs text-slate-500">Active: {pillDemoTab}</div>
+              <UsedInPages pages={["src/app/app/design-system/page.tsx"]} />
+            </Card>
+
+            <Card className="p-4">
               <div className="mb-2 text-sm font-semibold text-slate-900">Step / Tab Selector Pattern</div>
-              <div className="grid grid-cols-3 gap-2">
-                <button className="rounded-xl border border-slate-300 bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-900">
-                  기존 모델
-                </button>
-                <button className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
-                  신규 모델
-                </button>
-                <button className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">
-                  히스토리
-                </button>
-              </div>
+              <UnderlineTabs tabs={stepTabItems} activeKey={stepTab} onSelect={setStepTab} />
+              <div className="mt-3 text-xs text-slate-500">Active: {stepTab}</div>
               <div className="mt-3 text-xs text-slate-500">실험실/설정 페이지에서 반복되는 세그먼트 선택 UI</div>
               <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/settings/ChatSettingsPanel.tsx"]} />
             </Card>

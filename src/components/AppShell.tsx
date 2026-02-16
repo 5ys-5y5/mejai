@@ -28,6 +28,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (p.startsWith("/app/users")) return "고객";
     if (p.startsWith("/app/analytics")) return "통계/트렌드";
     if (p.startsWith("/app/review")) return "후속 지원 요청";
+    if (p.startsWith("/app/agents-kb")) return "Agents and KB";
     if (p.startsWith("/app/agents")) return "에이전트";
     if (p.startsWith("/app/eval")) return "평가/관리";
     if (p.startsWith("/app/kb")) return "지식 베이스";
