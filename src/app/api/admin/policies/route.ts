@@ -232,8 +232,11 @@ async function extractPolicyItems(content: string): Promise<PolicyItemMeta[]> {
     items.push({ name, kind, exported, hash });
   };
 
-  const isExported = (node: import("typescript").Node) =>
-    Boolean(node.modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword));
+  const isExported = (node: import("typescript").Node) => {
+    if (!ts.canHaveModifiers(node)) return false;
+    const modifiers = ts.getModifiers(node);
+    return Boolean(modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword));
+  };
 
   source.forEachChild((node) => {
     const exported = isExported(node);
