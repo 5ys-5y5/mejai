@@ -541,19 +541,24 @@ async function refreshPolicies(onProgress?: (payload: RefreshProgress) => void) 
   const deletedRows = (existingRows as PolicyRow[] | null | undefined)?.filter(
     (row) => row?.path && !seenPaths.has(row.path)
   );
-  const updates: Array<Promise<unknown>> = [];
+  const updates: Array<Promise<void>> = [];
   deletedRows?.forEach((row) => {
     if (!row?.path) return;
     if (row.status === "DELETED") return;
     updates.push(
-      supabaseAdmin
-        .from("I_runtime_policy_files")
-        .update({
-          status: "DELETED",
-          last_changed_at: now,
-          updated_at: now,
-        })
-        .eq("path", row.path)
+      (async () => {
+        const { error } = await supabaseAdmin
+          .from("I_runtime_policy_files")
+          .update({
+            status: "DELETED",
+            last_changed_at: now,
+            updated_at: now,
+          })
+          .eq("path", row.path);
+        if (error) {
+          throw new Error(error.message);
+        }
+      })()
     );
   });
   if (updates.length > 0) {
