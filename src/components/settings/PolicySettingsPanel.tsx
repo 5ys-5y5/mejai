@@ -15,7 +15,15 @@ type PolicyRow = {
   exports: string[] | null;
   details_ko?: {
     overview?: string;
-    items?: Array<{ name?: string; role?: string; impact?: string }>;
+    items?: Array<{
+      name?: string;
+      role?: string;
+      impact?: string;
+      status?: PolicyRow["status"];
+      kind?: string;
+      exported?: boolean;
+      item_hash?: string;
+    }>;
     model?: string;
   } | null;
   status: "LIVE" | "MODIFIED" | "NEW" | "DELETED";
