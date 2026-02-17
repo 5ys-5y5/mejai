@@ -91,6 +91,18 @@ export async function fetchAgent(context: RuntimeContext, agentId: string) {
   return { data: parent as AgentRow | null };
 }
 
+export async function fetchActiveAgentByParent(context: RuntimeContext, parentId: string) {
+  const { data, error } = await context.supabase
+    .from("B_bot_agents")
+    .select("*")
+    .eq("parent_id", parentId)
+    .eq("is_active", true)
+    .or(`org_id.eq.${context.orgId},org_id.is.null`)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  return { data: data as AgentRow | null };
+}
+
 export async function fetchKb(context: RuntimeContext, kbId: string) {
   const result = await context.supabase
     .from("B_bot_knowledge_bases")

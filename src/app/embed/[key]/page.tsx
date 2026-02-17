@@ -858,8 +858,8 @@ export default function WidgetEmbedPage() {
   const copyByKind = useCallback(
     async (kind: "conversation" | "issue") => {
       if (!sessionId) {
-        toast.error("세션 정보가 없습니다.");
-        return;
+        toast.error("\ub300\ud654 \uae30\ub85d\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.");
+        return false;
       }
       let mergedLogs = messageLogs;
       let prebuiltTextOverride: string | null = null;
@@ -888,7 +888,7 @@ export default function WidgetEmbedPage() {
       } catch {
         // ignore fetch failure, fall back to local logs
       }
-      await executeTranscriptCopy({
+      return executeTranscriptCopy({
         page: WIDGET_PAGE_KEY,
         kind,
         messages: copyMessages,
@@ -1046,8 +1046,8 @@ export default function WidgetEmbedPage() {
         return !prev;
       }),
     onToggleLogs: () => setShowAdminLogs((prev) => !prev),
-    onCopyConversation: () => void copyByKind("conversation"),
-    onCopyIssue: () => void copyByKind("issue"),
+    onCopyConversation: () => copyByKind("conversation"),
+    onCopyIssue: () => copyByKind("issue"),
     onToggleMessageSelection: handleToggleMessageSelection,
     onSubmitMessage: handleSendText,
     onExpand: () => undefined,

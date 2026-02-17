@@ -7,6 +7,7 @@ import { isUuidLike, isValidLlm } from "../shared/slotUtils";
 import type { KbRow } from "../shared/types";
 import {
   fetchAdminKbs,
+  fetchActiveAgentByParent,
   fetchAgent,
   fetchKb,
   getRecentTurns,
@@ -47,6 +48,7 @@ type AgentShape = {
   llm?: string | null;
   kb_id?: string | null;
   mcp_tool_ids?: string[] | null;
+  is_active?: boolean | null;
 };
 
 type WidgetContext = {
@@ -274,6 +276,21 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       return { response: respond({ error: agentRes.error || "AGENT_NOT_FOUND" }, { status: 404 }), state: null };
     }
     agent = agentRes.data;
+    if (isWidgetRequest && agent) {
+      const activeFlag = agent.is_active;
+      const rawParentId = agent.parent_id;
+      const shouldResolveChild =
+        activeFlag === false || !rawParentId || String(rawParentId) === String(agent.id || agentId);
+      if (shouldResolveChild) {
+        const parentId = String(rawParentId || agent.id || agentId).trim();
+        if (parentId) {
+          const activeRes = await fetchActiveAgentByParent(context, parentId);
+          if (activeRes.data) {
+            agent = activeRes.data;
+          }
+        }
+      }
+    }
   } else {
     if (!isValidLlm(overrideLlm)) {
       return { response: respond({ error: "INVALID_BODY" }, { status: 400 }), state: null };

@@ -1063,17 +1063,11 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     });
   };
 
-  const handleCopyTranscript = async (id: string) => {
-    await labActions.copyConversation(
-      id,
-      pageFeatures.adminPanel.copyConversation,
-      conversationDebugOptions
-    );
-  };
+  const handleCopyTranscript = async (id: string) =>
+    labActions.copyConversation(id, pageFeatures.adminPanel.copyConversation, conversationDebugOptions);
 
-  const handleCopyIssueTranscript = async (id: string) => {
-    await labActions.copyIssue(id, pageFeatures.adminPanel.copyIssue);
-  };
+  const handleCopyIssueTranscript = async (id: string) =>
+    labActions.copyIssue(id, pageFeatures.adminPanel.copyIssue);
 
   const handleCopySessionId = async (sessionId?: string | null) => {
     if (!sessionId) return;

@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction, WheelEvent } from "react";
-import { Fragment, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { AlertTriangle, Bot, Check, Copy, CornerDownRight, ExternalLink, Info, Loader, Loader2, Minus, Plus, RefreshCw, Send, Settings2, Trash2, User, X } from "lucide-react";
 import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
@@ -163,8 +163,8 @@ type AdminMenuProps = {
   onToggleSelection: () => void;
   showLogs: boolean;
   onToggleLogs: () => void;
-  onCopyConversation: () => void;
-  onCopyIssue: () => void;
+  onCopyConversation: () => void | boolean | Promise<void> | Promise<boolean>;
+  onCopyIssue: () => void | boolean | Promise<void> | Promise<boolean>;
   showSelectionToggle?: boolean;
   showLogsToggle?: boolean;
   showConversationCopy?: boolean;
@@ -189,6 +189,47 @@ export function ConversationAdminMenu({
   disableCopy = false,
   className,
 }: AdminMenuProps) {
+  const [copyState, setCopyState] = useState<"idle" | "copying" | "done">("idle");
+  const copyResetRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetRef.current) {
+        window.clearTimeout(copyResetRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopyConversation = async () => {
+    if (disableCopy || copyState === "copying") return;
+    setCopyState("copying");
+    try {
+      const result = await Promise.resolve(onCopyConversation());
+      if (result === false) {
+        setCopyState("idle");
+        return;
+      }
+      setCopyState("done");
+      if (copyResetRef.current) window.clearTimeout(copyResetRef.current);
+      copyResetRef.current = window.setTimeout(() => {
+        setCopyState("idle");
+      }, 1800);
+    } catch {
+      setCopyState("idle");
+    }
+  };
+
+  const copyLabel =
+    copyState === "copying" ? "\ubcf5\uc0ac\uc911" : copyState === "done" ? "\ubcf5\uc0ac \uc644\ub8cc" : "\ub300\ud654 \ubcf5\uc0ac";
+  const copyIcon =
+    copyState === "copying" ? (
+      <Loader2 className="h-3 w-3 animate-spin" />
+    ) : copyState === "done" ? (
+      <Check className="h-3 w-3" />
+    ) : (
+      <Copy className="h-3 w-3" />
+    );
+
   return (
     <div className={cn("z-20", className)}>
       <button
@@ -230,12 +271,12 @@ export function ConversationAdminMenu({
           {showConversationCopy ? (
             <button
               type="button"
-              onClick={onCopyConversation}
-              disabled={disableCopy}
+              onClick={handleCopyConversation}
+              disabled={disableCopy || copyState === "copying"}
               className="mb-1 inline-flex w-full items-center justify-between rounded-md border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-60"
             >
-              <span>대화 복사</span>
-              <Copy className="h-3 w-3" />
+              <span>{copyLabel}</span>
+              {copyIcon}
             </button>
           ) : null}
           {showIssueCopy ? (

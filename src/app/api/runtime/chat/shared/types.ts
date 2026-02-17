@@ -16,6 +16,7 @@ export type AgentRow = {
   llm: "chatgpt" | "gemini";
   kb_id: string | null;
   mcp_tool_ids?: string[] | null;
+  is_active?: boolean | null;
 };
 
 export type KbRow = {

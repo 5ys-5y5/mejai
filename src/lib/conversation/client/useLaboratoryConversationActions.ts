@@ -165,7 +165,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
   const submitMessage = useCallback(
     async (modelId: string, text: string) => {
       const target = models.find((model) => model.id === modelId);
-      if (!target) return;
+      if (!target) return false;
       if (!text) return;
       if (target.setupMode === "existing" && !target.selectedAgentId) {
         toast.error("에이전트를 선택하세요.");
@@ -344,7 +344,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
   const copyConversation = useCallback(
     async (id: string, enabledOverride?: boolean, conversationDebugOptionsOverride?: DebugTranscriptOptions) => {
       const target = models.find((model) => model.id === id);
-      if (!target) return;
+      if (!target) return false;
       const activeSessionId = resolveActiveSessionId(target);
       const viewMessages = visibleMessages(target);
       let prebuiltTextOverride: string | null = null;
@@ -363,7 +363,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           // ignore; fall back to local builder
         }
       }
-      await executeTranscriptCopy({
+      return executeTranscriptCopy({
         page: pageKey,
         kind: "conversation",
         messages: viewMessages,
@@ -393,7 +393,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
   const copyIssue = useCallback(
     async (id: string, enabledOverride?: boolean) => {
       const target = models.find((model) => model.id === id);
-      if (!target) return;
+      if (!target) return false;
       const activeSessionId = resolveActiveSessionId(target);
       const viewMessages = visibleMessages(target);
       let prebuiltTextOverride: string | null = null;
@@ -412,7 +412,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           // ignore; fall back to local builder
         }
       }
-      await executeTranscriptCopy({
+      return executeTranscriptCopy({
         page: pageKey,
         kind: "issue",
         messages: viewMessages,
