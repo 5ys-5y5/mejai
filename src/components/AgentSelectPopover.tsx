@@ -10,7 +10,7 @@ type AgentOption = {
   name: string;
 };
 
-type AgentSelectPopoverProps = React.HTMLAttributes<HTMLDivElement> & {
+type AgentSelectPopoverProps = Omit<React.HTMLAttributes<HTMLDivElement>, "onChange"> & {
   value: string;
   onChange: (value: string) => void;
   options?: AgentOption[];

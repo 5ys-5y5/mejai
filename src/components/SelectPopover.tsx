@@ -12,7 +12,7 @@ export type SelectOption = {
   group?: string;
 };
 
-type SelectPopoverProps = React.HTMLAttributes<HTMLDivElement> & {
+type SelectPopoverProps = Omit<React.HTMLAttributes<HTMLDivElement>, "onChange"> & {
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
@@ -158,7 +158,7 @@ export function SelectPopover({
   );
 }
 
-type MultiSelectPopoverProps = React.HTMLAttributes<HTMLDivElement> & {
+type MultiSelectPopoverProps = Omit<React.HTMLAttributes<HTMLDivElement>, "onChange"> & {
   values: string[];
   onChange: (values: string[]) => void;
   options: SelectOption[];

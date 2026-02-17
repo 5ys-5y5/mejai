@@ -1,5 +1,6 @@
 "use client";
 
+import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -219,6 +220,24 @@ export default function AgentDetailPage() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [kbInfoOpen, setKbInfoOpen] = useState(false);
   const [mcpInfoOpen, setMcpInfoOpen] = useState(false);
+
+  const handleKbChange: {
+    (value: string): void;
+    (event: FormEvent<HTMLDivElement>): void;
+  } = (valueOrEvent) => {
+    if (typeof valueOrEvent === "string") {
+      setKbId(valueOrEvent);
+    }
+  };
+
+  const handleMcpToolIdsChange: {
+    (values: string[]): void;
+    (event: FormEvent<HTMLDivElement>): void;
+  } = (valueOrEvent) => {
+    if (Array.isArray(valueOrEvent)) {
+      setMcpToolIds(valueOrEvent);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -621,7 +640,7 @@ export default function AgentDetailPage() {
                   <div className="flex items-center gap-2">
                     <SelectPopover
                       value={kbId}
-                      onChange={setKbId}
+                      onChange={handleKbChange}
                       options={kbOptions}
                       placeholder="KB 선택"
                       searchable
@@ -733,7 +752,7 @@ export default function AgentDetailPage() {
                 <div className="flex items-center gap-2">
                   <MultiSelectPopover
                     values={mcpToolIds}
-                    onChange={setMcpToolIds}
+                    onChange={handleMcpToolIdsChange}
                     options={mcpOptions}
                     placeholder="MCP 도구 선택"
                     displayMode="count"

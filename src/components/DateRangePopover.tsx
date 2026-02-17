@@ -10,7 +10,7 @@ export function DateRangePopover({
   onChange,
   className,
   ...rootProps
-}: { value: string; onChange: (value: string) => void } & React.HTMLAttributes<HTMLDivElement>) {
+}: { value: string; onChange: (value: string) => void } & Omit<React.HTMLAttributes<HTMLDivElement>, "onChange">) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const presets = [

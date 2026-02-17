@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AdminTag,
@@ -1110,6 +1110,15 @@ export function DesignSystemContent() {
   const [dateRangeValue, setDateRangeValue] = useState("last_month");
   const [agentValue, setAgentValue] = useState("all");
 
+  const handleInputSelectChange: {
+    (value: string): void;
+    (event: FormEvent<HTMLDivElement>): void;
+  } = (valueOrEvent) => {
+    if (typeof valueOrEvent === "string") {
+      setInputSelectValue(valueOrEvent);
+    }
+  };
+
   const [conversationAdminOpen, setConversationAdminOpen] = useState(false);
   const [conversationSelectionEnabled, setConversationSelectionEnabled] = useState(false);
   const [conversationShowLogs, setConversationShowLogs] = useState(false);
@@ -1935,7 +1944,7 @@ export function DesignSystemContent() {
                 />
                 <SelectPopover
                   value={inputSelectValue}
-                  onChange={setInputSelectValue}
+                  onChange={handleInputSelectChange}
                   options={singleOptions}
                   className="w-full"
                   panel-lego="SelectPopover"
