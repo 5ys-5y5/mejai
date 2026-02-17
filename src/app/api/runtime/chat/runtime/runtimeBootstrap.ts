@@ -93,11 +93,12 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const { req, debugEnabled, timingStages, respond } = params;
   const widgetSecret = String(req.headers.get("x-widget-secret") || "").trim();
   const expectedWidgetSecret = String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
+  const isWidgetRequest = Boolean(widgetSecret && expectedWidgetSecret && widgetSecret === expectedWidgetSecret);
   let context: ServerContextSuccess | null = null;
   let authContext: ServerContextSuccess | null = null;
   const authStartedAt = Date.now();
 
-  if (widgetSecret && expectedWidgetSecret && widgetSecret === expectedWidgetSecret) {
+  if (isWidgetRequest) {
     const orgId = String(req.headers.get("x-widget-org-id") || "").trim();
     if (!orgId) {
       return { response: respond({ error: "WIDGET_ORG_ID_REQUIRED" }, { status: 400 }), state: null };
@@ -117,16 +118,38 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     const headerUserId = String(req.headers.get("x-widget-user-id") || "").trim();
     let userId = headerUserId;
     let orgRole = "admin";
-    if (!userId) {
+    if (userId) {
       const { data: accessRow } = await supabaseAdmin
         .from("A_iam_user_access_maps")
-        .select("user_id, is_admin")
+        .select("user_id, is_admin, org_role")
+        .eq("org_id", orgId)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!accessRow?.user_id) {
+        userId = "";
+      } else {
+        orgRole = String(accessRow.org_role || (accessRow.is_admin ? "admin" : "operator") || "operator");
+      }
+    }
+    if (!userId) {
+      const { data: accessRows } = await supabaseAdmin
+        .from("A_iam_user_access_maps")
+        .select("user_id, is_admin, org_role")
         .eq("org_id", orgId)
         .order("is_admin", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      userId = accessRow?.user_id ? String(accessRow.user_id) : "";
-      orgRole = accessRow?.is_admin ? "admin" : "operator";
+        .limit(50);
+      const candidates = (accessRows || []) as Array<{
+        user_id?: string | null;
+        is_admin?: boolean | null;
+        org_role?: string | null;
+      }>;
+      const picked =
+        candidates.find((row) => String(row.org_role || "").toLowerCase() === "owner") ||
+        candidates.find((row) => Boolean(row.is_admin)) ||
+        candidates[0] ||
+        null;
+      userId = picked?.user_id ? String(picked.user_id) : "";
+      orgRole = String(picked?.org_role || (picked?.is_admin ? "admin" : "operator") || "operator");
     }
     if (!userId) {
       return { response: respond({ error: "WIDGET_USER_NOT_FOUND" }, { status: 400 }), state: null };
@@ -278,12 +301,23 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const userRole = (accessRow?.org_role as string | null) ?? null;
   const userOrgId = (accessRow?.org_id as string | null) ?? null;
 
-  const { data: authSettings } = await context.supabase
+  let authSettings: { id?: string | null; providers?: Record<string, Record<string, any> | undefined> | null } | null = null;
+  const { data: authSettingsByUser } = await context.supabase
     .from("A_iam_auth_settings")
     .select("id, providers")
     .eq("org_id", authContext.orgId)
     .eq("user_id", authContext.user.id)
     .maybeSingle();
+  authSettings = authSettingsByUser || null;
+  if (!authSettings && isWidgetRequest) {
+    const { data: authSettingsByOrg } = await context.supabase
+      .from("A_iam_auth_settings")
+      .select("id, providers")
+      .eq("org_id", authContext.orgId)
+      .is("user_id", null)
+      .maybeSingle();
+    authSettings = authSettingsByOrg || null;
+  }
   const providers = (authSettings?.providers || {}) as Record<string, Record<string, any> | undefined>;
   const providerAvailable = Object.keys(providers || {}).filter((key) => {
     const value = providers[key];

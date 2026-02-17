@@ -32,6 +32,28 @@ export async function fetchSessionLogs(sessionId: string, limit = 30) {
   }>(`/api/laboratory/logs?session_id=${encodeURIComponent(sessionId)}&limit=${Math.max(1, limit)}`);
 }
 
+export async function fetchWidgetSessionLogs(sessionId: string, widgetToken: string, limit = 30) {
+  const res = await fetch(
+    `/api/widget/logs?session_id=${encodeURIComponent(sessionId)}&limit=${Math.max(1, limit)}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${widgetToken}`,
+      },
+    }
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    const message = text || res.statusText || "REQUEST_FAILED";
+    throw new Error(message);
+  }
+  return res.json() as Promise<{
+    mcp_logs: NonNullable<LogBundle["mcp_logs"]>;
+    event_logs: NonNullable<LogBundle["event_logs"]>;
+    debug_logs: NonNullable<LogBundle["debug_logs"]>;
+  }>;
+}
+
 export async function fetchTranscriptSnapshot(
   sessionId: string,
   page: CopyPageKey,

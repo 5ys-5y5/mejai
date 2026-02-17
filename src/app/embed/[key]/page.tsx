@@ -21,7 +21,7 @@ import {
 } from "@/lib/conversation/pageFeaturePolicy";
 import { useConversationAdminStatus } from "@/lib/conversation/client/useConversationAdminStatus";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
-import { fetchSessionLogs } from "@/lib/conversation/client/runtimeClient";
+import { fetchSessionLogs, fetchWidgetSessionLogs } from "@/lib/conversation/client/runtimeClient";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
@@ -629,6 +629,41 @@ export default function WidgetEmbedPage() {
     el.scrollTop = el.scrollHeight;
   }, [messages, activeTab]);
 
+  const buildMergedLogs = useCallback(
+    (sessionLogs: LogBundle, baseLogs: LogMap) => {
+      const byTurn = groupLogsByTurn(sessionLogs);
+      return messages.reduce<LogMap>((acc, msg) => {
+        const current = acc[msg.id];
+        if (msg.role !== "bot") return acc;
+        const turnKey = String(msg.turnId || "").trim();
+        if (!turnKey) return acc;
+        const fromSession = byTurn.get(turnKey);
+        if (!fromSession) return acc;
+        acc[msg.id] = mergeLogBundles(current, fromSession);
+        return acc;
+      }, { ...baseLogs });
+    },
+    [messages]
+  );
+
+  const refreshSessionLogs = useCallback(
+    async (limit = 120) => {
+      if (!sessionId || !widgetToken) return;
+      try {
+        const sessionLogs = await fetchWidgetSessionLogs(sessionId, widgetToken, limit);
+        setMessageLogs((prev) => buildMergedLogs(sessionLogs, prev));
+      } catch {
+        // ignore
+      }
+    },
+    [buildMergedLogs, sessionId, widgetToken]
+  );
+
+  useEffect(() => {
+    if (!showAdminLogs) return;
+    void refreshSessionLogs();
+  }, [showAdminLogs, messages.length, refreshSessionLogs]);
+
   const handleNewConversation = useCallback(() => {
     setMessages([]);
     setMessageLogs({});
@@ -745,6 +780,9 @@ export default function WidgetEmbedPage() {
             [botId]: mergeLogBundles(prev[botId], data.log_bundle as LogBundle),
           }));
         }
+        if (showAdminLogs) {
+          void refreshSessionLogs(120);
+        }
         setStatus("연결됨");
         setSending(false);
       } catch (error) {
@@ -785,8 +823,10 @@ export default function WidgetEmbedPage() {
       policyFeatures,
       pendingUser,
       policyConfig,
+      refreshSessionLogs,
       sending,
       sessionId,
+      showAdminLogs,
       widgetToken,
     ]
   );
@@ -811,23 +851,6 @@ export default function WidgetEmbedPage() {
     [messages]
   );
 
-  const buildMergedLogs = useCallback(
-    (sessionLogs: LogBundle) => {
-      const byTurn = groupLogsByTurn(sessionLogs);
-      return messages.reduce<LogMap>((acc, msg) => {
-        const current = acc[msg.id];
-        if (msg.role !== "bot") return acc;
-        const turnKey = String(msg.turnId || "").trim();
-        if (!turnKey) return acc;
-        const fromSession = byTurn.get(turnKey);
-        if (!fromSession) return acc;
-        acc[msg.id] = mergeLogBundles(current, fromSession);
-        return acc;
-      }, { ...messageLogs });
-    },
-    [messageLogs, messages]
-  );
-
   const copyByKind = useCallback(
     async (kind: "conversation" | "issue") => {
       if (!sessionId) {
@@ -836,8 +859,10 @@ export default function WidgetEmbedPage() {
       }
       let mergedLogs = messageLogs;
       try {
-        const sessionLogs = await fetchSessionLogs(sessionId, 60);
-        mergedLogs = buildMergedLogs(sessionLogs);
+        const sessionLogs = widgetToken
+          ? await fetchWidgetSessionLogs(sessionId, widgetToken, 60)
+          : await fetchSessionLogs(sessionId, 60);
+        mergedLogs = buildMergedLogs(sessionLogs, messageLogs);
         setMessageLogs(mergedLogs);
       } catch {
         // ignore fetch failure, fall back to local logs

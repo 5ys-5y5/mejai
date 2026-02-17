@@ -2452,7 +2452,7 @@ export function DesignSystemContent() {
           onSelect={(key) => {
             setActiveCategory(key);
             const search = buildDesignSystemSearch({
-              name: nameParam || null,
+              name: null,
               category: key === "all" ? null : key,
             });
             router.replace(`${window.location.pathname}?${search}`, { scroll: false });
