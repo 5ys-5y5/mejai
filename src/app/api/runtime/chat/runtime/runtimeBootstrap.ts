@@ -122,7 +122,17 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         userIsAdmin: boolean | null;
         userRole: string | null;
         userOrgId: string | null;
+        userGroup: Record<string, any> | null;
         widgetContext: WidgetContext | null;
+        agentResolvedFromParent: boolean;
+        adminKbFilterMeta: Array<{
+          id: string;
+          title?: string | null;
+          apply_groups?: unknown;
+          apply_groups_mode?: string | null;
+          matched: boolean;
+          reason: string;
+        }>;
         sessionId: string;
         reusedSession: boolean;
         recentTurns: Array<Record<string, any>>;
@@ -270,6 +280,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
 
   let agent: AgentShape | null = null;
   const agentLookupStartedAt = Date.now();
+  let agentResolvedFromParent = false;
   if (agentId) {
     const agentRes = await fetchAgent(context, agentId);
     if (!agentRes.data) {
@@ -287,6 +298,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           const activeRes = await fetchActiveAgentByParent(context, parentId);
           if (activeRes.data) {
             agent = activeRes.data;
+            agentResolvedFromParent = true;
           }
         }
       }
@@ -389,11 +401,41 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
 
   const adminKbStartedAt = Date.now();
   const adminKbRes = await fetchAdminKbs(context);
-  let adminKbs = adminKbRes.data || [];
+  const adminKbAll = adminKbRes.data || [];
+  let adminKbFilterMeta: Array<{
+    id: string;
+    title?: string | null;
+    apply_groups?: unknown;
+    apply_groups_mode?: string | null;
+    matched: boolean;
+    reason: string;
+  }> = [];
+  let adminKbs = adminKbAll;
   if (overrideAdminKbIds !== null) {
     const allowed = new Set(overrideAdminKbIds);
+    adminKbFilterMeta = adminKbs.map((item) => ({
+      id: String(item.id || ""),
+      title: String((item as Record<string, any>).title || "") || null,
+      apply_groups: (item as Record<string, any>).apply_groups ?? null,
+      apply_groups_mode: String((item as Record<string, any>).apply_groups_mode || "") || null,
+      matched: allowed.has(item.id),
+      reason: allowed.has(item.id) ? "override_selected" : "override_not_selected",
+    }));
     adminKbs = adminKbs.filter((item) => allowed.has(item.id));
   } else {
+    adminKbFilterMeta = adminKbs.map((item) => {
+      const applyGroups = Array.isArray(item.apply_groups) ? item.apply_groups : null;
+      const applyMode = item.apply_groups_mode === "any" ? "any" : "all";
+      const matched = matchesAdminGroup(applyGroups, userGroup, applyMode);
+      return {
+        id: String(item.id || ""),
+        title: String((item as Record<string, any>).title || "") || null,
+        apply_groups: applyGroups,
+        apply_groups_mode: String(item.apply_groups_mode || "") || null,
+        matched,
+        reason: matched ? "group_match" : "group_mismatch",
+      };
+    });
     adminKbs = adminKbs.filter((item) =>
       matchesAdminGroup(
         Array.isArray(item.apply_groups) ? item.apply_groups : null,
@@ -580,7 +622,10 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       userIsAdmin,
       userRole,
       userOrgId,
+      userGroup,
       widgetContext,
+      agentResolvedFromParent,
+      adminKbFilterMeta,
       sessionId,
       reusedSession,
       recentTurns,

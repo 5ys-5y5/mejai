@@ -130,6 +130,29 @@ const EXECUTION_GUARD_RULES = {
 export async function POST(req: NextRequest) {
   const debugEnabled = process.env.DEBUG_RUNTIME_CHAT === "1" || process.env.NODE_ENV !== "production";
   const requestStartedAt = Date.now();
+  const readHeader = (name: string) => String(req.headers.get(name) || "").trim();
+  const headerOrigin = readHeader("origin");
+  const headerReferer = readHeader("referer");
+  const headerHost = readHeader("host");
+  const parseDomain = (value: string) => {
+    if (!value) return "";
+    try {
+      return new URL(value).hostname || "";
+    } catch {
+      const cleaned = value.replace(/^https?:\/\//, "");
+      return cleaned.split("/")[0] || "";
+    }
+  };
+  const requestOrigin = headerOrigin || headerReferer || "";
+  const requestDomain = parseDomain(requestOrigin) || parseDomain(headerHost);
+  const requestMeta = {
+    domain: requestDomain || null,
+    origin: requestOrigin || null,
+    widgetOrgIdPresent: Boolean(readHeader("x-widget-org-id")),
+    widgetUserIdPresent: Boolean(readHeader("x-widget-user-id")),
+    widgetAgentIdPresent: Boolean(readHeader("x-widget-agent-id")),
+    widgetSecretPresent: Boolean(readHeader("x-widget-secret")),
+  };
   const runtimeTraceId =
     String(req.headers.get("x-runtime-trace-id") || "").trim() ||
     `rt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -474,6 +497,7 @@ export async function POST(req: NextRequest) {
     let forcedIntentQueue = initialized.forcedIntentQueue;
     let pendingIntentQueue = initialized.pendingIntentQueue;
     let slotDebug = initialized.slotDebug;
+    let expectedInputSource = initialized.expectedInputSource;
     let usedRuleIds = initialized.usedRuleIds;
     let usedTemplateIds = initialized.usedTemplateIds;
     let inputRuleIds = initialized.inputRuleIds;
@@ -490,7 +514,76 @@ export async function POST(req: NextRequest) {
     let lastMcpCount = initialized.lastMcpCount;
     let contaminationSummaries = initialized.contaminationSummaries;
     const toolResults = initialized.toolResults;
-    const buildRuntimeSnapshot = (resolvedLlmModel: string | null, resolvedTools: string[]) => ({
+    const deriveModelSelectionMeta = (model: string | null, userText: string) => {
+      const length = String(userText || "").trim().length;
+      if (!model) {
+        return {
+          reason: "deterministic_or_skipped",
+          inputLength: length,
+          lengthRuleHit: null,
+          keywordRuleHit: null,
+        };
+      }
+      const isMini =
+        model.includes("mini") ||
+        model.includes("flash-lite") ||
+        model.includes("flash");
+      if (length > 400) {
+        return {
+          reason: "length_rule",
+          inputLength: length,
+          lengthRuleHit: true,
+          keywordRuleHit: false,
+        };
+      }
+      if (!isMini) {
+        return {
+          reason: "keyword_rule",
+          inputLength: length,
+          lengthRuleHit: false,
+          keywordRuleHit: true,
+        };
+      }
+      return {
+        reason: "short_default",
+        inputLength: length,
+        lengthRuleHit: false,
+        keywordRuleHit: false,
+      };
+    };
+    const computeExpectedToolNames = (intent: string) => {
+      if (["order_change", "shipping_inquiry", "refund_request"].includes(intent)) {
+        return [
+          "send_otp",
+          "verify_otp",
+          ...CHAT_PRINCIPLES.safety.otpRequiredTools,
+        ];
+      }
+      return [];
+    };
+    const computeIntentScopeMismatchReason = () => {
+      const expected = slotDebug.expectedInput;
+      if (!expected) return null;
+      const derivedSlots: Record<string, string | null> = {
+        order_id: derivedOrderId,
+        phone: derivedPhone,
+        zipcode: derivedZipcode,
+        address: derivedAddress,
+      };
+      const expectedValue = derivedSlots[expected] || null;
+      if (expectedValue) return null;
+      const firstActual = Object.entries(derivedSlots).find(([, value]) => Boolean(value));
+      if (!firstActual) return null;
+      return `expected_input=${expected} but derived_${firstActual[0]}=${String(firstActual[1] || "")}`;
+    };
+    let activePolicyConflicts: Array<Record<string, any>> = [];
+    const buildRuntimeSnapshot = (resolvedLlmModel: string | null, resolvedTools: string[]) => {
+      const modelMeta = deriveModelSelectionMeta(resolvedLlmModel, message);
+      const allowlistAllowedToolNames = Array.from(allowedToolNames);
+      const allowlistResolvedToolIds = Array.from(new Set(Array.from(allowedToolIdByName.values())));
+      const expectedTools = computeExpectedToolNames(resolvedIntent);
+      const missingExpectedTools = expectedTools.filter((tool) => (allowedToolByName.get(tool)?.length || 0) === 0);
+      return {
       llmModel: resolvedLlmModel,
       mcpTools: resolvedTools.length > 0 ? resolvedTools : mcpActions,
       mcpProviders: usedProviders,
@@ -516,6 +609,9 @@ export async function POST(req: NextRequest) {
       agentVersion: String((agent as Record<string, any>).version || "").trim() || null,
       agentLlm: agent.llm || null,
       agentKbId: agent.kb_id || null,
+      agentIsActive: typeof (agent as Record<string, any>).is_active === "boolean" ? (agent as Record<string, any>).is_active : null,
+      agentResolvedFromParent: bootstrap.state.agentResolvedFromParent,
+      agentMcpToolIdsRaw: Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.map((id: string) => String(id)) : [],
       kbId: kb.id,
       kbTitle: kb.title || null,
       kbVersion: (kb as Record<string, any>).version || null,
@@ -536,15 +632,31 @@ export async function POST(req: NextRequest) {
       widgetOrgId: bootstrap.state.widgetContext?.widgetOrgId || null,
       widgetAllowedDomains: bootstrap.state.widgetContext?.widgetAllowedDomains || [],
       widgetAllowedPaths: bootstrap.state.widgetContext?.widgetAllowedPaths || [],
+      requestDomain: requestMeta.domain,
+      requestOrigin: requestMeta.origin,
+      requestWidgetOrgIdPresent: requestMeta.widgetOrgIdPresent,
+      requestWidgetUserIdPresent: requestMeta.widgetUserIdPresent,
+      requestWidgetAgentIdPresent: requestMeta.widgetAgentIdPresent,
+      requestWidgetSecretPresent: requestMeta.widgetSecretPresent,
+      userGroup: bootstrap.state.userGroup,
+      kbAdminApplyGroups: bootstrap.state.adminKbFilterMeta.map((item) => ({ id: item.id, apply_groups: item.apply_groups })),
+      kbAdminApplyGroupsMode: bootstrap.state.adminKbFilterMeta.map((item) => item.apply_groups_mode || null),
+      kbAdminFilterReasons: bootstrap.state.adminKbFilterMeta.map((item) => item.reason),
       usedRuleIds,
       usedTemplateIds,
       usedToolPolicies,
       slotExpectedInput: slotDebug.expectedInput,
+      slotExpectedInputPrev: typeof effectivePrevBotContext.expected_input === "string" ? String(effectivePrevBotContext.expected_input) : null,
+      slotExpectedInputSource: expectedInputSource,
       slotOrderId: slotDebug.orderId,
       slotPhone: slotDebug.phone,
       slotPhoneMasked: maskPhone(slotDebug.phone),
       slotZipcode: slotDebug.zipcode,
       slotAddress: slotDebug.address,
+      slotDerivedOrderId: derivedOrderId,
+      slotDerivedPhone: derivedPhone,
+      slotDerivedZipcode: derivedZipcode,
+      slotDerivedAddress: derivedAddress,
       mcpCandidateCalls,
       mcpSkipped: mcpSkipLogs,
       policyInputRules: inputRuleIds,
@@ -553,7 +665,18 @@ export async function POST(req: NextRequest) {
       conversationMode,
       runtimeCallChain,
       templateOverrides: runtimeTemplateOverrides as Record<string, string>,
-    });
+      modelSelectionReason: modelMeta.reason,
+      modelSelectionInputLength: modelMeta.inputLength,
+      modelSelectionLengthRuleHit: modelMeta.lengthRuleHit,
+      modelSelectionKeywordRuleHit: modelMeta.keywordRuleHit,
+      allowlistResolvedToolIds,
+      allowlistAllowedToolNames,
+      allowlistAllowedToolCount: allowlistAllowedToolNames.length,
+      allowlistMissingExpectedTools: missingExpectedTools,
+      intentScopeMismatchReason: computeIntentScopeMismatchReason(),
+      policyConflicts: activePolicyConflicts,
+      policyConflictResolution: activePolicyConflicts.length > 0 ? "tool_stage_force_response_precedence" : null,
+    };
     const replyStyleDirective = resolveReplyStyleDirective({
       primaryKbContent: kb.content || "",
       adminKbContents: adminKbs.map((item) => item.content || ""),
@@ -869,7 +992,7 @@ export async function POST(req: NextRequest) {
     resolvedIntent = inputStage.resolvedIntent as string;
     resolvedOrderId = (inputStage.resolvedOrderId as string | null) || null;
     policyContext = inputStage.policyContext as PolicyEvalContext;
-    const activePolicyConflicts = inputStage.activePolicyConflicts as Array<Record<string, any>>;
+    activePolicyConflicts = inputStage.activePolicyConflicts as Array<Record<string, any>>;
     usedRuleIds = inputStage.usedRuleIds as string[];
     usedTemplateIds = inputStage.usedTemplateIds as string[];
     inputRuleIds = inputStage.inputRuleIds as string[];

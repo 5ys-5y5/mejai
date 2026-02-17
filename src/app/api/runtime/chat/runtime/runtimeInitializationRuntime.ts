@@ -31,6 +31,7 @@ export function initializeRuntimeState(input: {
   pipelineState: RuntimePipelineState;
   derivedChannel: string | null;
   expectedInput: string | null;
+  expectedInputSource: string | null;
   customerVerificationToken: string | null;
   derivedOrderId: string | null;
   derivedPhone: string | null;
@@ -133,11 +134,14 @@ export function initializeRuntimeState(input: {
         ? lastTurn?.answer_text
         : "";
   let initialExpectedInput = deriveExpectedInputFromAnswer(lastAnswer);
+  let expectedInputSource = initialExpectedInput ? "derived_from_last_answer" : null;
   if (initialExpectedInput === "address" && /(환불|취소|반품|교환)/.test(message)) {
     initialExpectedInput = null;
+    expectedInputSource = "reset_by_message_keyword";
   }
   if (isRestockInquiry(message) || isRestockSubscribe(message)) {
     initialExpectedInput = null;
+    expectedInputSource = "reset_by_restock_intent";
   }
   const pipelineState = createRuntimePipelineState({
     resolvedIntent,
@@ -166,6 +170,7 @@ export function initializeRuntimeState(input: {
     pipelineState,
     derivedChannel: pipelineState.derivedChannel,
     expectedInput: pipelineState.expectedInput,
+    expectedInputSource,
     customerVerificationToken: pipelineState.customerVerificationToken,
     derivedOrderId: pipelineState.derivedOrderId,
     derivedPhone: pipelineState.derivedPhone,

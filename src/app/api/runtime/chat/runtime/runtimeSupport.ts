@@ -84,6 +84,36 @@ export type DebugPayload = {
   widgetOrgId?: string | null;
   widgetAllowedDomains?: string[];
   widgetAllowedPaths?: string[];
+  requestDomain?: string | null;
+  requestOrigin?: string | null;
+  requestWidgetOrgIdPresent?: boolean;
+  requestWidgetUserIdPresent?: boolean;
+  requestWidgetAgentIdPresent?: boolean;
+  requestWidgetSecretPresent?: boolean;
+  agentIsActive?: boolean | null;
+  agentResolvedFromParent?: boolean;
+  agentMcpToolIdsRaw?: string[];
+  userGroup?: Record<string, any> | null;
+  kbAdminApplyGroups?: Array<Record<string, any>>;
+  kbAdminApplyGroupsMode?: Array<string | null>;
+  kbAdminFilterReasons?: Array<string>;
+  modelSelectionReason?: string | null;
+  modelSelectionInputLength?: number | null;
+  modelSelectionLengthRuleHit?: boolean | null;
+  modelSelectionKeywordRuleHit?: boolean | null;
+  allowlistResolvedToolIds?: string[];
+  allowlistAllowedToolNames?: string[];
+  allowlistAllowedToolCount?: number | null;
+  allowlistMissingExpectedTools?: string[];
+  slotExpectedInputPrev?: string | null;
+  slotExpectedInputSource?: string | null;
+  slotDerivedOrderId?: string | null;
+  slotDerivedPhone?: string | null;
+  slotDerivedZipcode?: string | null;
+  slotDerivedAddress?: string | null;
+  intentScopeMismatchReason?: string | null;
+  policyConflicts?: Array<Record<string, any>>;
+  policyConflictResolution?: string | null;
 };
 
 type DebugEntry = { key: string; value: string | number };
@@ -362,6 +392,135 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
           },
         }
       : {}),
+    ...(payload.requestDomain ||
+    payload.requestOrigin ||
+    payload.requestWidgetOrgIdPresent !== undefined ||
+    payload.requestWidgetUserIdPresent !== undefined ||
+    payload.requestWidgetAgentIdPresent !== undefined ||
+    payload.requestWidgetSecretPresent !== undefined
+      ? {
+          request_meta: {
+            ...(payload.requestDomain ? { domain: payload.requestDomain } : {}),
+            ...(payload.requestOrigin ? { origin: payload.requestOrigin } : {}),
+            ...(payload.requestWidgetOrgIdPresent !== undefined
+              ? { widget_org_id_present: payload.requestWidgetOrgIdPresent }
+              : {}),
+            ...(payload.requestWidgetUserIdPresent !== undefined
+              ? { widget_user_id_present: payload.requestWidgetUserIdPresent }
+              : {}),
+            ...(payload.requestWidgetAgentIdPresent !== undefined
+              ? { widget_agent_id_present: payload.requestWidgetAgentIdPresent }
+              : {}),
+            ...(payload.requestWidgetSecretPresent !== undefined
+              ? { widget_secret_present: payload.requestWidgetSecretPresent }
+              : {}),
+          },
+        }
+      : {}),
+    ...(payload.agentIsActive !== undefined ||
+    payload.agentResolvedFromParent !== undefined ||
+    Array.isArray(payload.agentMcpToolIdsRaw)
+      ? {
+          resolved_agent: {
+            ...(payload.agentIsActive !== undefined ? { is_active: payload.agentIsActive } : {}),
+            ...(payload.agentResolvedFromParent !== undefined
+              ? { resolved_from_parent: payload.agentResolvedFromParent }
+              : {}),
+            ...(Array.isArray(payload.agentMcpToolIdsRaw)
+              ? { mcp_tool_ids: payload.agentMcpToolIdsRaw }
+              : {}),
+          },
+        }
+      : {}),
+    ...(payload.userGroup ||
+    Array.isArray(payload.kbAdminApplyGroups) ||
+    Array.isArray(payload.kbAdminApplyGroupsMode) ||
+    Array.isArray(payload.kbAdminFilterReasons)
+      ? {
+          kb_resolution: {
+            ...(payload.userGroup ? { user_group: payload.userGroup } : {}),
+            ...(Array.isArray(payload.kbAdminApplyGroups) ? { admin_kb_apply_groups: payload.kbAdminApplyGroups } : {}),
+            ...(Array.isArray(payload.kbAdminApplyGroupsMode)
+              ? { admin_kb_apply_groups_mode: payload.kbAdminApplyGroupsMode }
+              : {}),
+            ...(Array.isArray(payload.kbAdminFilterReasons)
+              ? { admin_kb_filter_reasons: payload.kbAdminFilterReasons }
+              : {}),
+          },
+        }
+      : {}),
+    ...(payload.modelSelectionReason ||
+    payload.modelSelectionInputLength !== undefined ||
+    payload.modelSelectionLengthRuleHit !== undefined ||
+    payload.modelSelectionKeywordRuleHit !== undefined
+      ? {
+          model_resolution: {
+            ...(payload.modelSelectionReason ? { selection_reason: payload.modelSelectionReason } : {}),
+            ...(payload.modelSelectionInputLength !== undefined
+              ? { input_length: payload.modelSelectionInputLength }
+              : {}),
+            ...(payload.modelSelectionLengthRuleHit !== undefined
+              ? { length_rule_hit: payload.modelSelectionLengthRuleHit }
+              : {}),
+            ...(payload.modelSelectionKeywordRuleHit !== undefined
+              ? { keyword_rule_hit: payload.modelSelectionKeywordRuleHit }
+              : {}),
+          },
+        }
+      : {}),
+    ...(Array.isArray(payload.allowlistResolvedToolIds) ||
+    Array.isArray(payload.allowlistAllowedToolNames) ||
+    payload.allowlistAllowedToolCount !== undefined ||
+    Array.isArray(payload.allowlistMissingExpectedTools)
+      ? {
+          tool_allowlist: {
+            ...(Array.isArray(payload.allowlistResolvedToolIds)
+              ? { resolved_tool_ids: payload.allowlistResolvedToolIds }
+              : {}),
+            ...(Array.isArray(payload.allowlistAllowedToolNames)
+              ? { allowed_tool_names: payload.allowlistAllowedToolNames }
+              : {}),
+            ...(payload.allowlistAllowedToolCount !== undefined
+              ? { allowed_tool_count: payload.allowlistAllowedToolCount }
+              : {}),
+            ...(Array.isArray(payload.allowlistMissingExpectedTools)
+              ? { missing_tools_expected_by_intent: payload.allowlistMissingExpectedTools }
+              : {}),
+          },
+        }
+      : {}),
+    ...(payload.slotExpectedInputPrev ||
+    payload.slotExpectedInputSource ||
+    payload.slotDerivedOrderId ||
+    payload.slotDerivedPhone ||
+    payload.slotDerivedZipcode ||
+    payload.slotDerivedAddress
+      ? {
+          slot_flow: {
+            ...(payload.slotExpectedInputPrev ? { expected_input_prev: payload.slotExpectedInputPrev } : {}),
+            ...(payload.slotExpectedInputSource ? { expected_input_source: payload.slotExpectedInputSource } : {}),
+            ...(payload.slotDerivedOrderId ? { derived_order_id: payload.slotDerivedOrderId } : {}),
+            ...(payload.slotDerivedPhone ? { derived_phone: payload.slotDerivedPhone } : {}),
+            ...(payload.slotDerivedZipcode ? { derived_zipcode: payload.slotDerivedZipcode } : {}),
+            ...(payload.slotDerivedAddress ? { derived_address: payload.slotDerivedAddress } : {}),
+          },
+        }
+      : {}),
+    ...(payload.intentScopeMismatchReason
+      ? {
+          intent_scope: {
+            mismatch_reason: payload.intentScopeMismatchReason,
+          },
+        }
+      : {}),
+    ...(Array.isArray(payload.policyConflicts) || payload.policyConflictResolution
+      ? {
+          policy_conflicts: {
+            ...(Array.isArray(payload.policyConflicts) ? { conflicts: payload.policyConflicts } : {}),
+            ...(payload.policyConflictResolution ? { resolution: payload.policyConflictResolution } : {}),
+          },
+        }
+      : {}),
     ...(payload.conversationMode ? { mode: payload.conversationMode } : {}),
   };
 }
@@ -475,14 +634,58 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
     { key: "WIDGET.public_key", value: payload.widgetPublicKey || "-" },
     { key: "WIDGET.agent_id", value: payload.widgetAgentId || "-" },
     { key: "WIDGET.org_id", value: payload.widgetOrgId || "-" },
+    { key: "REQUEST.domain", value: payload.requestDomain || "-" },
+    { key: "REQUEST.origin", value: payload.requestOrigin || "-" },
+    {
+      key: "REQUEST.widget_org_id_present",
+      value:
+        payload.requestWidgetOrgIdPresent === undefined
+          ? "-"
+          : payload.requestWidgetOrgIdPresent
+            ? "true"
+            : "false",
+    },
+    {
+      key: "REQUEST.widget_user_id_present",
+      value:
+        payload.requestWidgetUserIdPresent === undefined
+          ? "-"
+          : payload.requestWidgetUserIdPresent
+            ? "true"
+            : "false",
+    },
+    {
+      key: "REQUEST.widget_agent_id_present",
+      value:
+        payload.requestWidgetAgentIdPresent === undefined
+          ? "-"
+          : payload.requestWidgetAgentIdPresent
+            ? "true"
+            : "false",
+    },
+    {
+      key: "REQUEST.widget_secret_present",
+      value:
+        payload.requestWidgetSecretPresent === undefined
+          ? "-"
+          : payload.requestWidgetSecretPresent
+            ? "true"
+            : "false",
+    },
     { key: "SLOT.expected_input", value: payload.slotExpectedInput || "-" },
+    { key: "SLOT.expected_input_prev", value: payload.slotExpectedInputPrev || "-" },
     { key: "SLOT.order_id", value: payload.slotOrderId || "-" },
     { key: "SLOT.phone", value: payload.slotPhone || "-" },
     { key: "SLOT.phone_masked", value: payload.slotPhoneMasked || "-" },
     { key: "SLOT.zipcode", value: payload.slotZipcode || "-" },
     { key: "SLOT.address", value: payload.slotAddress || "-" },
+    { key: "SLOT.derived_order_id", value: payload.slotDerivedOrderId || "-" },
+    { key: "SLOT.derived_phone", value: payload.slotDerivedPhone || "-" },
+    { key: "SLOT.derived_zipcode", value: payload.slotDerivedZipcode || "-" },
+    { key: "SLOT.derived_address", value: payload.slotDerivedAddress || "-" },
     { key: "POLICY.input_rules", value: uniq(payload.policyInputRules).join(", ") || "-" },
     { key: "POLICY.tool_rules", value: uniq(payload.policyToolRules).join(", ") || "-" },
+    { key: "POLICY.conflict_resolution", value: payload.policyConflictResolution || "-" },
     { key: "CONTEXT.contamination.count", value: uniq(payload.contextContamination).length || "-" },
     ...(payload.contextContamination && payload.contextContamination.length > 0
       ? uniq(payload.contextContamination).map((line, index) => ({
@@ -497,6 +700,8 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
         value: line,
       }))
       : [{ key: "MCP.skipped", value: "-" }]),
+    { key: "TOOL_ALLOWLIST.allowed_count", value: payload.allowlistAllowedToolCount ?? "-" },
+    { key: "TOOL_ALLOWLIST.allowed_names", value: (payload.allowlistAllowedToolNames || []).join(", ") || "-" },
     { key: "MODE", value: payload.conversationMode || "-" },
   ];
 }
