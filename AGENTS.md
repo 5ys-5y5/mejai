@@ -26,6 +26,16 @@ Goal: Keep UI definitions centralized under `src/components` so a single source 
 - Keep cross-cutting UI primitives in `src/components` and reference them everywhere else; do not fork them per feature page.
 - When refactoring, collapse duplicates by moving shared UI into the most reusable layer and updating higher layers to consume it.
 
+## Deployment-Safe Code Change Rules (Railway)
+
+Goal: Prevent syntax/compile errors from reaching Railway builds.
+
+- When editing large files (e.g., `runtimeOrchestrator.ts`), prefer **small, scoped patches** and re-open the modified region to verify **all braces/closures** are balanced before finishing.
+- After any non-trivial code change, **run `npm run build` locally** and fix errors before pushing. If you cannot run it, explicitly state that and minimize changes.
+- Avoid mid-function refactors unless required. If you must add a new block inside a long function, **place the closing braces immediately**, then fill in the block.
+- If you add new fields to debug payloads, **update all related types** in the same patch (e.g., `runtimeSupport.ts`, `runtimeConversationIoRuntime.ts`, `runtimeTurnIo.ts`).
+- If a build error occurs, **fix it before any further edits**. Do not stack unrelated changes.
+
 ## Terminal Encoding (PowerShell + Codex CLI)
 
 To prevent Korean text corruption in the Codex CLI PowerShell terminal output, ensure UTF-8 is set for the session and profile.

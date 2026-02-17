@@ -677,6 +677,7 @@ export async function POST(req: NextRequest) {
       policyConflicts: activePolicyConflicts,
       policyConflictResolution: activePolicyConflicts.length > 0 ? "tool_stage_force_response_precedence" : null,
     };
+    };
     const replyStyleDirective = resolveReplyStyleDirective({
       primaryKbContent: kb.content || "",
       adminKbContents: adminKbs.map((item) => item.content || ""),
