@@ -10,7 +10,7 @@ import {
   type LogBundle,
   type TranscriptMessage,
 } from "@/lib/debugTranscript";
-import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
+import { mapRuntimeResponseToTranscriptFields, type RuntimeRunResponseLike } from "@/lib/runtimeResponseTranscript";
 
 const TRANSCRIPT_SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
 const WIDGET_PROXY_EVENT_PREFIX = "WIDGET_RUNTIME_PROXY_";
@@ -128,10 +128,23 @@ function buildMessages(turns: TurnRow[], logsByTurn: LogsByTurn) {
     const botText = normalizeText(row.final_answer || row.answer_text);
     if (botText) {
       const botContext = normalizeBotContext(row.bot_context);
+      const responseSchema =
+        botContext && typeof botContext.response_schema === "object"
+          ? (botContext.response_schema as RuntimeRunResponseLike["response_schema"])
+          : undefined;
+      const responseSchemaIssues = Array.isArray(botContext?.response_schema_issues)
+        ? botContext?.response_schema_issues
+            .map((item) => String(item || "").trim())
+            .filter(Boolean)
+        : undefined;
+      const renderPlan =
+        botContext && typeof botContext.render_plan === "object"
+          ? (botContext.render_plan as RuntimeRunResponseLike["render_plan"])
+          : undefined;
       const mapped = mapRuntimeResponseToTranscriptFields({
-        response_schema: botContext?.response_schema,
-        response_schema_issues: botContext?.response_schema_issues,
-        render_plan: botContext?.render_plan,
+        response_schema: responseSchema,
+        response_schema_issues: responseSchemaIssues,
+        render_plan: renderPlan,
       });
       const botMessageId = turnId || `bot:${Math.random().toString(16).slice(2)}`;
       messages.push({

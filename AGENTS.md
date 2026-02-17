@@ -51,6 +51,15 @@ When a build error complains about a missing export (e.g., "export X doesn't exi
 - Prefer importing from the module where the symbol is defined, not adjacent policy files.
 - After fixing, run a quick search for other references to the same symbol to avoid repeated mismatches.
 
+## Type Safety Guardrail: Unknown Payloads in API Routes
+
+When a TypeScript build error says `unknown` is not assignable to a typed payload:
+
+- Do not pass raw `unknown` into typed helpers.
+- Add a small type guard or normalize function that narrows to the expected shape.
+- If needed, cast explicitly **after** checking `typeof === "object"` or array validation.
+- Keep the conversion close to the data boundary (e.g., in the API route) to avoid leaking `unknown` downstream.
+
 Add the following lines to the profile:
 ```powershell
 chcp 65001
