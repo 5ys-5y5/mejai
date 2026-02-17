@@ -88,6 +88,14 @@ When a component expects an array prop (e.g., `tree: Item[]`) but data may be mi
 - Do not pass `undefined` into required array props; avoid widening the component prop to `Item[] | undefined`.
 - If a parent/child relationship is optional, model it as `children?: Item[]` on the data type, not the renderer props.
 
+## Type Safety Guardrail: Typed Key Updates
+
+When updating a typed object by dynamic keys:
+
+- Derive a `Key` type from the target object (e.g., `keyof Target`) and cast key arrays to `Key[]` near the source.
+- Keep the accumulator typed to the target object (e.g., `const nextMap: Target = { ...current };`) to prevent implicit `any`.
+- Avoid adding `[key: string]` index signatures to otherwise well-typed objects just to satisfy one loop.
+
 Add the following lines to the profile:
 ```powershell
 chcp 65001

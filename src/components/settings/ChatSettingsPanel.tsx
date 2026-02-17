@@ -190,6 +190,11 @@ type DebugFieldExamplesPayload = {
   error?: string;
 };
 
+type PrefixJsonSections = NonNullable<
+  NonNullable<NonNullable<DebugTranscriptOptions["sections"]>["logs"]>["debug"]
+>["prefixJsonSections"];
+type PrefixJsonSectionKey = keyof PrefixJsonSections;
+
 const SETUP_FIELD_OPTIONS: Array<{ key: SetupFieldKey; defaultLabel: string }> = [
   { key: "inlineUserKbInput", defaultLabel: "사용자 KB입력란" },
   { key: "llmSelector", defaultLabel: "LLM 선택" },
@@ -1803,10 +1808,10 @@ export function ChatSettingsPanel({ authToken }: Props) {
                             }))
                           }
                           onToggle={(node, next) => {
-                            const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
+                            const keysToUpdate = (next ? [node.key] : collectTreeKeys(node)) as PrefixJsonSectionKey[];
                             updateDebugCopyOptions(page, (prev) => {
-                              const current = prev.sections?.logs?.debug?.prefixJsonSections || {};
-                              const nextMap = { ...current };
+                              const current = (prev.sections?.logs?.debug?.prefixJsonSections ?? {}) as PrefixJsonSections;
+                              const nextMap: PrefixJsonSections = { ...current };
                               keysToUpdate.forEach((key) => {
                                 nextMap[key] = next;
                               });
