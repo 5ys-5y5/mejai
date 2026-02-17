@@ -21,7 +21,11 @@ import {
 } from "@/lib/conversation/pageFeaturePolicy";
 import { useConversationAdminStatus } from "@/lib/conversation/client/useConversationAdminStatus";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
-import { fetchSessionLogs, fetchWidgetSessionLogs } from "@/lib/conversation/client/runtimeClient";
+import {
+  fetchSessionLogs,
+  fetchWidgetSessionLogs,
+  fetchWidgetTranscriptCopy,
+} from "@/lib/conversation/client/runtimeClient";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
@@ -858,6 +862,23 @@ export default function WidgetEmbedPage() {
         return;
       }
       let mergedLogs = messageLogs;
+      let prebuiltTextOverride: string | null = null;
+      if (widgetToken) {
+        try {
+          const serverCopy = await fetchWidgetTranscriptCopy({
+            sessionId,
+            widgetToken,
+            page: "/app/laboratory",
+            kind,
+            limit: 500,
+          });
+          if (typeof serverCopy?.transcript_text === "string") {
+            prebuiltTextOverride = serverCopy.transcript_text;
+          }
+        } catch {
+          // ignore; fall back to local builder
+        }
+      }
       try {
         const sessionLogs = widgetToken
           ? await fetchWidgetSessionLogs(sessionId, widgetToken, 60)
@@ -875,9 +896,10 @@ export default function WidgetEmbedPage() {
         enabledOverride:
           kind === "conversation" ? pageFeatures.adminPanel.copyConversation : pageFeatures.adminPanel.copyIssue,
         conversationDebugOptionsOverride: kind === "conversation" ? debugOptions : undefined,
+        prebuiltTextOverride,
       });
     },
-    [buildMergedLogs, copyMessages, debugOptions, messageLogs, pageFeatures, sessionId]
+    [buildMergedLogs, copyMessages, debugOptions, messageLogs, pageFeatures, sessionId, widgetToken]
   );
 
   useEffect(() => {

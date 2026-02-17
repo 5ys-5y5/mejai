@@ -172,6 +172,37 @@ export function createRuntimeResponder(input: {
       decidedUiTypeId: renderPlan.ui_type_id,
     });
     const schemaValidation = validateRuntimeResponseSchema(responseSchema);
+    if (RuntimeContextAny && currentTurnId) {
+      void (async () => {
+        try {
+          const { data } = await RuntimeContextAny.supabase
+            .from("D_conv_turns")
+            .select("bot_context")
+            .eq("id", currentTurnId)
+            .maybeSingle();
+          const currentBotContext =
+            data?.bot_context && typeof data.bot_context === "object" ? (data.bot_context as Record<string, any>) : {};
+          await RuntimeContextAny.supabase
+            .from("D_conv_turns")
+            .update({
+              bot_context: {
+                ...currentBotContext,
+                response_schema: responseSchema,
+                render_plan: renderPlan,
+                response_schema_issues: schemaValidation.ok ? null : schemaValidation.issues,
+              },
+            })
+            .eq("id", currentTurnId);
+        } catch (error: unknown) {
+          console.warn("[runtime/chat_mk2] failed to persist response schema", {
+            trace_id: runtimeTraceId,
+            session_id: currentSessionId,
+            turn_id: currentTurnId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      })();
+    }
     return NextResponse.json(
       {
         ...payload,

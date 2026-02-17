@@ -68,6 +68,54 @@ export async function fetchTranscriptSnapshot(
   );
 }
 
+export async function fetchTranscriptCopy(input: {
+  sessionId: string;
+  page: CopyPageKey;
+  kind: "conversation" | "issue";
+  limit?: number;
+}) {
+  return apiFetch<{
+    ok: boolean;
+    transcript_text: string | null;
+  }>("/api/transcript/copy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_id: input.sessionId,
+      page: input.page,
+      kind: input.kind,
+      limit: input.limit,
+    }),
+  });
+}
+
+export async function fetchWidgetTranscriptCopy(input: {
+  sessionId: string;
+  widgetToken: string;
+  page: CopyPageKey;
+  kind: "conversation" | "issue";
+  limit?: number;
+}) {
+  const res = await fetch("/api/transcript/copy", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${input.widgetToken}`,
+    },
+    body: JSON.stringify({
+      session_id: input.sessionId,
+      page: input.page,
+      kind: input.kind,
+      limit: input.limit,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(text || res.statusText || "REQUEST_FAILED");
+  }
+  return res.json() as Promise<{ ok: boolean; transcript_text: string | null }>;
+}
+
 export async function saveTranscriptSnapshot(input: {
   sessionId: string;
   page: CopyPageKey;

@@ -4,7 +4,12 @@ import { useCallback, useMemo, useState } from "react";
 import type { CopyPageKey } from "@/lib/transcriptCopyPolicy";
 import type { DebugTranscriptOptions, LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
-import { fetchSessionLogs, runConversation, saveTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
+import {
+  fetchSessionLogs,
+  fetchTranscriptCopy,
+  runConversation,
+  saveTranscriptSnapshot,
+} from "@/lib/conversation/client/runtimeClient";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 
 export type ConversationUiMessage = TranscriptMessage & {
@@ -198,6 +203,22 @@ export function useConversationController(options: ControllerOptions) {
 
   const copyByKind = useCallback(
     async (kind: "conversation" | "issue", enabledOverride?: boolean, conversationDebugOptionsOverride?: DebugTranscriptOptions) => {
+      let prebuiltTextOverride: string | null = null;
+      if (sessionId) {
+        try {
+          const serverCopy = await fetchTranscriptCopy({
+            sessionId,
+            page: options.page,
+            kind,
+            limit: 500,
+          });
+          if (typeof serverCopy?.transcript_text === "string") {
+            prebuiltTextOverride = serverCopy.transcript_text;
+          }
+        } catch {
+          // ignore; fall back to local builder
+        }
+      }
       return executeTranscriptCopy({
         page: options.page,
         kind,
@@ -206,6 +227,7 @@ export function useConversationController(options: ControllerOptions) {
         messageLogs,
         enabledOverride,
         conversationDebugOptionsOverride,
+        prebuiltTextOverride,
         onCopiedText: async (text) => {
           if (!sessionId) return;
           const turnId = resolveSnapshotTurnId(messages, selectedMessageIds);

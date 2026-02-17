@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 import { loadLaboratoryLogs, sendLaboratoryMessage, type LaboratoryRunConfig } from "@/lib/conversation/client/laboratoryTransport";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
-import { saveTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
+import { fetchTranscriptCopy, saveTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import type { TranscriptMessage, LogBundle } from "@/lib/debugTranscript";
 import type { ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
@@ -347,6 +347,22 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
       if (!target) return;
       const activeSessionId = resolveActiveSessionId(target);
       const viewMessages = visibleMessages(target);
+      let prebuiltTextOverride: string | null = null;
+      if (activeSessionId) {
+        try {
+          const serverCopy = await fetchTranscriptCopy({
+            sessionId: activeSessionId,
+            page: pageKey,
+            kind: "conversation",
+            limit: 500,
+          });
+          if (typeof serverCopy?.transcript_text === "string") {
+            prebuiltTextOverride = serverCopy.transcript_text;
+          }
+        } catch {
+          // ignore; fall back to local builder
+        }
+      }
       await executeTranscriptCopy({
         page: pageKey,
         kind: "conversation",
@@ -355,6 +371,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         messageLogs: target.messageLogs || {},
         enabledOverride,
         conversationDebugOptionsOverride,
+        prebuiltTextOverride,
         blockedMessage: "이 페이지에서는 대화 복사를 지원하지 않습니다.",
         onCopiedText: async (text) => {
           const turnId = resolveSnapshotTurnId(viewMessages, target.selectedMessageIds || []);
@@ -379,6 +396,22 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
       if (!target) return;
       const activeSessionId = resolveActiveSessionId(target);
       const viewMessages = visibleMessages(target);
+      let prebuiltTextOverride: string | null = null;
+      if (activeSessionId) {
+        try {
+          const serverCopy = await fetchTranscriptCopy({
+            sessionId: activeSessionId,
+            page: pageKey,
+            kind: "issue",
+            limit: 500,
+          });
+          if (typeof serverCopy?.transcript_text === "string") {
+            prebuiltTextOverride = serverCopy.transcript_text;
+          }
+        } catch {
+          // ignore; fall back to local builder
+        }
+      }
       await executeTranscriptCopy({
         page: pageKey,
         kind: "issue",
@@ -386,6 +419,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         selectedMessageIds: target.selectedMessageIds || [],
         messageLogs: target.messageLogs || {},
         enabledOverride,
+        prebuiltTextOverride,
         blockedMessage: "이 페이지에서는 문제 로그 복사를 지원하지 않습니다.",
         onCopiedText: async (text) => {
           const turnId = resolveSnapshotTurnId(viewMessages, target.selectedMessageIds || []);
