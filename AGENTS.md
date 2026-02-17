@@ -60,6 +60,14 @@ When a TypeScript build error says `unknown` is not assignable to a typed payloa
 - If needed, cast explicitly **after** checking `typeof === "object"` or array validation.
 - Keep the conversion close to the data boundary (e.g., in the API route) to avoid leaking `unknown` downstream.
 
+## Type Safety Guardrail: Callback Return Types
+
+When changing the return type of a callback used across shared UI props (e.g., copy actions):
+
+- Update the **shared prop types** first (e.g., component prop interfaces in `src/components`) to include the new return type.
+- Avoid `void` wrappers like `() => void fn()` when the return value matters; return the promise/boolean directly.
+- Check all call sites for type compatibility and update wrappers to preserve the return value.
+
 Add the following lines to the profile:
 ```powershell
 chcp 65001

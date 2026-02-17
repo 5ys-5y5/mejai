@@ -1610,8 +1610,8 @@ type ConversationModelCardProps = {
   onSelectSession: (id: string, sessionId: string) => Promise<void> | void;
   onSearchSessionById: (id: string, sessionId: string) => Promise<void> | void;
   onChangeConversationMode: (id: string, mode: ConversationModelMode) => void;
-  onCopyConversation: (id: string) => Promise<void> | void;
-  onCopyIssue: (id: string) => Promise<void> | void;
+  onCopyConversation: (id: string) => Promise<boolean> | boolean | Promise<void> | void;
+  onCopyIssue: (id: string) => Promise<boolean> | boolean | Promise<void> | void;
   onToggleMessageSelection: (id: string, messageId: string) => void;
   onSubmitMessage: (id: string, text: string) => Promise<void> | void;
   onExpand: (id: string) => void;
@@ -1865,8 +1865,8 @@ export type ConversationModelChatColumnLegoProps = {
   onToggleAdminOpen: () => void;
   onToggleSelectionMode: () => void;
   onToggleLogs: () => void;
-  onCopyConversation: () => void;
-  onCopyIssue: () => void;
+  onCopyConversation: () => void | boolean | Promise<void> | Promise<boolean>;
+  onCopyIssue: () => void | boolean | Promise<void> | Promise<boolean>;
   onToggleMessageSelection: (messageId: string) => void;
   onSubmitMessage: (text: string) => void;
   onExpand: () => void;
@@ -2226,8 +2226,8 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
         ...m,
         showAdminLogs: !m.showAdminLogs,
       })),
-    onCopyConversation: () => void onCopyConversation(model.id),
-    onCopyIssue: () => void onCopyIssue(model.id),
+    onCopyConversation: () => onCopyConversation(model.id),
+    onCopyIssue: () => onCopyIssue(model.id),
     onToggleMessageSelection: (messageId) => onToggleMessageSelection(model.id, messageId),
     onSubmitMessage: (text) => void onSubmitMessage(model.id, text),
     onExpand: () => onExpand(model.id),
