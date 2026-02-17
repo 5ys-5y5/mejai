@@ -96,6 +96,11 @@ When updating a typed object by dynamic keys:
 - Keep the accumulator typed to the target object (e.g., `const nextMap: Target = { ...current };`) to prevent implicit `any`.
 - Avoid adding `[key: string]` index signatures to otherwise well-typed objects just to satisfy one loop.
 
+If dynamic key updates are common:
+
+- Normalize the data to a `Record<string, boolean>` (or `Partial<Record<Key, boolean>>`) at the boundary and update through a shared helper.
+- Prefer a reusable `updateBooleanMap()` helper over ad-hoc `forEach` assignments to avoid repeated key-type errors.
+
 Add the following lines to the profile:
 ```powershell
 chcp 65001

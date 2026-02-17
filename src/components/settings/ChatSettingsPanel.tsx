@@ -190,10 +190,15 @@ type DebugFieldExamplesPayload = {
   error?: string;
 };
 
-type PrefixJsonSections = NonNullable<
-  NonNullable<NonNullable<DebugTranscriptOptions["sections"]>["logs"]>["debug"]
->["prefixJsonSections"];
-type PrefixJsonSectionKey = keyof PrefixJsonSections;
+type BooleanMap = Record<string, boolean>;
+
+function updateBooleanMap(current: BooleanMap | undefined, keys: string[], next: boolean): BooleanMap {
+  const nextMap: BooleanMap = { ...(current ?? {}) };
+  keys.forEach((key) => {
+    nextMap[key] = next;
+  });
+  return nextMap;
+}
 
 const SETUP_FIELD_OPTIONS: Array<{ key: SetupFieldKey; defaultLabel: string }> = [
   { key: "inlineUserKbInput", defaultLabel: "사용자 KB입력란" },
@@ -1643,11 +1648,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           onToggle={(node, next) => {
                             const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
                             updateDebugCopyOptions(page, (prev) => {
-                              const current = prev.sections?.turn?.responseSchemaDetailFields || {};
-                              const nextMap = { ...current };
-                              keysToUpdate.forEach((key) => {
-                                nextMap[key] = next;
-                              });
+                              const nextMap = updateBooleanMap(prev.sections?.turn?.responseSchemaDetailFields, keysToUpdate, next);
                               return {
                                 ...prev,
                                 sections: {
@@ -1714,11 +1715,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           onToggle={(node, next) => {
                             const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
                             updateDebugCopyOptions(page, (prev) => {
-                              const current = prev.sections?.turn?.renderPlanDetailFields || {};
-                              const nextMap = { ...current };
-                              keysToUpdate.forEach((key) => {
-                                nextMap[key] = next;
-                              });
+                              const nextMap = updateBooleanMap(prev.sections?.turn?.renderPlanDetailFields, keysToUpdate, next);
                               return {
                                 ...prev,
                                 sections: {
@@ -1808,13 +1805,10 @@ export function ChatSettingsPanel({ authToken }: Props) {
                             }))
                           }
                           onToggle={(node, next) => {
-                            const keysToUpdate = (next ? [node.key] : collectTreeKeys(node)) as PrefixJsonSectionKey[];
+                            const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
                             updateDebugCopyOptions(page, (prev) => {
-                              const current = (prev.sections?.logs?.debug?.prefixJsonSections ?? {}) as PrefixJsonSections;
-                              const nextMap: PrefixJsonSections = { ...current };
-                              keysToUpdate.forEach((key) => {
-                                nextMap[key] = next;
-                              });
+                              const current = prev.sections?.logs?.debug?.prefixJsonSections as BooleanMap | undefined;
+                              const nextMap = updateBooleanMap(current, keysToUpdate, next);
                               return {
                                 ...prev,
                                 sections: {
