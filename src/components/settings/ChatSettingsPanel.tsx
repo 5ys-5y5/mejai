@@ -46,6 +46,99 @@ const DEFAULT_LLM_OPTIONS: SelectOption[] = [
   { id: "gemini", label: "gemini" },
 ];
 
+type DebugFieldTree = {
+  key: string;
+  label: string;
+  children?: DebugFieldTree[];
+};
+
+const RESPONSE_SCHEMA_DETAIL_TREE: DebugFieldTree[] = [
+  {
+    key: "response_schema_detail_fields",
+    label: "RESPONSE_SCHEMA_DETAIL fields",
+    children: [
+      { key: "message", label: "message" },
+      {
+        key: "ui_hints",
+        label: "UI 힌트",
+        children: [
+          { key: "ui_hints.view", label: "view" },
+          { key: "ui_hints.choice_mode", label: "choice mode" },
+        ],
+      },
+      { key: "quick_replies", label: "quick replies" },
+      { key: "cards", label: "cards" },
+    ],
+  },
+];
+
+const RENDER_PLAN_DETAIL_TREE: DebugFieldTree[] = [
+  {
+    key: "render_plan_detail_fields",
+    label: "RENDER_PLAN_DETAIL fields",
+    children: [
+      { key: "view", label: "view" },
+      { key: "enable_quick_replies", label: "quick replies 사용" },
+      { key: "enable_cards", label: "cards 사용" },
+      { key: "interaction_scope", label: "interaction scope" },
+      { key: "selection_mode", label: "selection mode" },
+      { key: "min_select", label: "min select" },
+      { key: "max_select", label: "max select" },
+      { key: "submit_format", label: "submit format" },
+      { key: "prompt_kind", label: "prompt kind" },
+      {
+        key: "quick_reply_source",
+        label: "quick reply source",
+        children: [
+          { key: "quick_reply_source.type", label: "type" },
+          { key: "quick_reply_source.criteria", label: "criteria" },
+          { key: "quick_reply_source.source_function", label: "source function" },
+          { key: "quick_reply_source.source_module", label: "source module" },
+        ],
+      },
+      {
+        key: "grid_columns",
+        label: "grid columns",
+        children: [
+          { key: "grid_columns.quick_replies", label: "quick replies" },
+          { key: "grid_columns.cards", label: "cards" },
+        ],
+      },
+      {
+        key: "debug",
+        label: "debug",
+        children: [
+          { key: "debug.policy_version", label: "policy version" },
+          { key: "debug.quick_replies_count", label: "quick replies count" },
+          { key: "debug.cards_count", label: "cards count" },
+          { key: "debug.selection_mode_source", label: "selection mode source" },
+          { key: "debug.min_select_source", label: "min select source" },
+          { key: "debug.max_select_source", label: "max select source" },
+          { key: "debug.submit_format_source", label: "submit format source" },
+        ],
+      },
+    ],
+  },
+];
+
+const PREFIX_JSON_SECTIONS_TREE: DebugFieldTree[] = [
+  {
+    key: "prefix_json_sections",
+    label: "prefix_json 섹션",
+    children: [
+      { key: "requestMeta", label: "요청 메타" },
+      { key: "resolvedAgent", label: "에이전트 해석" },
+      { key: "kbResolution", label: "KB 해석" },
+      { key: "modelResolution", label: "모델 해석" },
+      { key: "toolAllowlist", label: "도구 허용 목록" },
+      { key: "slotFlow", label: "슬롯 흐름" },
+      { key: "intentScope", label: "의도 범위" },
+      { key: "policyConflicts", label: "정책 충돌" },
+      { key: "conflictResolution", label: "충돌 해소" },
+    ],
+  },
+];
+
 type Props = {
   authToken: string;
 };
@@ -338,6 +431,97 @@ function InlineHelpPopup({ className, ariaLabel = "도움말", children }: Inlin
   );
 }
 
+type DebugFieldTreeProps = {
+  tree: DebugFieldTree[];
+  isHeader: boolean;
+  disabled: boolean;
+  stateMap: Record<string, boolean> | undefined;
+  onToggle: (node: DebugFieldTree, next: boolean) => void;
+  collapsedMap?: Record<string, boolean>;
+  onToggleCollapse?: (key: string, next: boolean) => void;
+  isChild?: boolean;
+  parentEnabled?: boolean;
+};
+
+function DebugFieldTreeRenderer({
+  tree,
+  isHeader,
+  disabled,
+  stateMap,
+  onToggle,
+  collapsedMap,
+  onToggleCollapse,
+  isChild = false,
+  parentEnabled = true,
+}: DebugFieldTreeProps) {
+  return (
+    <div className={isChild ? "detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3" : ""}>
+      {tree.map((node) => {
+        const isOn = stateMap?.[node.key] ?? true;
+        const isCollapsed = collapsedMap?.[node.key] ?? false;
+        const effectiveDisabled = disabled || !parentEnabled;
+        const rowClass = isHeader
+          ? "mt-2 flex h-10 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-[11px]"
+          : "mt-2 flex h-10 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-[11px] [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100";
+        const isParent = Boolean(node.children && node.children.length > 0);
+        return (
+          <div key={node.key}>
+            {isParent ? (
+              <GroupToggleField
+                neutralStyle={isHeader}
+                label={node.label}
+                checked={isOn}
+                onChange={(next) => onToggle(node, next)}
+                expandable={isHeader}
+                expanded={!isCollapsed}
+                onToggleExpanded={() => onToggleCollapse?.(node.key, !isCollapsed)}
+                hideToggle={isHeader}
+              />
+            ) : (
+              <div className={rowClass}>
+                <span>{node.label}</span>
+                {!isHeader ? (
+                  <button
+                    type="button"
+                    disabled={effectiveDisabled}
+                    onClick={() => onToggle(node, !isOn)}
+                    className={!effectiveDisabled && isOn ? "inline-flex h-6 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[10px] font-bold text-white" : "inline-flex h-6 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[10px] font-bold text-white disabled:bg-slate-300"}
+                  >
+                    {!effectiveDisabled ? (isOn ? "ON" : "OFF") : "OFF"}
+                  </button>
+                ) : null}
+              </div>
+            )}
+            {isParent && (!isHeader || !isCollapsed) ? (
+              <DebugFieldTreeRenderer
+                tree={node.children}
+                isHeader={isHeader}
+                disabled={disabled}
+                stateMap={stateMap}
+                onToggle={onToggle}
+                collapsedMap={collapsedMap}
+                onToggleCollapse={onToggleCollapse}
+                isChild={true}
+                parentEnabled={isOn && parentEnabled}
+              />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function collectTreeKeys(node: DebugFieldTree): string[] {
+  const keys = [node.key];
+  if (node.children) {
+    node.children.forEach((child) => {
+      keys.push(...collectTreeKeys(child));
+    });
+  }
+  return keys;
+}
+
 const SETTING_FILE_GUIDE: SettingFileItem[] = [
   {
     key: "mcp.providerSelector",
@@ -540,6 +724,12 @@ export function ChatSettingsPanel({ authToken }: Props) {
   const [debugTurnDetailsOpenByPage, setDebugTurnDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
   const [debugLogsDetailsOpenByPage, setDebugLogsDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
   const [debugEventDetailsOpenByPage, setDebugEventDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
+  const [debugDetailTreeCollapsedByPage, setDebugDetailTreeCollapsedByPage] = useState<Record<ConversationPageKey, Record<string, boolean>>>(() =>
+    initialPages.reduce<Record<ConversationPageKey, Record<string, boolean>>>((acc, page) => {
+      acc[page] = {};
+      return acc;
+    }, {} as Record<ConversationPageKey, Record<string, boolean>>)
+  );
   const [debugFieldExamples, setDebugFieldExamples] = useState<Record<string, unknown>>({});
   const [debugFieldEventTypes, setDebugFieldEventTypes] = useState<string[]>([]);
   const [debugFieldMcpTools, setDebugFieldMcpTools] = useState<string[]>([]);
@@ -634,11 +824,17 @@ export function ChatSettingsPanel({ authToken }: Props) {
     setSetupUiByPage(nextSetupUi);
     setSetupExistingDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
     setSetupNewDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
-    setDebugHeaderDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
-    setDebugTurnDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
-    setDebugLogsDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
-    setDebugEventDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
-  }, [buildOpenStateByPage]);
+      setDebugHeaderDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+      setDebugTurnDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+      setDebugLogsDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+      setDebugEventDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+      setDebugDetailTreeCollapsedByPage(
+        discoveredPages.reduce<Record<ConversationPageKey, Record<string, boolean>>>((acc, page) => {
+          acc[page] = {};
+          return acc;
+        }, {} as Record<ConversationPageKey, Record<string, boolean>>)
+      );
+    }, [buildOpenStateByPage]);
 
   const updatePage = useCallback(
     (page: ConversationPageKey, updater: (prev: ConversationPageFeatures) => ConversationPageFeatures) => {
@@ -873,6 +1069,12 @@ export function ChatSettingsPanel({ authToken }: Props) {
     setDebugTurnDetailsOpenByPage(buildOpenStateByPage(pages));
     setDebugLogsDetailsOpenByPage(buildOpenStateByPage(pages));
     setDebugEventDetailsOpenByPage(buildOpenStateByPage(pages));
+    setDebugDetailTreeCollapsedByPage(
+      pages.reduce<Record<ConversationPageKey, Record<string, boolean>>>((acc, page) => {
+        acc[page] = {};
+        return acc;
+      }, {} as Record<ConversationPageKey, Record<string, boolean>>)
+    );
     setError(null);
   };
 
@@ -1005,6 +1207,10 @@ export function ChatSettingsPanel({ authToken }: Props) {
             const debugLogMcp = debugLogs?.mcp;
             const debugLogEvent = debugLogs?.event;
             const debugLogDebug = debugLogs?.debug;
+            const debugPrefixSections = debugLogDebug?.prefixJsonSections;
+            const responseSchemaDetailFields = debugTurn?.responseSchemaDetailFields;
+            const renderPlanDetailFields = debugTurn?.renderPlanDetailFields;
+            const debugTreeCollapsed = debugDetailTreeCollapsedByPage[page] || {};
             const showDebugHeaderDetails = Boolean(debugHeaderDetailsOpenByPage[page]);
             const showDebugTurnDetails = Boolean(debugTurnDetailsOpenByPage[page]);
             const showDebugLogsDetails = Boolean(debugLogsDetailsOpenByPage[page]);
@@ -1392,6 +1598,41 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           </button>
                         ) : null}
                       </div>
+                      <div className="mt-2">
+                        <DebugFieldTreeRenderer
+                          tree={RESPONSE_SCHEMA_DETAIL_TREE}
+                          isHeader={isHeader}
+                          disabled={!(debugTurn?.enabled ?? true) || !(debugTurn?.responseSchemaDetail ?? true)}
+                          stateMap={responseSchemaDetailFields as Record<string, boolean> | undefined}
+                          collapsedMap={debugTreeCollapsed}
+                          onToggleCollapse={(key, next) =>
+                            setDebugDetailTreeCollapsedByPage((prev) => ({
+                              ...prev,
+                              [page]: { ...(prev[page] || {}), [key]: next },
+                            }))
+                          }
+                          onToggle={(node, next) => {
+                            const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
+                            updateDebugCopyOptions(page, (prev) => {
+                              const current = prev.sections?.turn?.responseSchemaDetailFields || {};
+                              const nextMap = { ...current };
+                              keysToUpdate.forEach((key) => {
+                                nextMap[key] = next;
+                              });
+                              return {
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  turn: {
+                                    ...prev.sections?.turn,
+                                    responseSchemaDetailFields: nextMap,
+                                  },
+                                },
+                              };
+                            });
+                          }}
+                        />
+                      </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>RENDER_PLAN(요약)</span>
                         {!isHeader ? (
@@ -1427,6 +1668,41 @@ export function ChatSettingsPanel({ authToken }: Props) {
                             {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanDetail ?? true) ? "ON" : "OFF") : "OFF"}
                           </button>
                         ) : null}
+                      </div>
+                      <div className="mt-2">
+                        <DebugFieldTreeRenderer
+                          tree={RENDER_PLAN_DETAIL_TREE}
+                          isHeader={isHeader}
+                          disabled={!(debugTurn?.enabled ?? true) || !(debugTurn?.renderPlanDetail ?? true)}
+                          stateMap={renderPlanDetailFields as Record<string, boolean> | undefined}
+                          collapsedMap={debugTreeCollapsed}
+                          onToggleCollapse={(key, next) =>
+                            setDebugDetailTreeCollapsedByPage((prev) => ({
+                              ...prev,
+                              [page]: { ...(prev[page] || {}), [key]: next },
+                            }))
+                          }
+                          onToggle={(node, next) => {
+                            const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
+                            updateDebugCopyOptions(page, (prev) => {
+                              const current = prev.sections?.turn?.renderPlanDetailFields || {};
+                              const nextMap = { ...current };
+                              keysToUpdate.forEach((key) => {
+                                nextMap[key] = next;
+                              });
+                              return {
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  turn: {
+                                    ...prev.sections?.turn,
+                                    renderPlanDetailFields: nextMap,
+                                  },
+                                },
+                              };
+                            });
+                          }}
+                        />
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>QUICK_REPLY_RULE</span>
@@ -1488,6 +1764,44 @@ export function ChatSettingsPanel({ authToken }: Props) {
                             {(debugLogs?.enabled ?? true) ? ((debugLogs?.issueSummary ?? true) ? "ON" : "OFF") : "OFF"}
                           </button>
                         ) : null}
+                      </div>
+                      <div className="mt-2">
+                        <DebugFieldTreeRenderer
+                          tree={PREFIX_JSON_SECTIONS_TREE}
+                          isHeader={isHeader}
+                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogDebug?.enabled ?? true) || !(debugLogDebug?.prefixJson ?? true)}
+                          stateMap={debugPrefixSections as Record<string, boolean> | undefined}
+                          collapsedMap={debugTreeCollapsed}
+                          onToggleCollapse={(key, next) =>
+                            setDebugDetailTreeCollapsedByPage((prev) => ({
+                              ...prev,
+                              [page]: { ...(prev[page] || {}), [key]: next },
+                            }))
+                          }
+                          onToggle={(node, next) => {
+                            const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
+                            updateDebugCopyOptions(page, (prev) => {
+                              const current = prev.sections?.logs?.debug?.prefixJsonSections || {};
+                              const nextMap = { ...current };
+                              keysToUpdate.forEach((key) => {
+                                nextMap[key] = next;
+                              });
+                              return {
+                                ...prev,
+                                sections: {
+                                  ...prev.sections,
+                                  logs: {
+                                    ...prev.sections?.logs,
+                                    debug: {
+                                      ...prev.sections?.logs?.debug,
+                                      prefixJsonSections: nextMap,
+                                    },
+                                  },
+                                },
+                              };
+                            });
+                          }}
+                        />
                       </div>
                       <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                         <span>DEBUG 로그</span>

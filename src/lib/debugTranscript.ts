@@ -92,8 +92,10 @@ export type DebugTranscriptOptions = {
       tokenUnused?: boolean;
       responseSchemaSummary?: boolean;
       responseSchemaDetail?: boolean;
+      responseSchemaDetailFields?: Record<string, boolean>;
       renderPlanSummary?: boolean;
       renderPlanDetail?: boolean;
+      renderPlanDetailFields?: Record<string, boolean>;
       quickReplyRule?: boolean;
     };
     logs?: {
@@ -102,6 +104,17 @@ export type DebugTranscriptOptions = {
       debug?: {
         enabled?: boolean;
         prefixJson?: boolean;
+        prefixJsonSections?: {
+          requestMeta?: boolean;
+          resolvedAgent?: boolean;
+          kbResolution?: boolean;
+          modelResolution?: boolean;
+          toolAllowlist?: boolean;
+          slotFlow?: boolean;
+          intentScope?: boolean;
+          policyConflicts?: boolean;
+          conflictResolution?: boolean;
+        };
       };
       mcp?: {
         enabled?: boolean;
@@ -144,8 +157,10 @@ type NormalizedDebugTranscriptOptions = {
     tokenUnused: boolean;
     responseSchemaSummary: boolean;
     responseSchemaDetail: boolean;
+    responseSchemaDetailFields: Record<string, boolean>;
     renderPlanSummary: boolean;
     renderPlanDetail: boolean;
+    renderPlanDetailFields: Record<string, boolean>;
     quickReplyRule: boolean;
   };
   logs: {
@@ -154,6 +169,17 @@ type NormalizedDebugTranscriptOptions = {
     debug: {
       enabled: boolean;
       prefixJson: boolean;
+      prefixJsonSections: {
+        requestMeta: boolean;
+        resolvedAgent: boolean;
+        kbResolution: boolean;
+        modelResolution: boolean;
+        toolAllowlist: boolean;
+        slotFlow: boolean;
+        intentScope: boolean;
+        policyConflicts: boolean;
+        conflictResolution: boolean;
+      };
     };
     mcp: {
       enabled: boolean;
@@ -217,8 +243,10 @@ function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): Norm
       tokenUnused: sectionTurn?.tokenUnused ?? includeTokenUnused,
       responseSchemaSummary: sectionTurn?.responseSchemaSummary ?? includeResponseSchema,
       responseSchemaDetail: sectionTurn?.responseSchemaDetail ?? includeResponseSchema,
+      responseSchemaDetailFields: sectionTurn?.responseSchemaDetailFields ?? {},
       renderPlanSummary: sectionTurn?.renderPlanSummary ?? includeRenderPlan,
       renderPlanDetail: sectionTurn?.renderPlanDetail ?? includeRenderPlan,
+      renderPlanDetailFields: sectionTurn?.renderPlanDetailFields ?? {},
       quickReplyRule: sectionTurn?.quickReplyRule ?? includeQuickReplyRule,
     },
     logs: {
@@ -227,6 +255,17 @@ function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): Norm
       debug: {
         enabled: sectionLogDebug?.enabled ?? true,
         prefixJson: sectionLogDebug?.prefixJson ?? true,
+        prefixJsonSections: {
+          requestMeta: sectionLogDebug?.prefixJsonSections?.requestMeta ?? true,
+          resolvedAgent: sectionLogDebug?.prefixJsonSections?.resolvedAgent ?? true,
+          kbResolution: sectionLogDebug?.prefixJsonSections?.kbResolution ?? true,
+          modelResolution: sectionLogDebug?.prefixJsonSections?.modelResolution ?? true,
+          toolAllowlist: sectionLogDebug?.prefixJsonSections?.toolAllowlist ?? true,
+          slotFlow: sectionLogDebug?.prefixJsonSections?.slotFlow ?? true,
+          intentScope: sectionLogDebug?.prefixJsonSections?.intentScope ?? true,
+          policyConflicts: sectionLogDebug?.prefixJsonSections?.policyConflicts ?? true,
+          conflictResolution: sectionLogDebug?.prefixJsonSections?.conflictResolution ?? true,
+        },
       },
       mcp: {
         enabled: sectionLogMcp?.enabled ?? true,
@@ -337,6 +376,51 @@ function indentBlock(value: string, spaces = 2) {
     .split("\n")
     .map((line) => `${pad}${line}`)
     .join("\n");
+}
+
+function filterObjectByPathMap(
+  value: unknown,
+  map: Record<string, boolean> | undefined,
+  basePath = ""
+): unknown {
+  if (!map || Object.keys(map).length === 0) return value;
+  if (!value || typeof value !== "object") return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => filterObjectByPathMap(item, map, basePath));
+  }
+  const record = value as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  Object.keys(record).forEach((key) => {
+    const path = basePath ? `${basePath}.${key}` : key;
+    if (map[path] === false) return;
+    next[key] = filterObjectByPathMap(record[key], map, path);
+  });
+  return next;
+}
+
+function filterPrefixJson(
+  prefix: Record<string, unknown>,
+  sections: NormalizedDebugTranscriptOptions["logs"]["debug"]["prefixJsonSections"]
+) {
+  const filtered = { ...(prefix || {}) } as Record<string, unknown>;
+  const mappings: Array<[boolean, string[]]> = [
+    [sections.requestMeta, ["request_meta"]],
+    [sections.resolvedAgent, ["resolved_agent"]],
+    [sections.kbResolution, ["kb_resolution"]],
+    [sections.modelResolution, ["model_resolution"]],
+    [sections.toolAllowlist, ["tool_allowlist"]],
+    [sections.slotFlow, ["slot_flow"]],
+    [sections.intentScope, ["intent_scope"]],
+    [sections.policyConflicts, ["policy_conflicts"]],
+    [sections.conflictResolution, ["conflict_resolution"]],
+  ];
+  mappings.forEach(([enabled, keys]) => {
+    if (enabled) return;
+    keys.forEach((key) => {
+      if (key in filtered) delete filtered[key];
+    });
+  });
+  return filtered;
 }
 
 function extractDebugText(content: string) {
@@ -596,13 +680,17 @@ function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | 
   if (options.logs.debug.enabled && debugLogs.length > 0) {
     lines.push("DEBUG 로그:");
     debugLogs.forEach((log) => {
-      lines.push(`- ${log.id || "-"} (turn_id=${log.turn_id || "-"}) (${log.created_at || "-"})`);
-      if (options.logs.debug.prefixJson) {
-        lines.push("  prefix_json:");
-        lines.push(indentBlock(stringifyPretty(log.prefix_json || {}), 4));
-      }
-    });
-  }
+        lines.push(`- ${log.id || "-"} (turn_id=${log.turn_id || "-"}) (${log.created_at || "-"})`);
+        if (options.logs.debug.prefixJson) {
+          lines.push("  prefix_json:");
+          const filtered = filterPrefixJson(
+            (log.prefix_json || {}) as Record<string, unknown>,
+            options.logs.debug.prefixJsonSections
+          );
+          lines.push(indentBlock(stringifyPretty(filtered), 4));
+        }
+      });
+    }
   const summary = options.logs.issueSummary ? buildIssueSummary(bundle, turnId) : [];
   if (options.logs.issueSummary && summary.length > 0) {
     lines.push("문제 요약:");
@@ -1048,7 +1136,8 @@ export function buildDebugTranscript(input: {
       }
       if (allowResponseSchemaDetail) {
         lines.push("RESPONSE_SCHEMA_DETAIL:");
-        lines.push(indentBlock(stringifyPretty(schema), 2));
+        const filtered = filterObjectByPathMap(schema, normalized.turn.responseSchemaDetailFields);
+        lines.push(indentBlock(stringifyPretty(filtered), 2));
       }
     }
     const allowRenderPlanDetail = normalized.outputMode === "full" && normalized.turn.renderPlanDetail;
@@ -1061,7 +1150,8 @@ export function buildDebugTranscript(input: {
       }
       if (allowRenderPlanDetail) {
         lines.push("RENDER_PLAN_DETAIL:");
-        lines.push(indentBlock(stringifyPretty(plan), 2));
+        const filtered = filterObjectByPathMap(plan, normalized.turn.renderPlanDetailFields);
+        lines.push(indentBlock(stringifyPretty(filtered), 2));
       }
     }
     if (msg.renderPlan && normalized.turn.quickReplyRule) {

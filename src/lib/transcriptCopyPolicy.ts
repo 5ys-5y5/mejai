@@ -57,8 +57,10 @@ export const DEFAULT_CONVERSATION_DEBUG_OPTIONS: DebugTranscriptOptions = {
       tokenUnused: true,
       responseSchemaSummary: true,
       responseSchemaDetail: true,
+      responseSchemaDetailFields: {},
       renderPlanSummary: true,
       renderPlanDetail: true,
+      renderPlanDetailFields: {},
       quickReplyRule: true,
     },
     logs: {
@@ -67,6 +69,17 @@ export const DEFAULT_CONVERSATION_DEBUG_OPTIONS: DebugTranscriptOptions = {
       debug: {
         enabled: true,
         prefixJson: true,
+        prefixJsonSections: {
+          requestMeta: true,
+          resolvedAgent: true,
+          kbResolution: true,
+          modelResolution: true,
+          toolAllowlist: true,
+          slotFlow: true,
+          intentScope: true,
+          policyConflicts: true,
+          conflictResolution: true,
+        },
       },
       mcp: {
         enabled: true,
@@ -126,17 +139,30 @@ function normalizeConversationDebugOptions(input?: Partial<DebugTranscriptOption
         tokenUnused: turnInput?.tokenUnused ?? defaultTurn?.tokenUnused,
         responseSchemaSummary: turnInput?.responseSchemaSummary ?? defaultTurn?.responseSchemaSummary,
         responseSchemaDetail: turnInput?.responseSchemaDetail ?? defaultTurn?.responseSchemaDetail,
+        responseSchemaDetailFields: turnInput?.responseSchemaDetailFields ?? defaultTurn?.responseSchemaDetailFields ?? {},
         renderPlanSummary: turnInput?.renderPlanSummary ?? defaultTurn?.renderPlanSummary,
         renderPlanDetail: turnInput?.renderPlanDetail ?? defaultTurn?.renderPlanDetail,
+        renderPlanDetailFields: turnInput?.renderPlanDetailFields ?? defaultTurn?.renderPlanDetailFields ?? {},
         quickReplyRule: turnInput?.quickReplyRule ?? defaultTurn?.quickReplyRule,
       },
       logs: {
         enabled: logsInput?.enabled ?? defaultLogs?.enabled,
         issueSummary: logsInput?.issueSummary ?? defaultLogs?.issueSummary,
-        debug: {
-          enabled: logsDebugInput?.enabled ?? defaultLogsDebug?.enabled,
-          prefixJson: logsDebugInput?.prefixJson ?? defaultLogsDebug?.prefixJson,
+      debug: {
+        enabled: logsDebugInput?.enabled ?? defaultLogsDebug?.enabled,
+        prefixJson: logsDebugInput?.prefixJson ?? defaultLogsDebug?.prefixJson,
+        prefixJsonSections: {
+          requestMeta: logsDebugInput?.prefixJsonSections?.requestMeta ?? defaultLogsDebug?.prefixJsonSections?.requestMeta,
+          resolvedAgent: logsDebugInput?.prefixJsonSections?.resolvedAgent ?? defaultLogsDebug?.prefixJsonSections?.resolvedAgent,
+          kbResolution: logsDebugInput?.prefixJsonSections?.kbResolution ?? defaultLogsDebug?.prefixJsonSections?.kbResolution,
+          modelResolution: logsDebugInput?.prefixJsonSections?.modelResolution ?? defaultLogsDebug?.prefixJsonSections?.modelResolution,
+          toolAllowlist: logsDebugInput?.prefixJsonSections?.toolAllowlist ?? defaultLogsDebug?.prefixJsonSections?.toolAllowlist,
+          slotFlow: logsDebugInput?.prefixJsonSections?.slotFlow ?? defaultLogsDebug?.prefixJsonSections?.slotFlow,
+          intentScope: logsDebugInput?.prefixJsonSections?.intentScope ?? defaultLogsDebug?.prefixJsonSections?.intentScope,
+          policyConflicts: logsDebugInput?.prefixJsonSections?.policyConflicts ?? defaultLogsDebug?.prefixJsonSections?.policyConflicts,
+          conflictResolution: logsDebugInput?.prefixJsonSections?.conflictResolution ?? defaultLogsDebug?.prefixJsonSections?.conflictResolution,
         },
+      },
         mcp: {
           enabled: logsMcpInput?.enabled ?? defaultLogsMcp?.enabled,
           request: logsMcpInput?.request ?? defaultLogsMcp?.request,
