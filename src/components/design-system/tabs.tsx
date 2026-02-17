@@ -6,7 +6,7 @@ export type TabItem<T extends string = string> = {
   disabled?: boolean;
 };
 
-type TabBaseProps<T extends string> = React.HTMLAttributes<HTMLDivElement> & {
+type TabBaseProps<T extends string> = Omit<React.HTMLAttributes<HTMLDivElement>, "onSelect"> & {
   tabs: Array<TabItem<T>>;
   activeKey: T;
   onSelect: (key: T) => void;
