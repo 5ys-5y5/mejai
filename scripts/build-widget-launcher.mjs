@@ -4,6 +4,7 @@ import { build } from "esbuild";
 const root = process.cwd();
 const outFile = path.join(root, "public/widget.js");
 const tsconfig = path.join(root, "tsconfig.json");
+const processShim = path.join(root, "scripts/esbuild-process-shim.js");
 
 const entryContents = `
 import { mountWidgetLauncher } from "./src/components/design-system/widget/WidgetUI.parts";
@@ -26,6 +27,7 @@ try {
     outfile: outFile,
     sourcemap: false,
     tsconfig,
+    inject: [processShim],
     define: {
       "process.env.NODE_ENV": "\"production\"",
     },
