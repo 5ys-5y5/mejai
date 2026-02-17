@@ -80,6 +80,14 @@ When changing the return type of a callback used across shared UI props (e.g., c
 - Apply the same rule to submit actions (e.g., `onSubmitMessage`) if they start returning `boolean` for control flow.
 - Prefer consistent return shapes (e.g., always `boolean`), not `false | undefined`, to keep inference stable.
 
+## Type Safety Guardrail: Optional Children Props
+
+When a component expects an array prop (e.g., `tree: Item[]`) but data may be missing:
+
+- Keep the component prop type strict (`Item[]`) and normalize at the call site with a safe default (`children ?? []`).
+- Do not pass `undefined` into required array props; avoid widening the component prop to `Item[] | undefined`.
+- If a parent/child relationship is optional, model it as `children?: Item[]` on the data type, not the renderer props.
+
 Add the following lines to the profile:
 ```powershell
 chcp 65001

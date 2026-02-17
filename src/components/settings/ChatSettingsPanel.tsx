@@ -518,7 +518,7 @@ function DebugFieldTreeRenderer({
             )}
             {isParent && (!isHeader || !isCollapsed) ? (
               <DebugFieldTreeRenderer
-                tree={node.children}
+                tree={node.children ?? []}
                 isHeader={isHeader}
                 disabled={disabled}
                 stateMap={stateMap}
