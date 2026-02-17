@@ -42,6 +42,15 @@ if (!(Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force | Out
 notepad $PROFILE
 ```
 
+## Build Error Guardrail: Import/Export Mismatch
+
+When a build error complains about a missing export (e.g., "export X doesn't exist in target module"):
+
+- Do not hotfix by moving code blindly. Verify the **correct source module** for the symbol.
+- Confirm the export with a direct file check or a repo search before changing imports.
+- Prefer importing from the module where the symbol is defined, not adjacent policy files.
+- After fixing, run a quick search for other references to the same symbol to avoid repeated mismatches.
+
 Add the following lines to the profile:
 ```powershell
 chcp 65001

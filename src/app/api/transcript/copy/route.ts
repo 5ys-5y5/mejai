@@ -2,11 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { getServerContext } from "@/lib/serverAuth";
 import { verifyWidgetToken } from "@/lib/widgetToken";
-import {
-  resolvePageConversationDebugOptions,
-  type ConversationFeaturesProviderShape,
-  type ConversationPageKey,
-} from "@/lib/conversation/pageFeaturePolicy";
+import type { ConversationFeaturesProviderShape, ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
+import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import {
   buildDebugTranscript,
   buildIssueTranscript,
