@@ -1,14 +1,14 @@
 import { Card } from "./Card";
 
-interface MetricProps {
-    label: string;
-    value: string;
-    sub?: string;
+interface MetricProps extends React.HTMLAttributes<HTMLDivElement> {
+  label: string;
+  value: string;
+  sub?: string;
 }
 
-export function Metric({ label, value, sub }: MetricProps) {
+export function Metric({ label, value, sub, ...props }: MetricProps) {
   return (
-    <Card>
+    <Card {...props}>
       <div className="p-4">
         <div className="text-xs text-slate-500">{label}</div>
         <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">{value}</div>

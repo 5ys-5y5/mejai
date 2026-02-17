@@ -1,6 +1,7 @@
-"use client";
+﻿"use client";
 
-import { useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AdminTag,
   AgentSelectPopover,
@@ -62,7 +63,9 @@ import * as LucideIcons from "lucide-react";
 import {
   Bot,
   CalendarDays,
+  Check,
   Layers3,
+  Link,
   Search,
   SlidersHorizontal,
   Sparkles,
@@ -537,6 +540,41 @@ const widgetDefinitionGroups: Array<{ label: string; items: WidgetDefinitionItem
   },
 ];
 
+type UiDefinitionItem = {
+  name: string;
+  type: string;
+  depends: string;
+  role: string;
+  definedAt: string;
+};
+
+const uiDefinitionItems: UiDefinitionItem[] = [
+  { name: "IconChip", type: "UI Component", depends: "icon, label", role: "icon + label chip", definedAt: "src/components/ui/IconChip.tsx:10" },
+  { name: "Badge", type: "UI Component", depends: "badgeVariants", role: "status badge", definedAt: "src/components/ui/Badge.tsx:26" },
+  { name: "AdminTag", type: "UI Component", depends: "none", role: "admin marker", definedAt: "src/components/design-system/patterns.tsx:15" },
+  { name: "Divider", type: "UI Component", depends: "label", role: "section divider", definedAt: "src/components/ui/Divider.tsx:9" },
+  { name: "PanelCard", type: "UI Component", depends: "children", role: "dashboard card", definedAt: "src/components/design-system/patterns.tsx:3" },
+  { name: "Metric", type: "UI Component", depends: "label, value, sub", role: "metric summary", definedAt: "src/components/ui/Metric.tsx:9" },
+  { name: "TypographyScaleShell", type: "UI Component", depends: "none", role: "type scale sample", definedAt: "src/components/design-system/shells.tsx:24" },
+  { name: "Button", type: "UI Component", depends: "buttonVariants", role: "action button", definedAt: "src/components/ui/Button.tsx:35" },
+  { name: "InlineToggle", type: "UI Component", depends: "checked", role: "inline toggle", definedAt: "src/components/design-system/patterns.tsx:58" },
+  { name: "PageActionBarShell", type: "UI Component", depends: "Button", role: "page action bar", definedAt: "src/components/design-system/shells.tsx:73" },
+  { name: "Input", type: "UI Component", depends: "InputProps", role: "text input", definedAt: "src/components/ui/Input.tsx:4" },
+  { name: "SelectPopover", type: "UI Component", depends: "SelectOption", role: "select popover", definedAt: "src/components/SelectPopover.tsx:29" },
+  { name: "MultiSelectPopover", type: "UI Component", depends: "SelectOption", role: "multi select popover", definedAt: "src/components/SelectPopover.tsx:179" },
+  { name: "AgentSelectPopover", type: "UI Component", depends: "AgentOption", role: "agent select", definedAt: "src/components/AgentSelectPopover.tsx:30" },
+  { name: "DateRangePopover", type: "UI Component", depends: "date presets", role: "date range select", definedAt: "src/components/DateRangePopover.tsx:8" },
+  { name: "Card", type: "UI Component", depends: "CardHeader/CardContent", role: "content card", definedAt: "src/components/ui/Card.tsx:4" },
+  { name: "Skeleton", type: "UI Component", depends: "none", role: "loading skeleton", definedAt: "src/components/ui/Skeleton.tsx:3" },
+  { name: "StateBanner", type: "UI Component", depends: "tone, title, description", role: "status banner", definedAt: "src/components/design-system/patterns.tsx:29" },
+  { name: "OverlayShell", type: "UI Component", depends: "Button", role: "overlay shell", definedAt: "src/components/design-system/shells.tsx:191" },
+  { name: "SidebarNavigationShell", type: "UI Component", depends: "nav links", role: "sidebar navigation", definedAt: "src/components/design-system/shells.tsx:93" },
+  { name: "TopHeaderShell", type: "UI Component", depends: "Input, Button", role: "top header shell", definedAt: "src/components/design-system/shells.tsx:172" },
+  { name: "UnderlineTabs", type: "UI Component", depends: "TabItem", role: "underline tabs", definedAt: "src/components/design-system/tabs.tsx:16" },
+  { name: "PillTabs", type: "UI Component", depends: "TabItem", role: "pill tabs", definedAt: "src/components/design-system/tabs.tsx:54" },
+  { name: "LucideIcon", type: "UI Component", depends: "lucide-react", role: "lucide icon", definedAt: "node_modules/lucide-react" },
+];
+
 function UsedInPages({ pages }: { pages: string[] }) {
   const uniquePages = Array.from(new Set(pages));
   return (
@@ -560,6 +598,9 @@ function DependencyMeta({
   role,
   returns,
   definedAt,
+  highlighted,
+  onCopyLink,
+  copied,
 }: {
   type: string;
   name: string;
@@ -567,23 +608,41 @@ function DependencyMeta({
   role?: string;
   returns?: string;
   definedAt?: string;
+  highlighted?: boolean;
+  onCopyLink?: (name: string) => void;
+  copied?: boolean;
 }) {
   return (
-    <div className="mb-2 rounded-lg border border-slate-200 bg-white p-2 text-[11px] text-slate-700">
+    <div
+      className={cn(
+        "mb-2 rounded-lg border border-slate-200 bg-white p-2 text-[11px] text-slate-700 transition",
+        highlighted ? "border-amber-300 bg-amber-50 shadow-sm" : ""
+      )}
+      data-definition-name={name}
+    >
       <div>
         <span className="font-semibold text-slate-900">type:</span> {type}
       </div>
-      <div>
-        <span className="font-semibold text-slate-900">name:</span> {name}
+      <div className="flex items-center gap-2">
+        <span className="font-semibold text-slate-900">name:</span>
+        <button
+          type="button"
+          className="inline-flex h-4 items-center gap-1 rounded border border-slate-200 bg-white px-1.5 text-[10px] text-slate-600 transition hover:bg-slate-50"
+          title="Copy link"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onCopyLink?.(name);
+          }}
+        >
+          {copied ? <Check className="h-3 w-3" /> : <Link className="h-3 w-3" />}
+          Link
+        </button>
+        <span>{name}</span>
       </div>
       <div>
         <span className="font-semibold text-slate-900">depends:</span> {depends && depends.trim().length > 0 ? depends : "none"}
       </div>
-      {returns ? (
-        <div>
-          <span className="font-semibold text-slate-900">returns:</span> {returns}
-        </div>
-      ) : null}
       {definedAt ? (
         <div>
           <span className="font-semibold text-slate-900">defined at:</span> <code>{definedAt}</code>
@@ -592,6 +651,11 @@ function DependencyMeta({
       {role ? (
         <div>
           <span className="font-semibold text-slate-900">role:</span> {role}
+        </div>
+      ) : null}
+      {returns ? (
+        <div>
+          <span className="font-semibold text-slate-900">returns:</span> {returns}
         </div>
       ) : null}
     </div>
@@ -666,6 +730,72 @@ function getConversationDepends(name: string): string {
   if (!found) return "";
   const meta = getDefinitionMeta(found.item, found.groupLabel);
   return meta.depends || "";
+}
+
+function findUiDefinition(name: string): UiDefinitionItem | null {
+  return uiDefinitionItems.find((item) => item.name === name) ?? null;
+}
+
+function renderUiDefinitionMetaByName(
+  name: string,
+  highlightedName?: string | null,
+  onCopyLink?: (name: string) => void,
+  copiedName?: string | null
+) {
+  const found = findUiDefinition(name);
+  if (!found) return <DependencyMeta type="Unknown" name={name} depends="none" />;
+  return (
+    <DependencyMeta
+      type={found.type}
+      name={found.name}
+      depends={found.depends}
+      role={found.role}
+      definedAt={found.definedAt}
+      highlighted={highlightedName === found.name}
+      onCopyLink={onCopyLink}
+      copied={copiedName === found.name}
+    />
+  );
+}
+
+function escapeSelectorValue(value: string): string {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(value);
+  }
+  return value.replace(/["\\\\]/g, "\\\\$&");
+}
+
+function getCategoryForDefinitionName(name: string): CategoryKey | null {
+  if (findConversationDefinition(name) || findWidgetDefinition(name)) {
+    return "conversation";
+  }
+  const uiCategoryMap: Record<string, CategoryKey> = {
+    IconChip: "foundation",
+    Badge: "foundation",
+    AdminTag: "foundation",
+    Divider: "foundation",
+    PanelCard: "foundation",
+    Metric: "foundation",
+    TypographyScaleShell: "foundation",
+    Button: "action",
+    InlineToggle: "action",
+    PageActionBarShell: "action",
+    Input: "input",
+    SelectPopover: "select",
+    MultiSelectPopover: "select",
+    AgentSelectPopover: "select",
+    DateRangePopover: "select",
+    Card: "display",
+    Skeleton: "display",
+    StateBanner: "feedback",
+    OverlayShell: "overlay",
+    SidebarNavigationShell: "navigation",
+    UnderlineTabs: "navigation",
+    PillTabs: "navigation",
+    TopHeaderShell: "navigation",
+    LucideIcon: "icon",
+  };
+  return uiCategoryMap[name] ?? null;
 }
 
 function sortConversationEntries<T extends { name: string }>(items: T[]): T[] {
@@ -785,7 +915,12 @@ function sortWidgetEntries<T extends { name: string }>(items: T[]): T[] {
   return ordered.map((name) => byName.get(name)!).filter(Boolean);
 }
 
-function renderConversationDefinitionMeta(name: string) {
+function renderConversationDefinitionMeta(
+  name: string,
+  highlightedName?: string | null,
+  onCopyLink?: (name: string) => void,
+  copiedName?: string | null
+) {
   const found = findConversationDefinition(name);
   if (!found) return <DependencyMeta type="Unknown" name={name} depends="none" />;
   const meta = getDefinitionMeta(found.item, found.groupLabel);
@@ -797,11 +932,19 @@ function renderConversationDefinitionMeta(name: string) {
       returns={meta.returns}
       role={found.item.note}
       definedAt={`${CONVERSATION_PARTS_FILE}:${found.item.sourceLine}`}
+      highlighted={highlightedName === found.item.name}
+      onCopyLink={onCopyLink}
+      copied={copiedName === found.item.name}
     />
   );
 }
 
-function renderWidgetDefinitionMeta(item: WidgetDefinitionItem) {
+function renderWidgetDefinitionMeta(
+  item: WidgetDefinitionItem,
+  highlightedName?: string | null,
+  onCopyLink?: (name: string) => void,
+  copiedName?: string | null
+) {
   return (
     <DependencyMeta
       type={item.type}
@@ -810,6 +953,9 @@ function renderWidgetDefinitionMeta(item: WidgetDefinitionItem) {
       returns={item.returns}
       role={item.role}
       definedAt={item.definedAt}
+      highlighted={highlightedName === item.name}
+      onCopyLink={onCopyLink}
+      copied={copiedName === item.name}
     />
   );
 }
@@ -822,10 +968,15 @@ function findWidgetDefinition(name: string): WidgetDefinitionItem | null {
   return null;
 }
 
-function renderWidgetDefinitionMetaByName(name: string) {
+function renderWidgetDefinitionMetaByName(
+  name: string,
+  highlightedName?: string | null,
+  onCopyLink?: (name: string) => void,
+  copiedName?: string | null
+) {
   const found = findWidgetDefinition(name);
   if (!found) return <DependencyMeta type="Unknown" name={name} depends="none" />;
-  return renderWidgetDefinitionMeta(found);
+  return renderWidgetDefinitionMeta(found, highlightedName, onCopyLink, copiedName);
 }
 
 
@@ -989,10 +1140,140 @@ export function DesignSystemContent() {
   const [iconSearch, setIconSearch] = useState("");
   const [iconPage, setIconPage] = useState(1);
 
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const nameParam = searchParams?.get("name") ?? "";
+  const categoryParam = (searchParams?.get("category") ?? "") as CategoryKey | "";
+  const [highlightName, setHighlightName] = useState<string | null>(null);
+  const [copiedName, setCopiedName] = useState<string | null>(null);
+  const lastScrollNameRef = useRef<string | null>(null);
+  const copyResetRef = useRef<number | null>(null);
+  const scrollRetryRef = useRef<number | null>(null);
+
   const [widgetDemoActiveTab, setWidgetDemoActiveTab] = useState<WidgetConversationTab>("chat");
   const [widgetDemoSessionId, setWidgetDemoSessionId] = useState<string | null>(
     () => WIDGET_DEMO_SESSIONS[0]?.id ?? null
   );
+
+  const buildDesignSystemSearch = (next: { name?: string | null; category?: CategoryKey | null }) => {
+    const url = new URL(window.location.href);
+    const current = new URLSearchParams(url.search);
+    const params = new URLSearchParams();
+    params.set("tab", "design-system");
+    if (next.category) {
+      params.set("category", next.category);
+    }
+    if (next.name) {
+      params.set("name", next.name);
+    }
+    current.forEach((value, key) => {
+      if (key === "tab" || key === "category" || key === "name") return;
+      params.append(key, value);
+    });
+    return params.toString();
+  };
+
+  useEffect(() => {
+    const normalizedCategory = categoryLabels.find((entry) => entry.key === categoryParam)?.key ?? "all";
+    if (normalizedCategory !== activeCategory) {
+      setActiveCategory(normalizedCategory);
+    }
+  }, [categoryParam, activeCategory]);
+
+  useEffect(() => {
+    if (!nameParam) {
+      setHighlightName(null);
+      lastScrollNameRef.current = null;
+      if (scrollRetryRef.current) {
+        window.clearTimeout(scrollRetryRef.current);
+        scrollRetryRef.current = null;
+      }
+      return;
+    }
+    if (lastScrollNameRef.current !== nameParam) {
+      const targetCategory = getCategoryForDefinitionName(nameParam);
+      if (targetCategory && targetCategory !== activeCategory) {
+        setActiveCategory(targetCategory);
+        lastScrollNameRef.current = null;
+        if (categoryParam !== targetCategory) {
+          const search = buildDesignSystemSearch({ name: nameParam, category: targetCategory });
+          router.replace(`${window.location.pathname}?${search}`, { scroll: false });
+        }
+        return;
+      }
+    }
+    setHighlightName(nameParam);
+    if (lastScrollNameRef.current === nameParam) return;
+    lastScrollNameRef.current = nameParam;
+    let attempts = 0;
+    const tryScroll = () => {
+      const selector = `[data-definition-name="${escapeSelectorValue(nameParam)}"]`;
+      const target = document.querySelector(selector);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+      attempts += 1;
+      if (attempts <= 12) {
+        scrollRetryRef.current = window.setTimeout(tryScroll, 150);
+      }
+    };
+    const frame = window.requestAnimationFrame(tryScroll);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      if (scrollRetryRef.current) {
+        window.clearTimeout(scrollRetryRef.current);
+        scrollRetryRef.current = null;
+      }
+    };
+  }, [nameParam, activeCategory, categoryParam, router]);
+
+  const handleCopyLink = async (name: string) => {
+    if (typeof window === "undefined") return;
+    const targetCategory = getCategoryForDefinitionName(name);
+    const resolvedCategory =
+      targetCategory ?? (activeCategory !== "all" ? activeCategory : null);
+    const search = buildDesignSystemSearch({ name, category: resolvedCategory });
+    const text = `${window.location.origin}${window.location.pathname}?${search}`;
+
+    let copied = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      }
+    } catch {
+      copied = false;
+    }
+
+    if (!copied) {
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.top = "-1000px";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        copied = document.execCommand("copy");
+      } catch {
+        copied = false;
+      } finally {
+        document.body.removeChild(textarea);
+      }
+    }
+
+    if (copied) {
+      setCopiedName(name);
+      if (copyResetRef.current) {
+        window.clearTimeout(copyResetRef.current);
+      }
+      copyResetRef.current = window.setTimeout(() => {
+        setCopiedName((prev) => (prev === name ? null : prev));
+      }, 2000);
+    }
+  };
 
   const selectedMultiLabel = useMemo(() => {
     if (!multiValues.length) return "-";
@@ -1164,7 +1445,7 @@ export function DesignSystemContent() {
       name: "ConversationSetupBox",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationSetupBox")}
+          {renderConversationDefinitionMeta("ConversationSetupBox", highlightName, handleCopyLink, copiedName)}
           <ConversationSetupBox contentClassName="p-3">
             <div className="text-xs text-slate-700">설정 영역 래퍼가 `ConversationSetupPanel`로 구성됩니다.</div>
           </ConversationSetupBox>
@@ -1175,7 +1456,7 @@ export function DesignSystemContent() {
       name: "ConversationSetupFields",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationSetupFields")}
+          {renderConversationDefinitionMeta("ConversationSetupFields", highlightName, handleCopyLink, copiedName)}
           <ConversationSetupBox contentClassName="p-3">
             <ConversationSetupFields
               showInlineUserKbInput
@@ -1206,7 +1487,7 @@ export function DesignSystemContent() {
       name: "ConversationExistingSetup",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationExistingSetup")}
+          {renderConversationDefinitionMeta("ConversationExistingSetup", highlightName, handleCopyLink, copiedName)}
           <ConversationSetupBox contentClassName="p-3">
             <ConversationExistingSetup
               showModelSelector
@@ -1241,7 +1522,7 @@ export function DesignSystemContent() {
       name: "ConversationNewModelControls",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationNewModelControls")}
+          {renderConversationDefinitionMeta("ConversationNewModelControls", highlightName, handleCopyLink, copiedName)}
           <ConversationSetupBox contentClassName="p-3">
             <ConversationNewModelControls
               showKbSelector
@@ -1274,7 +1555,7 @@ export function DesignSystemContent() {
       name: "createConversationModelLegos",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("createConversationModelLegos")}
+          {renderConversationDefinitionMeta("createConversationModelLegos", highlightName, handleCopyLink, copiedName)}
           <div className="rounded-lg border border-slate-200 bg-white p-2 text-[11px] text-slate-600">
             <div>activeSessionId: <code>{demoAssembly.activeSessionId || "-"}</code></div>
             <div>visibleMessages: <code>{demoAssembly.visibleMessages.length}</code></div>
@@ -1288,7 +1569,7 @@ export function DesignSystemContent() {
       name: "ConversationModelSetupColumnLego",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationModelSetupColumnLego")}
+          {renderConversationDefinitionMeta("ConversationModelSetupColumnLego", highlightName, handleCopyLink, copiedName)}
           <div className="h-auto overflow-visible">
             <ConversationModelSetupColumnLego {...demoAssembly.setupLegoProps} />
           </div>
@@ -1299,7 +1580,7 @@ export function DesignSystemContent() {
       name: "ConversationAdminMenu",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationAdminMenu")}
+          {renderConversationDefinitionMeta("ConversationAdminMenu", highlightName, handleCopyLink, copiedName)}
           <div className="relative min-h-[56px] rounded-lg border border-slate-200 bg-white p-3">
             <ConversationAdminMenu
               className=""
@@ -1320,7 +1601,7 @@ export function DesignSystemContent() {
       name: "ConversationThread",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationThread")}
+          {renderConversationDefinitionMeta("ConversationThread", highlightName, handleCopyLink, copiedName)}
           <div className="rounded-lg border border-slate-200 bg-white p-3">
             <ConversationThread
               messages={[
@@ -1341,7 +1622,7 @@ export function DesignSystemContent() {
       name: "ConversationReplySelectors",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationReplySelectors")}
+          {renderConversationDefinitionMeta("ConversationReplySelectors", highlightName, handleCopyLink, copiedName)}
           <div className="rounded-lg border border-slate-200 bg-white p-3">
             <ConversationReplySelectors
               modelId="ui-demo"
@@ -1369,7 +1650,7 @@ export function DesignSystemContent() {
       name: "ConversationModelChatColumnLego",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationModelChatColumnLego")}
+          {renderConversationDefinitionMeta("ConversationModelChatColumnLego", highlightName, handleCopyLink, copiedName)}
           <div className="h-auto overflow-hidden">
             <ConversationModelChatColumnLego {...demoAssembly.chatLegoProps} />
           </div>
@@ -1380,7 +1661,7 @@ export function DesignSystemContent() {
       name: "ConversationModelComposedLego",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationModelComposedLego")}
+          {renderConversationDefinitionMeta("ConversationModelComposedLego", highlightName, handleCopyLink, copiedName)}
           <ConversationModelComposedLego
             className="lg:grid-cols-1"
             leftLego={<ConversationModelSetupColumnLego {...demoAssembly.setupLegoProps} />}
@@ -1393,7 +1674,7 @@ export function DesignSystemContent() {
       name: "ConversationSessionHeader",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationSessionHeader")}
+          {renderConversationDefinitionMeta("ConversationSessionHeader", highlightName, handleCopyLink, copiedName)}
           <ConversationSessionHeader
             modelIndex={1}
             canRemove
@@ -1411,7 +1692,7 @@ export function DesignSystemContent() {
       name: "ConversationWorkbenchTopBar",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderConversationDefinitionMeta("ConversationWorkbenchTopBar")}
+          {renderConversationDefinitionMeta("ConversationWorkbenchTopBar", highlightName, handleCopyLink, copiedName)}
           <ConversationWorkbenchTopBar
             wsStatusDot={workbenchWsStatus === "CONNECTED" ? "bg-emerald-500" : "bg-rose-500"}
             wsStatus={workbenchWsStatus}
@@ -1430,11 +1711,11 @@ export function DesignSystemContent() {
       name: "WidgetLauncherContainer",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderWidgetDefinitionMetaByName("WidgetLauncherContainer")}
-          {renderWidgetDefinitionMetaByName("WidgetLauncherButton")}
-          {renderWidgetDefinitionMetaByName("WidgetLauncherIcon")}
-          {renderWidgetDefinitionMetaByName("WidgetLauncherLabel")}
-          {renderWidgetDefinitionMetaByName("WidgetLauncherIframe")}
+          {renderWidgetDefinitionMetaByName("WidgetLauncherContainer", highlightName, handleCopyLink, copiedName)}
+          {renderWidgetDefinitionMetaByName("WidgetLauncherButton", highlightName, handleCopyLink, copiedName)}
+          {renderWidgetDefinitionMetaByName("WidgetLauncherIcon", highlightName, handleCopyLink, copiedName)}
+          {renderWidgetDefinitionMetaByName("WidgetLauncherLabel", highlightName, handleCopyLink, copiedName)}
+          {renderWidgetDefinitionMetaByName("WidgetLauncherIframe", highlightName, handleCopyLink, copiedName)}
           <div className="relative mt-3 h-28 rounded-lg border border-slate-200 bg-white">
             <WidgetLauncherContainer layout="absolute" bottom="16px" right="16px" zIndex={1} stack>
               <WidgetLauncherButton brandName={WIDGET_DEMO_BRAND_NAME} iconUrl={WIDGET_DEMO_ICON_URL} />
@@ -1448,7 +1729,7 @@ export function DesignSystemContent() {
       name: "WidgetHeaderLego",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderWidgetDefinitionMetaByName("WidgetHeaderLego")}
+          {renderWidgetDefinitionMetaByName("WidgetHeaderLego", highlightName, handleCopyLink, copiedName)}
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <WidgetHeaderLego
               brandName={WIDGET_DEMO_BRAND_NAME}
@@ -1470,7 +1751,7 @@ export function DesignSystemContent() {
       name: "WidgetTabBarLego",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderWidgetDefinitionMetaByName("WidgetTabBarLego")}
+          {renderWidgetDefinitionMetaByName("WidgetTabBarLego", highlightName, handleCopyLink, copiedName)}
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <WidgetTabBarLego
               activeTab={widgetDemoActiveTab}
@@ -1485,7 +1766,7 @@ export function DesignSystemContent() {
       name: "WidgetHistoryPanelLego",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderWidgetDefinitionMetaByName("WidgetHistoryPanelLego")}
+          {renderWidgetDefinitionMetaByName("WidgetHistoryPanelLego", highlightName, handleCopyLink, copiedName)}
           <div className="h-[280px] overflow-hidden rounded-lg border border-slate-200 bg-white">
             <WidgetHistoryPanelLego
               sessions={WIDGET_DEMO_SESSIONS}
@@ -1501,7 +1782,7 @@ export function DesignSystemContent() {
       name: "WidgetShell",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderWidgetDefinitionMetaByName("WidgetShell")}
+          {renderWidgetDefinitionMetaByName("WidgetShell", highlightName, handleCopyLink, copiedName)}
           <div className="h-[420px] overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
             <WidgetShell
               brandName={WIDGET_DEMO_BRAND_NAME}
@@ -1520,7 +1801,7 @@ export function DesignSystemContent() {
       name: "WidgetConversationLayout",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderWidgetDefinitionMetaByName("WidgetConversationLayout")}
+          {renderWidgetDefinitionMetaByName("WidgetConversationLayout", highlightName, handleCopyLink, copiedName)}
           <div className="h-[560px] overflow-hidden rounded-2xl border border-slate-200 bg-white">
             <WidgetConversationLayout
               brandName={WIDGET_DEMO_BRAND_NAME}
@@ -1556,35 +1837,42 @@ export function DesignSystemContent() {
         >
           <div className="grid grid-cols-1 gap-4">
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("IconChip", highlightName, handleCopyLink, copiedName)}
+              {renderUiDefinitionMetaByName("Badge", highlightName, handleCopyLink, copiedName)}
+              {renderUiDefinitionMetaByName("AdminTag", highlightName, handleCopyLink, copiedName)}
+              {renderUiDefinitionMetaByName("Divider", highlightName, handleCopyLink, copiedName)}
               <div className="flex flex-wrap items-center gap-2">
-                <IconChip icon={Layers3} label="Single Import Entry" />
-                <IconChip icon={Wrench} label="Composable Variant" />
-                <Badge variant="amber">정리 단계</Badge>
-                <Badge variant="green">샘플 데이터 포함</Badge>
-                <AdminTag />
+                <IconChip icon={Layers3} label="Single Import Entry" panel-lego="IconChip" />
+                <IconChip icon={Wrench} label="Composable Variant" panel-lego="IconChip" />
+                <Badge variant="amber" panel-lego="Badge">정리 단계</Badge>
+                <Badge variant="green" panel-lego="Badge">샘플 데이터 포함</Badge>
+                <AdminTag panel-lego="AdminTag" />
               </div>
-              <Divider label="상태 컬러" className="mt-3" />
+              <Divider label="상태 컬러" className="mt-3" panel-lego="Divider" />
               <div className="flex flex-wrap gap-2">
-                <Badge>default</Badge>
-                <Badge variant="green">green</Badge>
-                <Badge variant="amber">amber</Badge>
-                <Badge variant="red">red</Badge>
-                <Badge variant="slate">slate</Badge>
+                <Badge panel-lego="Badge">default</Badge>
+                <Badge variant="green" panel-lego="Badge">green</Badge>
+                <Badge variant="amber" panel-lego="Badge">amber</Badge>
+                <Badge variant="red" panel-lego="Badge">red</Badge>
+                <Badge variant="slate" panel-lego="Badge">slate</Badge>
               </div>
               <UsedInPages pages={["src/components/HelpPanel.tsx", "src/components/design-system/conversation/ConversationUI.parts.tsx"]} />
             </Card>
 
-            <PanelCard className="p-4">
+            <PanelCard className="p-4" panel-lego="PanelCard">
+              {renderUiDefinitionMetaByName("PanelCard", highlightName, handleCopyLink, copiedName)}
+              {renderUiDefinitionMetaByName("Metric", highlightName, handleCopyLink, copiedName)}
               <div className="text-sm font-semibold text-slate-900">PanelCard (대시보드 계열 반복 패턴)</div>
               <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Metric label="통화 수" value="128" sub="최근 30일" />
-                <Metric label="성공률" value="92%" sub="resolved / total" />
+                <Metric label="통화 수" value="128" sub="최근 30일" panel-lego="Metric" />
+                <Metric label="성공률" value="92%" sub="resolved / total" panel-lego="Metric" />
               </div>
               <UsedInPages pages={["src/app/app/page.tsx", "src/app/app/calls/[sessionId]/page.tsx"]} />
             </PanelCard>
 
             <Card className="p-4">
-              <TypographyScaleShell />
+              {renderUiDefinitionMetaByName("TypographyScaleShell", highlightName, handleCopyLink, copiedName)}
+              <TypographyScaleShell panel-lego="TypographyScaleShell" />
               <UsedInPages pages={["src/components/design-system/shells.tsx", "src/app/globals.css"]} />
             </Card>
           </div>
@@ -1598,29 +1886,32 @@ export function DesignSystemContent() {
         <SectionBlock id="action" title="Action" description="버튼/토글/액션 그룹 패턴">
           <div className="grid grid-cols-1 gap-4">
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("Button", highlightName, handleCopyLink, copiedName)}
               <div className="mb-2 text-sm font-semibold text-slate-900">Button Variants</div>
               <div className="flex flex-wrap gap-2">
-                <Button>기본</Button>
-                <Button variant="outline">아웃라인</Button>
-                <Button variant="secondary">세컨더리</Button>
-                <Button variant="ghost">고스트</Button>
-                <Button variant="destructive">삭제</Button>
+                <Button panel-lego="Button">기본</Button>
+                <Button variant="outline" panel-lego="Button">아웃라인</Button>
+                <Button variant="secondary" panel-lego="Button">세컨더리</Button>
+                <Button variant="ghost" panel-lego="Button">고스트</Button>
+                <Button variant="destructive" panel-lego="Button">삭제</Button>
               </div>
               <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/settings/ChatSettingsPanel.tsx"]} />
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("InlineToggle", highlightName, handleCopyLink, copiedName)}
               <div className="mb-2 text-sm font-semibold text-slate-900">Inline Toggle (설정 페이지 패턴)</div>
               <div className="flex items-center gap-3 text-xs text-slate-600">
                 <span>알림 발송</span>
-                <InlineToggle checked />
-                <InlineToggle checked={false} />
+                <InlineToggle checked panel-lego="InlineToggle" />
+                <InlineToggle checked={false} panel-lego="InlineToggle" />
               </div>
               <UsedInPages pages={["src/components/settings/ChatSettingsPanel.tsx"]} />
             </Card>
 
             <Card className="p-4">
-              <PageActionBarShell />
+              {renderUiDefinitionMetaByName("PageActionBarShell", highlightName, handleCopyLink, copiedName)}
+              <PageActionBarShell panel-lego="PageActionBarShell" />
               <UsedInPages pages={["src/components/design-system/shells.tsx", "src/app/app/page.tsx", "src/app/app/rules/page.tsx", "src/app/app/agents/[id]/page.tsx"]} />
             </Card>
           </div>
@@ -1634,8 +1925,10 @@ export function DesignSystemContent() {
         <SectionBlock id="input" title="Input" description="텍스트/텍스트영역/네이티브 셀렉트 패턴">
           <div className="grid grid-cols-1 gap-4">
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("Input", highlightName, handleCopyLink, copiedName)}
+              {renderUiDefinitionMetaByName("SelectPopover", highlightName, handleCopyLink, copiedName)}
               <div className="space-y-3">
-                <Input placeholder="기본 입력" className="w-full" />
+                <Input placeholder="기본 입력" className="w-full" panel-lego="Input" />
                 <textarea
                   className="h-24 w-full resize-y rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
                   defaultValue="멀티라인 입력 샘플"
@@ -1645,18 +1938,20 @@ export function DesignSystemContent() {
                   onChange={setInputSelectValue}
                   options={singleOptions}
                   className="w-full"
+                  panel-lego="SelectPopover"
                 />
               </div>
               <UsedInPages pages={["src/components/SelectPopover.tsx", "src/app/admin/AdminClient.tsx", "src/app/onboarding/page.tsx"]} />
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("Input", highlightName, handleCopyLink, copiedName)}
               <div className="text-sm font-semibold text-slate-900">폼 필드 조합</div>
               <div className="mt-3 grid grid-cols-1 gap-2 w-full">
                 <label className="text-xs text-slate-600">mall_id</label>
-                <Input defaultValue="samplemall" />
+                <Input defaultValue="samplemall" panel-lego="Input" />
                 <label className="text-xs text-slate-600">shop_no</label>
-                <Input defaultValue="1,2,3" />
+                <Input defaultValue="1,2,3" panel-lego="Input" />
               </div>
               <UsedInPages pages={["src/app/app/settings/page.tsx"]} />
             </Card>
@@ -1671,16 +1966,24 @@ export function DesignSystemContent() {
         <SectionBlock id="select" title="Select" description="서비스 전역 셀렉트 유형 카탈로그">
           <div className="grid grid-cols-1 gap-4">
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("SelectPopover", highlightName, handleCopyLink, copiedName)}
               <div className="mb-3 flex items-center gap-2">
                 <SlidersHorizontal className="h-4 w-4 text-slate-500" />
                 <div className="text-sm font-semibold text-slate-900">Select.Single.Basic</div>
               </div>
-              <SelectPopover value={singleValue} onChange={setSingleValue} options={singleOptions} className="w-full" />
+              <SelectPopover
+                value={singleValue}
+                onChange={setSingleValue}
+                options={singleOptions}
+                className="w-full"
+                panel-lego="SelectPopover"
+              />
               <div className="mt-2 text-xs text-slate-500">선택값: {singleValue}</div>
               <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/app/app/agents/[id]/page.tsx"]} />
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("SelectPopover", highlightName, handleCopyLink, copiedName)}
               <div className="mb-3 flex items-center gap-2">
                 <Search className="h-4 w-4 text-slate-500" />
                 <div className="text-sm font-semibold text-slate-900">Select.Single.Searchable</div>
@@ -1691,12 +1994,14 @@ export function DesignSystemContent() {
                 options={searchableSingleOptions}
                 searchable
                 className="w-full"
+                panel-lego="SelectPopover"
               />
               <div className="mt-2 text-xs text-slate-500">선택값: {searchSingleValue}</div>
               <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/design-system/conversation/ConversationUI.parts.tsx"]} />
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("MultiSelectPopover", highlightName, handleCopyLink, copiedName)}
               <div className="mb-3 flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-slate-500" />
                 <div className="text-sm font-semibold text-slate-900">Select.Multi.SearchBulk</div>
@@ -1708,12 +2013,14 @@ export function DesignSystemContent() {
                 displayMode="count"
                 showBulkActions
                 className="w-full"
+                panel-lego="MultiSelectPopover"
               />
               <div className="mt-2 text-xs text-slate-500">선택값: {selectedMultiLabel}</div>
               <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/design-system/conversation/ConversationUI.parts.tsx"]} />
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("MultiSelectPopover", highlightName, handleCopyLink, copiedName)}
               <div className="mb-3 flex items-center gap-2">
                 <Layers3 className="h-4 w-4 text-slate-500" />
                 <div className="text-sm font-semibold text-slate-900">Select.Multi.Grouped</div>
@@ -1725,22 +2032,25 @@ export function DesignSystemContent() {
                 displayMode="count"
                 showBulkActions
                 className="w-full"
+                panel-lego="MultiSelectPopover"
               />
               <div className="mt-2 text-xs text-slate-500">선택 개수: {groupedValues.length}</div>
               <UsedInPages pages={["src/components/SelectPopover.tsx (group 옵션 사용 시)"]} />
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("DateRangePopover", highlightName, handleCopyLink, copiedName)}
               <div className="mb-3 flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-slate-500" />
                 <div className="text-sm font-semibold text-slate-900">Select.DateRange</div>
               </div>
-              <DateRangePopover value={dateRangeValue} onChange={setDateRangeValue} />
+              <DateRangePopover value={dateRangeValue} onChange={setDateRangeValue} panel-lego="DateRangePopover" />
               <div className="mt-2 text-xs text-slate-500">선택 프리셋: {dateRangeValue}</div>
               <UsedInPages pages={["src/app/app/page.tsx"]} />
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("AgentSelectPopover", highlightName, handleCopyLink, copiedName)}
               <div className="mb-3 flex items-center gap-2">
                 <Bot className="h-4 w-4 text-slate-500" />
                 <div className="text-sm font-semibold text-slate-900">Select.Agent (카운트 뱃지형)</div>
@@ -1750,6 +2060,7 @@ export function DesignSystemContent() {
                 onChange={setAgentValue}
                 options={agentOptions}
                 followupCountByAgent={followupByAgent}
+                panel-lego="AgentSelectPopover"
               />
               <div className="mt-2 text-xs text-slate-500">선택값: {agentValue}</div>
               <UsedInPages pages={["src/app/app/page.tsx"]} />
@@ -1772,7 +2083,15 @@ export function DesignSystemContent() {
               <div className="mb-2 text-sm font-semibold text-slate-900">ChatSettingsPanel 기반 Conversation UI 구현 샘플</div>
               <div className="grid grid-cols-1 gap-3">
                 {sortConversationEntries(conversationDemoEntries).map((entry) => (
-                  <div key={entry.name}>{entry.node}</div>
+                  <div
+                    key={entry.name}
+                    className={cn(
+                      "rounded-xl border border-transparent p-1 transition",
+                      highlightName === entry.name ? "border-amber-300 bg-amber-50/60" : ""
+                    )}
+                  >
+                    {entry.node}
+                  </div>
                 ))}
               </div>
             </Card>
@@ -1801,6 +2120,9 @@ export function DesignSystemContent() {
                                   returns={meta.returns}
                                   role={item.note}
                                   definedAt={`${CONVERSATION_PARTS_FILE}:${item.sourceLine}`}
+                                  highlighted={highlightName === item.name}
+                                  onCopyLink={handleCopyLink}
+                                  copied={copiedName === item.name}
                                 />
                               );
                             })()}
@@ -1831,7 +2153,15 @@ export function DesignSystemContent() {
               <div className="mb-2 text-sm font-semibold text-slate-900">Widget UI 구성 샘플</div>
               <div className="grid grid-cols-1 gap-3">
                 {sortWidgetEntries(widgetDemoEntries).map((entry) => (
-                  <div key={entry.name}>{entry.node}</div>
+                  <div
+                    key={entry.name}
+                    className={cn(
+                      "rounded-xl border border-transparent p-1 transition",
+                      highlightName === entry.name ? "border-amber-300 bg-amber-50/60" : ""
+                    )}
+                  >
+                    {entry.node}
+                  </div>
                 ))}
               </div>
               <UsedInPages
@@ -1854,7 +2184,7 @@ export function DesignSystemContent() {
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                       {sortWidgetEntries(group.items).map((item) => (
                         <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                          {renderWidgetDefinitionMeta(item)}
+                          {renderWidgetDefinitionMeta(item, highlightName, handleCopyLink, copiedName)}
                         </div>
                       ))}
                     </div>
@@ -1878,7 +2208,9 @@ export function DesignSystemContent() {
       node: (
         <SectionBlock id="display" title="Display" description="리스트/테이블/스켈레톤/정보 카드 패턴">
           <div className="grid grid-cols-1 gap-4">
-            <Card>
+            <Card panel-lego="Card">
+              {renderUiDefinitionMetaByName("Card", highlightName, handleCopyLink, copiedName)}
+              {renderUiDefinitionMetaByName("Badge", highlightName, handleCopyLink, copiedName)}
               <CardHeader>
                 <CardTitle>Review Queue Item List</CardTitle>
                 <CardDescription>후속 지원 요청 카드 반복 형태</CardDescription>
@@ -1888,7 +2220,7 @@ export function DesignSystemContent() {
                   <div key={n} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
                     <div className="flex items-center gap-2">
                       <div className="text-xs font-semibold text-slate-900">rq_{100 + n}</div>
-                      <Badge variant="amber">배송지 변경</Badge>
+                      <Badge variant="amber" panel-lego="Badge">배송지 변경</Badge>
                     </div>
                     <div className="mt-1 text-[11px] text-slate-500">2026-02-10 · 미배정</div>
                   </div>
@@ -1898,6 +2230,7 @@ export function DesignSystemContent() {
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("Skeleton", highlightName, handleCopyLink, copiedName)}
               <div className="mb-2 text-sm font-semibold text-slate-900">테이블 헤더 + 스크롤 바디 패턴</div>
               <div className="max-h-52 overflow-auto rounded-xl border border-slate-200">
                 <div className="sticky top-0 z-10 grid grid-cols-[120px_1fr_80px] bg-white px-2 py-2 text-[11px] font-semibold text-slate-500">
@@ -1914,9 +2247,9 @@ export function DesignSystemContent() {
                 ))}
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2">
-                <Skeleton className="h-8" />
-                <Skeleton className="h-8" />
-                <Skeleton className="h-8" />
+                <Skeleton className="h-8" panel-lego="Skeleton" />
+                <Skeleton className="h-8" panel-lego="Skeleton" />
+                <Skeleton className="h-8" panel-lego="Skeleton" />
               </div>
               <UsedInPages pages={["src/app/app/rules/page.tsx", "src/components/DiffViewer.tsx"]} />
             </Card>
@@ -1931,19 +2264,23 @@ export function DesignSystemContent() {
         <SectionBlock id="feedback" title="Feedback" description="상태 배너/에러/성공 메시지 패턴">
           <div className="grid grid-cols-1 gap-3">
             <div>
-              <StateBanner tone="info" title="정보 안내" description="설정값이 기본값으로 동작 중입니다." />
+              {renderUiDefinitionMetaByName("StateBanner", highlightName, handleCopyLink, copiedName)}
+              <StateBanner tone="info" title="정보 안내" description="설정값이 기본값으로 동작 중입니다." panel-lego="StateBanner" />
               <UsedInPages pages={["src/app/app/settings/page.tsx"]} />
             </div>
             <div>
-              <StateBanner tone="success" title="저장 완료" description="대화 설정이 정상적으로 저장되었습니다." />
+              {renderUiDefinitionMetaByName("StateBanner", highlightName, handleCopyLink, copiedName)}
+              <StateBanner tone="success" title="저장 완료" description="대화 설정이 정상적으로 저장되었습니다." panel-lego="StateBanner" />
               <UsedInPages pages={["src/components/settings/ChatSettingsPanel.tsx"]} />
             </div>
             <div>
-              <StateBanner tone="warning" title="주의 필요" description="카페24 토큰 만료가 임박했습니다." />
+              {renderUiDefinitionMetaByName("StateBanner", highlightName, handleCopyLink, copiedName)}
+              <StateBanner tone="warning" title="주의 필요" description="카페24 토큰 만료가 임박했습니다." panel-lego="StateBanner" />
               <UsedInPages pages={["src/app/app/page.tsx", "src/app/app/settings/page.tsx"]} />
             </div>
             <div>
-              <StateBanner tone="danger" title="오류 발생" description="세션 데이터를 불러오지 못했습니다." />
+              {renderUiDefinitionMetaByName("StateBanner", highlightName, handleCopyLink, copiedName)}
+              <StateBanner tone="danger" title="오류 발생" description="세션 데이터를 불러오지 못했습니다." panel-lego="StateBanner" />
               <UsedInPages pages={["src/app/app/page.tsx", "src/app/app/rules/page.tsx"]} />
             </div>
           </div>
@@ -1956,7 +2293,8 @@ export function DesignSystemContent() {
       node: (
         <SectionBlock id="overlay" title="Overlay" description="모달/드롭다운/드로어 레이어 패턴">
           <Card className="p-4">
-            <OverlayShell />
+            {renderUiDefinitionMetaByName("OverlayShell", highlightName, handleCopyLink, copiedName)}
+            <OverlayShell panel-lego="OverlayShell" />
             <UsedInPages pages={["src/components/design-system/shells.tsx", "src/components/MobileDrawer.tsx", "src/components/settings/ChatSettingsPanel.tsx", "src/app/app/page.tsx"]} />
           </Card>
         </SectionBlock>
@@ -1969,43 +2307,50 @@ export function DesignSystemContent() {
         <SectionBlock id="navigation" title="Navigation" description="사이드바 링크/탭형 선택 패턴">
           <div className="grid grid-cols-1 gap-4">
             <Card className="p-4">
-              <SidebarNavigationShell />
+              {renderUiDefinitionMetaByName("SidebarNavigationShell", highlightName, handleCopyLink, copiedName)}
+              <SidebarNavigationShell panel-lego="SidebarNavigationShell" />
               <UsedInPages pages={["src/components/design-system/shells.tsx", "src/components/AppSidebar.tsx"]} />
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("UnderlineTabs", highlightName, handleCopyLink, copiedName)}
               <div className="mb-2 text-sm font-semibold text-slate-900">UnderlineTabs</div>
               <UnderlineTabs
                 tabs={underlineDemoTabs}
                 activeKey={underlineDemoTab}
                 onSelect={setUnderlineDemoTab}
+                panel-lego="UnderlineTabs"
               />
               <div className="mt-3 text-xs text-slate-500">Active: {underlineDemoTab}</div>
               <UsedInPages pages={["src/app/app/admin/page.tsx"]} />
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("PillTabs", highlightName, handleCopyLink, copiedName)}
               <div className="mb-2 text-sm font-semibold text-slate-900">PillTabs</div>
               <PillTabs
                 tabs={pillDemoTabs}
                 activeKey={pillDemoTab}
                 onSelect={setPillDemoTab}
                 sticky={false}
+                panel-lego="PillTabs"
               />
               <div className="mt-3 text-xs text-slate-500">Active: {pillDemoTab}</div>
               <UsedInPages pages={["src/app/app/design-system/page.tsx"]} />
             </Card>
 
             <Card className="p-4">
+              {renderUiDefinitionMetaByName("UnderlineTabs", highlightName, handleCopyLink, copiedName)}
               <div className="mb-2 text-sm font-semibold text-slate-900">Step / Tab Selector Pattern</div>
-              <UnderlineTabs tabs={stepTabItems} activeKey={stepTab} onSelect={setStepTab} />
+              <UnderlineTabs tabs={stepTabItems} activeKey={stepTab} onSelect={setStepTab} panel-lego="UnderlineTabs" />
               <div className="mt-3 text-xs text-slate-500">Active: {stepTab}</div>
               <div className="mt-3 text-xs text-slate-500">실험실/설정 페이지에서 반복되는 세그먼트 선택 UI</div>
               <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/settings/ChatSettingsPanel.tsx"]} />
             </Card>
 
             <Card className="p-4">
-              <TopHeaderShell />
+              {renderUiDefinitionMetaByName("TopHeaderShell", highlightName, handleCopyLink, copiedName)}
+              <TopHeaderShell panel-lego="TopHeaderShell" />
               <UsedInPages pages={["src/components/design-system/shells.tsx", "src/components/AppHeader.tsx", "src/components/ProfileMenu.tsx"]} />
             </Card>
           </div>
@@ -2022,6 +2367,7 @@ export function DesignSystemContent() {
           description="lucide-react 아이콘 전체 목록. 이름 검색 후 선택/사용 가능합니다."
         >
           <Card className="p-4">
+            {renderUiDefinitionMetaByName("LucideIcon", highlightName, handleCopyLink, copiedName)}
             <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
               <Input
                 placeholder="아이콘 이름 검색 (예: Search, Phone, Calendar)"
@@ -2030,6 +2376,7 @@ export function DesignSystemContent() {
                   setIconSearch(e.target.value);
                   setIconPage(1);
                 }}
+                panel-lego="Input"
               />
               <div className="text-xs text-slate-500">
                 총 <span className="font-semibold text-slate-700">{filteredIconEntries.length}</span> /{" "}
@@ -2041,6 +2388,7 @@ export function DesignSystemContent() {
                   size="sm"
                   disabled={safeIconPage <= 1}
                   onClick={() => setIconPage((p) => Math.max(1, p - 1))}
+                  panel-lego="Button"
                 >
                   이전
                 </Button>
@@ -2052,6 +2400,7 @@ export function DesignSystemContent() {
                   size="sm"
                   disabled={safeIconPage >= iconTotalPages}
                   onClick={() => setIconPage((p) => Math.min(iconTotalPages, p + 1))}
+                  panel-lego="Button"
                 >
                   다음
                 </Button>
@@ -2069,7 +2418,7 @@ export function DesignSystemContent() {
                     title={`${name} (클릭 시 이름 복사)`}
                   >
                     <div className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50">
-                      <IconItem className="h-[15px] w-[15px] text-slate-700" />
+                      <IconItem className="h-[15px] w-[15px] text-slate-700" panel-lego="LucideIcon" />
                     </div>
                     <div className="min-w-0 truncate text-[11px] font-medium text-slate-700">{name}</div>
                   </button>
@@ -2100,7 +2449,14 @@ export function DesignSystemContent() {
         <PillTabs
           tabs={categoryLabels}
           activeKey={activeCategory}
-          onSelect={setActiveCategory}
+          onSelect={(key) => {
+            setActiveCategory(key);
+            const search = buildDesignSystemSearch({
+              name: nameParam || null,
+              category: key === "all" ? null : key,
+            });
+            router.replace(`${window.location.pathname}?${search}`, { scroll: false });
+          }}
         />
 
       <div className="space-y-4">{visibleSections.map((section) => <div key={section.key}>{section.node}</div>)}</div>

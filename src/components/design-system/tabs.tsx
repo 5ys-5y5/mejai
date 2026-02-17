@@ -6,7 +6,7 @@ export type TabItem<T extends string = string> = {
   disabled?: boolean;
 };
 
-type TabBaseProps<T extends string> = {
+type TabBaseProps<T extends string> = React.HTMLAttributes<HTMLDivElement> & {
   tabs: Array<TabItem<T>>;
   activeKey: T;
   onSelect: (key: T) => void;
@@ -18,9 +18,10 @@ export function UnderlineTabs<T extends string>({
   activeKey,
   onSelect,
   className,
+  ...props
 }: TabBaseProps<T>) {
   return (
-    <div className={cn("border-b border-slate-200 pb-2", className)}>
+    <div className={cn("border-b border-slate-200 pb-2", className)} {...props}>
       <nav className="flex gap-2 overflow-x-auto">
         {tabs.map((tab) => {
           const isActive = activeKey === tab.key;
@@ -56,6 +57,7 @@ export function PillTabs<T extends string>({
   onSelect,
   className,
   sticky = true,
+  ...props
 }: TabBaseProps<T> & { sticky?: boolean }) {
   return (
     <div
@@ -64,6 +66,7 @@ export function PillTabs<T extends string>({
         sticky ? "sticky top-0 z-20" : "",
         className
       )}
+      {...props}
     >
       {tabs.map((tab) => {
         const isActive = activeKey === tab.key;

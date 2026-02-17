@@ -19,10 +19,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { cn } from "@/lib/utils";
 
-export function TypographyScaleShell() {
+export function TypographyScaleShell({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div>
+    <div className={cn(className)} {...props}>
       <div className="text-sm font-semibold text-slate-900">Typography Scale (폰트/크기/두께 기준)</div>
       <div className="mt-3 overflow-auto rounded-xl border border-slate-200">
         <div className="grid grid-cols-[120px_120px_120px_minmax(220px,1fr)] bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-500">
@@ -69,9 +70,9 @@ export function TypographyScaleShell() {
   );
 }
 
-export function PageActionBarShell() {
+export function PageActionBarShell({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div>
+    <div className={cn(className)} {...props}>
       <div className="mb-2 text-sm font-semibold text-slate-900">Page Action Bar Pattern</div>
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-2">
         <Button variant="outline" className="h-9 text-xs">
@@ -89,9 +90,9 @@ export function PageActionBarShell() {
   );
 }
 
-export function SidebarNavigationShell() {
+export function SidebarNavigationShell({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div>
+    <div className={cn(className)} {...props}>
       <div className="mb-2 text-sm font-semibold text-slate-900">Sidebar Link Pattern</div>
       <nav className="rounded-xl border border-slate-200 bg-white py-4 px-3 space-y-5">
         <div>
@@ -168,9 +169,9 @@ export function SidebarNavigationShell() {
   );
 }
 
-export function TopHeaderShell() {
+export function TopHeaderShell({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div>
+    <div className={cn(className)} {...props}>
       <div className="mb-2 text-sm font-semibold text-slate-900">Top Header Pattern</div>
       <div className="rounded-xl border border-slate-200 bg-white p-3">
         <div className="flex items-center gap-2">
@@ -187,13 +188,13 @@ export function TopHeaderShell() {
   );
 }
 
-export function OverlayShell() {
+export function OverlayShell({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   const [modalOpen, setModalOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   return (
-    <div>
+    <div className={cn(className)} {...props}>
       <div className="flex flex-wrap items-center gap-2">
         <Button onClick={() => setModalOpen(true)}>모달 열기</Button>
         <Button variant="outline" onClick={() => setDrawerOpen(true)}>

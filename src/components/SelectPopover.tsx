@@ -12,7 +12,7 @@ export type SelectOption = {
   group?: string;
 };
 
-type SelectPopoverProps = {
+type SelectPopoverProps = React.HTMLAttributes<HTMLDivElement> & {
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
@@ -38,6 +38,7 @@ export function SelectPopover({
   disabled = false,
   renderValue,
   renderOption,
+  ...rootProps
 }: SelectPopoverProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -63,7 +64,7 @@ export function SelectPopover({
   }, [open, setOpen]);
 
   return (
-    <div className={cn("relative", className)} ref={ref}>
+    <div className={cn("relative", className)} ref={ref} {...rootProps}>
       <button
         type="button"
         onClick={() => {
@@ -157,7 +158,7 @@ export function SelectPopover({
   );
 }
 
-type MultiSelectPopoverProps = {
+type MultiSelectPopoverProps = React.HTMLAttributes<HTMLDivElement> & {
   values: string[];
   onChange: (values: string[]) => void;
   options: SelectOption[];
@@ -191,6 +192,7 @@ export function MultiSelectPopover({
   showBulkActions = false,
   open: openProp,
   onOpenChange,
+  ...rootProps
 }: MultiSelectPopoverProps) {
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
@@ -298,7 +300,7 @@ export function MultiSelectPopover({
   };
 
   return (
-    <div className={cn("relative", className)} ref={ref}>
+    <div className={cn("relative", className)} ref={ref} {...rootProps}>
       <button
         type="button"
         onClick={() => {

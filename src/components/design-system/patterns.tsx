@@ -1,12 +1,26 @@
 import { cn } from "@/lib/utils";
 
-export function PanelCard({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <div className={cn("rounded-2xl border border-slate-300 bg-slate-50", className)}>{children}</div>;
+export function PanelCard({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement> & { children: React.ReactNode }) {
+  return (
+    <div className={cn("rounded-2xl border border-slate-300 bg-slate-50", className)} {...props}>
+      {children}
+    </div>
+  );
 }
 
-export function AdminTag() {
+export function AdminTag({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) {
   return (
-    <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+    <span
+      className={cn(
+        "rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700",
+        className
+      )}
+      {...props}
+    >
       ADMIN
     </span>
   );
@@ -17,12 +31,13 @@ export function StateBanner({
   title,
   description,
   className,
+  ...props
 }: {
   tone: "info" | "success" | "warning" | "danger";
   title: string;
   description: string;
   className?: string;
-}) {
+} & React.HTMLAttributes<HTMLDivElement>) {
   const toneClass =
     tone === "success"
       ? "border-emerald-200 bg-emerald-50 text-emerald-800"
@@ -33,14 +48,18 @@ export function StateBanner({
           : "border-sky-200 bg-sky-50 text-sky-800";
 
   return (
-    <div className={cn("rounded-xl border px-3 py-2", toneClass, className)}>
+    <div className={cn("rounded-xl border px-3 py-2", toneClass, className)} {...props}>
       <div className="text-sm font-semibold">{title}</div>
       <div className="mt-1 text-xs opacity-90">{description}</div>
     </div>
   );
 }
 
-export function InlineToggle({ checked, className }: { checked: boolean; className?: string }) {
+export function InlineToggle({
+  checked,
+  className,
+  ...props
+}: { checked: boolean; className?: string } & React.HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
       className={cn(
@@ -50,6 +69,7 @@ export function InlineToggle({ checked, className }: { checked: boolean; classNa
         className
       )}
       aria-label={checked ? "ON" : "OFF"}
+      {...props}
     >
       {checked ? "ON" : "OFF"}
     </span>
@@ -61,14 +81,15 @@ export function SectionBlock({
   title,
   description,
   children,
+  ...props
 }: {
   id: string;
   title: string;
   description: string;
   children: React.ReactNode;
-}) {
+} & React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div id={id} className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5">
+    <div id={id} className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5" {...props}>
       <div className="mb-4">
         <h2 className="text-base font-semibold text-slate-900">{title}</h2>
         <p className="mt-1 text-xs text-slate-500">{description}</p>

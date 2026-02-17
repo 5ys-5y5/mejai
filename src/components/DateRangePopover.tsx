@@ -5,7 +5,12 @@ import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export function DateRangePopover({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+export function DateRangePopover({
+  value,
+  onChange,
+  className,
+  ...rootProps
+}: { value: string; onChange: (value: string) => void } & React.HTMLAttributes<HTMLDivElement>) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const presets = [
@@ -27,7 +32,7 @@ export function DateRangePopover({ value, onChange }: { value: string; onChange:
   }, [open]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className={cn("relative", className)} ref={ref} {...rootProps}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}

@@ -130,7 +130,7 @@ export function WidgetLauncherIcon({
         width: sizePx,
         height: sizePx,
         objectFit: "cover",
-        borderRadius: "999px",
+        borderRadius: "16px",
         display: hidden ? "none" : "block",
         pointerEvents: "none",
         ...style,
@@ -213,11 +213,11 @@ export function WidgetLauncherButton({
       style={{
         width: sizePx,
         height: sizePx,
-        borderRadius: "999px",
+        borderRadius: "16px",
         border: "none",
         cursor: "pointer",
-        boxShadow: "0 10px 30px rgba(15, 23, 42, 0.2)",
-        background: primaryColor,
+        boxShadow: "none",
+        background: "transparent",
         color: "#fff",
         fontSize: `${fontSize}px`,
         display: "flex",
@@ -284,16 +284,16 @@ export function WidgetLauncherIframe({
 }: WidgetLauncherIframeProps) {
   if (asPlaceholder) {
     return (
-    <div
-      className={cn(
-        "rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-500",
-        className
-      )}
-      panel-lego="WidgetLauncherIframe.Placeholder"
-      style={style}
-    >
-      {placeholderLabel}
-    </div>
+      <div
+        className={cn(
+          "rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-500",
+          className
+        )}
+        panel-lego="WidgetLauncherIframe.Placeholder"
+        style={style}
+      >
+        {placeholderLabel}
+      </div>
     );
   }
 

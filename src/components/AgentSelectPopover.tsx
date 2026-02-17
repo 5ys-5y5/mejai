@@ -10,7 +10,7 @@ type AgentOption = {
   name: string;
 };
 
-type AgentSelectPopoverProps = {
+type AgentSelectPopoverProps = React.HTMLAttributes<HTMLDivElement> & {
   value: string;
   onChange: (value: string) => void;
   options?: AgentOption[];
@@ -32,6 +32,8 @@ export function AgentSelectPopover({
   onChange,
   options,
   followupCountByAgent,
+  className,
+  ...rootProps
 }: AgentSelectPopoverProps) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -68,7 +70,7 @@ export function AgentSelectPopover({
   }, [open]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className={cn("relative", className)} ref={ref} {...rootProps}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
