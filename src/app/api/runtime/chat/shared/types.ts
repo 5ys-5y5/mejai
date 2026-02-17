@@ -11,6 +11,8 @@ export type AgentRow = {
   id: string | null;
   parent_id?: string | null;
   name: string;
+  agent_type?: string | null;
+  version?: string | null;
   llm: "chatgpt" | "gemini";
   kb_id: string | null;
   mcp_tool_ids?: string[] | null;

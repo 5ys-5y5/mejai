@@ -94,7 +94,7 @@ export async function fetchAgent(context: RuntimeContext, agentId: string) {
 export async function fetchKb(context: RuntimeContext, kbId: string) {
   const { data, error } = await context.supabase
     .from("B_bot_knowledge_bases")
-    .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
+    .select("id, title, content, is_active, version, is_admin, kb_kind, apply_groups, apply_groups_mode, content_json")
     .eq("id", kbId)
     .or(`org_id.eq.${context.orgId},org_id.is.null`)
     .maybeSingle();
@@ -105,7 +105,7 @@ export async function fetchKb(context: RuntimeContext, kbId: string) {
 export async function fetchAdminKbs(context: RuntimeContext) {
   const { data, error } = await context.supabase
     .from("B_bot_knowledge_bases")
-    .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
+    .select("id, title, content, is_active, version, is_admin, kb_kind, apply_groups, apply_groups_mode, content_json")
     .eq("is_admin", true)
     .eq("is_active", true)
     .or(`org_id.eq.${context.orgId},org_id.is.null`);

@@ -34,6 +34,32 @@ export type DebugPayload = {
   contextContamination?: string[];
   runtimeCallChain?: Array<{ module_path: string; function_name: string }>;
   templateOverrides?: Record<string, string>;
+  agentId?: string | null;
+  agentParentId?: string | null;
+  agentName?: string | null;
+  agentType?: string | null;
+  agentVersion?: string | null;
+  agentLlm?: string | null;
+  agentKbId?: string | null;
+  kbId?: string | null;
+  kbTitle?: string | null;
+  kbVersion?: string | null;
+  kbKind?: string | null;
+  kbIsAdmin?: boolean | null;
+  kbAdminSummary?: Array<{
+    id: string;
+    title?: string | null;
+    version?: string | null;
+    kb_kind?: string | null;
+    is_admin?: boolean | null;
+  }>;
+  widgetId?: string | null;
+  widgetName?: string | null;
+  widgetPublicKey?: string | null;
+  widgetAgentId?: string | null;
+  widgetOrgId?: string | null;
+  widgetAllowedDomains?: string[];
+  widgetAllowedPaths?: string[];
 };
 
 type DebugEntry = { key: string; value: string | number };
@@ -250,6 +276,69 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
           },
         }
       : {}),
+    ...(payload.agentId ||
+    payload.agentName ||
+    payload.agentParentId ||
+    payload.agentType ||
+    payload.agentVersion ||
+    payload.agentLlm ||
+    payload.agentKbId
+      ? {
+          agent: {
+            ...(payload.agentId ? { id: payload.agentId } : {}),
+            ...(payload.agentParentId ? { parent_id: payload.agentParentId } : {}),
+            ...(payload.agentName ? { name: payload.agentName } : {}),
+            ...(payload.agentType ? { type: payload.agentType } : {}),
+            ...(payload.agentVersion ? { version: payload.agentVersion } : {}),
+            ...(payload.agentLlm ? { llm: payload.agentLlm } : {}),
+            ...(payload.agentKbId ? { kb_id: payload.agentKbId } : {}),
+          },
+        }
+      : {}),
+    ...(payload.kbId ||
+    payload.kbTitle ||
+    payload.kbVersion ||
+    payload.kbKind ||
+    payload.kbIsAdmin !== undefined ||
+    (Array.isArray(payload.kbAdminSummary) && payload.kbAdminSummary.length > 0)
+      ? {
+          kb: {
+            primary: {
+              ...(payload.kbId ? { id: payload.kbId } : {}),
+              ...(payload.kbTitle ? { title: payload.kbTitle } : {}),
+              ...(payload.kbVersion ? { version: payload.kbVersion } : {}),
+              ...(payload.kbKind ? { kind: payload.kbKind } : {}),
+              ...(payload.kbIsAdmin !== undefined && payload.kbIsAdmin !== null ? { is_admin: payload.kbIsAdmin } : {}),
+            },
+            ...(Array.isArray(payload.kbAdminSummary) && payload.kbAdminSummary.length > 0
+              ? { admin: payload.kbAdminSummary }
+              : {}),
+          },
+        }
+      : {}),
+    ...(payload.widgetId ||
+    payload.widgetName ||
+    payload.widgetPublicKey ||
+    payload.widgetAgentId ||
+    payload.widgetOrgId ||
+    (Array.isArray(payload.widgetAllowedDomains) && payload.widgetAllowedDomains.length > 0) ||
+    (Array.isArray(payload.widgetAllowedPaths) && payload.widgetAllowedPaths.length > 0)
+      ? {
+          widget: {
+            ...(payload.widgetId ? { id: payload.widgetId } : {}),
+            ...(payload.widgetName ? { name: payload.widgetName } : {}),
+            ...(payload.widgetPublicKey ? { public_key: payload.widgetPublicKey } : {}),
+            ...(payload.widgetAgentId ? { agent_id: payload.widgetAgentId } : {}),
+            ...(payload.widgetOrgId ? { org_id: payload.widgetOrgId } : {}),
+            ...(Array.isArray(payload.widgetAllowedDomains) && payload.widgetAllowedDomains.length > 0
+              ? { allowed_domains: payload.widgetAllowedDomains }
+              : {}),
+            ...(Array.isArray(payload.widgetAllowedPaths) && payload.widgetAllowedPaths.length > 0
+              ? { allowed_paths: payload.widgetAllowedPaths }
+              : {}),
+          },
+        }
+      : {}),
     ...(payload.conversationMode ? { mode: payload.conversationMode } : {}),
   };
 }
@@ -339,6 +428,23 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
     { key: "KB_ADMIN.rules", value: uniq(payload.usedRuleIds).join(", ") || "-" },
     { key: "KB_ADMIN.templates", value: uniq(payload.usedTemplateIds).join(", ") || "-" },
     { key: "KB_ADMIN.tool_policies", value: uniq(payload.usedToolPolicies).join(", ") || "-" },
+    { key: "AGENT.id", value: payload.agentId || "-" },
+    { key: "AGENT.parent_id", value: payload.agentParentId || "-" },
+    { key: "AGENT.name", value: payload.agentName || "-" },
+    { key: "AGENT.type", value: payload.agentType || "-" },
+    { key: "AGENT.version", value: payload.agentVersion || "-" },
+    { key: "AGENT.llm", value: payload.agentLlm || "-" },
+    { key: "AGENT.kb_id", value: payload.agentKbId || "-" },
+    { key: "KB.primary.id", value: payload.kbId || "-" },
+    { key: "KB.primary.title", value: payload.kbTitle || "-" },
+    { key: "KB.primary.version", value: payload.kbVersion || "-" },
+    { key: "KB.primary.kind", value: payload.kbKind || "-" },
+    { key: "KB.primary.is_admin", value: payload.kbIsAdmin === true ? "true" : payload.kbIsAdmin === false ? "false" : "-" },
+    { key: "WIDGET.id", value: payload.widgetId || "-" },
+    { key: "WIDGET.name", value: payload.widgetName || "-" },
+    { key: "WIDGET.public_key", value: payload.widgetPublicKey || "-" },
+    { key: "WIDGET.agent_id", value: payload.widgetAgentId || "-" },
+    { key: "WIDGET.org_id", value: payload.widgetOrgId || "-" },
     { key: "SLOT.expected_input", value: payload.slotExpectedInput || "-" },
     { key: "SLOT.order_id", value: payload.slotOrderId || "-" },
     { key: "SLOT.phone", value: payload.slotPhone || "-" },

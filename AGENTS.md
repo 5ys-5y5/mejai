@@ -1,4 +1,4 @@
-# AGENTS
+﻿# AGENTS
 
 ## Prompt Standards
 
@@ -25,3 +25,35 @@ Goal: Keep UI definitions centralized under `src/components` so a single source 
 - Prefer composition over copy/paste. If variations are needed, add well-scoped props or variants to the single definition.
 - Keep cross-cutting UI primitives in `src/components` and reference them everywhere else; do not fork them per feature page.
 - When refactoring, collapse duplicates by moving shared UI into the most reusable layer and updating higher layers to consume it.
+
+## Terminal Encoding (PowerShell + Codex CLI)
+
+To prevent Korean text corruption in the Codex CLI PowerShell terminal output, ensure UTF-8 is set for the session and profile.
+
+### One-time (current session)
+```powershell
+chcp 65001
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+```
+
+### Persist (PowerShell profile)
+```powershell
+if (!(Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force | Out-Null }
+notepad $PROFILE
+```
+
+Add the following lines to the profile:
+```powershell
+chcp 65001
+$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+```
+
+If the profile fails to load with a `PSSecurityException`, either:
+- run the one-time commands each session, or
+- allow profile scripts for the current user with `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`
+
+### Verification
+```powershell
+[Console]::OutputEncoding.WebName
+```
+Expected: `utf-8`

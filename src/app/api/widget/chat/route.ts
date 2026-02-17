@@ -3,6 +3,25 @@ import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { verifyWidgetToken } from "@/lib/widgetToken";
 
+function encodeHeaderValue(input: string) {
+  const value = String(input || "").trim();
+  if (!value) return "";
+  try {
+    return encodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function encodeHeaderJson(input: unknown) {
+  if (!input) return "";
+  try {
+    return encodeHeaderValue(JSON.stringify(input));
+  } catch {
+    return "";
+  }
+}
+
 function resolveRuntimeBaseUrl(req: NextRequest) {
   const override = String(process.env.WIDGET_RUNTIME_BASE_URL || "").trim();
   if (override) return override.replace(/\/+$/, "");
@@ -98,7 +117,7 @@ export async function POST(req: NextRequest) {
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, agent_id, is_active")
+    .select("id, org_id, agent_id, is_active, name, public_key, allowed_domains, allowed_paths")
     .eq("id", payload.widget_id)
     .maybeSingle();
   if (!widget || !widget.is_active) {
@@ -143,6 +162,12 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
         "x-widget-secret": secret,
         "x-widget-org-id": String(widget.org_id),
+        "x-widget-id": String(widget.id || ""),
+        "x-widget-name": encodeHeaderValue(String(widget.name || "")),
+        "x-widget-public-key": String(widget.public_key || ""),
+        "x-widget-agent-id": String(widget.agent_id || ""),
+        "x-widget-allowed-domains": encodeHeaderJson(widget.allowed_domains || []),
+        "x-widget-allowed-paths": encodeHeaderJson(widget.allowed_paths || []),
       },
       body: JSON.stringify({
         message,

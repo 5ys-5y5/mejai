@@ -1653,6 +1653,41 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           : [],
       });
     }
+
+    const restockFailureReason = (() => {
+      if (restockKbEntriesRaw.length === 0) return "KB_EMPTY";
+      if (rankedFromMessageSchedulable.length === 0) return "KB_NO_SCHEDULABLE_MATCH";
+      if (!restockProductId && !pendingProductName) return "PRODUCT_ID_MISSING";
+      if (!restockProductId && pendingProductName) return "PRODUCT_RESOLVE_FAILED";
+      if (restockProductId && !scheduleEntry) return "KB_SCHEDULE_NOT_FOUND";
+      if (resolvedIntent === "restock_inquiry") return "RESTOCK_INQUIRY_FALLTHROUGH";
+      return "UNHANDLED_FALLTHROUGH";
+    })();
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "RESTOCK_MATCH_FAILED",
+      {
+        reason: restockFailureReason,
+        intent: resolvedIntent,
+        query_text: restockQueryText,
+        kb_entry_count: restockKbEntriesRaw.length,
+        ranked_count: rankedFromMessage.length,
+        ranked_schedulable_count: rankedFromMessageSchedulable.length,
+        broad_candidate_count: broadCandidates.length,
+        product_id: restockProductId || null,
+        pending_product_id: pendingProductId || null,
+        pending_product_name: pendingProductName || null,
+        kb_match_from_query: Boolean(kbMatchFromQuery),
+        schedule_entry_found: Boolean(scheduleEntry),
+        schedule_raw_date: scheduleEntry?.raw_date || null,
+        lock_intent_to_subscribe: lockIntentToRestockSubscribe,
+        restock_subscribe_accepted: restockSubscribeAcceptedThisTurn,
+        restock_channel: restockChannel,
+      },
+      { intent_name: resolvedIntent }
+    );
   }
 
   return null;

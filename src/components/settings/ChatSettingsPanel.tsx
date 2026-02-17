@@ -647,6 +647,21 @@ export function ChatSettingsPanel({ authToken }: Props) {
     []
   );
 
+  const updateAllPages = useCallback(
+    (updater: (prev: ConversationPageFeatures) => ConversationPageFeatures) => {
+      setDraftByPage((prev) => {
+        const pages = normalizePages(registeredPages);
+        const next: Record<ConversationPageKey, ConversationPageFeatures> = { ...prev };
+        pages.forEach((page) => {
+          const current = prev[page] || getDefaultConversationPageFeatures(page);
+          next[page] = updater(current);
+        });
+        return next;
+      });
+    },
+    [registeredPages]
+  );
+
   const updateDebugCopyOptions = useCallback(
     (page: ConversationPageKey, updater: (prev: DebugTranscriptOptions) => DebugTranscriptOptions) => {
       setDebugCopyDraftByPage((prev) => ({ ...prev, [page]: updater(prev[page]) }));
@@ -1092,10 +1107,10 @@ export function ChatSettingsPanel({ authToken }: Props) {
                       checked={draft.adminPanel.copyConversation}
                       visibility={draft.visibility.adminPanel.copyConversation}
                       onChange={(v) =>
-                        updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, copyConversation: v } }))
+                        updateAllPages((prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, copyConversation: v } }))
                       }
                       onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
+                        updateAllPages((prev) => ({
                           ...prev,
                           visibility: {
                             ...prev.visibility,
@@ -1109,9 +1124,9 @@ export function ChatSettingsPanel({ authToken }: Props) {
                       label={isHeader ? "adminPanel.copyIssue" : "문제 로그 복사"}
                       checked={draft.adminPanel.copyIssue}
                       visibility={draft.visibility.adminPanel.copyIssue}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, copyIssue: v } }))}
+                      onChange={(v) => updateAllPages((prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, copyIssue: v } }))}
                       onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
+                        updateAllPages((prev) => ({
                           ...prev,
                           visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, copyIssue: mode } },
                         }))

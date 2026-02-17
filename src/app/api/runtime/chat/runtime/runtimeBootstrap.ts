@@ -40,11 +40,51 @@ type RuntimeContextAny = RuntimeContext;
 
 type AgentShape = {
   id: string | null;
+  parent_id?: string | null;
   name?: string | null;
+  agent_type?: string | null;
+  version?: string | null;
   llm?: string | null;
   kb_id?: string | null;
   mcp_tool_ids?: string[] | null;
 };
+
+type WidgetContext = {
+  widgetId: string | null;
+  widgetName: string | null;
+  widgetPublicKey: string | null;
+  widgetAgentId: string | null;
+  widgetOrgId: string | null;
+  widgetAllowedDomains: string[];
+  widgetAllowedPaths: string[];
+};
+
+function decodeHeaderValue(input: string) {
+  const value = String(input || "").trim();
+  if (!value) return "";
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function parseHeaderArray(input: string) {
+  const decoded = decodeHeaderValue(input);
+  if (!decoded) return [];
+  try {
+    const parsed = JSON.parse(decoded);
+    if (Array.isArray(parsed)) {
+      return parsed.map((item) => String(item || "").trim()).filter(Boolean);
+    }
+  } catch {
+    // ignore JSON parse errors and fall back to CSV
+  }
+  return decoded
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 type BootstrapParams = {
   req: NextRequest;
@@ -80,6 +120,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         userIsAdmin: boolean | null;
         userRole: string | null;
         userOrgId: string | null;
+        widgetContext: WidgetContext | null;
         sessionId: string;
         reusedSession: boolean;
         recentTurns: Array<Record<string, any>>;
@@ -484,6 +525,21 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     is_first_turn: firstTurnInSession,
   });
 
+  const widgetContext: WidgetContext | null = isWidgetRequest
+    ? {
+        widgetId: decodeHeaderValue(req.headers.get("x-widget-id") || "") || null,
+        widgetName: decodeHeaderValue(req.headers.get("x-widget-name") || "") || null,
+        widgetPublicKey: decodeHeaderValue(req.headers.get("x-widget-public-key") || "") || null,
+        widgetAgentId:
+          decodeHeaderValue(req.headers.get("x-widget-agent-id") || "") ||
+          String(agent.id || "").trim() ||
+          null,
+        widgetOrgId: decodeHeaderValue(req.headers.get("x-widget-org-id") || "") || authContext.orgId || null,
+        widgetAllowedDomains: parseHeaderArray(req.headers.get("x-widget-allowed-domains") || ""),
+        widgetAllowedPaths: parseHeaderArray(req.headers.get("x-widget-allowed-paths") || ""),
+      }
+    : null;
+
   return {
     response: null,
     state: {
@@ -509,6 +565,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       userIsAdmin,
       userRole,
       userOrgId,
+      widgetContext,
       sessionId,
       reusedSession,
       recentTurns,
