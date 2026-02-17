@@ -1,3 +1,29 @@
+const RUNTIME_STARTED_AT = new Date().toISOString();
+
+function resolveBuildInfo() {
+  const env = process.env || {};
+  const commit =
+    String(env.VERCEL_GIT_COMMIT_SHA || env.GIT_COMMIT_SHA || env.BUILD_COMMIT || env.COMMIT_SHA || "").trim() || null;
+  const ref = String(env.VERCEL_GIT_COMMIT_REF || env.GIT_BRANCH || env.BUILD_BRANCH || "").trim() || null;
+  const buildId =
+    String(env.VERCEL_DEPLOYMENT_ID || env.BUILD_ID || env.NEXT_PUBLIC_BUILD_ID || "").trim() || null;
+  const buildAt =
+    String(env.BUILD_TIMESTAMP || env.NEXT_PUBLIC_BUILD_TIMESTAMP || env.VERCEL_BUILD_TIME || "").trim() || null;
+  const deployEnv =
+    String(env.VERCEL_ENV || env.NODE_ENV || env.DEPLOY_ENV || env.NEXT_PUBLIC_VERCEL_ENV || "").trim() || null;
+
+  return {
+    tag: "debug-prefix-v3",
+    commit,
+    ref,
+    build_id: buildId,
+    build_at: buildAt,
+    deploy_env: deployEnv,
+    runtime_started_at: RUNTIME_STARTED_AT,
+    node: typeof process !== "undefined" ? process.version : null,
+  };
+}
+
 export type DebugPayload = {
   llmModel?: string | null;
   mcpTools?: string[];
@@ -179,7 +205,8 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
     result_count: payload.mcpLastCount ?? null,
   };
   return {
-    schema_version: 2,
+    schema_version: 3,
+    build: resolveBuildInfo(),
     ...(payload.llmModel ? { llm: { model: payload.llmModel } } : {}),
     mcp: {
       ...(providerNodes.length > 0 ? { providers: providerNodes } : {}),
@@ -388,6 +415,7 @@ export function buildDebugPrefix(payload: DebugPayload) {
 
 function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
   const uniq = (items?: string[]) => Array.from(new Set(items || [])).filter(Boolean);
+  const build = resolveBuildInfo();
   const normalizedLastFunction = resolveMcpLastFunctionValue(payload);
   const providerConfig = payload.providerConfig || {};
   const configParts = Object.entries(providerConfig)
@@ -428,6 +456,13 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
     { key: "KB_ADMIN.rules", value: uniq(payload.usedRuleIds).join(", ") || "-" },
     { key: "KB_ADMIN.templates", value: uniq(payload.usedTemplateIds).join(", ") || "-" },
     { key: "KB_ADMIN.tool_policies", value: uniq(payload.usedToolPolicies).join(", ") || "-" },
+    { key: "BUILD.tag", value: build.tag || "-" },
+    { key: "BUILD.commit", value: build.commit || "-" },
+    { key: "BUILD.ref", value: build.ref || "-" },
+    { key: "BUILD.build_id", value: build.build_id || "-" },
+    { key: "BUILD.build_at", value: build.build_at || "-" },
+    { key: "BUILD.deploy_env", value: build.deploy_env || "-" },
+    { key: "BUILD.runtime_started_at", value: build.runtime_started_at || "-" },
     { key: "AGENT.id", value: payload.agentId || "-" },
     { key: "AGENT.parent_id", value: payload.agentParentId || "-" },
     { key: "AGENT.name", value: payload.agentName || "-" },
