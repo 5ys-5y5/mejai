@@ -68,6 +68,7 @@ When changing the return type of a callback used across shared UI props (e.g., c
 - Avoid `void` wrappers like `() => void fn()` when the return value matters; return the promise/boolean directly.
 - Check all call sites for type compatibility and update wrappers to preserve the return value.
 - Apply the same rule to submit actions (e.g., `onSubmitMessage`) if they start returning `boolean` for control flow.
+- Prefer consistent return shapes (e.g., always `boolean`), not `false | undefined`, to keep inference stable.
 
 Add the following lines to the profile:
 ```powershell

@@ -166,19 +166,19 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
     async (modelId: string, text: string) => {
       const target = models.find((model) => model.id === modelId);
       if (!target) return false;
-      if (!text) return;
+      if (!text) return false;
       if (target.setupMode === "existing" && !target.selectedAgentId) {
         toast.error("에이전트를 선택하세요.");
-        return;
+        return false;
       }
       if (target.setupMode === "existing" && target.conversationMode !== "new" && !target.selectedSessionId) {
         toast.error("세션을 선택하세요.");
-        return;
+        return false;
       }
-      if (target.conversationMode === "history") return;
+      if (target.conversationMode === "history") return false;
       if (target.setupMode === "existing" && !target.config.kbId) {
         toast.error("KB를 선택하세요.");
-        return;
+        return false;
       }
       updateModel(modelId, (model) => ({
         ...model,
@@ -225,6 +225,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           }, 2500)
         : null;
 
+      let succeeded = false;
       try {
         const activeSessionId = target.conversationMode === "new" ? target.sessionId : await ensureEditableSession(target);
         appendLoadingLog(activeSessionId ? `기존 세션 사용: ${activeSessionId}` : "신규 세션으로 요청");
@@ -295,6 +296,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           if (botMessageId && !inlineLogs) {
             await loadLogs(modelId, botMessageId, res.session_id || target.sessionId, transcriptFields.turnId);
           }
+          succeeded = true;
         } else {
           updateModel(modelId, (model) => ({
             ...model,
@@ -337,6 +339,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           window.clearInterval(loadingTicker);
         }
       }
+      return succeeded;
     },
     [ensureEditableSession, isAdminUser, loadLogs, models, pageKey, updateModel]
   );
