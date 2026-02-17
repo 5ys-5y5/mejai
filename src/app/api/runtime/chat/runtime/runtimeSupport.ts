@@ -105,6 +105,15 @@ export type DebugPayload = {
   allowlistAllowedToolNames?: string[];
   allowlistAllowedToolCount?: number | null;
   allowlistMissingExpectedTools?: string[];
+  allowlistRequestedToolCount?: number | null;
+  allowlistValidToolCount?: number | null;
+  allowlistProviderSelectionCount?: number | null;
+  allowlistProviderSelections?: string[];
+  allowlistToolsByIdCount?: number | null;
+  allowlistToolsByProviderCount?: number | null;
+  allowlistResolvedToolCount?: number | null;
+  allowlistQueryErrorById?: string | null;
+  allowlistQueryErrorByProvider?: string | null;
   slotExpectedInputPrev?: string | null;
   slotExpectedInputSource?: string | null;
   slotDerivedOrderId?: string | null;
@@ -471,7 +480,16 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
     ...(Array.isArray(payload.allowlistResolvedToolIds) ||
     Array.isArray(payload.allowlistAllowedToolNames) ||
     payload.allowlistAllowedToolCount !== undefined ||
-    Array.isArray(payload.allowlistMissingExpectedTools)
+    Array.isArray(payload.allowlistMissingExpectedTools) ||
+    payload.allowlistRequestedToolCount !== undefined ||
+    payload.allowlistValidToolCount !== undefined ||
+    payload.allowlistProviderSelectionCount !== undefined ||
+    Array.isArray(payload.allowlistProviderSelections) ||
+    payload.allowlistToolsByIdCount !== undefined ||
+    payload.allowlistToolsByProviderCount !== undefined ||
+    payload.allowlistResolvedToolCount !== undefined ||
+    payload.allowlistQueryErrorById ||
+    payload.allowlistQueryErrorByProvider
       ? {
           tool_allowlist: {
             ...(Array.isArray(payload.allowlistResolvedToolIds)
@@ -485,6 +503,33 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
               : {}),
             ...(Array.isArray(payload.allowlistMissingExpectedTools)
               ? { missing_tools_expected_by_intent: payload.allowlistMissingExpectedTools }
+              : {}),
+            ...(payload.allowlistRequestedToolCount !== undefined
+              ? { requested_tool_count: payload.allowlistRequestedToolCount }
+              : {}),
+            ...(payload.allowlistValidToolCount !== undefined ? { valid_tool_count: payload.allowlistValidToolCount } : {}),
+            ...(payload.allowlistProviderSelectionCount !== undefined
+              ? { provider_selection_count: payload.allowlistProviderSelectionCount }
+              : {}),
+            ...(Array.isArray(payload.allowlistProviderSelections)
+              ? { provider_selections: payload.allowlistProviderSelections }
+              : {}),
+            ...(payload.allowlistToolsByIdCount !== undefined
+              ? { tools_by_id_count: payload.allowlistToolsByIdCount }
+              : {}),
+            ...(payload.allowlistToolsByProviderCount !== undefined
+              ? { tools_by_provider_count: payload.allowlistToolsByProviderCount }
+              : {}),
+            ...(payload.allowlistResolvedToolCount !== undefined
+              ? { resolved_tool_count: payload.allowlistResolvedToolCount }
+              : {}),
+            ...(payload.allowlistQueryErrorById || payload.allowlistQueryErrorByProvider
+              ? {
+                  query_error: {
+                    ...(payload.allowlistQueryErrorById ? { by_id: payload.allowlistQueryErrorById } : {}),
+                    ...(payload.allowlistQueryErrorByProvider ? { by_provider: payload.allowlistQueryErrorByProvider } : {}),
+                  },
+                }
               : {}),
           },
         }
@@ -702,6 +747,15 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
       : [{ key: "MCP.skipped", value: "-" }]),
     { key: "TOOL_ALLOWLIST.allowed_count", value: payload.allowlistAllowedToolCount ?? "-" },
     { key: "TOOL_ALLOWLIST.allowed_names", value: (payload.allowlistAllowedToolNames || []).join(", ") || "-" },
+    { key: "TOOL_ALLOWLIST.requested_count", value: payload.allowlistRequestedToolCount ?? "-" },
+    { key: "TOOL_ALLOWLIST.valid_count", value: payload.allowlistValidToolCount ?? "-" },
+    { key: "TOOL_ALLOWLIST.provider_selection_count", value: payload.allowlistProviderSelectionCount ?? "-" },
+    { key: "TOOL_ALLOWLIST.provider_selections", value: (payload.allowlistProviderSelections || []).join(", ") || "-" },
+    { key: "TOOL_ALLOWLIST.tools_by_id_count", value: payload.allowlistToolsByIdCount ?? "-" },
+    { key: "TOOL_ALLOWLIST.tools_by_provider_count", value: payload.allowlistToolsByProviderCount ?? "-" },
+    { key: "TOOL_ALLOWLIST.resolved_tool_count", value: payload.allowlistResolvedToolCount ?? "-" },
+    { key: "TOOL_ALLOWLIST.query_error_by_id", value: payload.allowlistQueryErrorById || "-" },
+    { key: "TOOL_ALLOWLIST.query_error_by_provider", value: payload.allowlistQueryErrorByProvider || "-" },
     { key: "MODE", value: payload.conversationMode || "-" },
   ];
 }

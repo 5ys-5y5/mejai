@@ -110,6 +110,20 @@ export type DebugTranscriptOptions = {
           kbResolution?: boolean;
           modelResolution?: boolean;
           toolAllowlist?: boolean;
+          toolAllowlistResolvedToolIds?: boolean;
+          toolAllowlistAllowedToolNames?: boolean;
+          toolAllowlistAllowedToolCount?: boolean;
+          toolAllowlistMissingExpectedTools?: boolean;
+          toolAllowlistRequestedToolCount?: boolean;
+          toolAllowlistValidToolCount?: boolean;
+          toolAllowlistProviderSelectionCount?: boolean;
+          toolAllowlistProviderSelections?: boolean;
+          toolAllowlistToolsByIdCount?: boolean;
+          toolAllowlistToolsByProviderCount?: boolean;
+          toolAllowlistResolvedToolCount?: boolean;
+          toolAllowlistQueryError?: boolean;
+          toolAllowlistQueryErrorById?: boolean;
+          toolAllowlistQueryErrorByProvider?: boolean;
           slotFlow?: boolean;
           intentScope?: boolean;
           policyConflicts?: boolean;
@@ -175,6 +189,20 @@ type NormalizedDebugTranscriptOptions = {
         kbResolution: boolean;
         modelResolution: boolean;
         toolAllowlist: boolean;
+        toolAllowlistResolvedToolIds: boolean;
+        toolAllowlistAllowedToolNames: boolean;
+        toolAllowlistAllowedToolCount: boolean;
+        toolAllowlistMissingExpectedTools: boolean;
+        toolAllowlistRequestedToolCount: boolean;
+        toolAllowlistValidToolCount: boolean;
+        toolAllowlistProviderSelectionCount: boolean;
+        toolAllowlistProviderSelections: boolean;
+        toolAllowlistToolsByIdCount: boolean;
+        toolAllowlistToolsByProviderCount: boolean;
+        toolAllowlistResolvedToolCount: boolean;
+        toolAllowlistQueryError: boolean;
+        toolAllowlistQueryErrorById: boolean;
+        toolAllowlistQueryErrorByProvider: boolean;
         slotFlow: boolean;
         intentScope: boolean;
         policyConflicts: boolean;
@@ -261,6 +289,23 @@ function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): Norm
           kbResolution: sectionLogDebug?.prefixJsonSections?.kbResolution ?? true,
           modelResolution: sectionLogDebug?.prefixJsonSections?.modelResolution ?? true,
           toolAllowlist: sectionLogDebug?.prefixJsonSections?.toolAllowlist ?? true,
+          toolAllowlistResolvedToolIds: sectionLogDebug?.prefixJsonSections?.toolAllowlistResolvedToolIds ?? true,
+          toolAllowlistAllowedToolNames: sectionLogDebug?.prefixJsonSections?.toolAllowlistAllowedToolNames ?? true,
+          toolAllowlistAllowedToolCount: sectionLogDebug?.prefixJsonSections?.toolAllowlistAllowedToolCount ?? true,
+          toolAllowlistMissingExpectedTools: sectionLogDebug?.prefixJsonSections?.toolAllowlistMissingExpectedTools ?? true,
+          toolAllowlistRequestedToolCount: sectionLogDebug?.prefixJsonSections?.toolAllowlistRequestedToolCount ?? true,
+          toolAllowlistValidToolCount: sectionLogDebug?.prefixJsonSections?.toolAllowlistValidToolCount ?? true,
+          toolAllowlistProviderSelectionCount:
+            sectionLogDebug?.prefixJsonSections?.toolAllowlistProviderSelectionCount ?? true,
+          toolAllowlistProviderSelections: sectionLogDebug?.prefixJsonSections?.toolAllowlistProviderSelections ?? true,
+          toolAllowlistToolsByIdCount: sectionLogDebug?.prefixJsonSections?.toolAllowlistToolsByIdCount ?? true,
+          toolAllowlistToolsByProviderCount:
+            sectionLogDebug?.prefixJsonSections?.toolAllowlistToolsByProviderCount ?? true,
+          toolAllowlistResolvedToolCount: sectionLogDebug?.prefixJsonSections?.toolAllowlistResolvedToolCount ?? true,
+          toolAllowlistQueryError: sectionLogDebug?.prefixJsonSections?.toolAllowlistQueryError ?? true,
+          toolAllowlistQueryErrorById: sectionLogDebug?.prefixJsonSections?.toolAllowlistQueryErrorById ?? true,
+          toolAllowlistQueryErrorByProvider:
+            sectionLogDebug?.prefixJsonSections?.toolAllowlistQueryErrorByProvider ?? true,
           slotFlow: sectionLogDebug?.prefixJsonSections?.slotFlow ?? true,
           intentScope: sectionLogDebug?.prefixJsonSections?.intentScope ?? true,
           policyConflicts: sectionLogDebug?.prefixJsonSections?.policyConflicts ?? true,
@@ -403,6 +448,21 @@ function filterPrefixJson(
   sections: NormalizedDebugTranscriptOptions["logs"]["debug"]["prefixJsonSections"]
 ) {
   const filtered = { ...(prefix || {}) } as Record<string, unknown>;
+  const toolAllowlistFieldMap: Record<string, boolean> = {
+    "tool_allowlist.resolved_tool_ids": sections.toolAllowlistResolvedToolIds,
+    "tool_allowlist.allowed_tool_names": sections.toolAllowlistAllowedToolNames,
+    "tool_allowlist.allowed_tool_count": sections.toolAllowlistAllowedToolCount,
+    "tool_allowlist.missing_tools_expected_by_intent": sections.toolAllowlistMissingExpectedTools,
+    "tool_allowlist.requested_tool_count": sections.toolAllowlistRequestedToolCount,
+    "tool_allowlist.valid_tool_count": sections.toolAllowlistValidToolCount,
+    "tool_allowlist.provider_selection_count": sections.toolAllowlistProviderSelectionCount,
+    "tool_allowlist.provider_selections": sections.toolAllowlistProviderSelections,
+    "tool_allowlist.tools_by_id_count": sections.toolAllowlistToolsByIdCount,
+    "tool_allowlist.tools_by_provider_count": sections.toolAllowlistToolsByProviderCount,
+    "tool_allowlist.resolved_tool_count": sections.toolAllowlistResolvedToolCount,
+    "tool_allowlist.query_error.by_id": sections.toolAllowlistQueryErrorById,
+    "tool_allowlist.query_error.by_provider": sections.toolAllowlistQueryErrorByProvider,
+  };
   const mappings: Array<[boolean, string[]]> = [
     [sections.requestMeta, ["request_meta"]],
     [sections.resolvedAgent, ["resolved_agent"]],
@@ -420,6 +480,13 @@ function filterPrefixJson(
       if (key in filtered) delete filtered[key];
     });
   });
+  if (sections.toolAllowlist) {
+    const prunedMap: Record<string, boolean> = {};
+    Object.entries(toolAllowlistFieldMap).forEach(([path, enabled]) => {
+      if (!enabled) prunedMap[path] = false;
+    });
+    return filterObjectByPathMap(filtered, prunedMap) as Record<string, unknown>;
+  }
   return filtered;
 }
 

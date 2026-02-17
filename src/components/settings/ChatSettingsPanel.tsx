@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
 import { ChevronDown, ChevronRight, CircleHelp, GripVertical } from "lucide-react";
@@ -124,17 +124,41 @@ const RENDER_PLAN_DETAIL_TREE: DebugFieldTree[] = [
 const PREFIX_JSON_SECTIONS_TREE: DebugFieldTree[] = [
   {
     key: "prefix_json_sections",
-    label: "prefix_json 섹션",
+    label: "prefix_json",
     children: [
-      { key: "requestMeta", label: "요청 메타" },
-      { key: "resolvedAgent", label: "에이전트 해석" },
-      { key: "kbResolution", label: "KB 해석" },
-      { key: "modelResolution", label: "모델 해석" },
-      { key: "toolAllowlist", label: "도구 허용 목록" },
-      { key: "slotFlow", label: "슬롯 흐름" },
-      { key: "intentScope", label: "의도 범위" },
-      { key: "policyConflicts", label: "정책 충돌" },
-      { key: "conflictResolution", label: "충돌 해소" },
+      { key: "requestMeta", label: "request_meta" },
+      { key: "resolvedAgent", label: "resolved_agent" },
+      { key: "kbResolution", label: "kb_resolution" },
+      { key: "modelResolution", label: "model_resolution" },
+      {
+        key: "toolAllowlist",
+        label: "tool_allowlist",
+        children: [
+          { key: "toolAllowlistResolvedToolIds", label: "resolved_tool_ids" },
+          { key: "toolAllowlistAllowedToolNames", label: "allowed_tool_names" },
+          { key: "toolAllowlistAllowedToolCount", label: "allowed_tool_count" },
+          { key: "toolAllowlistMissingExpectedTools", label: "missing_tools_expected_by_intent" },
+          { key: "toolAllowlistRequestedToolCount", label: "requested_tool_count" },
+          { key: "toolAllowlistValidToolCount", label: "valid_tool_count" },
+          { key: "toolAllowlistProviderSelectionCount", label: "provider_selection_count" },
+          { key: "toolAllowlistProviderSelections", label: "provider_selections" },
+          { key: "toolAllowlistToolsByIdCount", label: "tools_by_id_count" },
+          { key: "toolAllowlistToolsByProviderCount", label: "tools_by_provider_count" },
+          { key: "toolAllowlistResolvedToolCount", label: "resolved_tool_count" },
+          {
+            key: "toolAllowlistQueryError",
+            label: "query_error",
+            children: [
+              { key: "toolAllowlistQueryErrorById", label: "by_id" },
+              { key: "toolAllowlistQueryErrorByProvider", label: "by_provider" },
+            ],
+          },
+        ],
+      },
+      { key: "slotFlow", label: "slot_flow" },
+      { key: "intentScope", label: "intent_scope" },
+      { key: "policyConflicts", label: "policy_conflicts" },
+      { key: "conflictResolution", label: "conflict_resolution" },
     ],
   },
 ];
@@ -2631,6 +2655,8 @@ export function ChatSettingsPanel({ authToken }: Props) {
     </div>
   );
 }
+
+
 
 
 

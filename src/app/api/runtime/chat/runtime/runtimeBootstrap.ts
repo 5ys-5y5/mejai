@@ -114,6 +114,17 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         allowedToolVersionByName: Map<string, string | null>;
         allowedToolByName: Map<string, string[]>;
         allowedTools: { keys: Set<string>; byName: Map<string, string[]> };
+        allowlistMeta: {
+          requestedToolCount: number;
+          validToolCount: number;
+          providerSelectionCount: number;
+          providerSelections: string[];
+          toolsByIdCount: number;
+          toolsByProviderCount: number;
+          resolvedToolCount: number;
+          queryErrorById: string | null;
+          queryErrorByProvider: string | null;
+        };
         providerAvailable: string[];
         providerConfig: { mall_id: string | null; shop_no: string | null; board_no: string | null };
         runtimeFlags: { restock_lite: boolean };
@@ -458,6 +469,17 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const allowedToolVersionByName = new Map<string, string | null>();
   const allowedToolByName = new Map<string, string[]>();
   const allowedToolsStartedAt = Date.now();
+  let allowlistMeta = {
+    requestedToolCount: 0,
+    validToolCount: 0,
+    providerSelectionCount: 0,
+    providerSelections: [] as string[],
+    toolsByIdCount: 0,
+    toolsByProviderCount: 0,
+    resolvedToolCount: 0,
+    queryErrorById: null as string | null,
+    queryErrorByProvider: null as string | null,
+  };
   if (agent.mcp_tool_ids && agent.mcp_tool_ids.length > 0) {
     const requestedToolIds = agent.mcp_tool_ids.map((id: string) => String(id)).filter(Boolean);
     const validToolIds = requestedToolIds.filter((id: string) => isUuidLike(id));
@@ -488,7 +510,11 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           data: [] as Array<{ id: string; name: string; provider_key: string; scope_key?: string | null; version?: string | null; is_active?: boolean | null }>,
         }),
     ]);
-    const tools = [...(toolsById.data || []), ...(toolsByProvider.data || [])];
+    const toolsByIdError = (toolsById as { error?: { message?: string } | null }).error;
+    const toolsByProviderError = (toolsByProvider as { error?: { message?: string } | null }).error;
+    const toolsByIdData = (toolsById as { data?: Array<any> | null }).data || [];
+    const toolsByProviderData = (toolsByProvider as { data?: Array<any> | null }).data || [];
+    const tools = [...toolsByIdData, ...toolsByProviderData];
     const resolvedTools = new Map<string, { id: string; name: string; provider_key: string; version?: string | null }>();
     (tools || [])
       .filter((t) => t.is_active)
@@ -500,8 +526,19 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           version: typeof (t as Record<string, any>).version === "string"
             ? String((t as Record<string, any>).version)
             : null,
-        });
       });
+    });
+    allowlistMeta = {
+      requestedToolCount: requestedToolIds.length,
+      validToolCount: validToolIds.length,
+      providerSelectionCount: providerSelections.length,
+      providerSelections,
+      toolsByIdCount: toolsByIdData.length,
+      toolsByProviderCount: toolsByProviderData.length,
+      resolvedToolCount: resolvedTools.size,
+      queryErrorById: toolsByIdError?.message ? String(toolsByIdError.message).slice(0, 200) : null,
+      queryErrorByProvider: toolsByProviderError?.message ? String(toolsByProviderError.message).slice(0, 200) : null,
+    };
 
     const legacyScopes = Array.from(
       new Set(
@@ -614,6 +651,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       allowedToolVersionByName,
       allowedToolByName,
       allowedTools,
+      allowlistMeta,
       providerAvailable,
       providerConfig,
       runtimeFlags,

@@ -75,6 +75,20 @@ export const DEFAULT_CONVERSATION_DEBUG_OPTIONS: DebugTranscriptOptions = {
           kbResolution: true,
           modelResolution: true,
           toolAllowlist: true,
+          toolAllowlistResolvedToolIds: true,
+          toolAllowlistAllowedToolNames: true,
+          toolAllowlistAllowedToolCount: true,
+          toolAllowlistMissingExpectedTools: true,
+          toolAllowlistRequestedToolCount: true,
+          toolAllowlistValidToolCount: true,
+          toolAllowlistProviderSelectionCount: true,
+          toolAllowlistProviderSelections: true,
+          toolAllowlistToolsByIdCount: true,
+          toolAllowlistToolsByProviderCount: true,
+          toolAllowlistResolvedToolCount: true,
+          toolAllowlistQueryError: true,
+          toolAllowlistQueryErrorById: true,
+          toolAllowlistQueryErrorByProvider: true,
           slotFlow: true,
           intentScope: true,
           policyConflicts: true,
@@ -157,6 +171,48 @@ function normalizeConversationDebugOptions(input?: Partial<DebugTranscriptOption
           kbResolution: logsDebugInput?.prefixJsonSections?.kbResolution ?? defaultLogsDebug?.prefixJsonSections?.kbResolution,
           modelResolution: logsDebugInput?.prefixJsonSections?.modelResolution ?? defaultLogsDebug?.prefixJsonSections?.modelResolution,
           toolAllowlist: logsDebugInput?.prefixJsonSections?.toolAllowlist ?? defaultLogsDebug?.prefixJsonSections?.toolAllowlist,
+          toolAllowlistResolvedToolIds:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistResolvedToolIds ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistResolvedToolIds,
+          toolAllowlistAllowedToolNames:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistAllowedToolNames ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistAllowedToolNames,
+          toolAllowlistAllowedToolCount:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistAllowedToolCount ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistAllowedToolCount,
+          toolAllowlistMissingExpectedTools:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistMissingExpectedTools ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistMissingExpectedTools,
+          toolAllowlistRequestedToolCount:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistRequestedToolCount ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistRequestedToolCount,
+          toolAllowlistValidToolCount:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistValidToolCount ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistValidToolCount,
+          toolAllowlistProviderSelectionCount:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistProviderSelectionCount ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistProviderSelectionCount,
+          toolAllowlistProviderSelections:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistProviderSelections ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistProviderSelections,
+          toolAllowlistToolsByIdCount:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistToolsByIdCount ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistToolsByIdCount,
+          toolAllowlistToolsByProviderCount:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistToolsByProviderCount ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistToolsByProviderCount,
+          toolAllowlistResolvedToolCount:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistResolvedToolCount ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistResolvedToolCount,
+          toolAllowlistQueryError:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistQueryError ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistQueryError,
+          toolAllowlistQueryErrorById:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistQueryErrorById ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistQueryErrorById,
+          toolAllowlistQueryErrorByProvider:
+            logsDebugInput?.prefixJsonSections?.toolAllowlistQueryErrorByProvider ??
+            defaultLogsDebug?.prefixJsonSections?.toolAllowlistQueryErrorByProvider,
           slotFlow: logsDebugInput?.prefixJsonSections?.slotFlow ?? defaultLogsDebug?.prefixJsonSections?.slotFlow,
           intentScope: logsDebugInput?.prefixJsonSections?.intentScope ?? defaultLogsDebug?.prefixJsonSections?.intentScope,
           policyConflicts: logsDebugInput?.prefixJsonSections?.policyConflicts ?? defaultLogsDebug?.prefixJsonSections?.policyConflicts,
