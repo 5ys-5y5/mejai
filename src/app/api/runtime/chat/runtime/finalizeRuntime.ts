@@ -38,7 +38,7 @@ export async function handleGeneralNoPathGuard(input: Record<string, any> & { co
     resolvedIntent,
     finalCalls,
     allowed,
-    kbKind,
+    kbId,
     makeReply,
     insertTurn,
     sessionId,
@@ -55,7 +55,7 @@ export async function handleGeneralNoPathGuard(input: Record<string, any> & { co
     respond,
   } = input;
 
-  if (kbKind === "inline") {
+  if (kbId === "__INLINE_KB__") {
     return null;
   }
 

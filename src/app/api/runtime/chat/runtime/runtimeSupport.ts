@@ -70,13 +70,11 @@ export type DebugPayload = {
   kbId?: string | null;
   kbTitle?: string | null;
   kbVersion?: string | null;
-  kbKind?: string | null;
   kbIsAdmin?: boolean | null;
   kbAdminSummary?: Array<{
     id: string;
     title?: string | null;
     version?: string | null;
-    kb_kind?: string | null;
     is_admin?: boolean | null;
   }>;
   widgetId?: string | null;
@@ -325,7 +323,6 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
     ...(payload.kbId ||
     payload.kbTitle ||
     payload.kbVersion ||
-    payload.kbKind ||
     payload.kbIsAdmin !== undefined ||
     (Array.isArray(payload.kbAdminSummary) && payload.kbAdminSummary.length > 0)
       ? {
@@ -334,7 +331,6 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
               ...(payload.kbId ? { id: payload.kbId } : {}),
               ...(payload.kbTitle ? { title: payload.kbTitle } : {}),
               ...(payload.kbVersion ? { version: payload.kbVersion } : {}),
-              ...(payload.kbKind ? { kind: payload.kbKind } : {}),
               ...(payload.kbIsAdmin !== undefined && payload.kbIsAdmin !== null ? { is_admin: payload.kbIsAdmin } : {}),
             },
             ...(Array.isArray(payload.kbAdminSummary) && payload.kbAdminSummary.length > 0
@@ -473,7 +469,6 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
     { key: "KB.primary.id", value: payload.kbId || "-" },
     { key: "KB.primary.title", value: payload.kbTitle || "-" },
     { key: "KB.primary.version", value: payload.kbVersion || "-" },
-    { key: "KB.primary.kind", value: payload.kbKind || "-" },
     { key: "KB.primary.is_admin", value: payload.kbIsAdmin === true ? "true" : payload.kbIsAdmin === false ? "false" : "-" },
     { key: "WIDGET.id", value: payload.widgetId || "-" },
     { key: "WIDGET.name", value: payload.widgetName || "-" },

@@ -27,7 +27,6 @@ export type KbRow = {
   is_admin?: boolean | null;
   apply_groups?: Array<{ path: string; values: string[] }> | null;
   apply_groups_mode?: "all" | "any" | null;
-  kb_kind?: string | null;
   content_json?: unknown | null;
 };
 

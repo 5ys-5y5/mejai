@@ -519,13 +519,11 @@ export async function POST(req: NextRequest) {
       kbId: kb.id,
       kbTitle: kb.title || null,
       kbVersion: (kb as Record<string, any>).version || null,
-      kbKind: (kb as Record<string, any>).kb_kind || null,
       kbIsAdmin: (kb as Record<string, any>).is_admin ?? null,
       kbAdminSummary: adminKbs.map((item) => ({
         id: String(item.id || ""),
         title: String((item as Record<string, any>).title || "") || null,
         version: String((item as Record<string, any>).version || "") || null,
-        kb_kind: String((item as Record<string, any>).kb_kind || "") || null,
         is_admin:
           typeof (item as Record<string, any>).is_admin === "boolean"
             ? (item as Record<string, any>).is_admin
@@ -1163,7 +1161,7 @@ export async function POST(req: NextRequest) {
       resolvedIntent,
       finalCalls,
       allowed,
-      kbKind: (kb as KbRow).kb_kind || null,
+      kbId: kb.id,
       makeReply,
       insertTurn,
       sessionId,

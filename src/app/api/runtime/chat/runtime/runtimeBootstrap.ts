@@ -305,7 +305,6 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       apply_groups: null,
       apply_groups_mode: null,
       content_json: null,
-      kb_kind: "inline",
     };
   } else if (agent.kb_id) {
     const kbRes = await fetchKb(context, agent.kb_id);
@@ -326,7 +325,6 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       apply_groups: null,
       apply_groups_mode: null,
       content_json: null,
-      kb_kind: "none",
     };
   }
 
