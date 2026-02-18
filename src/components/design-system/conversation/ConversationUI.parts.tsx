@@ -408,6 +408,9 @@ type SetupFieldsProps = {
   onInlineKbSampleApply?: (sampleIds: string[]) => void;
   inlineKbSampleConflict?: boolean;
   setupFieldOrder?: SetupFieldKey[];
+  kbLabel?: string;
+  adminKbLabel?: string;
+  routeLabel?: string;
 
   showLlmSelector: boolean;
   llmLabel?: string;
