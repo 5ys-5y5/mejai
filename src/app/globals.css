@@ -31,6 +31,9 @@
 }
 
 @layer base {
+  :root {
+    --layer-popover: 10000;
+  }
   * {
     border-color: var(--color-border);
     outline-color: color-mix(in srgb, var(--color-ring) 50%, transparent);

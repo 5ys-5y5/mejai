@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Copy, Minus, Play, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Copy, Minus, Play, Plus } from "lucide-react";
 import { SelectPopover } from "@/components/SelectPopover";
 import { Card } from "@/components/ui/Card";
 import { apiFetch } from "@/lib/apiClient";
@@ -128,6 +128,8 @@ export default function RulesPage() {
   const [actionSearchColumn, setActionSearchColumn] = useState<
     "all" | "name" | "description" | "meta" | "usage_count"
   >("all");
+  const [actionSortKey, setActionSortKey] = useState<"name" | "description" | "meta" | "usage_count">("name");
+  const [actionSortDirection, setActionSortDirection] = useState<"asc" | "desc">("asc");
   const [inputByTool, setInputByTool] = useState<Record<string, string>>({});
   const [outputByTool, setOutputByTool] = useState<Record<string, string>>({});
   const [outputExpandedByTool, setOutputExpandedByTool] = useState<Record<string, boolean>>({});
@@ -191,10 +193,36 @@ export default function RulesPage() {
       return true;
     });
   }, [selectedProvider, actionSearch, actionSearchColumn]);
+  const sortedActions = useMemo(() => {
+    if (!filteredActions.length) return filteredActions;
+    const sorted = [...filteredActions];
+    const dir = actionSortDirection === "asc" ? 1 : -1;
+    sorted.sort((a, b) => {
+      if (actionSortKey === "usage_count") {
+        const aValue = a.usage_count ?? 0;
+        const bValue = b.usage_count ?? 0;
+        return (aValue - bValue) * dir;
+      }
+      if (actionSortKey === "name") {
+        return a.name.localeCompare(b.name) * dir;
+      }
+      if (actionSortKey === "description") {
+        return (a.description || "").localeCompare(b.description || "") * dir;
+      }
+      const aMeta = [a.meta?.destructive ? "파괴적" : "", a.provider_key || a.provider || ""]
+        .join(" ")
+        .trim();
+      const bMeta = [b.meta?.destructive ? "파괴적" : "", b.provider_key || b.provider || ""]
+        .join(" ")
+        .trim();
+      return aMeta.localeCompare(bMeta) * dir;
+    });
+    return sorted;
+  }, [filteredActions, actionSortDirection, actionSortKey]);
   const selectedAction = useMemo(() => {
-    if (!filteredActions.length) return null;
-    return filteredActions.find((action) => action.id === selectedActionId) || filteredActions[0] || null;
-  }, [filteredActions, selectedActionId]);
+    if (!sortedActions.length) return null;
+    return sortedActions.find((action) => action.id === selectedActionId) || sortedActions[0] || null;
+  }, [sortedActions, selectedActionId]);
   const providersSorted = useMemo(
     () => [...providers].sort((a, b) => (b.action_count || 0) - (a.action_count || 0)),
     [providers]
@@ -212,14 +240,23 @@ export default function RulesPage() {
   }, [allActions]);
   useEffect(() => {
     if (!selectedProvider) return;
-    if (filteredActions.length === 0) {
+    if (sortedActions.length === 0) {
       setSelectedActionId("");
       return;
     }
-    if (!filteredActions.some((action) => action.id === selectedActionId)) {
-      setSelectedActionId(filteredActions[0].id);
+    if (!sortedActions.some((action) => action.id === selectedActionId)) {
+      setSelectedActionId(sortedActions[0].id);
     }
-  }, [selectedProvider, filteredActions, selectedActionId]);
+  }, [selectedProvider, sortedActions, selectedActionId]);
+
+  function handleActionSort(nextKey: "name" | "description" | "meta" | "usage_count") {
+    if (actionSortKey === nextKey) {
+      setActionSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setActionSortKey(nextKey);
+    setActionSortDirection("asc");
+  }
 
   async function handleRun(action: McpAction) {
     setRunStateByTool((prev) => ({ ...prev, [action.id]: { loading: true, error: null } }));
@@ -376,25 +413,81 @@ export default function RulesPage() {
                   <div className="max-h-[360px] overflow-y-auto rounded-xl border border-slate-200 [scrollbar-gutter:auto]">
                     {/* 헤더(컬럼명) 고정 영역 */}
                     <div className="sticky top-0 z-10 bg-white">
-                      <div className={cn("grid border-b border-slate-200 text-left", GRID_COLS)}>
-                        <span className="flex min-h-[40px] items-center px-2 py-2 text-left text-[11px] font-semibold text-slate-500">
-                          액션
-                        </span>
-                        <span className="flex min-h-[40px] items-center px-2 py-2 text-left text-[11px] font-semibold text-slate-500">
-                          설명
-                        </span>
-                        <span className="flex min-h-[40px] items-center px-2 py-2 text-left text-[11px] font-semibold text-slate-500">
-                          메타데이터
-                        </span>
-                        <span className="flex min-h-[40px] items-center justify-end px-2 py-2 text-right text-[11px] font-semibold text-slate-500">
-                          사용 빈도
-                        </span>
+                                            <div className={cn("grid border-b border-slate-200 text-left", GRID_COLS)}>
+                        <button
+                          type="button"
+                          onClick={() => handleActionSort("name")}
+                          className="flex min-h-[40px] items-center gap-1 px-2 py-2 text-left text-[11px] font-semibold text-slate-500 transition hover:text-slate-700"
+                          aria-label="Sort by name"
+                        >
+                          <span>액션</span>
+                          <span className="text-[10px] text-slate-400">
+                            {actionSortKey === "name" ? (
+                              actionSortDirection === "asc" ? (
+                                <ChevronUp className="h-3 w-3" />
+                              ) : (
+                                <ChevronDown className="h-3 w-3" />
+                              )
+                            ) : null}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleActionSort("description")}
+                          className="flex min-h-[40px] items-center gap-1 px-2 py-2 text-left text-[11px] font-semibold text-slate-500 transition hover:text-slate-700"
+                          aria-label="Sort by description"
+                        >
+                          <span>설명</span>
+                          <span className="text-[10px] text-slate-400">
+                            {actionSortKey === "description" ? (
+                              actionSortDirection === "asc" ? (
+                                <ChevronUp className="h-3 w-3" />
+                              ) : (
+                                <ChevronDown className="h-3 w-3" />
+                              )
+                            ) : null}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleActionSort("meta")}
+                          className="flex min-h-[40px] items-center gap-1 px-2 py-2 text-left text-[11px] font-semibold text-slate-500 transition hover:text-slate-700"
+                          aria-label="Sort by meta"
+                        >
+                          <span>메타데이터</span>
+                          <span className="text-[10px] text-slate-400">
+                            {actionSortKey === "meta" ? (
+                              actionSortDirection === "asc" ? (
+                                <ChevronUp className="h-3 w-3" />
+                              ) : (
+                                <ChevronDown className="h-3 w-3" />
+                              )
+                            ) : null}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleActionSort("usage_count")}
+                          className="flex min-h-[40px] items-center justify-end gap-1 px-2 py-2 text-right text-[11px] font-semibold text-slate-500 transition hover:text-slate-700"
+                          aria-label="Sort by usage count"
+                        >
+                          <span>사용 빈도</span>
+                          <span className="text-[10px] text-slate-400">
+                            {actionSortKey === "usage_count" ? (
+                              actionSortDirection === "asc" ? (
+                                <ChevronUp className="h-3 w-3" />
+                              ) : (
+                                <ChevronDown className="h-3 w-3" />
+                              )
+                            ) : null}
+                          </span>
+                        </button>
                       </div>
                     </div>
 
                     {/* 스크롤 되는 바디(리스트) 영역 */}
                     <ul className="divide-y divide-slate-200">
-                      {filteredActions.map((action) => {
+                      {sortedActions.map((action) => {
                         const selected = action.id === selectedAction?.id;
                         const allowed = action.policy?.is_allowed ?? true;
 
@@ -464,7 +557,7 @@ export default function RulesPage() {
                         );
                       })}
                     </ul>
-                    {filteredActions.length === 0 ? (
+                    {sortedActions.length === 0 ? (
                       <div className="px-3 py-6 text-center text-xs text-slate-500">검색/필터 결과가 없습니다.</div>
                     ) : null}
                   </div>

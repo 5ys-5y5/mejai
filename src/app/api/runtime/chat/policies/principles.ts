@@ -21,6 +21,8 @@ export const CHAT_PRINCIPLES = {
       "track_shipment",
       "update_order_shipping_address",
     ] as const,
+    // For sensitive intents, require OTP before any user-specific flow continues.
+    forceOtpBeforeSensitiveIntentFlow: true,
   },
   // Deterministic answer-shape policy used by choice flows.
   response: {
@@ -91,6 +93,10 @@ export const CHAT_PRINCIPLES = {
 
 export function requiresOtpForIntent(intent: string) {
   return (CHAT_PRINCIPLES.safety.otpRequiredIntents as readonly string[]).includes(String(intent || ""));
+}
+
+export function shouldForceOtpBeforeSensitiveIntentFlow() {
+  return Boolean(CHAT_PRINCIPLES.safety.forceOtpBeforeSensitiveIntentFlow);
 }
 
 export function shouldEnforceIntentContractRuntime() {

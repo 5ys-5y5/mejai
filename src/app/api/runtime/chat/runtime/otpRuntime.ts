@@ -1,4 +1,5 @@
-import { resolvePhoneWithReuse } from "./memoryReuseRuntime";
+﻿import { resolvePhoneWithReuse } from "./memoryReuseRuntime";
+import { shouldForceOtpBeforeSensitiveIntentFlow } from "../policies/principles";
 
 export function readOtpState(lastTurn: unknown) {
   const lastTurnRecord = (lastTurn ?? {}) as Record<string, any>;
@@ -44,16 +45,40 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
     noteMcp,
     mcpActions,
     respond,
+    insertEvent,
   } = input;
 
   const hasSensitivePlannedCall = finalCalls.some((call: { name?: string }) => isOtpRequiredTool(call.name));
+  const shouldForceOtpGate =
+    shouldForceOtpBeforeSensitiveIntentFlow() &&
+    requiresOtpForIntent(resolvedIntent) &&
+    !customerVerificationToken &&
+    !otpVerifiedThisTurn &&
+    !otpPending;
   if (
     requiresOtpForIntent(resolvedIntent) &&
-    hasSensitivePlannedCall &&
+    (hasSensitivePlannedCall || shouldForceOtpGate) &&
     !customerVerificationToken &&
     !otpVerifiedThisTurn &&
     !otpPending
   ) {
+    await insertEvent?.(
+      context,
+      sessionId,
+      latestTurnId,
+      "AUTH_GATE_PRECHECK",
+      {
+        intent: resolvedIntent,
+        has_sensitive_planned_call: hasSensitivePlannedCall,
+        force_otp_gate: shouldForceOtpGate,
+        otp_pending: otpPending,
+        otp_verified: otpVerifiedThisTurn,
+        customer_verification_token_present: Boolean(customerVerificationToken),
+        planned_calls: finalCalls.map((call: { name?: string }) => call.name).filter(Boolean),
+        allowed_tool_names_count: Array.from(allowedToolNames || []).length,
+      },
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
+    );
     const otpDestination =
       resolvePhoneWithReuse({
         derivedPhone,
@@ -62,6 +87,20 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
         recentEntityPhone: String(lastTurn?.bot_context?.otp_destination || ""),
       }) || "";
     if (!otpDestination) {
+      await insertEvent?.(
+        context,
+        sessionId,
+        latestTurnId,
+        "AUTH_GATE_TRIGGERED",
+        {
+          reason: "SENSITIVE_INTENT_PRE_TOOL",
+          action: "ASK_PHONE_FOR_OTP",
+          intent: resolvedIntent,
+          force_otp_gate: shouldForceOtpGate,
+          has_sensitive_planned_call: hasSensitivePlannedCall,
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
+      );
       const prompt = "개인정보 보호를 위해 먼저 본인확인이 필요합니다. 휴대폰 번호를 알려주세요.";
       const reply = makeReply(prompt);
       await insertTurn({
@@ -81,6 +120,20 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
       return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
     }
     if (!hasAllowedToolName("send_otp")) {
+      await insertEvent?.(
+        context,
+        sessionId,
+        latestTurnId,
+        "AUTH_GATE_TRIGGERED",
+        {
+          reason: "OTP_TOOL_NOT_ALLOWED",
+          action: "ABORT_OTP",
+          intent: resolvedIntent,
+          force_otp_gate: shouldForceOtpGate,
+          has_sensitive_planned_call: hasSensitivePlannedCall,
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
+      );
       mcpCandidateCalls.splice(0, mcpCandidateCalls.length, ...Array.from(new Set([...mcpCandidateCalls, "send_otp"])));
       noteMcpSkip(
         "send_otp",
@@ -117,6 +170,20 @@ export async function handlePreSensitiveOtpGuard(input: Record<string, any>): Pr
       latestTurnId,
       { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
       allowedTools
+    );
+    await insertEvent?.(
+      context,
+      sessionId,
+      latestTurnId,
+      "AUTH_GATE_TRIGGERED",
+      {
+        reason: sendResult.ok ? "OTP_SENT" : "OTP_SEND_FAILED",
+        action: sendResult.ok ? "ASK_OTP_CODE" : "ABORT_OTP",
+        intent: resolvedIntent,
+        force_otp_gate: shouldForceOtpGate,
+        has_sensitive_planned_call: hasSensitivePlannedCall,
+      },
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
     );
     noteMcp("send_otp", sendResult);
     mcpActions.push("send_otp");
@@ -520,4 +587,5 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
 
   return { response: null, otpVerifiedThisTurn, otpPending, customerVerificationToken, policyContext, auditEntity, mcpCandidateCalls };
 }
+
 

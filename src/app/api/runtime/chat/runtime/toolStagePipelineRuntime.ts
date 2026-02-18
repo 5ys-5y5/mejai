@@ -149,6 +149,7 @@ export async function runToolStagePipeline(input: Record<string, any> & { compil
     noteMcp,
     mcpActions,
     respond,
+    insertEvent,
   });
   if (preSensitiveOtpGuard) {
     return { response: preSensitiveOtpGuard };

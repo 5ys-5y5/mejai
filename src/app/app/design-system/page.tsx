@@ -73,10 +73,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RENDER_POLICY } from "@/app/api/runtime/chat/policies/renderPolicy";
-import {
-  getDefaultConversationPageFeatures,
-  resolveConversationSetupUi,
-} from "@/lib/conversation/pageFeaturePolicy";
+import { getDefaultConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
+import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
 import {
   createDefaultModel,
   type ChatMessage,
@@ -1338,7 +1336,7 @@ export function DesignSystemContent() {
   });
 
   const demoPageFeatures = useMemo(() => getDefaultConversationPageFeatures("/app/laboratory"), []);
-  const demoSetupUi = useMemo(() => resolveConversationSetupUi("/app/laboratory"), []);
+  const { setupUi: demoSetupUi } = useConversationPageRuntimeConfig("/");
   const demoVersionOptions = useMemo(() => {
     return (demoAgentVersionsByGroup.get(demoSelectedAgentGroupId) || []).map((item) => ({
       id: item.id,
@@ -1472,21 +1470,29 @@ export function DesignSystemContent() {
               inlineKbAdminOnly
               inlineKbValue={demoSetupFieldInlineKb}
               onInlineKbChange={setDemoSetupFieldInlineKb}
+              inlineKbLabel={demoSetupUi.labels.inlineUserKbInput}
+              setupFieldOrder={demoSetupUi.order}
               showLlmSelector
               llmAdminOnly
               llmValue={demoSetupFieldLlm}
               onLlmChange={setDemoSetupFieldLlm}
+              llmLabel={demoSetupUi.labels.llmSelector}
               llmOptions={demoLlmOptions}
               showMcpProviderSelector
               mcpProviderAdminOnly
               providerValues={demoSetupFieldProviders}
               onProviderChange={setDemoSetupFieldProviders}
+              mcpProviderLabel={demoSetupUi.labels.mcpProviderSelector}
               providerOptions={demoProviderOptions}
               showMcpActionSelector
               mcpActionAdminOnly
               actionValues={demoSetupFieldActions}
               onActionChange={setDemoSetupFieldActions}
+              mcpActionLabel={demoSetupUi.labels.mcpActionSelector}
               actionOptions={demoToolOptions}
+              kbLabel={demoSetupUi.labels.kbSelector}
+              adminKbLabel={demoSetupUi.labels.adminKbSelector}
+              routeLabel={demoSetupUi.labels.routeSelector}
             />
           </ConversationSetupBox>
         </div>
@@ -1504,6 +1510,8 @@ export function DesignSystemContent() {
               showModeExisting
               showSessionIdSearch
               showModeNew
+              existingFieldOrder={demoSetupUi.existingOrder}
+              existingLabels={demoSetupUi.existingLabels}
               setupMode={demoSetupExistingMode}
               onSelectExisting={() => setDemoSetupExistingMode("existing")}
               onSelectNew={() => setDemoSetupExistingMode("new")}

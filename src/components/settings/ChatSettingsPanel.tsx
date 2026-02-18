@@ -903,18 +903,29 @@ export function ChatSettingsPanel({ authToken }: Props) {
     (page: ConversationPageKey, from: SetupFieldKey, to: SetupFieldKey) => {
       if (from === to) return;
       setSetupUiByPage((prev) => {
+        const applyOrder = (source: ConversationSetupUi) => {
+          const baseOrder = [...source.order];
+          const fromIdx = baseOrder.indexOf(from);
+          const toIdx = baseOrder.indexOf(to);
+          if (fromIdx < 0 || toIdx < 0) return source;
+          const [moved] = baseOrder.splice(fromIdx, 1);
+          baseOrder.splice(toIdx, 0, moved);
+          return { ...source, order: baseOrder, labels: { ...source.labels } };
+        };
+
+        if (page === "/") {
+          const next = { ...prev };
+          Object.keys(next).forEach((key) => {
+            const source = next[key as ConversationPageKey];
+            if (!source) return;
+            next[key as ConversationPageKey] = applyOrder(source);
+          });
+          return next;
+        }
+
         const source = prev[page];
         if (!source) return prev;
-        const baseOrder = [...source.order];
-        const fromIdx = baseOrder.indexOf(from);
-        const toIdx = baseOrder.indexOf(to);
-        if (fromIdx < 0 || toIdx < 0) return prev;
-        const [moved] = baseOrder.splice(fromIdx, 1);
-        baseOrder.splice(toIdx, 0, moved);
-        return {
-          ...prev,
-          [page]: { ...source, order: baseOrder, labels: { ...source.labels } },
-        };
+        return { ...prev, [page]: applyOrder(source) };
       });
     },
     []
@@ -924,18 +935,29 @@ export function ChatSettingsPanel({ authToken }: Props) {
     (page: ConversationPageKey, from: ExistingSetupFieldKey, to: ExistingSetupFieldKey) => {
       if (from === to) return;
       setSetupUiByPage((prev) => {
+        const applyOrder = (source: ConversationSetupUi) => {
+          const baseOrder = [...source.existingOrder];
+          const fromIdx = baseOrder.indexOf(from);
+          const toIdx = baseOrder.indexOf(to);
+          if (fromIdx < 0 || toIdx < 0) return source;
+          const [moved] = baseOrder.splice(fromIdx, 1);
+          baseOrder.splice(toIdx, 0, moved);
+          return { ...source, existingOrder: baseOrder, existingLabels: { ...source.existingLabels } };
+        };
+
+        if (page === "/") {
+          const next = { ...prev };
+          Object.keys(next).forEach((key) => {
+            const source = next[key as ConversationPageKey];
+            if (!source) return;
+            next[key as ConversationPageKey] = applyOrder(source);
+          });
+          return next;
+        }
+
         const source = prev[page];
         if (!source) return prev;
-        const baseOrder = [...source.existingOrder];
-        const fromIdx = baseOrder.indexOf(from);
-        const toIdx = baseOrder.indexOf(to);
-        if (fromIdx < 0 || toIdx < 0) return prev;
-        const [moved] = baseOrder.splice(fromIdx, 1);
-        baseOrder.splice(toIdx, 0, moved);
-        return {
-          ...prev,
-          [page]: { ...source, existingOrder: baseOrder, existingLabels: { ...source.existingLabels } },
-        };
+        return { ...prev, [page]: applyOrder(source) };
       });
     },
     []

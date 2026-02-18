@@ -907,7 +907,7 @@ export function ConversationExistingSetup({
 }: ConversationExistingSetupProps) {
   const [sessionSearchId, setSessionSearchId] = useState("");
   const orderedKeys: ExistingSetupFieldKey[] =
-    existingFieldOrder || ["agentSelector", "versionSelector", "sessionSelector", "sessionIdSearch", "conversationMode"];
+    existingFieldOrder || ["agentSelector", "versionSelector", "conversationMode", "sessionSelector", "sessionIdSearch"];
   const labelOf = (key: ExistingSetupFieldKey, fallback: string) => existingLabels?.[key] || fallback;
 
   return (
@@ -998,7 +998,7 @@ export function ConversationExistingSetup({
               );
             }
             if (key === "sessionSelector") {
-              if (!showAgentSelector || !selectedAgentId) return null;
+              if (!showAgentSelector || !selectedAgentId || conversationMode === "new") return null;
               return (
                 <div key={key}>
                   <div className="mb-1 text-[11px] font-semibold text-slate-600">{labelOf(key, "세션 선택")}</div>
@@ -1013,7 +1013,7 @@ export function ConversationExistingSetup({
               );
             }
             if (key === "sessionIdSearch") {
-              if (!showAgentSelector || !showSessionIdSearch) return null;
+              if (!showAgentSelector || !showSessionIdSearch || conversationMode === "new") return null;
               return (
                 <div key={key}>
                   <div className="mb-1 text-[11px] font-semibold text-slate-600">{labelOf(key, "세션 ID 직접 조회")}</div>
@@ -1050,7 +1050,7 @@ export function ConversationExistingSetup({
               );
             }
             if (key === "conversationMode") {
-              if (!showAgentSelector || !(selectedAgentId && (selectedSessionId || sessionsLength === 0))) return null;
+              if (!showAgentSelector || !selectedAgentId) return null;
               return (
                 <div key={key} className="space-y-1">
                   <div className="mb-1 text-[11px] font-semibold text-slate-600">{labelOf(key, "모드 선택")}</div>

@@ -199,7 +199,7 @@ const DEFAULT_SETUP_UI: ConversationSetupUi = {
     mcpProviderSelector: "MCP 프로바이더 선택",
     mcpActionSelector: "MCP 액션 선택",
   },
-  existingOrder: ["agentSelector", "versionSelector", "sessionSelector", "sessionIdSearch", "conversationMode"],
+  existingOrder: ["agentSelector", "versionSelector", "conversationMode", "sessionSelector", "sessionIdSearch"],
   existingLabels: {
     modeExisting: "기존 모델",
     modeNew: "신규 모델",
