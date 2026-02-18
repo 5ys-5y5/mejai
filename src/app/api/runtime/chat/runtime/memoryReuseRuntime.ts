@@ -34,9 +34,10 @@ export function resolveSlotWithReuse(input: {
   prevEntity?: OptionalText;
   prevTranscript?: OptionalText;
   recentEntity?: OptionalText;
+  forceReuse?: boolean;
 }) {
   const slotKey = String(input.slotKey || "").trim();
-  const canReuse = shouldReuseSlotForIntent(input.resolvedIntent, slotKey);
+  const canReuse = Boolean(input.forceReuse) || shouldReuseSlotForIntent(input.resolvedIntent, slotKey);
   if (!canReuse) {
     return normalizeText(input.derived);
   }
@@ -54,6 +55,7 @@ export function resolvePhoneWithReuse(input: {
   prevPhoneFromTranscript?: OptionalText;
   recentEntityPhone?: OptionalText;
   resolvedIntent?: string | null;
+  forceReuse?: boolean;
 }) {
   return resolveSlotWithReuse({
     slotKey: "phone",
@@ -62,6 +64,7 @@ export function resolvePhoneWithReuse(input: {
     prevEntity: input.prevEntityPhone,
     prevTranscript: input.prevPhoneFromTranscript,
     recentEntity: input.recentEntityPhone,
+    forceReuse: input.forceReuse,
   });
 }
 
@@ -71,6 +74,7 @@ export function resolveAddressWithReuse(input: {
   prevAddressFromTranscript?: OptionalText;
   recentEntityAddress?: OptionalText;
   resolvedIntent?: string | null;
+  forceReuse?: boolean;
 }) {
   return resolveSlotWithReuse({
     slotKey: "address",
@@ -79,6 +83,7 @@ export function resolveAddressWithReuse(input: {
     prevEntity: input.prevEntityAddress,
     prevTranscript: input.prevAddressFromTranscript,
     recentEntity: input.recentEntityAddress,
+    forceReuse: input.forceReuse,
   });
 }
 

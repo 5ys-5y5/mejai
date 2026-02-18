@@ -774,6 +774,8 @@ export default function WidgetEmbedPage() {
                   responseSchema: mapped.responseSchema,
                   responseSchemaIssues: mapped.responseSchemaIssues,
                   renderPlan: normalizedRenderPlan,
+                  quickReplies: mapped.quickReplies.length > 0 ? mapped.quickReplies : undefined,
+                  productCards: mapped.productCards.length > 0 ? mapped.productCards : undefined,
                   isLoading: false,
                 }
               : msg

@@ -373,15 +373,29 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     seededIntent = "order_change";
   }
   const nextResolvedIntent = seededIntent;
+  const prevIntentName = String(prevBotContext.intent_name || prevIntent || "").trim();
+  const allowFlowCarryover = Boolean(prevIntentName) && prevIntentName === nextResolvedIntent && hasExpectedInputs;
+  const forceReusePhone =
+    allowFlowCarryover &&
+    !expectedSlotKeys.has("phone") &&
+    typeof prevEntity.phone === "string" &&
+    Boolean(prevEntity.phone.trim());
+  const forceReuseAddress =
+    allowFlowCarryover &&
+    !expectedSlotKeys.has("address") &&
+    !expectedSlotKeys.has("zipcode") &&
+    typeof prevEntity.address === "string" &&
+    Boolean(prevEntity.address.trim());
   const resolvedPhone = resolvePhoneWithReuse({
     derivedPhone,
     prevEntityPhone: typeof prevEntity.phone === "string" ? prevEntity.phone : null,
     prevPhoneFromTranscript,
     recentEntityPhone: recentEntity?.phone || null,
     resolvedIntent: nextResolvedIntent,
+    forceReuse: forceReusePhone,
   });
   const blockedAddressFallback =
-    !allowAddressReuse && !derivedAddress
+    !allowAddressReuse && !forceReuseAddress && !derivedAddress
       ? typeof prevEntity.address === "string"
         ? prevEntity.address
         : prevAddressFromTranscript || recentEntity?.address || null
@@ -410,10 +424,12 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
   }
   const resolvedAddress = resolveAddressWithReuse({
     derivedAddress,
-    prevEntityAddress: allowAddressReuse && typeof prevEntity.address === "string" ? prevEntity.address : null,
-    prevAddressFromTranscript: allowAddressReuse ? prevAddressFromTranscript : null,
-    recentEntityAddress: allowAddressReuse ? recentEntity?.address || null : null,
+    prevEntityAddress:
+      (allowAddressReuse || forceReuseAddress) && typeof prevEntity.address === "string" ? prevEntity.address : null,
+    prevAddressFromTranscript: allowAddressReuse || forceReuseAddress ? prevAddressFromTranscript : null,
+    recentEntityAddress: allowAddressReuse || forceReuseAddress ? recentEntity?.address || null : null,
     resolvedIntent: nextResolvedIntent,
+    forceReuse: forceReuseAddress,
   });
   const preservedAuditFields = pickPreservedEntityAuditFields(prevEntity);
   const policyContext: PolicyEvalContext = {

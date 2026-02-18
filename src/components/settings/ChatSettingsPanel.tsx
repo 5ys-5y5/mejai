@@ -33,6 +33,26 @@ const SETTINGS_CARD_WIDTH_BY_PAGE: Record<ConversationPageKey, number> = {
 function normalizePages(pages: ConversationPageKey[]) {
   return Array.from(new Set([...BASE_PAGE_KEYS, ...pages.filter(Boolean)])).sort((a, b) => a.localeCompare(b));
 }
+function syncSetupUiOrderByHeader(
+  pages: ConversationPageKey[],
+  setupUiByPage: Record<ConversationPageKey, ConversationSetupUi>
+) {
+  const headerPage = pages.includes("/") ? "/" : pages[0];
+  if (!headerPage) return setupUiByPage;
+  const headerUi = setupUiByPage[headerPage];
+  if (!headerUi) return setupUiByPage;
+  const next: Record<ConversationPageKey, ConversationSetupUi> = { ...setupUiByPage };
+  pages.forEach((page) => {
+    const current = next[page];
+    if (!current) return;
+    next[page] = {
+      ...current,
+      order: [...headerUi.order],
+      existingOrder: [...headerUi.existingOrder],
+    };
+  });
+  return next;
+}
 const DEBUG_OUTPUT_MODE_OPTIONS: SelectOption[] = [
   { id: "full", label: "Full" },
   { id: "summary", label: "Summary (with issues)" },
@@ -724,10 +744,13 @@ export function ChatSettingsPanel({ authToken }: Props) {
   );
   const buildInitialSetupUiByPage = useCallback(
     (pages: ConversationPageKey[], provider: ConversationFeaturesProviderShape | null = null) =>
-      pages.reduce<Record<ConversationPageKey, ConversationSetupUi>>((acc, page) => {
-        acc[page] = resolveConversationSetupUi(page, provider);
-        return acc;
-      }, {}),
+      syncSetupUiOrderByHeader(
+        pages,
+        pages.reduce<Record<ConversationPageKey, ConversationSetupUi>>((acc, page) => {
+          acc[page] = resolveConversationSetupUi(page, provider);
+          return acc;
+        }, {})
+      ),
     []
   );
   const buildOpenStateByPage = useCallback(
@@ -849,10 +872,13 @@ export function ChatSettingsPanel({ authToken }: Props) {
       acc[page] = resolvePageConversationDebugOptions(page, providerValue);
       return acc;
     }, {});
-    const nextSetupUi = discoveredPages.reduce<Record<ConversationPageKey, ConversationSetupUi>>((acc, page) => {
-      acc[page] = resolveConversationSetupUi(page, providerValue);
-      return acc;
-    }, {});
+    const nextSetupUi = syncSetupUiOrderByHeader(
+      discoveredPages,
+      discoveredPages.reduce<Record<ConversationPageKey, ConversationSetupUi>>((acc, page) => {
+        acc[page] = resolveConversationSetupUi(page, providerValue);
+        return acc;
+      }, {})
+    );
     setRegisteredPages(discoveredPages);
     setDraftByPage(next);
     setDebugCopyDraftByPage(nextDebug);
@@ -901,7 +927,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
   );
 
   const moveSetupField = useCallback(
-    (page: ConversationPageKey, from: SetupFieldKey, to: SetupFieldKey) => {
+    (_page: ConversationPageKey, from: SetupFieldKey, to: SetupFieldKey) => {
       if (from === to) return;
       setSetupUiByPage((prev) => {
         const applyOrder = (source: ConversationSetupUi) => {
@@ -913,27 +939,20 @@ export function ChatSettingsPanel({ authToken }: Props) {
           baseOrder.splice(toIdx, 0, moved);
           return { ...source, order: baseOrder, labels: { ...source.labels } };
         };
-
-        if (page === "/") {
-          const next = { ...prev };
-          Object.keys(next).forEach((key) => {
-            const source = next[key as ConversationPageKey];
-            if (!source) return;
-            next[key as ConversationPageKey] = applyOrder(source);
-          });
-          return next;
-        }
-
-        const source = prev[page];
-        if (!source) return prev;
-        return { ...prev, [page]: applyOrder(source) };
+        const next = { ...prev };
+        Object.keys(next).forEach((key) => {
+          const source = next[key as ConversationPageKey];
+          if (!source) return;
+          next[key as ConversationPageKey] = applyOrder(source);
+        });
+        return next;
       });
     },
     []
   );
 
   const moveExistingSetupField = useCallback(
-    (page: ConversationPageKey, from: ExistingSetupFieldKey, to: ExistingSetupFieldKey) => {
+    (_page: ConversationPageKey, from: ExistingSetupFieldKey, to: ExistingSetupFieldKey) => {
       if (from === to) return;
       setSetupUiByPage((prev) => {
         const applyOrder = (source: ConversationSetupUi) => {
@@ -945,20 +964,13 @@ export function ChatSettingsPanel({ authToken }: Props) {
           baseOrder.splice(toIdx, 0, moved);
           return { ...source, existingOrder: baseOrder, existingLabels: { ...source.existingLabels } };
         };
-
-        if (page === "/") {
-          const next = { ...prev };
-          Object.keys(next).forEach((key) => {
-            const source = next[key as ConversationPageKey];
-            if (!source) return;
-            next[key as ConversationPageKey] = applyOrder(source);
-          });
-          return next;
-        }
-
-        const source = prev[page];
-        if (!source) return prev;
-        return { ...prev, [page]: applyOrder(source) };
+        const next = { ...prev };
+        Object.keys(next).forEach((key) => {
+          const source = next[key as ConversationPageKey];
+          if (!source) return;
+          next[key as ConversationPageKey] = applyOrder(source);
+        });
+        return next;
       });
     },
     []

@@ -1,8 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  WIDGET_PAGE_KEY,
-  type ConversationFeaturesProviderShape,
-} from "@/lib/conversation/pageFeaturePolicy";
+import { type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
 
 type AuthSettingsRow = {
   providers: Record<string, Record<string, unknown> | undefined> | null;
@@ -25,14 +22,14 @@ export async function fetchWidgetChatPolicy(
   const provider = picked?.providers?.chat_policy as ConversationFeaturesProviderShape | undefined;
   if (!provider) return null;
 
-  const pageOverride = provider.pages?.[WIDGET_PAGE_KEY];
-  const debugOverride = provider.debug_copy?.[WIDGET_PAGE_KEY];
-  const setupOverride = provider.settings_ui?.setup_fields?.[WIDGET_PAGE_KEY];
+  const pages = { ...(provider.pages || {}) };
+  const debugCopy = { ...(provider.debug_copy || {}) };
+  const setupFields = { ...(provider.settings_ui?.setup_fields || {}) };
 
-  const trimmed: ConversationFeaturesProviderShape = {};
-  if (pageOverride) trimmed.pages = { [WIDGET_PAGE_KEY]: pageOverride };
-  if (debugOverride) trimmed.debug_copy = { [WIDGET_PAGE_KEY]: debugOverride };
-  if (setupOverride) trimmed.settings_ui = { setup_fields: { [WIDGET_PAGE_KEY]: setupOverride } };
-
-  return trimmed;
+  return {
+    ...provider,
+    ...(Object.keys(pages).length > 0 ? { pages } : {}),
+    ...(Object.keys(debugCopy).length > 0 ? { debug_copy: debugCopy } : {}),
+    ...(Object.keys(setupFields).length > 0 ? { settings_ui: { setup_fields: setupFields } } : {}),
+  };
 }

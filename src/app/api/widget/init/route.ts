@@ -4,6 +4,7 @@ import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { issueWidgetToken } from "@/lib/widgetToken";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
 import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
+import { WIDGET_PAGE_KEY, type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
 
 function nowIso() {
   return new Date().toISOString();
@@ -42,6 +43,20 @@ function readOrigin(input: Record<string, any>) {
     }
   }
   return "";
+}
+
+function resolveWidgetUiSettingsSource(policy: ConversationFeaturesProviderShape | null) {
+  const pageKey = WIDGET_PAGE_KEY;
+  const hasPageOverride = Boolean(policy?.pages && policy.pages[pageKey]);
+  const hasSetupFields = Boolean(policy?.settings_ui?.setup_fields && policy.settings_ui.setup_fields[pageKey]);
+  const hasDebugCopy = Boolean(policy?.debug_copy && policy.debug_copy[pageKey]);
+  return {
+    pageKey,
+    source: hasPageOverride ? "chat_policy.pages" : "default",
+    hasPageOverride,
+    hasSetupFields,
+    hasDebugCopy,
+  };
 }
 
 export async function POST(req: NextRequest) {
@@ -166,6 +181,37 @@ export async function POST(req: NextRequest) {
   }
 
   const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null);
+  if (sessionId) {
+    const settingsSource = resolveWidgetUiSettingsSource(chatPolicy);
+    void (async () => {
+      try {
+        await supabaseAdmin.from("F_audit_events").insert({
+          session_id: sessionId,
+          turn_id: null,
+          event_type: "UI_SETTINGS_SOURCE",
+          payload: {
+            widget_id: widget.id,
+            org_id: widget.org_id,
+            page_key: settingsSource.pageKey,
+            source: settingsSource.source,
+            has_page_override: settingsSource.hasPageOverride,
+            has_setup_fields: settingsSource.hasSetupFields,
+            has_debug_copy: settingsSource.hasDebugCopy,
+            origin: origin || null,
+            page_url: pageUrl || null,
+          },
+          created_at: nowIso(),
+          bot_context: { source: "widget_init" },
+        });
+      } catch (error) {
+        console.warn("[widget/init] failed to log ui settings source", {
+          sessionId,
+          widgetId: widget.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    })();
+  }
 
   return NextResponse.json({
     widget_token: widgetToken,

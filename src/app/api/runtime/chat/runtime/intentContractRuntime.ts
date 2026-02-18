@@ -61,7 +61,7 @@ const INTENT_CONTRACTS: IntentContract[] = [
   },
   {
     intent: "restock_subscribe",
-    reuseSlots: ["product", "channel"],
+    reuseSlots: ["product", "channel", "phone"],
   },
   {
     intent: "faq",
