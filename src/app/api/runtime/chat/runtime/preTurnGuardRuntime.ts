@@ -1,6 +1,6 @@
 import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "./quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
-import { readPendingPhoneReuse } from "./memoryReuseRuntime";
+import { getPreferredPromptSlot, getReuseSlotLabel, readPendingReuse } from "./memoryReuseRuntime";
 
 type PreTurnGuardParams = {
   context: any;
@@ -13,11 +13,13 @@ type PreTurnGuardParams = {
   nextSeq: number;
   latestTurnId: string | null;
   derivedPhone: string | null;
+  derivedOrderId: string | null;
+  derivedAddress: string | null;
+  derivedZipcode: string | null;
   expectedInput: string | null;
   normalizePhoneDigits: (value?: string | null) => string | null;
   isYesText: (text: string) => boolean;
   isNoText: (text: string) => boolean;
-  maskPhone: (value?: string | null) => string;
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
@@ -34,6 +36,9 @@ type PreTurnGuardParams = {
 type PreTurnGuardResult = {
   response: unknown | null;
   derivedPhone: string | null;
+  derivedOrderId: string | null;
+  derivedAddress: string | null;
+  derivedZipcode: string | null;
   expectedInput: string | null;
 };
 
@@ -49,11 +54,13 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
     nextSeq,
     latestTurnId,
     derivedPhone,
+    derivedOrderId,
+    derivedAddress,
+    derivedZipcode,
     expectedInput,
     normalizePhoneDigits,
     isYesText,
     isNoText,
-    maskPhone,
     makeReply,
     insertTurn,
     insertEvent,
@@ -61,6 +68,9 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
   } = params;
 
   let nextDerivedPhone = derivedPhone;
+  let nextDerivedOrderId = derivedOrderId;
+  let nextDerivedAddress = derivedAddress;
+  let nextDerivedZipcode = derivedZipcode;
   let nextExpectedInput = expectedInput;
 
   if (prevBotContext.conversation_closed === true) {
@@ -96,18 +106,43 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
     return {
       response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }),
       derivedPhone: nextDerivedPhone,
+      derivedOrderId: nextDerivedOrderId,
+      derivedAddress: nextDerivedAddress,
+      derivedZipcode: nextDerivedZipcode,
       expectedInput: nextExpectedInput,
     };
   }
 
-  const phoneReuseState = readPendingPhoneReuse(prevBotContext);
-  if (phoneReuseState.pending) {
-    const pendingPhone = normalizePhoneDigits(phoneReuseState.pendingPhone || "");
-    if (isYesText(message) && pendingPhone) {
-      nextDerivedPhone = pendingPhone;
-      nextExpectedInput = "phone";
+  const reuseState = readPendingReuse(prevBotContext);
+  if (reuseState.pending && reuseState.slotKey) {
+    const slotKey = String(reuseState.slotKey || "").trim();
+    const pendingValue = String(reuseState.value || "").trim();
+    const clearedReuseFlags = {
+      reuse_pending: false,
+      pending_reuse_slot: null,
+      pending_reuse_value: null,
+      phone_reuse_pending: false,
+      pending_phone: null,
+      order_id_reuse_pending: false,
+      pending_order_id: null,
+      address_reuse_pending: false,
+      pending_address: null,
+      zipcode_reuse_pending: false,
+      pending_zipcode: null,
+    };
+    if (isYesText(message) && pendingValue) {
+      if (slotKey === "phone") nextDerivedPhone = normalizePhoneDigits(pendingValue);
+      if (slotKey === "order_id") nextDerivedOrderId = pendingValue;
+      if (slotKey === "address") nextDerivedAddress = pendingValue;
+      if (slotKey === "zipcode") nextDerivedZipcode = pendingValue;
+      if (!["phone", "order_id", "address", "zipcode"].includes(slotKey)) {
+        (prevEntity as Record<string, any>)[slotKey] = pendingValue;
+      }
+      nextExpectedInput = null;
     } else if (isNoText(message)) {
-      const reply = makeReply("새로 조회할 휴대폰 번호를 알려주세요.");
+      const nextSlot = getPreferredPromptSlot(slotKey);
+      const label = getReuseSlotLabel(nextSlot);
+      const reply = makeReply(`Please provide ${label}.`);
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -118,26 +153,28 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
           intent_name: resolvedIntent,
           entity: prevEntity,
           selected_order_id: prevSelectedOrderId,
-          phone_reuse_pending: false,
-          pending_phone: null,
+          ...clearedReuseFlags,
         },
       });
       return {
         response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
         derivedPhone: nextDerivedPhone,
-        expectedInput: nextExpectedInput,
+        derivedOrderId: nextDerivedOrderId,
+        derivedAddress: nextDerivedAddress,
+        derivedZipcode: nextDerivedZipcode,
+        expectedInput: nextExpectedInput || nextSlot,
       };
     } else {
-      const masked = pendingPhone ? maskPhone(pendingPhone) : "-";
+      const label = getReuseSlotLabel(slotKey);
       const reply = makeReply(
-        buildYesNoConfirmationPrompt(`이전에 제공한 번호(${masked})를 그대로 사용해 조회할까요?`, {
+        buildYesNoConfirmationPrompt(`Use the previously provided ${label} (${pendingValue || "-"}) to continue?`, {
           botContext: prevBotContext,
           entity: prevEntity,
         })
       );
       const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
         optionsCount: YES_NO_QUICK_REPLIES.length,
-        criteria: "state:phone_reuse_pending_confirm",
+        criteria: "state:reuse_pending_confirm",
         sourceFunction: "handlePreTurnGuards",
         sourceModule: "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
         contextText: reply,
@@ -152,8 +189,9 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
           intent_name: resolvedIntent,
           entity: prevEntity,
           selected_order_id: prevSelectedOrderId,
-          phone_reuse_pending: true,
-          pending_phone: pendingPhone || null,
+          reuse_pending: true,
+          pending_reuse_slot: slotKey || null,
+          pending_reuse_value: pendingValue || null,
         },
       });
       return {
@@ -166,14 +204,19 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
           quick_reply_config: quickReplyConfig,
         }),
         derivedPhone: nextDerivedPhone,
+        derivedOrderId: nextDerivedOrderId,
+        derivedAddress: nextDerivedAddress,
+        derivedZipcode: nextDerivedZipcode,
         expectedInput: nextExpectedInput,
       };
     }
   }
-
   return {
     response: null,
     derivedPhone: nextDerivedPhone,
+    derivedOrderId: nextDerivedOrderId,
+    derivedAddress: nextDerivedAddress,
+    derivedZipcode: nextDerivedZipcode,
     expectedInput: nextExpectedInput,
   };
 }

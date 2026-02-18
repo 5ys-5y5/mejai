@@ -125,7 +125,7 @@ function buildMessages(turns: TurnRow[], logsByTurn: LogsByTurn) {
       });
     }
 
-    const botText = normalizeText(row.final_answer || row.answer_text);
+    const botText = normalizeText(row.answer_text || row.final_answer);
     if (botText) {
       const botContext = normalizeBotContext(row.bot_context);
       const responseSchema =

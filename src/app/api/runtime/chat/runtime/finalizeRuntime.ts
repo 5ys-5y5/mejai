@@ -1,8 +1,67 @@
 import type { ChatMessage } from "@/lib/llm_mk2";
 import { YES_NO_QUICK_REPLIES, maybeBuildYesNoQuickReplyRule } from "./quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
-import { canOfferPhoneReusePrompt } from "./memoryReuseRuntime";
+import { getReuseSlotLabel, pickReuseCandidate } from "./memoryReuseRuntime";
 import type { CompiledPolicy } from "../shared/runtimeTypes";
+
+function extractUserFacingFromDebug(text: string) {
+  const sections: Record<string, string> = { summary: "", reason: "", detail: "", next: "" };
+  let current: keyof typeof sections | null = null;
+  const lines = String(text || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (const line of lines) {
+    if (line.startsWith("\uC694\uC57D:")) {
+      current = "summary";
+      sections.summary = line.replace(/^\uC694\uC57D:\s*/, "");
+      continue;
+    }
+    if (line.startsWith("\uADFC\uAC70:")) {
+      current = "reason";
+      sections.reason = line.replace(/^\uADFC\uAC70:\s*/, "");
+      continue;
+    }
+    if (line.startsWith("\uC0C1\uC138:")) {
+      current = "detail";
+      sections.detail = line.replace(/^\uC0C1\uC138:\s*/, "");
+      continue;
+    }
+    if (line.startsWith("\uB2E4\uC74C \uC561\uC158:")) {
+      current = "next";
+      sections.next = line.replace(/^\uB2E4\uC74C \uC561\uC158:\s*/, "");
+      continue;
+    }
+    if (current) {
+      sections[current] = sections[current] ? `${sections[current]}\n${line}` : line;
+    }
+  }
+  const parts = [sections.summary, sections.next].filter(Boolean);
+  return parts.join("\n").trim();
+}
+
+function sanitizeUserFacingMessage(text: string, resolvedIntent: string) {
+  const normalized = String(text || "").trim();
+  if (!normalized) return "";
+  const hasStructured = /\uC694\uC57D:|\uADFC\uAC70:|\uC0C1\uC138:|\uB2E4\uC74C \uC561\uC158:/.test(normalized);
+  let candidate = hasStructured ? extractUserFacingFromDebug(normalized) : normalized;
+  if (!candidate && hasStructured) {
+    candidate = normalized
+      .replace(/\uC694\uC57D:\s*/g, "")
+      .replace(/\uADFC\uAC70:\s*/g, "")
+      .replace(/\uC0C1\uC138:\s*/g, "")
+      .replace(/\uB2E4\uC74C \uC561\uC158:\s*/g, "")
+      .trim();
+  }
+  if (resolvedIntent === "order_change") {
+    candidate = candidate
+      .replace(/\uBB38\uC758\s*\uD2F0\uCF13/gi, "")
+      .replace(/\uB2F4\uB2F9\uC790/gi, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+  return candidate.trim();
+}
 
 export function buildFinalLlmMessages(input: {
   message: string;
@@ -17,8 +76,31 @@ export function buildFinalLlmMessages(input: {
   recentTurns: Array<{ transcript_text?: string | null; final_answer?: string | null; answer_text?: string | null }>;
 }) {
   const productDecisionJson = input.productDecision ? JSON.stringify(input.productDecision) : "null";
-  const systemPrompt = `당신은 고객 상담봇입니다.\n규칙:\n- KB에 있는 내용만 근거로 답합니다.\n- KB에 없는 내용은 추측하지 않습니다.\n- 상품 판정 JSON을 우선으로 따릅니다.`;
-  const userPrompt = `고객 질문: ${input.message}\n의도: ${input.resolvedIntent}\n채널: ${input.derivedChannel || "없음"}\n확인된 정보:\n- 주문번호: ${input.resolvedOrderId || "없음"}\n- 휴대폰: ${String(input.policyEntity?.phone || "없음")}\n- 주소: ${String(input.policyEntity?.address || "없음")}\n출력 형식:\n요약: ...\n근거: ...\n상세: ...\n다음 액션: ...\n상품판정: ${productDecisionJson}\nKB 제목: ${input.kb.title}\nKB 내용:\n${input.kb.content || ""}\n관리자 공통 KB:\n${input.adminKbs.map((item) => `[ADMIN KB] ${item.title}\n${item.content || ""}`).join("\n\n") || "(없음)"}\n도구 결과:\n${input.mcpSummary || "(없음)"}`;
+  const systemPrompt = [
+    "You are a customer support assistant.",
+    "Return only a concise, conversational response for the end user.",
+    "Do not use labels like '\uC694\uC57D:', '\uADFC\uAC70:', '\uC0C1\uC138:', or '\uB2E4\uC74C \uC561\uC158:'.요약:', '근거:', '상세:', or '다음 액션:'.",
+    "Do not mention handoff, tickets, or human escalation unless explicitly required by policy or tools.",
+    "Use the same language as the user.",
+  ].join("\n");
+  const userPrompt = [
+    `User message: ${input.message}`,
+    `Intent: ${input.resolvedIntent}`,
+    `Channel: ${input.derivedChannel || "none"}`,
+    "Known info:",
+    `- order_id: ${input.resolvedOrderId || "none"}`,
+    `- phone: ${String(input.policyEntity?.phone || "none")}`,
+    `- address: ${String(input.policyEntity?.address || "none")}`,
+    `- zipcode: ${String(input.policyEntity?.zipcode || "none")}`,
+    `Product decision: ${productDecisionJson}`,
+    `KB title: ${input.kb.title}`,
+    "KB content:",
+    input.kb.content || "",
+    "Admin KBs:",
+    input.adminKbs.map((item) => `[ADMIN KB] ${item.title}\n${item.content || ""}`).join("\n") || "(none)",
+    "Tool results:",
+    input.mcpSummary || "(none)",
+  ].join("\n");
 
   const messages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
   [...input.recentTurns].reverse().forEach((turn) => {
@@ -135,8 +217,6 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
     formatOutputDefault,
     normalizeOrderChangeAddressPrompt,
     resolvedIntent,
-    normalizePhoneDigits,
-    maskPhone,
     listOrdersCalled,
     debugEnabled,
     makeReply,
@@ -170,17 +250,14 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
   usedTemplateIds.push(
     ...extractTemplateIds(outputGate.matched as Array<Record<string, any>>)
   );
-  if (outputGate.actions.outputFormat) {
-    finalAnswer = formatOutputDefault(finalAnswer);
-  }
 
-  let phoneReusePending = false;
+  let reusePending = false;
+  let reusePendingSlot: string | null = null;
+  let reusePendingValue: string | null = null;
   let forcedTemplateApplied: string | null = null;
   let forcedTemplateSkippedReason: string | null = null;
   if (outputGate.actions.forcedResponse) {
     const forcedTemplate = normalizeOrderChangeAddressPrompt(resolvedIntent, outputGate.actions.forcedResponse);
-    const rawPhone = typeof policyContext.entity?.phone === "string" ? policyContext.entity.phone : "";
-    const normalizedPhone = normalizePhoneDigits(rawPhone);
     const resolvedAddress =
       typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
     const conversationFlags =
@@ -188,13 +265,30 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
         ? ((policyContext.conversation as Record<string, any>).flags as Record<string, any>) || {}
         : {};
     const deferredForceReason = String(conversationFlags.deferred_force_response_reason || "").trim();
+    const missingSlots = Array.isArray(conversationFlags.intent_scope_missing_slots)
+      ? conversationFlags.intent_scope_missing_slots
+      : [];
+    const reuseCandidate = pickReuseCandidate({
+      missingSlots,
+      entity: (policyContext.entity || {}) as Record<string, any>,
+      listOrdersCalled,
+    });
     const isAddressPromptTemplate =
       forcedTemplate === (compiledPolicy.templates?.order_change_need_address || "") ||
       forcedTemplate === (compiledPolicy.templates?.order_change_need_zipcode || "") ||
       usedTemplateIds.includes("order_change_need_address") ||
-      usedTemplateIds.includes("order_change_need_zipcode") ||
-      /(주소|배송지).*(알려|입력|적어)/.test(forcedTemplate);
-    if (resolvedIntent === "order_change" && isAddressPromptTemplate && resolvedAddress) {
+      usedTemplateIds.includes("order_change_need_zipcode");
+
+    if (reuseCandidate) {
+      reusePending = true;
+      reusePendingSlot = reuseCandidate.slotKey;
+      reusePendingValue = reuseCandidate.value;
+      const label = getReuseSlotLabel(reuseCandidate.slotKey);
+      finalAnswer = buildYesNoConfirmationPrompt(
+        `Use the previously provided ${label} (${reuseCandidate.value || "-"}) to continue?`,
+        { entity: policyContext.entity }
+      );
+    } else if (resolvedIntent === "order_change" && isAddressPromptTemplate && resolvedAddress) {
       forcedTemplateSkippedReason = deferredForceReason || "ADDRESS_ALREADY_RESOLVED";
       await insertEvent(
         context,
@@ -218,38 +312,28 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
         });
       }
     } else {
-    const isNeedOrderIdTemplate =
-      forcedTemplate === (compiledPolicy.templates?.order_change_need_order_id || "") ||
-      usedTemplateIds.includes("order_change_need_order_id");
-      if (
-        canOfferPhoneReusePrompt({
-          resolvedIntent,
-          isNeedOrderIdTemplate,
-          normalizedPhone,
-          listOrdersCalled,
-        })
-      ) {
-        phoneReusePending = true;
-        finalAnswer = buildYesNoConfirmationPrompt(`이미 제공해주신 휴대폰 번호(${maskPhone(normalizedPhone)})로 주문을 조회할까요?`, {
-          entity: policyContext.entity,
-        });
-      } else {
-        finalAnswer = forcedTemplate;
-        forcedTemplateApplied = forcedTemplate;
-      }
+      finalAnswer = forcedTemplate;
+      forcedTemplateApplied = forcedTemplate;
       if (debugEnabled) {
         console.log("[runtime/chat/mk2] forcing template", { reason: outputGate.actions.forceReason });
       }
     }
   }
 
-  const reply = makeReply(finalAnswer, answerRes.model, mcpActions);
+
+  const debugAnswer = formatOutputDefault(finalAnswer);
+  let userAnswer = sanitizeUserFacingMessage(finalAnswer, resolvedIntent);
+  if (!userAnswer) {
+    userAnswer = extractUserFacingFromDebug(debugAnswer) || finalAnswer;
+  }
+
+  const reply = makeReply(userAnswer, answerRes.model, mcpActions);
   const finalPersistStartedAt = Date.now();
   await insertTurn({
     session_id: sessionId,
     seq: nextSeq,
     transcript_text: message,
-    answer_text: reply,
+    answer_text: debugAnswer,
     final_answer: reply,
     kb_references: [
       { kb_id: kb.id, title: kb.title, version: kb.version },
@@ -273,6 +357,8 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
           }
         : null,
       mcp_actions: mcpActions,
+      user_facing_message: userAnswer,
+      debug_answer: debugAnswer,
       final_response_debug: {
         forced_template_applied: forcedTemplateApplied,
         forced_template_skipped_reason: forcedTemplateSkippedReason,
@@ -280,15 +366,16 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
         resolved_address:
           typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() || null : null,
       },
-      ...(phoneReusePending
+      ...(reusePending
         ? {
-            phone_reuse_pending: true,
-            pending_phone:
-              typeof policyContext.entity?.phone === "string" ? normalizePhoneDigits(policyContext.entity.phone) || null : null,
+            reuse_pending: true,
+            pending_reuse_slot: reusePendingSlot,
+            pending_reuse_value: reusePendingValue,
           }
         : {
-            phone_reuse_pending: false,
-            pending_phone: null,
+            reuse_pending: false,
+            pending_reuse_slot: null,
+            pending_reuse_value: null,
           }),
     },
   });
@@ -301,6 +388,7 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
     {
       answer: reply,
       model: answerRes.model,
+      debug_answer: debugAnswer,
       quick_reply_config: maybeBuildYesNoQuickReplyRule({
         message: reply,
         criteria: "output:final_answer_yes_no_prompt",

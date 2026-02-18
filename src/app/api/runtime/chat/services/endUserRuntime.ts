@@ -26,6 +26,16 @@ type IdentityCandidate = {
   is_primary: boolean;
 };
 
+type EndUserMemoryEntity = {
+  phone?: string | null;
+  email?: string | null;
+  member_id?: string | null;
+  name?: string | null;
+  address?: string | null;
+  zipcode?: string | null;
+  order_id?: string | null;
+};
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -231,12 +241,127 @@ function buildIdentityCandidates(profile: EndUserProfile): IdentityCandidate[] {
   return identities;
 }
 
+function mergeMemoryEntity(base: EndUserMemoryEntity, override: EndUserMemoryEntity) {
+  const next: EndUserMemoryEntity = { ...base };
+  const keys: Array<keyof EndUserMemoryEntity> = [
+    "phone",
+    "email",
+    "member_id",
+    "name",
+    "address",
+    "zipcode",
+    "order_id",
+  ];
+  keys.forEach((key) => {
+    const value = override[key];
+    if (typeof value === "string" && value.trim()) {
+      next[key] = value.trim();
+    }
+  });
+  return next;
+}
+
+function buildMemoryEntityFromRows(rows: Array<Record<string, any>>) {
+  const next: EndUserMemoryEntity = {};
+  const seen = new Set<string>();
+  rows.forEach((row) => {
+    const key = readString(row.memory_key);
+    if (!key || seen.has(key)) return;
+    const content = readString(row.content);
+    const valueJson = readRecord(row.value_json) || {};
+    const fallback = readString(valueJson.value);
+    const value = content || fallback;
+    if (!value) return;
+    seen.add(key);
+    if (key === "phone") next.phone = value;
+    if (key === "email") next.email = value;
+    if (key === "member_id") next.member_id = value;
+    if (key === "name") next.name = value;
+    if (key === "address") next.address = value;
+    if (key === "zipcode") next.zipcode = value;
+    if (key === "order_id") next.order_id = value;
+  });
+  return next;
+}
+
+export async function fetchEndUserMemoryEntity(input: {
+  context: EndUserSyncContext;
+  sessionId: string;
+  runtimeEndUser?: Record<string, any> | null;
+  entity?: Record<string, any> | null;
+}) {
+  const { context, sessionId, runtimeEndUser, entity } = input;
+  const orgId = String(context.orgId || "").trim();
+  if (!orgId) return null;
+
+  let endUserId: string | null = null;
+  try {
+    const { data: sessionRow } = await context.supabase
+      .from("A_end_user_sessions")
+      .select("end_user_id")
+      .eq("session_id", sessionId)
+      .maybeSingle();
+    if (sessionRow?.end_user_id) {
+      endUserId = String(sessionRow.end_user_id);
+    }
+  } catch {
+    endUserId = null;
+  }
+
+  if (!endUserId) {
+    const runtimeProfile = extractProfileFromObject(runtimeEndUser || null);
+    const entityProfile = extractProfileFromEntity(entity || null);
+    const mergedProfile = mergeProfiles(entityProfile, runtimeProfile);
+    const identities = buildIdentityCandidates(mergedProfile);
+    if (identities.length > 0) {
+      const hashes = identities.map((item) => item.identity_hash);
+      const { data: identityRows } = await context.supabase
+        .from("A_end_user_identities")
+        .select("end_user_id, identity_hash, is_primary")
+        .eq("org_id", orgId)
+        .in("identity_hash", hashes);
+      const matched = (identityRows || [])
+        .map((row) => ({
+          end_user_id: String(row.end_user_id || "").trim(),
+          is_primary: Boolean(row.is_primary),
+        }))
+        .filter((row) => row.end_user_id);
+      if (matched.length > 0) {
+        matched.sort((a, b) => Number(b.is_primary) - Number(a.is_primary));
+        endUserId = matched[0].end_user_id;
+      }
+    }
+  }
+
+  if (!endUserId) return null;
+
+  const { data: memoryRows } = await context.supabase
+    .from("A_end_user_memories")
+    .select("memory_key, content, value_json, updated_at")
+    .eq("org_id", orgId)
+    .eq("end_user_id", endUserId)
+    .eq("is_active", true)
+    .in("memory_key", ["phone", "email", "member_id", "name", "address", "zipcode", "order_id"])
+    .order("updated_at", { ascending: false });
+  const memoryEntity = buildMemoryEntityFromRows((memoryRows || []) as Array<Record<string, any>>);
+  const fallbackEntity: EndUserMemoryEntity = {
+    phone: normalizePhone(readString((entity || {})?.phone) || null),
+    email: normalizeEmail(readString((entity || {})?.email) || null),
+    member_id: readString((entity || {})?.member_id),
+    name: readString((entity || {})?.name),
+    address: readString((entity || {})?.address),
+    zipcode: readString((entity || {})?.zipcode),
+    order_id: readString((entity || {})?.order_id),
+  };
+  return mergeMemoryEntity(memoryEntity, fallbackEntity);
+}
+
 function buildContentSummary(value: string | null, fallback?: string | null, maxLength = 200) {
   const base = (fallback && String(fallback).trim()) || (value && String(value).trim()) || "";
   if (!base) return null;
   const normalized = base.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
+  return `${normalized.slice(0, Math.max(0, maxLength - 1))}...`;
 }
 
 function buildUserSummary(input: { intent?: string | null; userText?: string | null; botText?: string | null }) {
@@ -245,7 +370,7 @@ function buildUserSummary(input: { intent?: string | null; userText?: string | n
   if (input.userText) parts.push(`user:${buildContentSummary(input.userText, null, 120)}`);
   if (input.botText) parts.push(`bot:${buildContentSummary(input.botText, null, 120)}`);
   const summary = parts.join(" | ").trim();
-  return summary.length > 260 ? `${summary.slice(0, 259)}…` : summary;
+  return summary.length > 260 ? `${summary.slice(0, 259)}...` : summary;
 }
 
 async function upsertMemory(input: {
@@ -467,10 +592,13 @@ export async function syncEndUserFromTurn(input: {
       }
     }
 
+    const userFacingMessage =
+      readString((turnPayload.bot_context || {})?.user_facing_message) ||
+      readString(turnPayload.final_answer || turnPayload.answer_text);
     const sessionSummary = buildUserSummary({
       intent: readString((turnPayload.bot_context || {})?.intent_name),
       userText: readString(turnPayload.transcript_text),
-      botText: readString(turnPayload.final_answer || turnPayload.answer_text),
+      botText: userFacingMessage,
     });
 
     await context.supabase.from("A_end_user_sessions").upsert(
@@ -493,7 +621,7 @@ export async function syncEndUserFromTurn(input: {
     );
 
     const userContent = readString(turnPayload.transcript_text);
-    const assistantContent = readString(turnPayload.final_answer || turnPayload.answer_text);
+    const assistantContent = userFacingMessage;
     const messageRows: Array<Record<string, any>> = [];
     if (userContent) {
       messageRows.push({

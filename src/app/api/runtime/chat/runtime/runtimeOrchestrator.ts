@@ -58,6 +58,7 @@ import {
   getRecentTurns,
   resolveProductDecision,
 } from "../services/dataAccess";
+import { fetchEndUserMemoryEntity } from "../services/endUserRuntime";
 import { insertEvent, insertFinalTurn, upsertDebugLog } from "../services/auditRuntime";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import {
@@ -119,10 +120,9 @@ import type {
 const EXECUTION_GUARD_RULES = {
   updateAddress: {
     missingZipcodeCode: "MISSING_ZIPCODE",
-    askZipcodePrompt: "배송지 변경을 위해 우편번호(5자리)를 알려주세요.",
-    fallbackTicketMessage:
-      "배송지 변경 자동 처리에 실패하여 상담 요청을 접수했습니다. 담당자가 확인 후 안내드릴게요.",
-    fallbackRetryMessage: "배송지 변경 처리 중 오류가 발생했습니다. 다시 시도해 주세요.",
+    askZipcodePrompt: "\uBC30\uC1A1\uC9C0 \uBCC0\uACBD\uC744 \uC704\uD574 \uC6B0\uD3B8\uBC88\uD638(5\uC790\uB9AC)\uB97C \uC54C\uB824\uC8FC\uC138\uC694.",
+    fallbackTicketMessage: "\uBC30\uC1A1\uC9C0 \uBCC0\uACBD \uCC98\uB9AC \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4. \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.",
+    fallbackRetryMessage: "\uBCC0\uACBD \uCC98\uB9AC \uC911 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC2B5\uB2C8\uB2E4. \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.",
   },
 } as const;
 
@@ -481,8 +481,17 @@ export async function POST(req: NextRequest) {
     const prevPhoneFromTranscript = initialized.prevPhoneFromTranscript;
     const prevZipFromTranscript = initialized.prevZipFromTranscript;
     const prevAddressFromTranscript = initialized.prevAddressFromTranscript;
-    const recentEntity = initialized.recentEntity;
+    let recentEntity = initialized.recentEntity;
     const pipelineState = initialized.pipelineState;
+    const memoryEntity = await fetchEndUserMemoryEntity({
+      context,
+      sessionId,
+      runtimeEndUser: (context as Record<string, any>)?.runtimeEndUser || null,
+      entity: prevEntity,
+    });
+    if (memoryEntity) {
+      recentEntity = { ...memoryEntity, ...(recentEntity || {}) };
+    }
     const derivedChannel = initialized.derivedChannel;
     pipelineStateForError = pipelineState;
     let expectedInput = initialized.expectedInput;
@@ -755,6 +764,9 @@ export async function POST(req: NextRequest) {
       resolvedIntent,
       expectedInput,
       derivedPhone,
+      derivedOrderId,
+      derivedAddress,
+      derivedZipcode,
     };
     markStage("pre_turn_guard.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts", "handlePreTurnGuards");
@@ -769,11 +781,13 @@ export async function POST(req: NextRequest) {
       nextSeq,
       latestTurnId,
       derivedPhone: preTurnGuardInput.derivedPhone,
+      derivedOrderId: preTurnGuardInput.derivedOrderId,
+      derivedAddress: preTurnGuardInput.derivedAddress,
+      derivedZipcode: preTurnGuardInput.derivedZipcode,
       expectedInput: preTurnGuardInput.expectedInput,
       normalizePhoneDigits,
       isYesText,
       isNoText,
-      maskPhone,
       makeReply,
       insertTurn,
       insertEvent,
@@ -782,11 +796,20 @@ export async function POST(req: NextRequest) {
     if (preTurnGuards.response) return preTurnGuards.response;
     const preTurnGuardOutput: PreTurnGuardStepOutput = {
       derivedPhone: preTurnGuards.derivedPhone,
+      derivedOrderId: preTurnGuards.derivedOrderId,
+      derivedAddress: preTurnGuards.derivedAddress,
+      derivedZipcode: preTurnGuards.derivedZipcode,
       expectedInput: preTurnGuards.expectedInput,
     };
     derivedPhone = preTurnGuardOutput.derivedPhone;
+    derivedOrderId = preTurnGuardOutput.derivedOrderId;
+    derivedAddress = preTurnGuardOutput.derivedAddress;
+    derivedZipcode = preTurnGuardOutput.derivedZipcode;
     expectedInput = preTurnGuardOutput.expectedInput;
     pipelineState.derivedPhone = derivedPhone;
+    pipelineState.derivedOrderId = derivedOrderId;
+    pipelineState.derivedAddress = derivedAddress;
+    pipelineState.derivedZipcode = derivedZipcode;
     pipelineState.expectedInput = expectedInput;
     markStage("slot_derivation.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts", "deriveSlotsForTurn");

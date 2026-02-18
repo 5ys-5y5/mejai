@@ -12,6 +12,7 @@ import {
   extractAddressCandidatesFromSearchData,
 } from "../shared/addressCandidateUtils";
 import type { AddressSearchResult } from "../shared/runtimeTypes";
+import { buildMutationSuccessMessages, getMutationIntentContract } from "../runtime/intentContractRuntime";
 
 function joinAddressParts(input: {
   zipcode?: string | null;
@@ -158,7 +159,7 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
   } = input;
 
   if (!shouldResolveZipcodeViaJusoWhenAddressGiven()) {
-    const directZipReply = makeReply("우편번호 5자리를 입력해 주세요.");
+    const directZipReply = makeReply("\uC6B0\uD3B8\uBC88\uD638\uB97C \uC54C\uB824\uC8FC\uC138\uC694.");
     await insertEvent(
       context,
       sessionId,
@@ -599,33 +600,59 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
         appliedText,
       });
       const hasSemanticMismatch =
-        Boolean(requestZip && appliedZip && requestZip !== appliedZip) ||
-        Boolean((requestAddress2 || appliedAddress2) && requestAddress2 !== appliedAddress2) ||
-        Boolean(!requestAddress2 && beforeAddress2 && appliedAddress2 && appliedAddress2 === beforeAddress2);
-      const lines = [
-        "요약: 배송지 변경이 완료되었습니다.",
-        `상세: 주문번호 ${resolvedOrderId || "-"}의 배송지 변경 요청이 정상 처리되었습니다.`,
-        `- 기존값: ${beforeText}`,
-        `- 변경요청값: ${requestText}`,
-        `- 최종반영값: ${appliedText}`,
-        hasSemanticMismatch
-          ? "- 주의: 변경요청값과 최종반영값이 다릅니다. address1/address2 분리 반영 여부를 확인해 주세요."
-          : null,
-        "다음 액션: 추가 변경이 필요하면 주소를 다시 알려주세요.",
-      ].filter(Boolean) as string[];
-      const reply = makeReply(lines.join("\n"));
+        Boolean(requestZip && appliedZip && requestZip != appliedZip) ||
+        Boolean((requestAddress2 || appliedAddress2) && requestAddress2 != appliedAddress2) ||
+        Boolean(!requestAddress2 && beforeAddress2 && appliedAddress2 && appliedAddress2 == beforeAddress2);
+      const mutationContract = getMutationIntentContract(resolvedIntent);
+      const fallbackMessages = {
+        userMessage: [
+          "\uBC30\uC1A1\uC9C0 \uBCC0\uACBD\uC774 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4.",
+          `\uC8FC\uBB38\uBC88\uD638 ${resolvedOrderId || "-"}\uC758 \uBC30\uC1A1\uC9C0\uAC00 \uC5C5\uB370\uC774\uD2B8\uB418\uC5C8\uC2B5\uB2C8\uB2E4.`,
+          `\uBCC0\uACBD\uB41C \uBC30\uC1A1\uC9C0: ${appliedText}`,
+          hasSemanticMismatch
+            ? "\uC694\uCCAD\uD558\uC2E0 \uC8FC\uC18C\uC640 \uC801\uC6A9\uB41C \uC8FC\uC18C\uAC00 \uB2EC\uB77C \uD655\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4. \uB2E4\uC2DC \uC54C\uB824\uC8FC\uC138\uC694."
+            : null,
+          "\uCD94\uAC00\uB85C \uBCC0\uACBD\uD560 \uB0B4\uC6A9\uC774 \uC788\uC73C\uBA74 \uC54C\uB824\uC8FC\uC138\uC694.",
+        ].filter(Boolean).join("\n"),
+        debugMessage: [
+          "\uC694\uC57D: \uBC30\uC1A1\uC9C0 \uBCC0\uACBD\uC744 \uC801\uC6A9\uD588\uC2B5\uB2C8\uB2E4.",
+          "\uADFC\uAC70: \uC8FC\uBB38 \uBCC0\uACBD \uCC98\uB9AC \uB85C\uC9C1\uC5D0 \uB530\uB77C \uBCC0\uACBD\uC744 \uC9C4\uD589\uD588\uC2B5\uB2C8\uB2E4.",
+          `\uC0C1\uC138: \uC8FC\uBB38\uBC88\uD638 ${resolvedOrderId || "-"}\uC758 \uBC30\uC1A1\uC9C0\uB97C \uBCC0\uACBD\uD588\uC2B5\uB2C8\uB2E4.`,
+          `- \uBCC0\uACBD \uC804: ${beforeText}`,
+          `- \uC694\uCCAD: ${requestText}`,
+          `- \uC801\uC6A9: ${appliedText}`,
+          hasSemanticMismatch
+            ? "- \uC8FC\uC758: \uC694\uCCAD\uACFC \uC801\uC6A9 \uACB0\uACFC\uAC00 \uB2EC\uB77C \uD655\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4."
+            : null,
+          "\uB2E4\uC74C \uC561\uC158: \uCD94\uAC00 \uBCC0\uACBD \uC0AC\uD56D\uC774 \uC788\uC73C\uBA74 \uC54C\uB824\uC8FC\uC138\uC694.",
+        ].filter(Boolean).join("\n"),
+      };
+      const { userMessage, debugMessage } = mutationContract
+        ? buildMutationSuccessMessages({
+            contract: mutationContract,
+            resolvedOrderId,
+            appliedText,
+            beforeText,
+            requestText,
+            hasSemanticMismatch,
+          })
+        : fallbackMessages;
+      const userReply = makeReply(userMessage);
+      const debugReply = debugMessage;
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
         transcript_text: message,
-        answer_text: reply,
-        final_answer: reply,
+        answer_text: debugReply,
+        final_answer: userReply,
         bot_context: {
           intent_name: resolvedIntent,
           entity: policyContextEntity,
           selected_order_id: resolvedOrderId,
           customer_verification_token: customerVerificationToken,
           mcp_actions: mcpActions,
+          user_facing_message: userReply,
+          debug_answer: debugReply,
         },
       });
       await insertEvent(
@@ -634,8 +661,9 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
         latestTurnId,
         "FINAL_ANSWER_READY",
         {
-          answer: reply,
+          answer: userReply,
           model: "deterministic_order_change_success",
+          debug_answer: debugReply,
           change_audit: {
             tool: "cafe24:update_order_shipping_address",
             before: {
@@ -666,7 +694,7 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
         },
         { intent_name: resolvedIntent }
       );
-      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+      return respond({ session_id: sessionId, step: "final", message: userReply, mcp_actions: mcpActions });
     }
 
 

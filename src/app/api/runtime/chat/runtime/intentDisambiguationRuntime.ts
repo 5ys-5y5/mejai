@@ -201,6 +201,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
   } else if (
     expectedInput === null &&
     !prevBotContext.restock_pending &&
+    !prevBotContext.reuse_pending &&
     !prevBotContext.phone_reuse_pending
   ) {
     const queuedIntents = Array.isArray((prevBotContext as Record<string, any>).intent_queue)

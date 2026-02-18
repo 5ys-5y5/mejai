@@ -18,11 +18,17 @@ export type PreTurnGuardStepInput = StepInput<{
   resolvedIntent: string;
   expectedInput: string | null;
   derivedPhone: string | null;
+  derivedOrderId: string | null;
+  derivedAddress: string | null;
+  derivedZipcode: string | null;
 }>;
 
 export type PreTurnGuardStepOutput = StepOutput<{
   expectedInput: string | null;
   derivedPhone: string | null;
+  derivedOrderId: string | null;
+  derivedAddress: string | null;
+  derivedZipcode: string | null;
 }>;
 
 export type SlotDerivationStepOutput = StepOutput<{

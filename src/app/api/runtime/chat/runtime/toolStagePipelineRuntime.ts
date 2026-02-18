@@ -1,6 +1,11 @@
 import { runPolicyStage } from "@/lib/policyEngine";
 import { extractTemplateIds } from "./runtimeSupport";
 import {
+  buildMutationToolCall,
+  getMutationIntentContract,
+  resolveMutationReadyState,
+} from "./intentContractRuntime";
+import {
   createToolAccessEvaluator,
   emitPreMcpDecisionEvent,
   emitToolPolicyConflictIfAny,
@@ -12,6 +17,7 @@ import {
 } from "./toolRuntime";
 import { handlePreSensitiveOtpGuard } from "./otpRuntime";
 import { handlePostToolDeterministicFlows } from "./postToolRuntime";
+import { getSubstitutionPlan } from "../policies/principles";
 import type { CompiledPolicy } from "../shared/runtimeTypes";
 
 export async function runToolStagePipeline(input: Record<string, any> & { compiledPolicy: CompiledPolicy }) {
@@ -99,6 +105,64 @@ export async function runToolStagePipeline(input: Record<string, any> & { compil
     allowed,
     noteMcpSkip
   ) as typeof forcedCalls;
+
+  const mutationContract = getMutationIntentContract(resolvedIntent);
+  if (mutationContract) {
+    const entity = (policyContext?.entity || {}) as Record<string, any>;
+    const readyState = resolveMutationReadyState({
+      contract: mutationContract,
+      entity,
+      resolvedOrderId,
+    });
+    const hasMutationCall = finalCalls.some(
+      (call: { name: string }) => call.name === mutationContract.mutationTool
+    );
+    if (
+      readyState.ready &&
+      !hasMutationCall &&
+      hasAllowedToolName(mutationContract.mutationTool) &&
+      canUseTool(mutationContract.mutationTool)
+    ) {
+      const toolCall = buildMutationToolCall({
+        contract: mutationContract,
+        entity,
+        resolvedOrderId,
+      });
+      finalCalls.push(toolCall);
+      if (!mcpCandidateCalls.includes(mutationContract.mutationTool)) {
+        mcpCandidateCalls.push(mutationContract.mutationTool);
+      }
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_DECISION",
+        {
+          stage: "tool",
+          action: "AUTO_FORCE_MUTATION_TOOL",
+          reason: "MUTATION_INTENT_READY",
+          intent: mutationContract.intent,
+          tool: mutationContract.mutationTool,
+          resolved: readyState.resolved,
+        },
+        { intent_name: resolvedIntent, entity }
+      );
+    } else if (!readyState.ready) {
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "EXECUTION_GUARD_TRIGGERED",
+        {
+          tool: mutationContract.mutationTool,
+          reason: "MISSING_REQUIRED_SLOTS",
+          error: "MUTATION_INTENT_NOT_READY",
+          missing: readyState.missing,
+        },
+        { intent_name: resolvedIntent, entity }
+      );
+    }
+  }
 
   finalCalls = await normalizeAndFilterFinalCalls({
     finalCalls,
@@ -212,6 +276,8 @@ export async function runToolStagePipeline(input: Record<string, any> & { compil
     usedTemplateIds,
     isOrderChangeZipcodeTemplateText,
     policyContext,
+    hasAllowedToolName,
+    canUseTool,
     makeReply,
     insertTurn,
     nextSeq,
@@ -223,6 +289,45 @@ export async function runToolStagePipeline(input: Record<string, any> & { compil
   });
   if (forcedToolResponse) {
     return { response: forcedToolResponse };
+  }
+
+  const orderIdPlan = getSubstitutionPlan("order_id");
+  if (resolvedIntent === "order_change" && !resolvedOrderId && orderIdPlan) {
+    const phone = typeof policyContext?.entity?.phone === "string" ? String(policyContext.entity.phone).trim() : "";
+    const alreadyPlanned = finalCalls.some((call: { name: string }) => call.name === "list_orders");
+    if (
+      phone &&
+      orderIdPlan.ask.includes("phone") &&
+      orderIdPlan.tools.includes("list_orders") &&
+      !alreadyPlanned &&
+      hasAllowedToolName("list_orders") &&
+      canUseTool("list_orders")
+    ) {
+      const memberId =
+        typeof policyContext?.entity?.member_id === "string" ? String(policyContext.entity.member_id) : null;
+      finalCalls.push({
+        name: "list_orders",
+        args: {
+          ...(memberId ? { member_id: memberId } : { cellphone: phone }),
+          ...buildDefaultOrderRange(),
+        },
+      });
+      if (!mcpCandidateCalls.includes("list_orders")) {
+        mcpCandidateCalls.push("list_orders");
+      }
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_DECISION",
+        {
+          stage: "tool",
+          action: "SUBSTITUTE_ORDER_ID_WITH_PHONE",
+          reason: "MISSING_ORDER_ID_PHONE_AVAILABLE",
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
+      );
+    }
   }
 
   const toolResults: Array<{ name: string; ok: boolean; data?: Record<string, any>; error?: unknown }> =

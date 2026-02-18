@@ -5,6 +5,7 @@ import {
 } from "./quickReplyConfigRuntime";
 import { buildNumberedChoicePrompt, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
 import { splitAddressForUpdate } from "../shared/slotUtils";
+import { getSubstitutionPlan } from "../policies/principles";
 import type { CompiledPolicy } from "../shared/runtimeTypes";
 
 type ToolCall = { name: string; args?: Record<string, any>; ok?: boolean; data?: Record<string, any>; error?: unknown };
@@ -601,6 +602,8 @@ export async function handleToolForcedResponse(input: {
   productDecisionRes: { decision?: Record<string, any> | null };
   normalizeOrderChangeAddressPrompt: (intent: string, text: string) => string;
   isOrderChangeZipcodeTemplateText: (text: string) => boolean;
+  hasAllowedToolName: (name: string) => boolean;
+  canUseTool: (name: string) => boolean;
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
@@ -627,6 +630,8 @@ export async function handleToolForcedResponse(input: {
     usedTemplateIds,
     isOrderChangeZipcodeTemplateText,
     policyContext,
+    hasAllowedToolName,
+    canUseTool,
     makeReply,
     insertTurn,
     nextSeq,
@@ -683,8 +688,24 @@ export async function handleToolForcedResponse(input: {
     usedTemplateIds.includes("order_change_need_zipcode") ||
     isOrderChangeZipcodeTemplateText(rawForcedText) ||
     isOrderChangeZipcodeTemplateText(forcedText);
+  const isNeedOrderIdTemplate =
+    rawForcedText === (compiledPolicy.templates?.order_change_need_order_id || "") ||
+    forcedText === (compiledPolicy.templates?.order_change_need_order_id || "") ||
+    usedTemplateIds.includes("order_change_need_order_id");
   const currentAddress = typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
   const shouldDeferZipcodeTemplate = isNeedZipcodeTemplate && resolvedIntent === "order_change" && Boolean(currentAddress);
+  const phone = typeof policyContext.entity?.phone === "string" ? String(policyContext.entity.phone).trim() : "";
+  const orderIdPlan = getSubstitutionPlan("order_id");
+  const shouldDeferOrderIdTemplate =
+    isNeedOrderIdTemplate &&
+    resolvedIntent === "order_change" &&
+    Boolean(orderIdPlan) &&
+    !resolvedOrderId &&
+    Boolean(phone) &&
+    orderIdPlan?.ask?.includes("phone") &&
+    orderIdPlan?.tools?.includes("list_orders") &&
+    hasAllowedToolName("list_orders") &&
+    canUseTool("list_orders");
 
   if (shouldDeferZipcodeTemplate) {
     markDeferredTemplate("ORDER_AND_ADDRESS_ALREADY_AVAILABLE", "order_change_need_zipcode");
@@ -698,6 +719,24 @@ export async function handleToolForcedResponse(input: {
         action: "DEFER_FORCE_RESPONSE_TEMPLATE",
         reason: "ORDER_AND_ADDRESS_ALREADY_AVAILABLE",
         template: "order_change_need_zipcode",
+      },
+      { intent_name: resolvedIntent }
+    );
+    return null;
+  }
+
+  if (shouldDeferOrderIdTemplate) {
+    markDeferredTemplate("PHONE_AVAILABLE_FOR_ORDER_ID", "order_change_need_order_id");
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "POLICY_DECISION",
+      {
+        stage: "tool",
+        action: "DEFER_FORCE_RESPONSE_TEMPLATE",
+        reason: "PHONE_AVAILABLE_FOR_ORDER_ID",
+        template: "order_change_need_order_id",
       },
       { intent_name: resolvedIntent }
     );

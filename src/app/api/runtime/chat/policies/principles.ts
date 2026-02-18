@@ -59,6 +59,29 @@ export const CHAT_PRINCIPLES = {
     // If zipcode cannot be found from input address, treat as typo and ask address again.
     requireAddressRetryWhenZipcodeNotFound: true,
   },
+  // Missing user-specific identifiers should be backfilled via substitute inputs, not asked directly.
+  // Promise: do not directly ask for zipcode/order_id when the user indicates they do not know them.
+  substitution: {
+    // Slots that users explicitly do not know (expandable list).
+    whatUserDontKnow: ["zipcode", "order_id"] as const,
+    // Resolution strategies for unknown slots (expandable map).
+    resolution: {
+      zipcode: {
+        ask: ["address", "road_address", "jibun_address"] as const,
+        tools: ["search_address"] as const,
+        requires: ["address"] as const,
+      },
+      order_id: {
+        ask: ["phone", "email"] as const,
+        tools: ["list_orders"] as const,
+        requires: ["phone"] as const,
+      },
+    },
+    // When multiple candidates are found, require explicit user selection.
+    requireChoiceWhenMultipleCandidates: true,
+    // If a slot was provided before, do not ask again; confirm reuse with yes/no and proceed.
+    reuseProvidedInfoWithYesNo: true,
+  },
   // High-priority memory reuse contract.
   // Promise: do not ask again for information already provided by the user when it can be safely reused.
   memory: {
@@ -156,6 +179,44 @@ export function shouldEnforceNoRepeatQuestions() {
 
 export function shouldResolveZipcodeViaJusoWhenAddressGiven() {
   return Boolean(CHAT_PRINCIPLES.address.resolveZipcodeViaJusoWhenAddressGiven);
+}
+
+export function getWhatUserDontKnow() {
+  return CHAT_PRINCIPLES.substitution.whatUserDontKnow as readonly string[];
+}
+
+export function getSubstitutionResolutionMap() {
+  return CHAT_PRINCIPLES.substitution.resolution as Record<
+    string,
+    { ask: readonly string[]; tools: readonly string[]; requires: readonly string[] }
+  >;
+}
+
+export function shouldResolveWithSubstitution(targetSlot: string) {
+  const unknown = new Set(getWhatUserDontKnow());
+  if (!unknown.has(String(targetSlot || ""))) return false;
+  const plan = getSubstitutionResolutionMap()[String(targetSlot || "")];
+  return Boolean(plan);
+}
+
+export function getSubstitutionPlan(targetSlot: string) {
+  if (!shouldResolveWithSubstitution(targetSlot)) return null;
+  const plan = getSubstitutionResolutionMap()[String(targetSlot || "")];
+  if (!plan) return null;
+  return {
+    target: String(targetSlot || ""),
+    ask: Array.isArray(plan.ask) ? plan.ask : [],
+    tools: Array.isArray(plan.tools) ? plan.tools : [],
+    requires: Array.isArray(plan.requires) ? plan.requires : [],
+  };
+}
+
+export function shouldRequireChoiceWhenMultipleCandidates() {
+  return Boolean(CHAT_PRINCIPLES.substitution.requireChoiceWhenMultipleCandidates);
+}
+
+export function shouldReuseProvidedInfoWithYesNo() {
+  return Boolean(CHAT_PRINCIPLES.substitution.reuseProvidedInfoWithYesNo);
 }
 
 export function shouldRequireCandidateSelectionWhenMultipleZipcodes() {

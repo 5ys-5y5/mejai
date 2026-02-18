@@ -401,9 +401,18 @@ export function validateToolArgs(
 }
 
 export function formatOutputDefault(text: string) {
-  if (/요약/.test(text) && /근거/.test(text) && /상세/.test(text)) return text;
-  const lines = text.split("\n").filter(Boolean);
-  const summary = lines[0] || text;
-  const detail = lines.slice(1).join("\n") || text;
-  return `요약\n${summary}\n\n근거\nKB 기준에 따라 안내드립니다.\n\n상세\n${detail}\n\n다음 액션\n추가로 필요한 정보가 있다면 알려주세요.`;
+  const normalized = String(text || "").trim();
+  if (!normalized) return "";
+  if (/\uC694\uC57D:/.test(normalized) && /\uADFC\uAC70:/.test(normalized) && /\uC0C1\uC138:/.test(normalized)) return normalized;
+  const lines = normalized.split("\n").map((line) => line.trim()).filter(Boolean);
+  const summary = lines[0] || normalized;
+  const detail = lines.slice(1).join("\n") || summary;
+  return [
+    `요약: ${summary}`,
+    "근거: KB 및 정책에 따라 처리했습니다.",
+    `상세: ${detail}`,
+    "다음 액션: 추가 요청이 있으면 알려주세요.",
+  ].join("\n");
 }
+
+
