@@ -74,7 +74,7 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
   let nextExpectedInput = expectedInput;
 
   if (prevBotContext.conversation_closed === true) {
-    const reply = makeReply("이미 종료된 대화입니다. 새 문의는 새 대화에서 시작해 주세요.");
+    const reply = makeReply("이전 문의가 종료되었습니다. 새 문의가 있다면 알려주세요.");
     await insertTurn({
       session_id: sessionId,
       seq: nextSeq,
@@ -141,8 +141,8 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
       nextExpectedInput = null;
     } else if (isNoText(message)) {
       const nextSlot = getPreferredPromptSlot(slotKey);
-      const label = getReuseSlotLabel(nextSlot);
-      const reply = makeReply(`Please provide ${label}.`);
+      const label = getReuseSlotLabel(nextSlot, resolvedIntent);
+      const reply = makeReply(`아래 정보를 알려주세요. (${label})`);
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -153,6 +153,7 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
           intent_name: resolvedIntent,
           entity: prevEntity,
           selected_order_id: prevSelectedOrderId,
+          expected_input: nextSlot,
           ...clearedReuseFlags,
         },
       });
@@ -165,9 +166,9 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
         expectedInput: nextExpectedInput || nextSlot,
       };
     } else {
-      const label = getReuseSlotLabel(slotKey);
+      const label = getReuseSlotLabel(slotKey, resolvedIntent);
       const reply = makeReply(
-        buildYesNoConfirmationPrompt(`Use the previously provided ${label} (${pendingValue || "-"}) to continue?`, {
+        buildYesNoConfirmationPrompt(`이전에 알려주신 ${label}(${pendingValue || "-"})로 진행할까요?`, {
           botContext: prevBotContext,
           entity: prevEntity,
         })
@@ -220,5 +221,3 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
     expectedInput: nextExpectedInput,
   };
 }
-
-

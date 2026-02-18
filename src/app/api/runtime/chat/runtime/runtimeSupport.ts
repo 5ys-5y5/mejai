@@ -48,6 +48,8 @@ export type DebugPayload = {
   usedToolPolicies?: string[];
   conversationMode?: string | null;
   slotExpectedInput?: string | null;
+  slotExpectedInputs?: string[];
+  slotExpectedInputStage?: string | null;
   slotOrderId?: string | null;
   slotPhone?: string | null;
   slotPhoneMasked?: string | null;
@@ -535,6 +537,8 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
         }
       : {}),
     ...(payload.slotExpectedInputPrev ||
+    payload.slotExpectedInputs ||
+    payload.slotExpectedInputStage ||
     payload.slotExpectedInputSource ||
     payload.slotDerivedOrderId ||
     payload.slotDerivedPhone ||
@@ -542,6 +546,8 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
     payload.slotDerivedAddress
       ? {
           slot_flow: {
+            ...(payload.slotExpectedInputs ? { expected_inputs: payload.slotExpectedInputs } : {}),
+            ...(payload.slotExpectedInputStage ? { expected_input_stage: payload.slotExpectedInputStage } : {}),
             ...(payload.slotExpectedInputPrev ? { expected_input_prev: payload.slotExpectedInputPrev } : {}),
             ...(payload.slotExpectedInputSource ? { expected_input_source: payload.slotExpectedInputSource } : {}),
             ...(payload.slotDerivedOrderId ? { derived_order_id: payload.slotDerivedOrderId } : {}),
@@ -718,6 +724,8 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
             : "false",
     },
     { key: "SLOT.expected_input", value: payload.slotExpectedInput || "-" },
+    { key: "SLOT.expected_inputs", value: (payload.slotExpectedInputs || []).join(", ") || "-" },
+    { key: "SLOT.expected_input_stage", value: payload.slotExpectedInputStage || "-" },
     { key: "SLOT.expected_input_prev", value: payload.slotExpectedInputPrev || "-" },
     { key: "SLOT.order_id", value: payload.slotOrderId || "-" },
     { key: "SLOT.phone", value: payload.slotPhone || "-" },

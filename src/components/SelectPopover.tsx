@@ -149,7 +149,7 @@ export function SelectPopover({
                   exit={{ opacity: 0, y: panelStyle.placement === "bottom" ? -6 : 6, scale: 0.98 }}
                   transition={{ duration: 0.12 }}
                   className={cn(
-                    "fixed overflow-hidden rounded-2xl border border-slate-200 bg-white",
+                    "fixed flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white",
                     panelClassName
                   )}
                   style={{
@@ -157,6 +157,7 @@ export function SelectPopover({
                     left: panelStyle.left,
                     width: panelStyle.width,
                     maxHeight: panelStyle.maxHeight,
+                    height: panelStyle.maxHeight,
                     zIndex: "var(--layer-popover)",
                   }}
                   role="dialog"
@@ -490,7 +491,15 @@ export function MultiSelectPopover({
                       </button>
                     </div>
                   ) : null}
-                  <div className="flex max-h-72 flex-col gap-[5px] overflow-auto p-2">
+                  <div
+                    className="flex flex-col gap-[5px] overflow-auto p-2 pb-6"
+                    style={{
+                      maxHeight: Math.max(
+                        80,
+                        panelStyle.maxHeight - (searchable ? 44 : 0) - (showBulkActions ? 44 : 0)
+                      ),
+                    }}
+                  >
                     {hasGroupedOptions
                       ? groupedFiltered.map((group, index) => (
                           <div key={group.key} className={cn(index > 0 ? "pt-2" : "")}>

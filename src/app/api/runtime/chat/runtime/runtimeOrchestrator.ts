@@ -19,6 +19,7 @@ import {
   detectIntentCandidates,
   extractRestockChannel,
   intentLabel,
+  intentSupportScope,
   isAddressChangeUtterance,
   isEndConversationText,
   isExecutionAffirmativeText,
@@ -94,6 +95,12 @@ import { handlePostActionStage } from "./postActionRuntime";
 import { resolveIntentDisambiguation } from "./intentDisambiguationRuntime";
 import { handlePreTurnGuards } from "./preTurnGuardRuntime";
 import { deriveSlotsForTurn } from "./slotDerivationRuntime";
+import {
+  buildInputContractMismatch,
+  resolveInputContractSnapshot,
+  type InputContractConfig,
+} from "./inputContractRuntime";
+import { emitGuardedEvent } from "./guardedEventRuntime";
 import { handleAddressChangeRefundPending } from "./pendingStateRuntime";
 import { handleRestockPendingStage } from "./restockPendingRuntime";
 import { resolveIntentAndPolicyContext } from "./contextResolutionRuntime";
@@ -264,7 +271,7 @@ export async function POST(req: NextRequest) {
       }
     }
     const resolvedTurnId = isUuidLike(runtimeTurnId) ? runtimeTurnId : crypto.randomUUID();
-    const fallback = "처리 중 오류가 발생했습니다. 같은 내용을 한 번 더 보내주세요.";
+    const fallback = "죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
     const failed = buildFailedPayload({
       code: "INTERNAL_ERROR",
       summary: errorMessage || "INTERNAL_ERROR",
@@ -447,6 +454,8 @@ export async function POST(req: NextRequest) {
       (prevBotContext || {}) as Record<string, any>,
       runtimeTemplateOverrides
     );
+    const inputContractConfig = ((providerConfig as Record<string, any>)?.runtime_contracts?.input_contracts ||
+      null) as InputContractConfig | null;
     RuntimeContextAny = context;
     currentSessionId = sessionId;
     firstTurnInSession = firstInSession;
@@ -470,6 +479,7 @@ export async function POST(req: NextRequest) {
       deriveExpectedInputFromAnswer,
       isRestockInquiry,
       isRestockSubscribe,
+      inputContractConfig,
     });
     const hasAllowedToolName = initialized.hasAllowedToolName;
     const prevIntent = initialized.prevIntent;
@@ -495,6 +505,8 @@ export async function POST(req: NextRequest) {
     const derivedChannel = initialized.derivedChannel;
     pipelineStateForError = pipelineState;
     let expectedInput = initialized.expectedInput;
+    let expectedInputs = initialized.expectedInputs;
+    let expectedInputStage = initialized.expectedInputStage;
     let customerVerificationToken = initialized.customerVerificationToken;
     let derivedOrderId = initialized.derivedOrderId;
     let derivedPhone = initialized.derivedPhone;
@@ -572,19 +584,26 @@ export async function POST(req: NextRequest) {
       return [];
     };
     const computeIntentScopeMismatchReason = () => {
-      const expected = slotDebug.expectedInput;
-      if (!expected) return null;
-      const derivedSlots: Record<string, string | null> = {
-        order_id: derivedOrderId,
-        phone: derivedPhone,
-        zipcode: derivedZipcode,
-        address: derivedAddress,
-      };
-      const expectedValue = derivedSlots[expected] || null;
-      if (expectedValue) return null;
-      const firstActual = Object.entries(derivedSlots).find(([, value]) => Boolean(value));
-      if (!firstActual) return null;
-      return `expected_input=${expected} but derived_${firstActual[0]}=${String(firstActual[1] || "")}`;
+      return buildInputContractMismatch({
+        expectedInputs,
+        derivedSlots: {
+          order_id: derivedOrderId,
+          phone: derivedPhone,
+          zipcode: derivedZipcode,
+          address: derivedAddress,
+        },
+      });
+    };
+    const inputContractBefore = resolveInputContractSnapshot({
+      botContext: effectivePrevBotContext as Record<string, any>,
+      derivedExpectedInput:
+        typeof effectivePrevBotContext.expected_input === "string" ? String(effectivePrevBotContext.expected_input).trim() : null,
+      contractConfig: inputContractConfig,
+    });
+    const sameExpectedInputs = (a: string[], b: string[]) => {
+      const left = [...a].map((item) => String(item || "").trim()).filter(Boolean).sort().join("|");
+      const right = [...b].map((item) => String(item || "").trim()).filter(Boolean).sort().join("|");
+      return left === right;
     };
     let activePolicyConflicts: Array<Record<string, any>> = [];
     const buildRuntimeSnapshot = (resolvedLlmModel: string | null, resolvedTools: string[]) => {
@@ -594,113 +613,129 @@ export async function POST(req: NextRequest) {
       const expectedTools = computeExpectedToolNames(resolvedIntent);
       const missingExpectedTools = expectedTools.filter((tool) => (allowedToolByName.get(tool)?.length || 0) === 0);
       return {
-      llmModel: resolvedLlmModel,
-      mcpTools: resolvedTools.length > 0 ? resolvedTools : mcpActions,
-      mcpProviders: usedProviders,
-      mcpLastFunction: lastMcpFunction,
-      mcpLastStatus: lastMcpStatus,
-      mcpLastError: lastMcpError,
-      mcpLastCount: lastMcpCount,
-      mcpLogs: mcpSkipLogs,
-      providerConfig: usedProviders.includes("cafe24") ? providerConfig : {},
-      providerAvailable,
-      authSettingsId: authSettings?.id || null,
-      userId: authContext.user.id,
-      orgId: userOrgId || authContext.orgId,
-      userPlan,
-      userIsAdmin,
-      userRole,
-      kbUserId: kb.id,
-      kbAdminIds: adminKbs.map((item) => item.id),
-      agentId: agent.id || null,
-      agentParentId: String((agent as Record<string, any>).parent_id || "").trim() || null,
-      agentName: agent.name || null,
-      agentType: String((agent as Record<string, any>).agent_type || "").trim() || null,
-      agentVersion: String((agent as Record<string, any>).version || "").trim() || null,
-      agentLlm: agent.llm || null,
-      agentKbId: agent.kb_id || null,
-      agentIsActive: typeof (agent as Record<string, any>).is_active === "boolean" ? (agent as Record<string, any>).is_active : null,
-      agentResolvedFromParent: bootstrap.state.agentResolvedFromParent,
-      agentMcpToolIdsRaw: Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.map((id: string) => String(id)) : [],
-      kbId: kb.id,
-      kbTitle: kb.title || null,
-      kbVersion: (kb as Record<string, any>).version || null,
-      kbIsAdmin: (kb as Record<string, any>).is_admin ?? null,
-      kbAdminSummary: adminKbs.map((item) => ({
-        id: String(item.id || ""),
-        title: String((item as Record<string, any>).title || "") || null,
-        version: String((item as Record<string, any>).version || "") || null,
-        is_admin:
-          typeof (item as Record<string, any>).is_admin === "boolean"
-            ? (item as Record<string, any>).is_admin
-            : null,
-      })),
-      widgetId: bootstrap.state.widgetContext?.widgetId || null,
-      widgetName: bootstrap.state.widgetContext?.widgetName || null,
-      widgetPublicKey: bootstrap.state.widgetContext?.widgetPublicKey || null,
-      widgetAgentId: bootstrap.state.widgetContext?.widgetAgentId || null,
-      widgetOrgId: bootstrap.state.widgetContext?.widgetOrgId || null,
-      widgetAllowedDomains: bootstrap.state.widgetContext?.widgetAllowedDomains || [],
-      widgetAllowedPaths: bootstrap.state.widgetContext?.widgetAllowedPaths || [],
-      requestDomain: requestMeta.domain,
-      requestOrigin: requestMeta.origin,
-      requestWidgetOrgIdPresent: requestMeta.widgetOrgIdPresent,
-      requestWidgetUserIdPresent: requestMeta.widgetUserIdPresent,
-      requestWidgetAgentIdPresent: requestMeta.widgetAgentIdPresent,
-      requestWidgetSecretPresent: requestMeta.widgetSecretPresent,
-      userGroup: bootstrap.state.userGroup,
-      kbAdminApplyGroups: bootstrap.state.adminKbFilterMeta.map((item) => ({ id: item.id, apply_groups: item.apply_groups })),
-      kbAdminApplyGroupsMode: bootstrap.state.adminKbFilterMeta.map((item) => item.apply_groups_mode || null),
-      kbAdminFilterReasons: bootstrap.state.adminKbFilterMeta.map((item) => item.reason),
-      usedRuleIds,
-      usedTemplateIds,
-      usedToolPolicies,
-      slotExpectedInput: slotDebug.expectedInput,
-      slotExpectedInputPrev: typeof effectivePrevBotContext.expected_input === "string" ? String(effectivePrevBotContext.expected_input) : null,
-      slotExpectedInputSource: expectedInputSource,
-      slotOrderId: slotDebug.orderId,
-      slotPhone: slotDebug.phone,
-      slotPhoneMasked: maskPhone(slotDebug.phone),
-      slotZipcode: slotDebug.zipcode,
-      slotAddress: slotDebug.address,
-      slotDerivedOrderId: derivedOrderId,
-      slotDerivedPhone: derivedPhone,
-      slotDerivedZipcode: derivedZipcode,
-      slotDerivedAddress: derivedAddress,
-      mcpCandidateCalls,
-      mcpSkipped: mcpSkipLogs,
-      policyInputRules: inputRuleIds,
-      policyToolRules: toolRuleIds,
-      contextContamination: contaminationSummaries,
-      conversationMode,
-      runtimeCallChain,
-      templateOverrides: runtimeTemplateOverrides as Record<string, string>,
-      modelSelectionReason: modelMeta.reason,
-      modelSelectionInputLength: modelMeta.inputLength,
-      modelSelectionLengthRuleHit: modelMeta.lengthRuleHit,
-      modelSelectionKeywordRuleHit: modelMeta.keywordRuleHit,
-      allowlistResolvedToolIds,
-      allowlistAllowedToolNames,
-      allowlistAllowedToolCount: allowlistAllowedToolNames.length,
-      allowlistMissingExpectedTools: missingExpectedTools,
-      allowlistRequestedToolCount: allowlistMeta?.requestedToolCount ?? null,
-      allowlistValidToolCount: allowlistMeta?.validToolCount ?? null,
-      allowlistProviderSelectionCount: allowlistMeta?.providerSelectionCount ?? null,
-      allowlistProviderSelections: allowlistMeta?.providerSelections || [],
-      allowlistToolsByIdCount: allowlistMeta?.toolsByIdCount ?? null,
-      allowlistToolsByProviderCount: allowlistMeta?.toolsByProviderCount ?? null,
-      allowlistResolvedToolCount: allowlistMeta?.resolvedToolCount ?? null,
-      allowlistQueryErrorById: allowlistMeta?.queryErrorById ?? null,
-      allowlistQueryErrorByProvider: allowlistMeta?.queryErrorByProvider ?? null,
-      intentScopeMismatchReason: computeIntentScopeMismatchReason(),
-      policyConflicts: activePolicyConflicts,
-      policyConflictResolution: activePolicyConflicts.length > 0 ? "tool_stage_force_response_precedence" : null,
-    };
+        llmModel: resolvedLlmModel,
+        mcpTools: resolvedTools.length > 0 ? resolvedTools : mcpActions,
+        mcpProviders: usedProviders,
+        mcpLastFunction: lastMcpFunction,
+        mcpLastStatus: lastMcpStatus,
+        mcpLastError: lastMcpError,
+        mcpLastCount: lastMcpCount,
+        mcpLogs: mcpSkipLogs,
+        providerConfig: usedProviders.includes("cafe24") ? providerConfig : {},
+        providerAvailable,
+        authSettingsId: authSettings?.id || null,
+        userId: authContext.user.id,
+        orgId: userOrgId || authContext.orgId,
+        userPlan,
+        userIsAdmin,
+        userRole,
+        kbUserId: kb.id,
+        kbAdminIds: adminKbs.map((item) => item.id),
+        agentId: agent.id || null,
+        agentParentId: String((agent as Record<string, any>).parent_id || "").trim() || null,
+        agentName: agent.name || null,
+        agentType: String((agent as Record<string, any>).agent_type || "").trim() || null,
+        agentVersion: String((agent as Record<string, any>).version || "").trim() || null,
+        agentLlm: agent.llm || null,
+        agentKbId: agent.kb_id || null,
+        agentIsActive:
+          typeof (agent as Record<string, any>).is_active === "boolean" ? (agent as Record<string, any>).is_active : null,
+        agentResolvedFromParent: bootstrap.state.agentResolvedFromParent,
+        agentMcpToolIdsRaw: Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.map((id: string) => String(id)) : [],
+        kbId: kb.id,
+        kbTitle: kb.title || null,
+        kbVersion: (kb as Record<string, any>).version || null,
+        kbIsAdmin: (kb as Record<string, any>).is_admin ?? null,
+        kbAdminSummary: adminKbs.map((item) => ({
+          id: String(item.id || ""),
+          title: String((item as Record<string, any>).title || "") || null,
+          version: String((item as Record<string, any>).version || "") || null,
+          is_admin:
+            typeof (item as Record<string, any>).is_admin === "boolean" ? (item as Record<string, any>).is_admin : null,
+        })),
+        widgetId: bootstrap.state.widgetContext?.widgetId || null,
+        widgetName: bootstrap.state.widgetContext?.widgetName || null,
+        widgetPublicKey: bootstrap.state.widgetContext?.widgetPublicKey || null,
+        widgetAgentId: bootstrap.state.widgetContext?.widgetAgentId || null,
+        widgetOrgId: bootstrap.state.widgetContext?.widgetOrgId || null,
+        widgetAllowedDomains: bootstrap.state.widgetContext?.widgetAllowedDomains || [],
+        widgetAllowedPaths: bootstrap.state.widgetContext?.widgetAllowedPaths || [],
+        requestDomain: requestMeta.domain,
+        requestOrigin: requestMeta.origin,
+        requestWidgetOrgIdPresent: requestMeta.widgetOrgIdPresent,
+        requestWidgetUserIdPresent: requestMeta.widgetUserIdPresent,
+        requestWidgetAgentIdPresent: requestMeta.widgetAgentIdPresent,
+        requestWidgetSecretPresent: requestMeta.widgetSecretPresent,
+        userGroup: bootstrap.state.userGroup,
+        kbAdminApplyGroups: bootstrap.state.adminKbFilterMeta.map((item) => ({ id: item.id, apply_groups: item.apply_groups })),
+        kbAdminApplyGroupsMode: bootstrap.state.adminKbFilterMeta.map((item) => item.apply_groups_mode || null),
+        kbAdminFilterReasons: bootstrap.state.adminKbFilterMeta.map((item) => item.reason),
+        usedRuleIds,
+        usedTemplateIds,
+        usedToolPolicies,
+        slotExpectedInput: slotDebug.expectedInput,
+        slotExpectedInputs: expectedInputs,
+        slotExpectedInputStage: expectedInputStage,
+        slotExpectedInputPrev:
+          typeof effectivePrevBotContext.expected_input === "string" ? String(effectivePrevBotContext.expected_input) : null,
+        slotExpectedInputSource: expectedInputSource,
+        slotOrderId: slotDebug.orderId,
+        slotPhone: slotDebug.phone,
+        slotPhoneMasked: maskPhone(slotDebug.phone),
+        slotZipcode: slotDebug.zipcode,
+        slotAddress: slotDebug.address,
+        slotDerivedOrderId: derivedOrderId,
+        slotDerivedPhone: derivedPhone,
+        slotDerivedZipcode: derivedZipcode,
+        slotDerivedAddress: derivedAddress,
+        mcpCandidateCalls,
+        mcpSkipped: mcpSkipLogs,
+        policyInputRules: inputRuleIds,
+        policyToolRules: toolRuleIds,
+        contextContamination: contaminationSummaries,
+        conversationMode,
+        runtimeCallChain,
+        templateOverrides: runtimeTemplateOverrides as Record<string, string>,
+        modelSelectionReason: modelMeta.reason,
+        modelSelectionInputLength: modelMeta.inputLength,
+        modelSelectionLengthRuleHit: modelMeta.lengthRuleHit,
+        modelSelectionKeywordRuleHit: modelMeta.keywordRuleHit,
+        allowlistResolvedToolIds,
+        allowlistAllowedToolNames,
+        allowlistAllowedToolCount: allowlistAllowedToolNames.length,
+        allowlistMissingExpectedTools: missingExpectedTools,
+        allowlistRequestedToolCount: allowlistMeta?.requestedToolCount ?? null,
+        allowlistValidToolCount: allowlistMeta?.validToolCount ?? null,
+        allowlistProviderSelectionCount: allowlistMeta?.providerSelectionCount ?? null,
+        allowlistProviderSelections: allowlistMeta?.providerSelections || [],
+        allowlistToolsByIdCount: allowlistMeta?.toolsByIdCount ?? null,
+        allowlistToolsByProviderCount: allowlistMeta?.toolsByProviderCount ?? null,
+        allowlistResolvedToolCount: allowlistMeta?.resolvedToolCount ?? null,
+        allowlistQueryErrorById: allowlistMeta?.queryErrorById ?? null,
+        allowlistQueryErrorByProvider: allowlistMeta?.queryErrorByProvider ?? null,
+        intentScopeMismatchReason: computeIntentScopeMismatchReason(),
+        policyConflicts: activePolicyConflicts,
+        policyConflictResolution: activePolicyConflicts.length > 0 ? "tool_stage_force_response_precedence" : null,
+      };
     };
     const replyStyleDirective = resolveReplyStyleDirective({
       primaryKbContent: kb.content || "",
       adminKbContents: adminKbs.map((item) => item.content || ""),
     });
+    let otpAckPending = false;
+    const decorateReplyText = (text: string) => {
+      const baseText = String(text || "");
+      const hasAck = /인증이 완료되었습니다/.test(baseText);
+      if (otpAckPending && hasAck) {
+        otpAckPending = false;
+        return applyReplyStyle(baseText, replyStyleDirective);
+      }
+      if (otpAckPending) {
+        otpAckPending = false;
+        return applyReplyStyle(`인증이 완료되었습니다.\n${baseText}`, replyStyleDirective);
+      }
+      return applyReplyStyle(baseText, replyStyleDirective);
+    };
     const { makeReply, insertTurn } = createRuntimeConversationIo({
       context,
       insertFinalTurn,
@@ -718,7 +753,7 @@ export async function POST(req: NextRequest) {
       setLatestTurnId: (id) => {
         latestTurnId = id;
       },
-      decorateReplyText: (text) => applyReplyStyle(text, replyStyleDirective),
+      decorateReplyText,
     });
     const disambiguationInput: DisambiguationStepInput = {
       message,
@@ -741,6 +776,7 @@ export async function POST(req: NextRequest) {
       detectIntentCandidates,
       hasChoiceAnswerCandidates,
       intentLabel,
+      intentSupportScope,
       parseIndexedChoices,
       isYesText,
       makeReply,
@@ -805,17 +841,62 @@ export async function POST(req: NextRequest) {
     derivedOrderId = preTurnGuardOutput.derivedOrderId;
     derivedAddress = preTurnGuardOutput.derivedAddress;
     derivedZipcode = preTurnGuardOutput.derivedZipcode;
+    const prevExpectedInput = expectedInput;
     expectedInput = preTurnGuardOutput.expectedInput;
+    if (preTurnGuardOutput.expectedInput !== prevExpectedInput) {
+      expectedInputSource = "pre_turn_guard";
+    }
     pipelineState.derivedPhone = derivedPhone;
     pipelineState.derivedOrderId = derivedOrderId;
     pipelineState.derivedAddress = derivedAddress;
     pipelineState.derivedZipcode = derivedZipcode;
     pipelineState.expectedInput = expectedInput;
+    pipelineState.expectedInputs = expectedInputs;
+    pipelineState.expectedInputStage = expectedInputStage;
+    if (!expectedInputStage || expectedInputStage === "legacy.expected_input") {
+      expectedInputs = expectedInput ? [expectedInput] : expectedInputs;
+      expectedInputStage = expectedInput ? "legacy.expected_input" : expectedInputStage;
+    }
+    const inputContractAfter = {
+      expectedInputs,
+      expectedInput,
+      source: expectedInputSource,
+      stage: expectedInputStage,
+    };
+    const contractChanged =
+      inputContractBefore.stage !== inputContractAfter.stage ||
+      inputContractBefore.source !== inputContractAfter.source ||
+      !sameExpectedInputs(inputContractBefore.expectedInputs, inputContractAfter.expectedInputs);
+    if (contractChanged) {
+      await emitGuardedEvent({
+        insertEvent,
+        context,
+        sessionId,
+        turnId: latestTurnId,
+        baseEvent: "INPUT_CONTRACT_REVIEW",
+        payloadBefore: {
+          intent_name: resolvedIntent,
+          expected_inputs: inputContractBefore.expectedInputs,
+          expected_input: inputContractBefore.expectedInput,
+          expected_input_stage: inputContractBefore.stage,
+          source: inputContractBefore.source,
+        },
+        payloadAfter: {
+          intent_name: resolvedIntent,
+          expected_inputs: inputContractAfter.expectedInputs,
+          expected_input: inputContractAfter.expectedInput,
+          expected_input_stage: inputContractAfter.stage,
+          source: inputContractAfter.source,
+        },
+        botContext: { intent_name: resolvedIntent },
+      });
+    }
     markStage("slot_derivation.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts", "deriveSlotsForTurn");
     const slotDerivation = await deriveSlotsForTurn({
       message,
       expectedInput,
+      expectedInputs,
       resolvedIntent,
       agentLlm: (agent.llm ?? null) as "chatgpt" | "gemini" | null,
       timingStages,
@@ -851,6 +932,38 @@ export async function POST(req: NextRequest) {
     pipelineState.derivedAddress = derivedAddress;
     pipelineState.resolvedIntent = resolvedIntent;
 
+    const inputContractMismatch = buildInputContractMismatch({
+      expectedInputs,
+      derivedSlots: {
+        order_id: derivedOrderId,
+        phone: derivedPhone,
+        zipcode: derivedZipcode,
+        address: derivedAddress,
+      },
+    });
+    if (inputContractMismatch) {
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "INPUT_CONTRACT_MISMATCH",
+        {
+          intent_name: resolvedIntent,
+          expected_inputs: expectedInputs,
+          expected_input: expectedInput,
+          expected_input_stage: expectedInputStage,
+          source: expectedInputSource,
+          derived: {
+            order_id: derivedOrderId,
+            phone: derivedPhone,
+            zipcode: derivedZipcode,
+            address: derivedAddress,
+          },
+          reason: inputContractMismatch,
+        },
+        { intent_name: resolvedIntent }
+      );
+    }
     markStage("pending_state.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/pendingStateRuntime.ts", "handleAddressChangeRefundPending");
     const pendingState = await handleAddressChangeRefundPending({
@@ -956,6 +1069,7 @@ export async function POST(req: NextRequest) {
       latestTurnId,
       message,
       expectedInput,
+      expectedInputs,
       forcedIntentQueue,
       lockIntentToRestockSubscribe,
       prevIntent,
@@ -1144,6 +1258,7 @@ export async function POST(req: NextRequest) {
     mcpCandidateCalls = otpGateOutput.mcpCandidateCalls;
     pipelineState.customerVerificationToken = customerVerificationToken;
     pipelineState.mcpCandidateCalls = mcpCandidateCalls;
+    otpAckPending = Boolean(otpVerifiedThisTurn);
 
     markStage("product_decision.start");
     pushRuntimeCall("src/app/api/runtime/chat/services/dataAccess.ts", "resolveProductDecision");
@@ -1174,6 +1289,7 @@ export async function POST(req: NextRequest) {
       option_name?: string;
       quantity?: string;
       price?: string;
+      image_url?: string | null;
       label?: string;
     }> = [];
     let mcpSummary = "";

@@ -1,5 +1,6 @@
 import type { PolicyEvalContext } from "@/lib/policyEngine";
 import { resolveAddressWithReuse, resolvePhoneWithReuse } from "./memoryReuseRuntime";
+import { getExpectedSlotKeys } from "./inputContractRuntime";
 
 type ContextResolutionParams = {
   context: any;
@@ -7,6 +8,7 @@ type ContextResolutionParams = {
   latestTurnId: string | null;
   message: string;
   expectedInput: string | null;
+  expectedInputs: string[];
   forcedIntentQueue: string[];
   lockIntentToRestockSubscribe: boolean;
   prevIntent: string | null;
@@ -76,7 +78,8 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     sessionId,
     latestTurnId,
     message,
-    expectedInput,
+  expectedInput,
+  expectedInputs,
     forcedIntentQueue,
     lockIntentToRestockSubscribe,
     prevIntent,
@@ -201,6 +204,11 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     }
   }
 
+  const expectedSlotKeys = new Set(getExpectedSlotKeys(expectedInputs || []));
+  const hasExpectedInputs = Array.isArray(expectedInputs) && expectedInputs.length > 0;
+  const allowAddressReuse = !hasExpectedInputs || expectedSlotKeys.has("address") || expectedSlotKeys.has("zipcode");
+  const allowZipHistoryFallback = !hasExpectedInputs || expectedSlotKeys.has("address") || expectedSlotKeys.has("zipcode");
+
   const safePrevEntityZipcode =
     typeof prevEntity.zipcode === "string" && isLikelyZipcode(prevEntity.zipcode)
       ? String(prevEntity.zipcode).trim()
@@ -223,11 +231,7 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
       : null;
   const allowPendingZipCarry =
     hasActiveAddressPending &&
-    (
-      expectedInput === "address" ||
-      expectedInput === "zipcode" ||
-      (addressStage === "awaiting_zipcode_confirm" && (isYesText(message) || isNoText(message)))
-    );
+    (allowZipHistoryFallback || (addressStage === "awaiting_zipcode_confirm" && (isYesText(message) || isNoText(message))));
   const pendingZipFromContext = allowPendingZipCarry ? pendingZipFromContextRaw : null;
   if (pendingZipFromContextRaw && !pendingZipFromContext) {
     noteContamination({
@@ -252,8 +256,6 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
       { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
     );
   }
-  const allowZipHistoryFallback =
-    expectedInput === null || expectedInput === "address" || expectedInput === "zipcode";
   const blockedZipFallback =
     !allowZipHistoryFallback && !derivedZipcode
       ? safePrevEntityZipcode || safePrevZipFromTranscript || safeRecentZipcode
@@ -347,12 +349,42 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     prevEntityPhone: typeof prevEntity.phone === "string" ? prevEntity.phone : null,
     prevPhoneFromTranscript,
     recentEntityPhone: recentEntity?.phone || null,
+    resolvedIntent: nextResolvedIntent,
   });
+  const blockedAddressFallback =
+    !allowAddressReuse && !derivedAddress
+      ? typeof prevEntity.address === "string"
+        ? prevEntity.address
+        : prevAddressFromTranscript || recentEntity?.address || null
+      : null;
+  if (blockedAddressFallback) {
+    noteContamination({
+      slot: "address",
+      candidate: blockedAddressFallback,
+      reason: "ADDRESS_CARRYOVER_BLOCKED_BY_EXPECTED_INPUTS",
+      action: "CLEARED",
+    });
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "CONTEXT_CONTAMINATION_DETECTED",
+      {
+        slot: "address",
+        candidate: blockedAddressFallback,
+        reason: "ADDRESS_CARRYOVER_BLOCKED_BY_EXPECTED_INPUTS",
+        action: "CLEARED",
+        expected_inputs: expectedInputs,
+      },
+      { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
+    );
+  }
   const resolvedAddress = resolveAddressWithReuse({
     derivedAddress,
-    prevEntityAddress: typeof prevEntity.address === "string" ? prevEntity.address : null,
-    prevAddressFromTranscript,
-    recentEntityAddress: recentEntity?.address || null,
+    prevEntityAddress: allowAddressReuse && typeof prevEntity.address === "string" ? prevEntity.address : null,
+    prevAddressFromTranscript: allowAddressReuse ? prevAddressFromTranscript : null,
+    recentEntityAddress: allowAddressReuse ? recentEntity?.address || null : null,
+    resolvedIntent: nextResolvedIntent,
   });
   const preservedAuditFields = pickPreservedEntityAuditFields(prevEntity);
   const policyContext: PolicyEvalContext = {

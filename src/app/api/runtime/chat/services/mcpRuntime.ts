@@ -216,26 +216,68 @@ export async function callMcpTool(
 
 export function buildAddressSearchKeywords(raw: string) {
   const cleaned = String(raw || "")
-    .replace(/^(주소|배송지)\s*[:\-]?\s*/g, "")
+    .replace(/^(?:address|addr|shipping address|\uC8FC\uC18C|\uBC30\uC1A1\uC9C0)\s*[:\-]?\s*/i, "")
     .replace(/\s+/g, " ")
     .trim();
   if (!cleaned) return [];
-  const out: string[] = [cleaned];
+  const out: string[] = [];
+  const pushUnique = (value: string) => {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) return;
+    if (!out.includes(trimmed)) out.push(trimmed);
+  };
+  pushUnique(cleaned);
   const tokens = cleaned.split(" ").filter(Boolean);
-  const isDetailToken = (token: string) =>
-    /^\d{1,5}$/.test(token) ||
-    /^\d{1,5}(호|층|동|실)$/.test(token) ||
-    /^[A-Za-z]?\d{1,5}$/.test(token);
-  // JUSO는 상세 동/호수까지 붙으면 매칭 실패가 잦아서 뒤 토큰을 단계적으로 제거하며 재시도한다.
-  if (tokens.length >= 2) {
-    let end = tokens.length;
-    while (end > 1) {
-      const last = tokens[end - 1];
-      if (!isDetailToken(last)) break;
-      end -= 1;
-      const trimmed = tokens.slice(0, end).join(" ").trim();
-      if (trimmed && !out.includes(trimmed)) out.push(trimmed);
+  if (tokens.length < 2) return out;
+
+  const unitSuffixRegex = /(?:\uBC88\uC9C0|\uD638|\uB3D9|\uCE35)$/u;
+  const stripUnitSuffix = (token: string) => String(token || "").replace(unitSuffixRegex, "");
+  const normalizeToken = (token: string) => stripUnitSuffix(String(token || "").trim());
+  const isNumericLike = (token: string) => {
+    const normalized = normalizeToken(token);
+    if (!normalized) return false;
+    return (
+      /^\d{1,5}$/.test(normalized) ||
+      /^\d{1,5}-\d{1,5}$/.test(normalized) ||
+      /^[A-Za-z]?\d{1,5}$/.test(normalized)
+    );
+  };
+  const isLikelyDetailToken = (token: string, prevToken: string | null) => {
+    if (!token) return false;
+    if (unitSuffixRegex.test(token)) return true;
+    if (!isNumericLike(token)) return false;
+    const prevNumeric = prevToken ? isNumericLike(prevToken) : false;
+    if (prevNumeric) return true;
+    const normalized = normalizeToken(token);
+    return /^\d{1,5}-\d{1,5}$/.test(normalized) && Boolean(prevToken);
+  };
+
+  const pushTokens = (parts: string[]) => {
+    if (parts.length === 0) return;
+    pushUnique(parts.join(" "));
+  };
+
+  let current = [...tokens];
+  while (current.length > 1) {
+    const last = current[current.length - 1];
+    const prev = current.length > 1 ? current[current.length - 2] : null;
+    const isDetail = isLikelyDetailToken(last, prev);
+    if (isDetail) {
+      const normalizedLast = normalizeToken(last);
+      if (normalizedLast && normalizedLast !== last) {
+        pushTokens([...current.slice(0, -1), normalizedLast]);
+      }
+      if (normalizedLast.includes("-")) {
+        const head = normalizedLast.split("-")[0];
+        if (head && head !== normalizedLast) {
+          pushTokens([...current.slice(0, -1), head]);
+        }
+      }
+      current = current.slice(0, -1);
+      pushTokens(current);
+      continue;
     }
+    break;
   }
   return out;
 }

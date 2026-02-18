@@ -69,6 +69,8 @@ export const DEFAULT_CONVERSATION_DEBUG_OPTIONS: DebugTranscriptOptions = {
       debug: {
         enabled: true,
         prefixJson: true,
+        dedupeGlobalPrefixJson: true,
+        usedOnly: false,
         prefixJsonSections: {
           requestMeta: true,
           resolvedAgent: true,
@@ -126,7 +128,8 @@ function normalizeConversationDebugOptions(input?: Partial<DebugTranscriptOption
   const defaultLogsEvent = defaultLogs?.event;
 
   return {
-    outputMode: input?.outputMode === "summary" ? "summary" : "full",
+    outputMode:
+      input?.outputMode === "summary" || input?.outputMode === "used_only" ? input.outputMode : "full",
     includePrincipleHeader: input?.includePrincipleHeader ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includePrincipleHeader,
     includeResponseSchema: input?.includeResponseSchema ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includeResponseSchema,
     includeRenderPlan: input?.includeRenderPlan ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includeRenderPlan,
@@ -165,6 +168,9 @@ function normalizeConversationDebugOptions(input?: Partial<DebugTranscriptOption
       debug: {
         enabled: logsDebugInput?.enabled ?? defaultLogsDebug?.enabled,
         prefixJson: logsDebugInput?.prefixJson ?? defaultLogsDebug?.prefixJson,
+        dedupeGlobalPrefixJson:
+          logsDebugInput?.dedupeGlobalPrefixJson ?? defaultLogsDebug?.dedupeGlobalPrefixJson,
+        usedOnly: logsDebugInput?.usedOnly ?? defaultLogsDebug?.usedOnly,
         prefixJsonSections: {
           requestMeta: logsDebugInput?.prefixJsonSections?.requestMeta ?? defaultLogsDebug?.prefixJsonSections?.requestMeta,
           resolvedAgent: logsDebugInput?.prefixJsonSections?.resolvedAgent ?? defaultLogsDebug?.prefixJsonSections?.resolvedAgent,

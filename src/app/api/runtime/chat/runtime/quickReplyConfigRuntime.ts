@@ -6,6 +6,7 @@ export type RuntimeQuickReplyConfig = {
   criteria: string;
   source_function: string;
   source_module: string;
+  preset?: "yes_no" | null;
 };
 
 export const YES_NO_QUICK_REPLIES = [
@@ -22,6 +23,7 @@ type ResolveQuickReplyConfigInput = {
   sourceFunction: string;
   sourceModule: string;
   contextText?: string | null;
+  preset?: "yes_no" | null;
 };
 
 function toSafeInt(value: unknown) {
@@ -66,6 +68,7 @@ export function resolveQuickReplyConfig(input: ResolveQuickReplyConfigInput): Ru
     criteria: String(input.criteria || "runtime:quick_reply_rule"),
     source_function: input.sourceFunction,
     source_module: input.sourceModule,
+    preset: input.preset ?? null,
   };
 }
 
@@ -75,6 +78,7 @@ export function resolveSingleChoiceQuickReplyConfig(input: {
   sourceFunction: string;
   sourceModule: string;
   contextText?: string | null;
+  preset?: "yes_no" | null;
 }) {
   return resolveQuickReplyConfig({
     optionsCount: input.optionsCount,
@@ -85,6 +89,7 @@ export function resolveSingleChoiceQuickReplyConfig(input: {
     sourceFunction: input.sourceFunction,
     sourceModule: input.sourceModule,
     contextText: input.contextText,
+    preset: input.preset ?? null,
   });
 }
 
@@ -95,7 +100,13 @@ export function maybeBuildYesNoQuickReplyRule(input: {
   sourceModule: string;
 }) {
   const text = String(input.message || "");
-  const isYesNoPrompt = /맞으면\s*'네'[\s\S]*'아니오'/u.test(text);
+  const isYesNoPrompt =
+    /맞으면\s*'네'[\s\S]*'아니오'/u.test(text) ||
+    /네\s*\/\s*아니오/u.test(text) ||
+    /네\s*(?:또는|혹은)\s*아니오/u.test(text) ||
+    /네\s*\/\s*아니오로\s*답/u.test(text) ||
+    /네\s*아니오\s*로\s*답/u.test(text) ||
+    /네\s*아니오\s*중/u.test(text);
   if (!isYesNoPrompt) return null;
   return resolveSingleChoiceQuickReplyConfig({
     optionsCount: YES_NO_QUICK_REPLIES.length,
@@ -103,5 +114,6 @@ export function maybeBuildYesNoQuickReplyRule(input: {
     sourceFunction: input.sourceFunction,
     sourceModule: input.sourceModule,
     contextText: text,
+    preset: "yes_no",
   });
 }

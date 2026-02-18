@@ -40,8 +40,22 @@ export function extractAddressCandidatesFromSearchData(searchData: unknown, max 
 
 export function buildAddressCandidateQuickReplies(candidates: AddressCandidate[]) {
   return candidates.map((candidate) => ({
-    label: `${candidate.index}번`,
+    label: String(candidate.index),
     value: String(candidate.index),
+  }));
+}
+
+export function buildAddressCandidateChoiceItems(candidates: AddressCandidate[]) {
+  return candidates.map((candidate) => ({
+    value: String(candidate.index),
+    label: `${candidate.index}번`,
+    title: candidate.jibun_addr || candidate.road_addr || `후보 ${candidate.index}`,
+    description: [candidate.road_addr, candidate.zip_no].filter(Boolean).join(" / "),
+    fields: [
+      { label: "지번주소", value: candidate.jibun_addr || "-" },
+      { label: "도로명주소", value: candidate.road_addr || "-" },
+      { label: "우편번호", value: candidate.zip_no || "-" },
+    ],
   }));
 }
 

@@ -16,6 +16,7 @@ import {
 } from "../services/dataAccess";
 import { prepareSessionState } from "./sessionRuntime";
 import { pushRuntimeTimingStage, type RuntimeTimingStage } from "./runtimeSupport";
+import { DEFAULT_TOOL_PROVIDER_MAP } from "./mcpToolRegistry";
 import type { CompiledPolicy, RuntimeContext } from "../shared/runtimeTypes";
 
 type Body = {
@@ -588,6 +589,25 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       if (!allowedToolVersionByName.has(name)) {
         allowedToolVersionByName.set(name, (t as Record<string, any>).version || null);
       }
+    });
+  }
+  const deployEnv = String(process.env.VERCEL_ENV || process.env.NODE_ENV || process.env.DEPLOY_ENV || "")
+    .trim()
+    .toLowerCase();
+  const allowlistQueryFailed = Boolean(allowlistMeta.queryErrorById || allowlistMeta.queryErrorByProvider);
+  if (allowlistQueryFailed && allowedToolNames.size === 0 && deployEnv !== "production") {
+    Object.entries(DEFAULT_TOOL_PROVIDER_MAP).forEach(([name, providerKey]) => {
+      const key = `${providerKey}:${name}`;
+      if (!allowedToolNames.has(key)) {
+        allowedToolNames.add(key);
+      }
+      const list = allowedToolByName.get(name) || [];
+      if (!list.includes(key)) list.push(key);
+      allowedToolByName.set(name, list);
+    });
+    console.warn("[runtime/chat_mk2] allowlist query failed; applied non-prod fallback", {
+      deployEnv: deployEnv || null,
+      allowed_tool_count: allowedToolNames.size,
     });
   }
   pushRuntimeTimingStage(timingStages, "resolve_allowed_tools", allowedToolsStartedAt, {

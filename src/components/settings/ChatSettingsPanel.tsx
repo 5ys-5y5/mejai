@@ -34,8 +34,9 @@ function normalizePages(pages: ConversationPageKey[]) {
   return Array.from(new Set([...BASE_PAGE_KEYS, ...pages.filter(Boolean)])).sort((a, b) => a.localeCompare(b));
 }
 const DEBUG_OUTPUT_MODE_OPTIONS: SelectOption[] = [
-  { id: "full", label: "원문(Full)" },
-  { id: "summary", label: "요약(Summary, 문제 신호 포함)" },
+  { id: "full", label: "Full" },
+  { id: "summary", label: "Summary (with issues)" },
+  { id: "used_only", label: "Used only" },
 ];
 const AUDIT_BOT_SCOPE_OPTIONS: SelectOption[] = [
   { id: "runtime_turns_only", label: "runtime_turns_only" },
@@ -1256,13 +1257,18 @@ export function ChatSettingsPanel({ authToken }: Props) {
             const showSetupExistingDetails = Boolean(setupExistingDetailsOpenByPage[page]);
             const showSetupNewDetails = Boolean(setupNewDetailsOpenByPage[page]);
             const debugCopyDraft = debugCopyDraftByPage[page];
-            const debugOutputMode = debugCopyDraft.outputMode === "summary" ? "summary" : "full";
             const debugHeader = debugCopyDraft.sections?.header;
             const debugTurn = debugCopyDraft.sections?.turn;
             const debugLogs = debugCopyDraft.sections?.logs;
             const debugLogMcp = debugLogs?.mcp;
             const debugLogEvent = debugLogs?.event;
             const debugLogDebug = debugLogs?.debug;
+            const debugOutputMode =
+              debugCopyDraft.outputMode === "summary"
+                ? "summary"
+                : debugLogDebug?.usedOnly
+                  ? "used_only"
+                  : "full";
             const debugPrefixSections = debugLogDebug?.prefixJsonSections;
             const responseSchemaDetailFields = debugTurn?.responseSchemaDetailFields;
             const renderPlanDetailFields = debugTurn?.renderPlanDetailFields;
@@ -1407,7 +1413,18 @@ export function ChatSettingsPanel({ authToken }: Props) {
                         onChange={(value) =>
                           updateDebugCopyOptions(page, (prev) => ({
                             ...prev,
-                            outputMode: value === "summary" ? "summary" : "full",
+                            outputMode:
+                              value === "summary" ? "summary" : value === "used_only" ? "used_only" : "full",
+                            sections: {
+                              ...prev.sections,
+                              logs: {
+                                ...prev.sections?.logs,
+                                debug: {
+                                  ...prev.sections?.logs?.debug,
+                                  usedOnly: value === "used_only",
+                                },
+                              },
+                            },
                           }))
                         }
                         className="w-full"

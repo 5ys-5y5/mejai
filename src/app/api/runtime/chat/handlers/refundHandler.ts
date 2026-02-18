@@ -1,5 +1,7 @@
 import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "../runtime/quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "../runtime/promptTemplateRuntime";
+import { resolveSubstitutionPrompt } from "../runtime/intentContractRuntime";
+import { getSubstitutionPlan } from "../policies/principles";
 
 type RefundToolResult = { name: string; ok: boolean; data?: Record<string, any>; error?: unknown };
 
@@ -54,7 +56,16 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
   if (resolvedIntent !== "refund_request") return null;
 
   if (!resolvedOrderId) {
-    const reply = makeReply("환불/취소/반품은 주문 확인이 필요합니다. 주문번호 또는 휴대폰번호를 알려주세요.");
+    const plan = getSubstitutionPlan("order_id");
+    const substitution = resolveSubstitutionPrompt({
+      targetSlot: "order_id",
+      intent: resolvedIntent,
+      plan,
+      entity: policyContextEntity,
+    });
+    const prompt = substitution?.prompt || "환불/반품/취소를 위해 연락처를 알려주세요.";
+    const expectedInput = substitution?.askSlot || "phone";
+    const reply = makeReply(prompt);
     await insertTurn({
       session_id: sessionId,
       seq: nextSeq,
@@ -67,6 +78,7 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
         selected_order_id: null,
         customer_verification_token: customerVerificationToken,
         mcp_actions: mcpActions,
+        expected_input: expectedInput,
       },
     });
     return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
@@ -74,7 +86,7 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
 
   if (!refundConfirmAcceptedThisTurn && !createTicketSuccess && !createTicketFailure) {
     const reply = makeReply(
-      buildYesNoConfirmationPrompt(`주문번호 ${resolvedOrderId}건으로 취소/환불 요청을 접수할까요?`, {
+      buildYesNoConfirmationPrompt(`주문번호 ${resolvedOrderId} 건에 대해 환불/반품/취소를 접수할까요?`, {
         entity: policyContextEntity,
       })
     );
@@ -124,7 +136,7 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
     const ticketData = (createTicketSuccess.data ?? {}) as Record<string, any>;
     const ticketId = String(ticketData.ticket_id ?? ticketData.id ?? "").trim() || "-";
     const reply = makeReply(
-      `요약: 취소/환불 요청이 접수되었습니다.\n상세: 주문번호 ${resolvedOrderId} 기준으로 요청이 등록되었습니다. (접수번호: ${ticketId})\n다음 액션: 처리 결과를 확인해드릴까요?`
+      `접수 완료: 환불/반품/취소 요청이 접수되었습니다.\n주문번호 ${resolvedOrderId} 건으로 처리 중이며, 티켓 번호는 ${ticketId}입니다.\n추가 문의가 있으면 알려주세요.`
     );
     await insertTurn({
       session_id: sessionId,
@@ -154,7 +166,7 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
   if (createTicketFailure) {
     const errorText = String(createTicketFailure.error || "CREATE_TICKET_FAILED");
     const reply = makeReply(
-      `요청 접수 중 오류가 발생했습니다.\n원인: ${errorText}\n다음 액션: 잠시 후 다시 시도하거나 관리자에게 취소 요청을 전달해 주세요.`
+      `요청을 처리하는 중 오류가 발생했어요.\n오류: ${errorText}\n잠시 후 다시 시도하시거나 다른 문의가 있으면 알려주세요.`
     );
     await insertTurn({
       session_id: sessionId,
@@ -183,4 +195,3 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
 
   return null;
 }
-

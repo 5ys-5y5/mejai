@@ -59,6 +59,23 @@ export const CHAT_PRINCIPLES = {
     // If zipcode cannot be found from input address, treat as typo and ask address again.
     requireAddressRetryWhenZipcodeNotFound: true,
   },
+  // Mutation safety contract for user-scoped changes.
+  mutation: {
+    // Always confirm the target entity even when only one candidate exists.
+    // The confirmation prompt must include identifying summary fields.
+    requireTargetConfirmationAlways: true,
+    requireTargetSummaryFields: ["order_id", "product_name", "option_name", "price", "quantity"] as const,
+    // After any CRUD mutation, show before/after snapshots to verify correctness.
+    requireBeforeAfterSummaryForMutations: true,
+  },
+  // Target confirmation contract for single-candidate selections.
+  targetConfirmation: {
+    requireSingleCandidateConfirmation: true,
+    summaryFieldsByTarget: {
+      order: ["order_id", "product_name", "option_name", "price", "quantity"] as const,
+      address: ["jibun_address", "road_address", "zipcode"] as const,
+    },
+  },
   // Missing user-specific identifiers should be backfilled via substitute inputs, not asked directly.
   // Promise: do not directly ask for zipcode/order_id when the user indicates they do not know them.
   substitution: {
@@ -249,6 +266,27 @@ export function shouldRequireBeforeAfterOnMutation() {
 
 export function shouldRequireFailureBoundaryLogs() {
   return Boolean(CHAT_PRINCIPLES.audit.requireFailureBoundaryLogs);
+}
+
+export function shouldRequireMutationTargetConfirmationAlways() {
+  return Boolean(CHAT_PRINCIPLES.mutation.requireTargetConfirmationAlways);
+}
+
+export function getMutationTargetSummaryFields() {
+  return CHAT_PRINCIPLES.mutation.requireTargetSummaryFields as readonly string[];
+}
+
+export function shouldRequireBeforeAfterSummaryForMutations() {
+  return Boolean(CHAT_PRINCIPLES.mutation.requireBeforeAfterSummaryForMutations);
+}
+
+export function shouldRequireSingleTargetConfirmation() {
+  return Boolean(CHAT_PRINCIPLES.targetConfirmation.requireSingleCandidateConfirmation);
+}
+
+export function getTargetSummaryFields(targetKind: string) {
+  const fields = (CHAT_PRINCIPLES.targetConfirmation.summaryFieldsByTarget as Record<string, readonly string[]> | undefined) || {};
+  return (fields[targetKind] || []) as readonly string[];
 }
 
 export function shouldEnforceIntentScopedSlotGate() {

@@ -1,16 +1,16 @@
 export function deriveExpectedInputFromAnswer(lastAnswer: string) {
-  const text = String(lastAnswer || "");
-  if (text.includes("인증번호")) return "otp_code";
-  const addressPrompt = text.includes("주소") || text.includes("배송지");
-  const zipcodeOnlyPrompt = text.includes("우편번호") && !addressPrompt && /(알려|입력|필요)/.test(text);
-  if (zipcodeOnlyPrompt) return "zipcode";
-  if (addressPrompt) return "address";
-  if (text.includes("휴대폰 번호")) {
-    if (text.includes("주문번호") && text.includes("또는")) return "order_id_or_phone";
-    return "phone";
-  }
-  if (text.includes("주문번호") && text.includes("또는") && text.includes("휴대폰")) return "order_id_or_phone";
-  if (text.includes("주문번호")) return "order_id";
+  const text = String(lastAnswer || "").replace(/\s+/g, " ").trim();
+  if (!text) return null;
+  if (/인증번호|OTP|코드/.test(text)) return "otp_code";
+  const hasZipcode = /우편번호|5자리/.test(text);
+  const hasAddress = /주소|배송지|수령지/.test(text);
+  if (hasZipcode && !hasAddress) return "zipcode";
+  if (hasAddress) return "address";
+  const hasPhone = /휴대폰|전화번호|연락처/.test(text);
+  const hasOrderId = /주문번호|주문\s*번호/.test(text);
+  if (hasOrderId && hasPhone) return "order_id_or_phone";
+  if (hasPhone) return "phone";
+  if (hasOrderId) return "order_id";
   return null;
 }
 
@@ -25,4 +25,3 @@ export function isRestockSubscribeStage(prevBotContext: Record<string, any>) {
     ].includes(String(prevBotContext.restock_stage || ""))
   );
 }
-

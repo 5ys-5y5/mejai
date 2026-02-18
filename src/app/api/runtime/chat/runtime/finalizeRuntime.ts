@@ -2,6 +2,7 @@ import type { ChatMessage } from "@/lib/llm_mk2";
 import { YES_NO_QUICK_REPLIES, maybeBuildYesNoQuickReplyRule } from "./quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
 import { getReuseSlotLabel, pickReuseCandidate } from "./memoryReuseRuntime";
+import { getIntentContract } from "./intentContractRuntime";
 import type { CompiledPolicy } from "../shared/runtimeTypes";
 
 function extractUserFacingFromDebug(text: string) {
@@ -53,12 +54,20 @@ function sanitizeUserFacingMessage(text: string, resolvedIntent: string) {
       .replace(/\uB2E4\uC74C \uC561\uC158:\s*/g, "")
       .trim();
   }
-  if (resolvedIntent === "order_change") {
-    candidate = candidate
-      .replace(/\uBB38\uC758\s*\uD2F0\uCF13/gi, "")
-      .replace(/\uB2F4\uB2F9\uC790/gi, "")
-      .replace(/\s{2,}/g, " ")
-      .trim();
+  const intentContract = getIntentContract(resolvedIntent);
+  if (intentContract?.preventEscalation) {
+    const blocklist = [
+      "\uBB38\uC758 \uD2F0\uCF13",
+      "\uD2F0\uCF13",
+      "\uB2F4\uB2F9\uC790",
+      "\uC804\uB2EC",
+      "\uC811\uC218",
+      "\uC548\uB0B4\uD574 \uB4DC\uB9AC\uACA0\uC2B5\uB2C8\uB2E4",
+    ];
+    blocklist.forEach((phrase) => {
+      candidate = candidate.replace(new RegExp(phrase, "gi"), "");
+    });
+    candidate = candidate.replace(/\s{2,}/g, " ").trim();
   }
   return candidate.trim();
 }
@@ -76,16 +85,21 @@ export function buildFinalLlmMessages(input: {
   recentTurns: Array<{ transcript_text?: string | null; final_answer?: string | null; answer_text?: string | null }>;
 }) {
   const productDecisionJson = input.productDecision ? JSON.stringify(input.productDecision) : "null";
+  const intentContract = getIntentContract(input.resolvedIntent);
+  const intentContractSummary = intentContract
+    ? `reuse_slots=${(intentContract.reuseSlots || []).join(",") || "none"}; prevent_escalation=${intentContract.preventEscalation ? "true" : "false"}`
+    : "none";
   const systemPrompt = [
     "You are a customer support assistant.",
     "Return only a concise, conversational response for the end user.",
-    "Do not use labels like '\uC694\uC57D:', '\uADFC\uAC70:', '\uC0C1\uC138:', or '\uB2E4\uC74C \uC561\uC158:'.요약:', '근거:', '상세:', or '다음 액션:'.",
+    "Do not use labels like '\uC694\uC57D:', '\uADFC\uAC70:', '\uC0C1\uC138:', or '\uB2E4\uC74C \uC561\uC158:'.",
     "Do not mention handoff, tickets, or human escalation unless explicitly required by policy or tools.",
     "Use the same language as the user.",
   ].join("\n");
   const userPrompt = [
     `User message: ${input.message}`,
     `Intent: ${input.resolvedIntent}`,
+    `Intent contract: ${intentContractSummary}`,
     `Channel: ${input.derivedChannel || "none"}`,
     "Known info:",
     `- order_id: ${input.resolvedOrderId || "none"}`,
@@ -144,9 +158,8 @@ export async function handleGeneralNoPathGuard(input: Record<string, any> & { co
   if (!(resolvedIntent === "general" && finalCalls.length === 0 && allowed.size === 0)) {
     return null;
   }
-
   const reply = makeReply(
-    "현재 정책/지식 범위에서 바로 처리할 수 없는 요청입니다. 상담사 연결로 이어서 도와드릴게요."
+    "죄송해요. 해당 요청은 현재 경로로 처리할 수 없어요. 다른 문의가 있으면 알려주세요."
   );
   await insertTurn({
     session_id: sessionId,
@@ -272,6 +285,7 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
       missingSlots,
       entity: (policyContext.entity || {}) as Record<string, any>,
       listOrdersCalled,
+      resolvedIntent,
     });
     const isAddressPromptTemplate =
       forcedTemplate === (compiledPolicy.templates?.order_change_need_address || "") ||
@@ -283,9 +297,9 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
       reusePending = true;
       reusePendingSlot = reuseCandidate.slotKey;
       reusePendingValue = reuseCandidate.value;
-      const label = getReuseSlotLabel(reuseCandidate.slotKey);
+      const label = getReuseSlotLabel(reuseCandidate.slotKey, resolvedIntent);
       finalAnswer = buildYesNoConfirmationPrompt(
-        `Use the previously provided ${label} (${reuseCandidate.value || "-"}) to continue?`,
+        `\uC774\uC804\uC5D0 \uC54C\uB824\uC8FC\uC2E0 ${label}(${reuseCandidate.value || "-"})\uB85C \uC9C4\uD589\uD560\uAE4C\uC694?`,
         { entity: policyContext.entity }
       );
     } else if (resolvedIntent === "order_change" && isAddressPromptTemplate && resolvedAddress) {
@@ -417,4 +431,3 @@ export async function runFinalResponseFlow(input: Record<string, any>) {
     ...(quickReplyConfig ? { quick_replies: YES_NO_QUICK_REPLIES, quick_reply_config: quickReplyConfig } : {}),
   });
 }
-

@@ -1,15 +1,19 @@
 import { NextResponse } from "next/server";
 import {
   deriveQuickRepliesWithTrace,
+  deriveQuickRepliesFromChoiceItems,
   deriveQuickRepliesFromConfig,
   deriveQuickReplyConfig,
   deriveRichMessageHtml,
+  type RuntimeChoiceItem,
   type RuntimeQuickReplyConfig,
 } from "./ui-responseDecorators";
 import { ENABLE_RUNTIME_TIMING, nowIso, type RuntimeTimingStage } from "../runtime/runtimeSupport";
 import {
   buildRuntimeResponseSchema,
+  extractRuntimeChoiceItems,
   extractRuntimeCards,
+  type RuntimeCard,
   type RuntimeResponderPayload,
   validateRuntimeResponseSchema,
 } from "./runtimeResponseSchema";
@@ -39,6 +43,29 @@ export function createRuntimeResponder(input: {
     getFirstTurnInSession,
   } = input;
   let timingLogged = false;
+
+  function buildCardsFromChoiceItems(items: RuntimeChoiceItem[]): RuntimeCard[] {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    return items
+      .filter((item) => String(item.image_url || "").trim() !== "")
+      .map((item) => {
+        const fields = Array.isArray(item.fields)
+          ? item.fields
+              .map((field) => `${String(field.label || "").trim()}: ${String(field.value || "").trim()}`)
+              .filter((line) => line.trim() !== "")
+          : [];
+        const description =
+          String(item.description || "").trim() || (fields.length > 0 ? fields.join("\n") : "");
+        return {
+          id: String(item.value || ""),
+          title: String(item.title || item.label || ""),
+          subtitle: String(item.subtitle || ""),
+          description,
+          image_url: item.image_url || null,
+          value: String(item.value || ""),
+        };
+      });
+  }
 
   return (payload: RuntimeResponderPayload, init?: ResponseInit) => {
     if (ENABLE_RUNTIME_TIMING && !timingLogged) {
@@ -95,33 +122,47 @@ export function createRuntimeResponder(input: {
         : null;
     const configDerivedQuickReplies = deriveQuickRepliesFromConfig(quickReplyConfig);
     const derivedQuickReplies = deriveQuickRepliesWithTrace(payload.message, quickReplyMax);
+    const choiceItems = extractRuntimeChoiceItems(payload);
+    const choiceDerivedQuickReplies = deriveQuickRepliesFromChoiceItems(choiceItems, quickReplyMax);
+    const explicitQuickReplies = Array.isArray(payload.quick_replies) ? payload.quick_replies : [];
     const quickReplies =
-      Array.isArray(payload.quick_replies) && payload.quick_replies.length > 0
-        ? payload.quick_replies
-        : configDerivedQuickReplies.length > 0
-          ? configDerivedQuickReplies
-          : derivedQuickReplies.quickReplies;
+      explicitQuickReplies.length > 0
+        ? explicitQuickReplies
+        : choiceDerivedQuickReplies.length > 0
+          ? choiceDerivedQuickReplies
+          : configDerivedQuickReplies.length > 0
+            ? configDerivedQuickReplies
+            : derivedQuickReplies.quickReplies;
     const resolvedQuickReplyConfig = quickReplyConfig || deriveQuickReplyConfig(payload.message, quickReplies);
     const richMessageHtml = deriveRichMessageHtml(payload.message);
-    const cards = extractRuntimeCards(payload);
+    const explicitCards = extractRuntimeCards(payload);
+    const choiceCards = buildCardsFromChoiceItems(choiceItems);
+    const cards = explicitCards.length > 0 ? explicitCards : choiceCards;
     const quickReplySource =
-      Array.isArray(payload.quick_replies) && payload.quick_replies.length > 0
+      explicitQuickReplies.length > 0
         ? { type: "explicit" as const, criteria: "payload:quick_replies" }
-        : configDerivedQuickReplies.length > 0
+        : choiceDerivedQuickReplies.length > 0
           ? {
-            type: "config" as const,
-            criteria: "payload:quick_reply_config",
-            source_function: "deriveQuickRepliesFromConfig",
+            type: "explicit" as const,
+            criteria: "payload:choice_items",
+            source_function: "deriveQuickRepliesFromChoiceItems",
             source_module: "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
           }
-          : derivedQuickReplies.quickReplies.length > 0
+          : configDerivedQuickReplies.length > 0
             ? {
-              type: "fallback" as const,
-              criteria: derivedQuickReplies.derivation?.criteria,
-              source_function: derivedQuickReplies.derivation?.source_function,
-              source_module: derivedQuickReplies.derivation?.source_module,
+              type: "config" as const,
+              criteria: "payload:quick_reply_config",
+              source_function: "deriveQuickRepliesFromConfig",
+              source_module: "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
             }
-            : { type: "none" as const };
+            : derivedQuickReplies.quickReplies.length > 0
+              ? {
+                type: "fallback" as const,
+                criteria: derivedQuickReplies.derivation?.criteria,
+                source_function: derivedQuickReplies.derivation?.source_function,
+                source_module: derivedQuickReplies.derivation?.source_module,
+              }
+              : { type: "none" as const };
     const RuntimeContextAny = getRuntimeContextAny();
     const currentSessionId = getCurrentSessionId();
     const currentTurnId = getLatestTurnId();
@@ -167,6 +208,7 @@ export function createRuntimeResponder(input: {
       quickReplies,
       quickReplyConfig: resolvedQuickReplyConfig || null,
       cards,
+      choiceItems,
       decidedView: renderPlan.view,
       decidedChoiceMode: renderPlan.selection_mode,
       decidedUiTypeId: renderPlan.ui_type_id,
@@ -211,6 +253,7 @@ export function createRuntimeResponder(input: {
         ...(richMessageHtml ? { rich_message_html: richMessageHtml } : {}),
         ...(quickReplies.length > 0 ? { quick_replies: quickReplies } : {}),
         ...(resolvedQuickReplyConfig ? { quick_reply_config: resolvedQuickReplyConfig } : {}),
+        ...(choiceItems.length > 0 ? { choice_items: choiceItems } : {}),
         response_schema: responseSchema,
         render_plan: renderPlan,
         ...(schemaValidation.ok ? {} : { response_schema_issues: schemaValidation.issues }),

@@ -8,6 +8,7 @@ import {
 } from "../policies/principles";
 import {
   buildAddressCandidateChoicePrompt,
+  buildAddressCandidateChoiceItems,
   buildAddressCandidateQuickReplies,
   extractAddressCandidatesFromSearchData,
 } from "../shared/addressCandidateUtils";
@@ -159,14 +160,14 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
   } = input;
 
   if (!shouldResolveZipcodeViaJusoWhenAddressGiven()) {
-    const directZipReply = makeReply("\uC6B0\uD3B8\uBC88\uD638\uB97C \uC54C\uB824\uC8FC\uC138\uC694.");
+    const directZipReply = makeReply("\uB3C4\uB85C\uBA85/\uC9C0\uBC88 \uC8FC\uC18C\uB97C \uC54C\uB824\uC8FC\uC138\uC694.");
     await insertEvent(
       context,
       sessionId,
       latestTurnId,
       "ADDRESS_FLOW_POLICY_DECISION",
       {
-        action: "REQUEST_ZIPCODE_DIRECT",
+        action: "REQUEST_ADDRESS_RETRY",
         reason: "PRINCIPLE_DISABLED_RESOLVE_ZIPCODE_VIA_JUSO",
       },
       { intent_name: resolvedIntent }
@@ -182,7 +183,8 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
         entity: policyContextEntity,
         selected_order_id: resolvedOrderId,
         address_pending: true,
-        address_stage: "awaiting_zipcode",
+        address_stage: "awaiting_address",
+        expected_input: "address",
         pending_address: currentAddress || null,
         customer_verification_token: customerVerificationToken,
         mcp_actions: mcpActions,
@@ -236,6 +238,7 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
       });
       const reply = makeReply(prompt);
       const quickReplies = buildAddressCandidateQuickReplies(candidates);
+      const choiceItems = buildAddressCandidateChoiceItems(candidates);
       const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
         optionsCount: quickReplies.length,
         criteria: choiceCriteria,
@@ -290,6 +293,7 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
         mcp_actions: mcpActions,
         quick_replies: quickReplies,
         quick_reply_config: quickReplyConfig,
+        choice_items: choiceItems,
       });
     }
     const first = candidates[0];
@@ -303,7 +307,7 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
         }))
     ) {
       const prompt = buildYesNoConfirmationPrompt(
-        `입력하신 주소를 확인했습니다.\n- 지번주소: ${first.jibun_addr || currentAddress}\n- 도로명주소: ${first.road_addr || "-"}\n- 우편번호: ${first.zip_no}\n위 정보가 맞는지 확인해 주세요.`,
+        `입력하신 주소를 확인했습니다.\n- 지번주소: ${first.jibun_addr || currentAddress}\n- 도로명주소: ${first.road_addr || "-"}\n- 우편번호: ${first.zip_no}\n위 정보가 맞는지 확인해주세요.`,
         { entity: policyContextEntity }
       );
       const reply = makeReply(prompt);
@@ -381,9 +385,7 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
       { intent_name: resolvedIntent }
     );
   }
-  const prompt = shouldRequireAddressRetryWhenZipcodeNotFound()
-    ? "입력하신 주소와 일치하는 결과를 찾지 못했습니다. 도로명/지번 주소를 다시 입력해 주세요."
-    : "입력하신 주소와 일치하는 결과를 찾지 못했습니다. 우편번호 5자리를 입력해 주세요.";
+  const prompt = "\uC785\uB825\uD558\uC2E0 \uC8FC\uC18C\uB85C \uC6B0\uD3B8\uBC88\uD638\uB97C \uCC3E\uC9C0 \uBABB\uD588\uC5B4\uC694. \uB3C4\uB85C\uBA85/\uC9C0\uBC88 \uC8FC\uC18C\uB97C \uB2E4\uC2DC \uC785\uB825\uD574\uC8FC\uC138\uC694.";
   const reply = makeReply(prompt);
   await insertTurn({
     session_id: sessionId,
@@ -396,7 +398,8 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
       entity: policyContextEntity,
       selected_order_id: resolvedOrderId,
       address_pending: true,
-      address_stage: shouldRequireAddressRetryWhenZipcodeNotFound() ? "awaiting_address_retry" : "awaiting_zipcode",
+      address_stage: "awaiting_address_retry",
+      expected_input: "address",
       pending_address: currentAddress || null,
       customer_verification_token: customerVerificationToken,
       mcp_actions: mcpActions,

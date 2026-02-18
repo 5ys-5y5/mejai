@@ -17,6 +17,8 @@ import { getDebugParts, renderBotContent } from "@/lib/conversation/messageRende
 import type { ConversationPageFeatures, ConversationSetupUi, ExistingSetupFieldKey, ExistingSetupLabelKey } from "@/lib/conversation/pageFeaturePolicy";
 import type { ChatMessage, ModelState, SetupMode } from "@/lib/conversation/client/laboratoryPageState";
 import { appendInlineKbSample, hasConflictingInlineKbSamples } from "@/lib/conversation/inlineKbSamples";
+import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
+import { applyDebugToggleSelection, DEBUG_COPY_TOGGLE_OPTIONS, resolveDebugToggleValues } from "@/lib/debugTranscriptToggle";
 
 // ------------------------------------------------------------
 // Unified conversation UI assembly file.
@@ -165,6 +167,8 @@ type AdminMenuProps = {
   onToggleLogs: () => void;
   onCopyConversation: () => void | boolean | Promise<void> | Promise<boolean>;
   onCopyIssue: () => void | boolean | Promise<void> | Promise<boolean>;
+  debugOptions?: DebugTranscriptOptions;
+  onUpdateDebugOptions?: (next: DebugTranscriptOptions) => void | Promise<void>;
   showSelectionToggle?: boolean;
   showLogsToggle?: boolean;
   showConversationCopy?: boolean;
@@ -182,6 +186,8 @@ export function ConversationAdminMenu({
   onToggleLogs,
   onCopyConversation,
   onCopyIssue,
+  debugOptions,
+  onUpdateDebugOptions,
   showSelectionToggle = true,
   showLogsToggle = true,
   showConversationCopy = true,
@@ -191,11 +197,16 @@ export function ConversationAdminMenu({
 }: AdminMenuProps) {
   const [copyState, setCopyState] = useState<"idle" | "copying" | "done">("idle");
   const copyResetRef = useRef<number | null>(null);
+  const [debugSaveState, setDebugSaveState] = useState<"idle" | "saving" | "done" | "error">("idle");
+  const debugResetRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
       if (copyResetRef.current) {
         window.clearTimeout(copyResetRef.current);
+      }
+      if (debugResetRef.current) {
+        window.clearTimeout(debugResetRef.current);
       }
     };
   }, []);
@@ -229,6 +240,28 @@ export function ConversationAdminMenu({
     ) : (
       <Copy className="h-3 w-3" />
     );
+  const debugToggleValues = debugOptions ? resolveDebugToggleValues(debugOptions) : [];
+  const showDebugOptions = Boolean(showConversationCopy && debugOptions && onUpdateDebugOptions);
+
+  const handleDebugToggleChange = async (values: string[]) => {
+    if (!debugOptions || !onUpdateDebugOptions) return;
+    const nextOptions = applyDebugToggleSelection(debugOptions, values);
+    setDebugSaveState("saving");
+    try {
+      await Promise.resolve(onUpdateDebugOptions(nextOptions));
+      setDebugSaveState("done");
+      if (debugResetRef.current) window.clearTimeout(debugResetRef.current);
+      debugResetRef.current = window.setTimeout(() => {
+        setDebugSaveState("idle");
+      }, 1800);
+    } catch {
+      setDebugSaveState("error");
+      if (debugResetRef.current) window.clearTimeout(debugResetRef.current);
+      debugResetRef.current = window.setTimeout(() => {
+        setDebugSaveState("idle");
+      }, 2400);
+    }
+  };
 
   return (
     <div className={cn("z-20", className)}>
@@ -242,7 +275,12 @@ export function ConversationAdminMenu({
         <Settings2 className="h-4 w-4" />
       </button>
       {open ? (
-        <div className="absolute right-0 mt-1 w-36 rounded-md border border-slate-200 bg-white p-1.5">
+        <div
+          className={cn(
+            "absolute right-0 mt-1 rounded-md border border-slate-200 bg-white p-2",
+            showDebugOptions ? "w-72" : "w-36"
+          )}
+        >
           {showSelectionToggle ? (
             <button
               type="button"
@@ -289,6 +327,30 @@ export function ConversationAdminMenu({
               <span>문제 로그 복사</span>
               <AlertTriangle className="h-3 w-3" />
             </button>
+          ) : null}
+          {showDebugOptions ? (
+            <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2">
+              <div className="mb-1 text-[11px] font-semibold text-slate-700">Debug Transcript</div>
+              <MultiSelectPopover
+                values={debugToggleValues}
+                onChange={handleDebugToggleChange}
+                options={DEBUG_COPY_TOGGLE_OPTIONS}
+                displayMode="count"
+                showBulkActions
+                className="w-full"
+                buttonClassName="h-8 text-[11px]"
+                panelClassName="z-50"
+              />
+              <div className="mt-1 text-[10px] text-slate-500">
+                {debugSaveState === "saving"
+                  ? "저장 중..."
+                  : debugSaveState === "done"
+                    ? "저장 완료"
+                    : debugSaveState === "error"
+                      ? "저장 실패"
+                      : " "}
+              </div>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -1313,6 +1375,8 @@ function ConversationModelChatColumnCore({
   onToggleLogs,
   onCopyConversation,
   onCopyIssue,
+  debugOptions,
+  onUpdateDebugOptions,
   onToggleMessageSelection,
   onSubmitMessage,
   onCollapse,
@@ -1378,6 +1442,8 @@ function ConversationModelChatColumnCore({
           }}
           onCopyConversation={onCopyConversation}
           onCopyIssue={onCopyIssue}
+          debugOptions={debugOptions}
+          onUpdateDebugOptions={onUpdateDebugOptions}
           showSelectionToggle={adminFeatures.selectionToggle}
           showLogsToggle={adminFeatures.logsToggle}
           showConversationCopy={adminFeatures.copyConversation}
@@ -1615,6 +1681,8 @@ type ConversationModelCardProps = {
   onChangeConversationMode: (id: string, mode: ConversationModelMode) => void;
   onCopyConversation: (id: string) => Promise<boolean> | boolean | Promise<void> | void;
   onCopyIssue: (id: string) => Promise<boolean> | boolean | Promise<void> | void;
+  conversationDebugOptions?: DebugTranscriptOptions;
+  onUpdateConversationDebugOptions?: (next: DebugTranscriptOptions) => void | Promise<void>;
   onToggleMessageSelection: (id: string, messageId: string) => void;
   onSubmitMessage: (id: string, text: string) => Promise<boolean> | boolean | Promise<void> | void;
   onExpand: (id: string) => void;
@@ -1870,6 +1938,8 @@ export type ConversationModelChatColumnLegoProps = {
   onToggleLogs: () => void;
   onCopyConversation: () => void | boolean | Promise<void> | Promise<boolean>;
   onCopyIssue: () => void | boolean | Promise<void> | Promise<boolean>;
+  debugOptions?: DebugTranscriptOptions;
+  onUpdateDebugOptions?: (next: DebugTranscriptOptions) => void | Promise<void>;
   onToggleMessageSelection: (messageId: string) => void;
   onSubmitMessage: (text: string) => void | boolean | Promise<void> | Promise<boolean>;
   onExpand: () => void;
@@ -1893,6 +1963,8 @@ export function ConversationModelChatColumnLego({
   onToggleLogs,
   onCopyConversation,
   onCopyIssue,
+  debugOptions,
+  onUpdateDebugOptions,
   onToggleMessageSelection,
   onSubmitMessage,
   onExpand,
@@ -1917,6 +1989,8 @@ export function ConversationModelChatColumnLego({
         onToggleLogs={onToggleLogs}
         onCopyConversation={onCopyConversation}
         onCopyIssue={onCopyIssue}
+        debugOptions={debugOptions}
+        onUpdateDebugOptions={onUpdateDebugOptions}
         onToggleMessageSelection={onToggleMessageSelection}
         onSubmitMessage={onSubmitMessage}
         onExpand={onExpand}
@@ -1985,6 +2059,8 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
     onChangeConversationMode,
     onCopyConversation,
     onCopyIssue,
+    conversationDebugOptions,
+    onUpdateConversationDebugOptions,
     onToggleMessageSelection,
     onSubmitMessage,
     onExpand,
@@ -2231,6 +2307,8 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
       })),
     onCopyConversation: () => onCopyConversation(model.id),
     onCopyIssue: () => onCopyIssue(model.id),
+    debugOptions: conversationDebugOptions,
+    onUpdateDebugOptions: onUpdateConversationDebugOptions,
     onToggleMessageSelection: (messageId) => onToggleMessageSelection(model.id, messageId),
     onSubmitMessage: (text) => onSubmitMessage(model.id, text),
     onExpand: () => onExpand(model.id),

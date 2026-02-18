@@ -1,6 +1,11 @@
 ﻿# AGENTS
 
 ## Prompt Standards
+## High Priority: Contract/Intent-Level Fixes
+
+- Any runtime or policy change must be designed at the contract/intent level so it generalizes across similar flows; do not implement case-specific patches that only fix one scenario.
+- When a flow mismatch occurs, update the shared contract/stage model and expectation logic so all intents with similar stages benefit.
+
 
 Use the following prompt when build or type errors repeat. It is designed to drive root-cause fixes instead of file-by-file hotfixes.
 

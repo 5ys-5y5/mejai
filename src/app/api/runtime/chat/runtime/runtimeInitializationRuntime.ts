@@ -1,4 +1,9 @@
 import { createRuntimePipelineState, type RuntimePipelineState } from "./runtimePipelineState";
+import {
+  resolveInputContractSnapshot,
+  resetInputContractOnMessage,
+  type InputContractConfig,
+} from "./inputContractRuntime";
 
 export function initializeRuntimeState(input: {
   message: string;
@@ -16,6 +21,7 @@ export function initializeRuntimeState(input: {
   deriveExpectedInputFromAnswer: (answer: string) => string | null;
   isRestockInquiry: (text: string) => boolean;
   isRestockSubscribe: (text: string) => boolean;
+  inputContractConfig?: InputContractConfig | null;
 }): {
   hasAllowedToolName: (name: string) => boolean;
   prevIntent: string | null;
@@ -31,6 +37,8 @@ export function initializeRuntimeState(input: {
   pipelineState: RuntimePipelineState;
   derivedChannel: string | null;
   expectedInput: string | null;
+  expectedInputs: string[];
+  expectedInputStage: string | null;
   expectedInputSource: string | null;
   customerVerificationToken: string | null;
   derivedOrderId: string | null;
@@ -133,19 +141,36 @@ export function initializeRuntimeState(input: {
       : typeof lastTurn?.answer_text === "string"
         ? lastTurn?.answer_text
         : "";
-  let initialExpectedInput = deriveExpectedInputFromAnswer(lastAnswer);
-  let expectedInputSource = initialExpectedInput ? "derived_from_last_answer" : null;
-  if (initialExpectedInput === "address" && /(환불|취소|반품|교환)/.test(message)) {
-    initialExpectedInput = null;
-    expectedInputSource = "reset_by_message_keyword";
-  }
+  const botContextExpectedInput =
+    typeof prevBotContext.expected_input === "string" ? String(prevBotContext.expected_input).trim() : null;
+  const derivedExpectedInput = botContextExpectedInput || deriveExpectedInputFromAnswer(lastAnswer);
+  let contractSnapshot = resolveInputContractSnapshot({
+    botContext: prevBotContext,
+    derivedExpectedInput,
+    contractConfig: input.inputContractConfig,
+  });
+  contractSnapshot = resetInputContractOnMessage({
+    message,
+    snapshot: contractSnapshot,
+    reason: "reset_by_message_keyword",
+  });
   if (isRestockInquiry(message) || isRestockSubscribe(message)) {
-    initialExpectedInput = null;
-    expectedInputSource = "reset_by_restock_intent";
+    contractSnapshot = {
+      expectedInputs: [],
+      expectedInput: null,
+      source: "reset_by_restock_intent",
+      stage: contractSnapshot.stage,
+    };
   }
+  const initialExpectedInput = contractSnapshot.expectedInput;
+  const expectedInputSource = contractSnapshot.source;
+  const expectedInputs = contractSnapshot.expectedInputs;
+  const expectedInputStage = contractSnapshot.stage;
   const pipelineState = createRuntimePipelineState({
     resolvedIntent,
     expectedInput: initialExpectedInput,
+    expectedInputs,
+    expectedInputStage,
     customerVerificationToken: initialCustomerVerificationToken,
     derivedChannel,
     derivedOrderId: initialDerivedOrderId,
@@ -170,6 +195,8 @@ export function initializeRuntimeState(input: {
     pipelineState,
     derivedChannel: pipelineState.derivedChannel,
     expectedInput: pipelineState.expectedInput,
+    expectedInputs: pipelineState.expectedInputs,
+    expectedInputStage: pipelineState.expectedInputStage,
     expectedInputSource,
     customerVerificationToken: pipelineState.customerVerificationToken,
     derivedOrderId: pipelineState.derivedOrderId,

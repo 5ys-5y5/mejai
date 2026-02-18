@@ -76,7 +76,7 @@ export type TranscriptMessage = {
 };
 
 export type DebugTranscriptOptions = {
-  outputMode?: "full" | "summary";
+  outputMode?: "full" | "summary" | "used_only";
   sections?: {
     header?: {
       enabled?: boolean;
@@ -104,6 +104,8 @@ export type DebugTranscriptOptions = {
       debug?: {
         enabled?: boolean;
         prefixJson?: boolean;
+        dedupeGlobalPrefixJson?: boolean;
+        usedOnly?: boolean;
         prefixJsonSections?: {
           requestMeta?: boolean;
           resolvedAgent?: boolean;
@@ -155,7 +157,7 @@ export type DebugTranscriptOptions = {
 };
 
 type NormalizedDebugTranscriptOptions = {
-  outputMode: "full" | "summary";
+  outputMode: "full" | "summary" | "used_only";
   auditBotScope: "all_bot_messages" | "runtime_turns_only";
   header: {
     enabled: boolean;
@@ -183,6 +185,8 @@ type NormalizedDebugTranscriptOptions = {
     debug: {
       enabled: boolean;
       prefixJson: boolean;
+      dedupeGlobalPrefixJson: boolean;
+      usedOnly: boolean;
       prefixJsonSections: {
         requestMeta: boolean;
         resolvedAgent: boolean;
@@ -228,7 +232,8 @@ const TRANSCRIPT_SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
 
 function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): NormalizedDebugTranscriptOptions {
   const input = options || {};
-  const outputMode = input.outputMode === "summary" ? "summary" : "full";
+  const outputMode =
+    input.outputMode === "summary" || input.outputMode === "used_only" ? input.outputMode : "full";
   const auditBotScope = input.auditBotScope === "all_bot_messages" ? "all_bot_messages" : "runtime_turns_only";
 
   const includePrincipleHeader = input.includePrincipleHeader ?? true;
@@ -283,6 +288,8 @@ function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): Norm
       debug: {
         enabled: sectionLogDebug?.enabled ?? true,
         prefixJson: sectionLogDebug?.prefixJson ?? true,
+        dedupeGlobalPrefixJson: sectionLogDebug?.dedupeGlobalPrefixJson ?? true,
+        usedOnly: sectionLogDebug?.usedOnly ?? outputMode === "used_only",
         prefixJsonSections: {
           requestMeta: sectionLogDebug?.prefixJsonSections?.requestMeta ?? true,
           resolvedAgent: sectionLogDebug?.prefixJsonSections?.resolvedAgent ?? true,
@@ -490,6 +497,105 @@ function filterPrefixJson(
   return filtered;
 }
 
+function pickUsedOnlyPrefix(prefix: Record<string, unknown>) {
+  const allowed = new Set([
+    "mcp",
+    "slot",
+    "slot_flow",
+    "intent_scope",
+    "policy_conflicts",
+    "decision",
+  ]);
+  const next: Record<string, unknown> = {};
+  Object.keys(prefix || {}).forEach((key) => {
+    if (allowed.has(key)) next[key] = prefix[key];
+  });
+  const mcp = (next.mcp || {}) as Record<string, unknown>;
+  if (Object.keys(mcp).length > 0) {
+    next.mcp = { last: (mcp as Record<string, unknown>).last || null };
+  }
+  return next;
+}
+
+function shouldUseCompactPrefix(
+  bundle: LogBundle | undefined,
+  turnId: string | null | undefined,
+  options: NormalizedDebugTranscriptOptions
+) {
+  if (!options.logs.debug.usedOnly) return false;
+  if (!bundle) return true;
+  if (!hasIssue(bundle, turnId)) return true;
+  const summary = buildIssueSummary(bundle, turnId);
+  return summary.length > 0;
+}
+
+function pruneMcpPrefix(prefix: Record<string, unknown>, options: NormalizedDebugTranscriptOptions) {
+  if (!options.logs.mcp.enabled) return prefix;
+  const next = { ...prefix };
+  const mcp = (next.mcp || {}) as Record<string, unknown>;
+  if (Object.keys(mcp).length === 0) return next;
+  const pruned = { ...mcp };
+  delete pruned.logs;
+  delete pruned.providers;
+  delete pruned.candidate_calls;
+  delete pruned.provider_config;
+  next.mcp = pruned;
+  return next;
+}
+
+type PrefixJsonDedupeState = {
+  seenResolvedAgent: boolean;
+  globalKeys: Set<string>;
+  seenGlobalKeys: Set<string>;
+};
+
+function applyPrefixJsonDedupe(prefix: Record<string, unknown>, state?: PrefixJsonDedupeState) {
+  if (!state) return prefix;
+  const next = { ...prefix };
+  if (Object.prototype.hasOwnProperty.call(next, "resolved_agent")) {
+    if (state.seenResolvedAgent) {
+      delete next.resolved_agent;
+    } else {
+      state.seenResolvedAgent = true;
+    }
+  }
+  Object.keys(next).forEach((key) => {
+    if (!state.globalKeys.has(key)) return;
+    if (state.seenGlobalKeys.has(key)) {
+      delete next[key];
+    } else {
+      state.seenGlobalKeys.add(key);
+    }
+  });
+  return next;
+}
+
+function getGlobalPrefixJsonKeys(messageLogs: Record<string, LogBundle>): Set<string> {
+  const allDebugLogs = Object.values(messageLogs || {}).flatMap((bundle) => bundle.debug_logs || []);
+  if (allDebugLogs.length < 2) return new Set();
+  const counts = new Map<string, { value: string; count: number; mismatch: boolean }>();
+  allDebugLogs.forEach((log) => {
+    const prefix = (log.prefix_json || {}) as Record<string, unknown>;
+    Object.keys(prefix).forEach((key) => {
+      const stable = makeStableJsonKey(prefix[key]);
+      const entry = counts.get(key);
+      if (!entry) {
+        counts.set(key, { value: stable, count: 1, mismatch: false });
+        return;
+      }
+      entry.count += 1;
+      if (entry.value !== stable) entry.mismatch = true;
+    });
+  });
+  const globalKeys = new Set<string>();
+  counts.forEach((entry, key) => {
+    if (!entry.mismatch && entry.count === allDebugLogs.length) {
+      globalKeys.add(key);
+    }
+  });
+  return globalKeys;
+}
+
 function extractDebugText(content: string) {
   if (typeof document === "undefined") return content;
   const holder = document.createElement("div");
@@ -650,7 +756,7 @@ function buildIssueSummary(bundle?: LogBundle, turnId?: string | null) {
   return Array.from(summary);
 }
 
-function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | undefined, options: NormalizedDebugTranscriptOptions) {
+function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | undefined, options: NormalizedDebugTranscriptOptions, prefixJsonDedupe?: PrefixJsonDedupeState) {
   if (!bundle) return "";
   const debugLogs = dedupeLogsByIdentity(
     turnId ? (bundle.debug_logs || []).filter((log) => log.turn_id === turnId) : (bundle.debug_logs || []),
@@ -749,12 +855,24 @@ function formatLogBundle(bundle: LogBundle | undefined, turnId: string | null | 
     debugLogs.forEach((log) => {
         lines.push(`- ${log.id || "-"} (turn_id=${log.turn_id || "-"}) (${log.created_at || "-"})`);
         if (options.logs.debug.prefixJson) {
-          lines.push("  prefix_json:");
-          const filtered = filterPrefixJson(
-            (log.prefix_json || {}) as Record<string, unknown>,
-            options.logs.debug.prefixJsonSections
+          const prefixJson = (log.prefix_json || {}) as Record<string, unknown>;
+          const compactPrefix = shouldUseCompactPrefix(bundle, turnId, options)
+            ? pickUsedOnlyPrefix(prefixJson)
+            : prefixJson;
+          const filtered = applyPrefixJsonDedupe(
+            pruneMcpPrefix(
+              filterPrefixJson(
+                compactPrefix,
+                options.logs.debug.prefixJsonSections
+              ),
+              options
+            ),
+            prefixJsonDedupe
           );
-          lines.push(indentBlock(stringifyPretty(filtered), 4));
+          if (Object.keys(filtered).length > 0) {
+            lines.push("  prefix_json:");
+            lines.push(indentBlock(stringifyPretty(filtered), 4));
+          }
         }
       });
     }
@@ -1189,7 +1307,7 @@ export function buildDebugTranscript(input: {
     } else if (!msg.responseSchema && !msg.renderPlan) {
       return answerText;
     }
-    const allowResponseSchemaDetail = normalized.outputMode === "full" && normalized.turn.responseSchemaDetail;
+    const allowResponseSchemaDetail = normalized.outputMode !== "summary" && normalized.turn.responseSchemaDetail;
     if (msg.responseSchema && (normalized.turn.responseSchemaSummary || allowResponseSchemaDetail)) {
       const schema = msg.responseSchema;
       const schemaView = schema.ui_hints?.view || "text";
@@ -1207,7 +1325,7 @@ export function buildDebugTranscript(input: {
         lines.push(indentBlock(stringifyPretty(filtered), 2));
       }
     }
-    const allowRenderPlanDetail = normalized.outputMode === "full" && normalized.turn.renderPlanDetail;
+    const allowRenderPlanDetail = normalized.outputMode !== "summary" && normalized.turn.renderPlanDetail;
     if (msg.renderPlan && (normalized.turn.renderPlanSummary || allowRenderPlanDetail)) {
       const plan = msg.renderPlan;
       if (normalized.turn.renderPlanSummary) {
@@ -1230,6 +1348,13 @@ export function buildDebugTranscript(input: {
     return lines.length > 0 ? lines.join("\n") : answerText;
   };
 
+  const prefixJsonDedupe: PrefixJsonDedupeState | undefined = normalized.logs.debug.dedupeGlobalPrefixJson
+    ? {
+        seenResolvedAgent: false,
+        globalKeys: getGlobalPrefixJsonKeys(input.messageLogs || {}),
+        seenGlobalKeys: new Set(),
+      }
+    : undefined;
   const turnBlocks: string[] = [];
   let bufferedUsers: TranscriptMessage[] = [];
   visibleMessages.forEach((msg) => {
@@ -1243,7 +1368,7 @@ export function buildDebugTranscript(input: {
     ].join("\n\n");
     const tokenUsedPrefix = normalized.turn.tokenUsed ? "[TOKEN_USED]\n\n" : "";
     const unusedLines = normalized.turn.enabled && normalized.turn.tokenUnused ? ["[TOKEN_UNUSED]"].join("\n") : "";
-    const logText = normalized.logs.enabled ? formatLogBundle(input.messageLogs[msg.id], msg.turnId, normalized) : "";
+    const logText = normalized.logs.enabled ? formatLogBundle(input.messageLogs[msg.id], msg.turnId, normalized, prefixJsonDedupe) : "";
     const turnId = normalized.turn.enabled && normalized.turn.turnId ? (msg.turnId ? `TURN_ID: ${msg.turnId}` : "TURN_ID: -") : "";
     const tail = logText ? `\n${logText}` : "";
     const bodyCore = `${tokenUsedPrefix}${turnBody}`;

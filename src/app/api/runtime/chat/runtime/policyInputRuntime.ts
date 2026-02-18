@@ -1,3 +1,5 @@
+import { deriveExpectedInputFromAnswer } from "./intentRuntime";
+
 export function reconcileIntentFromInputGate(input: {
   intentFromPolicy: string;
   resolvedIntent: string;
@@ -170,6 +172,7 @@ export async function handleInputForcedResponse(input: {
   } = input;
   if (!forcedResponse) return null;
   const forcedText = normalizeOrderChangeAddressPrompt(resolvedIntent, forcedResponse);
+  const inferredExpectedInput = deriveExpectedInputFromAnswer(forcedText);
   const reply = makeReply(forcedText);
   await insertTurn({
     session_id: sessionId,
@@ -181,6 +184,7 @@ export async function handleInputForcedResponse(input: {
       intent_name: resolvedIntent,
       entity: policyContext.entity,
       selected_order_id: resolvedOrderId,
+      expected_input: inferredExpectedInput || null,
     },
   });
   await insertEvent(context, sessionId, latestTurnId, "POLICY_DECISION", { stage: "input" }, { intent_name: resolvedIntent });

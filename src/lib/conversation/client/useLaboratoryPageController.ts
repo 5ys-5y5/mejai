@@ -10,6 +10,7 @@ import { useConversationMcpCatalog } from "@/lib/conversation/client/useConversa
 import { useLaboratoryConversationActions } from "@/lib/conversation/client/useLaboratoryConversationActions";
 import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
 import { buildCopyPayload, resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
+import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
 import { isAdminKbValue } from "@/lib/kbType";
 import {
@@ -112,6 +113,9 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
   const [models, setModels] = useState<ModelState[]>(() => [createDefaultModel()]);
   const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
   const [lockedReplySelections, setLockedReplySelections] = useState<Record<string, string[]>>({});
+  const [conversationDebugOptions, setConversationDebugOptions] = useState<DebugTranscriptOptions>(() =>
+    resolvePageConversationDebugOptions(pageKey, providerValue)
+  );
   const initialAgentSelectionAppliedRef = useRef(false);
   const chatScrollRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const leftPaneRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -940,8 +944,28 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     isAdminUser,
     pageKey,
   });
-  const conversationDebugOptions = useMemo(
-    () => resolvePageConversationDebugOptions(pageKey, providerValue),
+  useEffect(() => {
+    setConversationDebugOptions(resolvePageConversationDebugOptions(pageKey, providerValue));
+  }, [pageKey, providerValue]);
+
+  const updateConversationDebugOptions = useCallback(
+    async (next: DebugTranscriptOptions) => {
+      setConversationDebugOptions(next);
+      const merged = { ...(providerValue?.debug_copy || {}), [pageKey]: next };
+      try {
+        await apiFetch<{ ok?: boolean; error?: string }>("/api/auth-settings/providers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: "chat_policy",
+            values: { debug_copy: merged },
+            commit: true,
+          }),
+        });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "대화 복사 디버그 설정 저장에 실패했습니다.");
+      }
+    },
     [pageKey, providerValue]
   );
   const snapshotSyncSignatureRef = useRef<Record<string, string>>({});
@@ -1175,6 +1199,8 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     handleChangeConversationMode,
     handleCopyTranscript,
     handleCopyIssueTranscript,
+    conversationDebugOptions,
+    updateConversationDebugOptions,
     toggleMessageSelection,
     submitMessage: labActions.submitMessage,
     expandModelLayout,

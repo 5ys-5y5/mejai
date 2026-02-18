@@ -5,6 +5,7 @@ import type { CopyPageKey } from "@/lib/transcriptCopyPolicy";
 import type { DebugTranscriptOptions, LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 import {
+  fetchConversationDebugOptions,
   fetchSessionLogs,
   fetchTranscriptCopy,
   runConversation,
@@ -203,8 +204,13 @@ export function useConversationController(options: ControllerOptions) {
 
   const copyByKind = useCallback(
     async (kind: "conversation" | "issue", enabledOverride?: boolean, conversationDebugOptionsOverride?: DebugTranscriptOptions) => {
+      const latestDebugOptions =
+        kind === "conversation" ? await fetchConversationDebugOptions(options.page).catch(() => null) : null;
+      const effectiveDebugOptions = latestDebugOptions || conversationDebugOptionsOverride;
       let prebuiltTextOverride: string | null = null;
-      if (sessionId) {
+      const hasSelection = selectedMessageIds.length > 0;
+      const hasUnpersisted = messages.some((msg) => msg.role === "bot" && !msg.turnId);
+      if (sessionId && !hasSelection && !hasUnpersisted) {
         try {
           const serverCopy = await fetchTranscriptCopy({
             sessionId,
@@ -226,7 +232,7 @@ export function useConversationController(options: ControllerOptions) {
         selectedMessageIds,
         messageLogs,
         enabledOverride,
-        conversationDebugOptionsOverride,
+        conversationDebugOptionsOverride: effectiveDebugOptions || undefined,
         prebuiltTextOverride,
         onCopiedText: async (text) => {
           if (!sessionId) return;

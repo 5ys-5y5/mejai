@@ -155,7 +155,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           step: "confirm",
           message: reply,
           mcp_actions: [],
-          quick_replies: pendingCandidates.map((_, idx) => ({ label: `${idx + 1}번`, value: String(idx + 1) })),
+          quick_replies: pendingCandidates.map((_, idx) => ({ label: String(idx + 1), value: String(idx + 1) })),
           quick_reply_config: quickReplyConfig,
           product_cards: productCards,
         }),
@@ -165,7 +165,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
       };
     }
     if (isNoText(message)) {
-      const reply = makeReply("알겠습니다. 안내 대상 상품명을 입력해 주시면 해당 상품 기준으로 확인할게요.");
+      const reply = makeReply("알겠습니다. 재입고를 확인할 상품명을 알려주세요.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -178,6 +178,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           selected_order_id: prevSelectedOrderId,
           restock_pending: true,
           restock_stage: "awaiting_product",
+          expected_input: "product_query",
         },
       });
       await insertEvent(
@@ -257,7 +258,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
     const pendingChannel = String(prevBotContext.pending_channel || "").trim();
     if (isEndConversationText(message)) {
-      const reply = makeReply("대화를 종료합니다. 이용해 주셔서 감사합니다.");
+      const reply = makeReply("대화를 종료할게요. 다른 문의가 있으면 알려주세요.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -287,10 +288,15 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         { answer: reply, model: "deterministic_conversation_end" },
         { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, any> }
       );
-      return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }), resolvedIntent: nextResolvedIntent, restockSubscribeAcceptedThisTurn: nextAccepted, lockIntentToRestockSubscribe: nextLocked };
+      return {
+        response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }),
+        resolvedIntent: nextResolvedIntent,
+        restockSubscribeAcceptedThisTurn: nextAccepted,
+        lockIntentToRestockSubscribe: nextLocked,
+      };
     }
     if (isNoText(message)) {
-      const reply = makeReply("재입고 알림 신청을 진행하지 않았습니다. 필요하면 상품명을 다시 알려주세요.");
+      const reply = makeReply("재입고 알림 신청은 진행하지 않을게요. 다른 상품의 재입고도 필요하면 알려주세요.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -304,7 +310,12 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           pending_channel: pendingChannel || null,
         },
       });
-      return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }), resolvedIntent: nextResolvedIntent, restockSubscribeAcceptedThisTurn: nextAccepted, lockIntentToRestockSubscribe: nextLocked };
+      return {
+        response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }),
+        resolvedIntent: nextResolvedIntent,
+        restockSubscribeAcceptedThisTurn: nextAccepted,
+        lockIntentToRestockSubscribe: nextLocked,
+      };
     }
     if (isYesText(message) || isExecutionAffirmativeText(message) || isRestockSubscribe(message)) {
       nextAccepted = true;
@@ -313,7 +324,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     } else {
       const reply = makeReply(
         buildYesNoConfirmationPrompt(
-          `상품(${pendingProductName || pendingProductId || "-"})에 ${pendingChannel || "sms"} 채널로 재입고 알림을 신청할까요?`,
+          `상품(${pendingProductName || pendingProductId || "-"})을(를) ${pendingChannel || "sms"}로 재입고 알림 신청할까요?`,
           { botContext: prevBotContext, entity: prevEntity }
         )
       );
@@ -368,7 +379,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
       : [];
     const extractedPhone = normalizePhoneDigits(extractPhone(message));
     if (!extractedPhone) {
-      const reply = makeReply("재입고 알림 신청을 위해 휴대폰 번호를 알려주세요. (예: 01012345678)");
+      const reply = makeReply("재입고 알림을 받을 휴대폰 번호를 알려주세요. (예: 01012345678)");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -385,12 +396,18 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           pending_product_name: pendingProductName || null,
           pending_channel: pendingChannel,
           pending_lead_days: pendingLeadDays,
+          expected_input: "phone",
         },
       });
-      return { response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }), resolvedIntent: nextResolvedIntent, restockSubscribeAcceptedThisTurn: nextAccepted, lockIntentToRestockSubscribe: nextLocked };
+      return {
+        response: respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] }),
+        resolvedIntent: nextResolvedIntent,
+        restockSubscribeAcceptedThisTurn: nextAccepted,
+        lockIntentToRestockSubscribe: nextLocked,
+      };
     }
     const reply = makeReply(
-      buildYesNoConfirmationPrompt(`휴대폰 번호(${maskPhone(extractedPhone)})로 ${pendingChannel} 재입고 알림을 신청할까요?`, {
+      buildYesNoConfirmationPrompt(`휴대폰 번호(${maskPhone(extractedPhone)})로 ${pendingChannel} 재입고 알림을 받을까요?`, {
         botContext: prevBotContext,
         entity: prevEntity,
       })
@@ -489,6 +506,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           pending_channel: pendingChannel,
           available_lead_days: availableLeadDays,
           min_lead_days: minLeadDays,
+          expected_input: "restock_lead_days",
         },
       });
       return {
@@ -507,7 +525,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     }
     const reply = makeReply(
       buildYesNoConfirmationPrompt(
-        `선택하신 알림일(D-${selectedLeadDays.join(", D-")}) 기준으로 ${pendingChannel} 예약 알림을 신청할까요?`,
+        `선택하신 D-${selectedLeadDays.join(", D-")}부터 ${pendingChannel}로 알림을 받을까요?`,
         { botContext: prevBotContext, entity: prevEntity }
       )
     );
@@ -561,7 +579,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           .filter((n) => Number.isFinite(n))
       : [];
     if (isEndConversationText(message)) {
-      const reply = makeReply("대화를 종료합니다. 이용해 주셔서 감사합니다.");
+      const reply = makeReply("대화를 종료할게요. 다른 문의가 있으면 알려주세요.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -591,13 +609,18 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         { answer: reply, model: "deterministic_conversation_end" },
         { intent_name: nextResolvedIntent, entity: prevEntity as Record<string, any> }
       );
-      return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }), resolvedIntent: nextResolvedIntent, restockSubscribeAcceptedThisTurn: nextAccepted, lockIntentToRestockSubscribe: nextLocked };
+      return {
+        response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }),
+        resolvedIntent: nextResolvedIntent,
+        restockSubscribeAcceptedThisTurn: nextAccepted,
+        lockIntentToRestockSubscribe: nextLocked,
+      };
     }
     if (isYesText(message) || isExecutionAffirmativeText(message)) {
       nextAccepted = true;
       nextLocked = true;
     } else if (isNoText(message)) {
-      const reply = makeReply("재입고 알림 신청을 진행하지 않았습니다. 필요하면 상품명을 다시 알려주세요.");
+      const reply = makeReply("재입고 알림 신청은 진행하지 않을게요. 다른 상품의 재입고도 필요하면 알려주세요.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -611,11 +634,16 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           pending_channel: pendingChannel || null,
         },
       });
-      return { response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }), resolvedIntent: nextResolvedIntent, restockSubscribeAcceptedThisTurn: nextAccepted, lockIntentToRestockSubscribe: nextLocked };
+      return {
+        response: respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: [] }),
+        resolvedIntent: nextResolvedIntent,
+        restockSubscribeAcceptedThisTurn: nextAccepted,
+        lockIntentToRestockSubscribe: nextLocked,
+      };
     } else {
       const reply = makeReply(
         buildYesNoConfirmationPrompt(
-          `상품(${pendingProductName || pendingProductId || "-"})에 ${pendingChannel || "sms"} 채널로 재입고 알림을 신청할까요?`,
+          `상품(${pendingProductName || pendingProductId || "-"})을(를) ${pendingChannel || "sms"}로 재입고 알림 신청할까요?`,
           { botContext: prevBotContext, entity: prevEntity }
         )
       );
@@ -667,5 +695,3 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     lockIntentToRestockSubscribe: nextLocked,
   };
 }
-
-

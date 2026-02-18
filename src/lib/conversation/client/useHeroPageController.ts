@@ -8,6 +8,7 @@ import { useConversationController } from "@/lib/conversation/client/useConversa
 import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
 import { isEnabledByGate } from "@/lib/conversation/pageFeaturePolicy";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
+import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import {
   appendInlineKbSample,
   hasConflictingInlineKbSamples,
@@ -31,6 +32,9 @@ export function useHeroPageController() {
   const [adminLogControlsOpen, setAdminLogControlsOpen] = useState(false);
   const [chatSelectionEnabled, setChatSelectionEnabled] = useState(false);
   const [showAdminLogs, setShowAdminLogs] = useState(false);
+  const [conversationDebugOptions, setConversationDebugOptions] = useState<DebugTranscriptOptions>(() =>
+    resolvePageConversationDebugOptions("/", providerValue)
+  );
   const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
   const [lockedReplySelections, setLockedReplySelections] = useState<Record<string, string[]>>({});
   const [inlineKbSamples, setInlineKbSamples] = useState<InlineKbSampleItem[]>([]);
@@ -111,6 +115,10 @@ export function useHeroPageController() {
   }, [messages]);
 
   useEffect(() => {
+    setConversationDebugOptions(resolvePageConversationDebugOptions("/", providerValue));
+  }, [providerValue]);
+
+  useEffect(() => {
     if (!loadPlan.loadInlineKbSamples) {
       return;
     }
@@ -149,11 +157,29 @@ export function useHeroPageController() {
     return hasConflictingInlineKbSamples(contents);
   }, [inlineKbSampleSelectionOrder, sampleContentById]);
 
+  const updateConversationDebugOptions = useCallback(
+    async (next: DebugTranscriptOptions) => {
+      setConversationDebugOptions(next);
+      const merged = { ...(providerValue?.debug_copy || {}), "/": next };
+      try {
+        await apiFetch<{ ok?: boolean; error?: string }>("/api/auth-settings/providers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: "chat_policy",
+            values: { debug_copy: merged },
+            commit: true,
+          }),
+        });
+      } catch (err) {
+        // ignore on landing
+      }
+    },
+    [providerValue]
+  );
+
   const handleCopyTranscript = async () => {
-    await convo.copyConversation(
-      pageFeatures.adminPanel.copyConversation,
-      resolvePageConversationDebugOptions("/", providerValue)
-    );
+    await convo.copyConversation(pageFeatures.adminPanel.copyConversation, conversationDebugOptions);
   };
 
   const handleCopyIssueTranscript = async () => {
@@ -219,6 +245,8 @@ export function useHeroPageController() {
     setShowAdminLogs,
     handleCopyTranscript,
     handleCopyIssueTranscript,
+    conversationDebugOptions,
+    updateConversationDebugOptions,
     messages,
     selectedMessageIds,
     toggleMessageSelection,

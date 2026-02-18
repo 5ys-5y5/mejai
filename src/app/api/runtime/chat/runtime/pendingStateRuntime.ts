@@ -5,9 +5,12 @@ import {
   shouldRequireAddressRetryWhenZipcodeNotFound,
   shouldRequireJibunRoadZipTripleInChoice,
   shouldResolveZipcodeViaJusoWhenAddressGiven,
+  getSubstitutionPlan,
 } from "../policies/principles";
+import { resolveSubstitutionPrompt } from "./intentContractRuntime";
 import {
   buildAddressCandidateChoicePrompt,
+  buildAddressCandidateChoiceItems,
   buildAddressCandidateQuickReplies,
   extractAddressCandidatesFromSearchData,
   parseAddressCandidateSelection,
@@ -162,6 +165,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           selected_order_id: prevSelectedOrderId,
           address_pending: true,
           address_stage: "awaiting_address_retry",
+          expected_input: "address",
           pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
         },
       });
@@ -179,6 +183,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
       const prompt = buildAddressCandidateChoicePrompt({ candidates, originalAddress: pendingAddress });
       const reply = makeReply(prompt);
       const quickReplies = buildAddressCandidateQuickReplies(candidates);
+      const choiceItems = buildAddressCandidateChoiceItems(candidates);
       const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
         optionsCount: quickReplies.length,
         criteria: "state:awaiting_zipcode_choice",
@@ -212,6 +217,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           mcp_actions: [],
           quick_replies: quickReplies,
           quick_reply_config: quickReplyConfig,
+          choice_items: choiceItems,
         }),
         derivedOrderId: nextDerivedOrderId,
         derivedZipcode: nextDerivedZipcode,
@@ -267,6 +273,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           selected_order_id: prevSelectedOrderId,
           address_pending: true,
           address_stage: "awaiting_address_retry",
+          expected_input: "address",
           pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
         },
       });
@@ -426,14 +433,22 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
     const pendingZip = extractZipcode(message) || pendingStrictFive;
     if (!pendingZip) {
       if (!shouldResolveZipcodeViaJusoWhenAddressGiven()) {
-        const fallbackReply = makeReply("우편번호 5자리를 입력해 주세요.");
+        const substitution = resolveSubstitutionPrompt({
+          targetSlot: "zipcode",
+          intent: resolvedIntent,
+          plan: getSubstitutionPlan("zipcode"),
+          entity: prevEntity,
+        });
+        const prompt = substitution?.prompt || "도로명/지번 주소를 다시 입력해 주세요.";
+        const expectedInput = substitution?.askSlot || "address";
+        const fallbackReply = makeReply(prompt);
         await insertEvent(
           context,
           sessionId,
           latestTurnId,
           "ADDRESS_FLOW_POLICY_DECISION",
           {
-            action: "REQUEST_ZIPCODE_DIRECT",
+            action: "REQUEST_ADDRESS_SUBSTITUTE",
             reason: "PRINCIPLE_DISABLED_RESOLVE_ZIPCODE_VIA_JUSO",
           },
           { intent_name: resolvedIntent }
@@ -449,9 +464,10 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
             entity: prevEntity,
             selected_order_id: prevSelectedOrderId,
             address_pending: true,
-            address_stage: "awaiting_zipcode",
+            address_stage: "awaiting_address",
             pending_address: pendingAddress || null,
             pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
+            expected_input: expectedInput,
           },
         });
         return {
@@ -500,6 +516,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
             });
             const reply = makeReply(prompt);
             const quickReplies = buildAddressCandidateQuickReplies(candidates);
+            const choiceItems = buildAddressCandidateChoiceItems(candidates);
             const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
               optionsCount: quickReplies.length,
               criteria: "state:awaiting_zipcode_choice_from_search",
@@ -545,6 +562,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
                 mcp_actions: [],
                 quick_replies: quickReplies,
                 quick_reply_config: quickReplyConfig,
+                choice_items: choiceItems,
               }),
               derivedOrderId: nextDerivedOrderId,
               derivedZipcode: nextDerivedZipcode,
@@ -650,9 +668,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           );
         }
       }
-      const prompt = shouldRequireAddressRetryWhenZipcodeNotFound()
-        ? "입력하신 주소와 일치하는 결과를 찾지 못했습니다. 도로명/지번 주소를 다시 입력해 주세요."
-        : "입력하신 주소와 일치하는 결과를 찾지 못했습니다. 우편번호 5자리를 입력해 주세요.";
+      const prompt = "\uC785\uB825\uD558\uC2E0 \uC8FC\uC18C\uC640 \uC77C\uCE58\uD558\uB294 \uACB0\uACFC\uB97C \uCC3E\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4. \uB3C4\uB85C\uBA85/\uC9C0\uBC88 \uC8FC\uC18C\uB97C \uB2E4\uC2DC \uC785\uB825\uD574 \uC8FC\uC138\uC694.";
       const reply = makeReply(prompt);
       await insertTurn({
         session_id: sessionId,
@@ -665,7 +681,8 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           entity: prevEntity,
           selected_order_id: prevSelectedOrderId,
           address_pending: true,
-          address_stage: shouldRequireAddressRetryWhenZipcodeNotFound() ? "awaiting_address_retry" : "awaiting_zipcode",
+          address_stage: "awaiting_address_retry",
+          expected_input: "address",
           pending_order_id: isLikelyOrderId(pendingOrderId) ? pendingOrderId : null,
           pending_address: pendingAddress || null,
         },
@@ -803,6 +820,48 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           mcp_actions: [],
           quick_replies: YES_NO_QUICK_REPLIES,
           quick_reply_config: quickReplyConfig,
+        }),
+        derivedOrderId: nextDerivedOrderId,
+        derivedZipcode: nextDerivedZipcode,
+        derivedAddress: nextDerivedAddress,
+        updateConfirmAcceptedThisTurn: nextUpdateConfirmAccepted,
+        refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
+      };
+    }
+  }
+
+  const targetConfirmPending =
+    Boolean(prevBotContext.target_confirm_pending) ||
+    Boolean(prevBotContext.order_confirm_pending);
+  const targetConfirmStage = String(
+    prevBotContext.target_confirm_stage || prevBotContext.order_confirm_stage || ""
+  ).trim();
+  if (targetConfirmPending && targetConfirmStage === "awaiting_target_confirm") {
+    const targetKind = String(prevBotContext.target_confirm_kind || "order").trim() || "order";
+    const pendingOrderId = String(prevBotContext.pending_order_id || "").trim();
+    if (isYesText(message)) {
+      if (targetKind === "order" && isLikelyOrderId(pendingOrderId)) nextDerivedOrderId = pendingOrderId;
+    } else if (isNoText(message)) {
+      const reply = makeReply("알겠습니다. 주문 내역을 다시 찾을 수 있도록 주문 시 사용한 연락처나 상품 정보를 알려주세요.");
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: prevEntity,
+          selected_order_id: prevSelectedOrderId,
+          mcp_actions: [],
+        },
+      });
+      return {
+        response: respond({
+          session_id: sessionId,
+          step: "confirm",
+          message: reply,
+          mcp_actions: [],
         }),
         derivedOrderId: nextDerivedOrderId,
         derivedZipcode: nextDerivedZipcode,

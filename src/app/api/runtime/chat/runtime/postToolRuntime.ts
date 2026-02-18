@@ -28,6 +28,7 @@ export async function handlePostToolDeterministicFlows(input: Record<string, any
     listOrdersCalled,
     listOrdersEmpty,
     customerVerificationToken,
+    otpVerifiedThisTurn,
     callAddressSearchWithAudit,
     executionGuardRules,
     refundConfirmAcceptedThisTurn,
@@ -77,6 +78,7 @@ export async function handlePostToolDeterministicFlows(input: Record<string, any
     customerVerificationToken,
     resolvedOrderId,
     policyContext,
+    otpVerifiedThisTurn,
   });
   if (postToolGuards.response) {
     return { response: postToolGuards.response, resolvedOrderId, policyContext, mcpSummary };

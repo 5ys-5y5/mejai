@@ -24,6 +24,8 @@ type RuntimeStateSnapshot = {
   usedTemplateIds: string[];
   usedToolPolicies: string[];
   slotExpectedInput: string | null;
+  slotExpectedInputs?: string[];
+  slotExpectedInputStage?: string | null;
   slotOrderId: string | null;
   slotPhone: string | null;
   slotPhoneMasked: string;

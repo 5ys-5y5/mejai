@@ -12,17 +12,17 @@ type TemplateKey =
   | "numbered_choice_example";
 
 const DEFAULT_TEMPLATES: Record<TemplateKey, string> = {
-  confirm_yes_no_suffix: "맞으면 '네', 아니면 '아니오'를 입력해 주세요.",
-  intent_disambiguation_title: "요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)",
-  intent_disambiguation_example: "예: 1,2",
-  restock_lead_days_title: "예약 알림일을 선택해 주세요. (최소 {min}개)",
+  confirm_yes_no_suffix: "네/아니오로 답해주세요.",
+  intent_disambiguation_title: "원하시는 문의 유형을 선택해주세요. (번호로 답변)",
+  intent_disambiguation_example: "예) 1,2",
+  restock_lead_days_title: "재입고 알림을 언제부터 받을까요? (최소 {min}일 전)",
   restock_lead_days_selectable: "선택 가능: {options}",
-  restock_lead_days_example: "쉼표(,)로 입력해 주세요. 예: {example}",
-  restock_lead_days_retry_title: "알림일을 선택해 주세요. 현재 선택 가능한 값은 {options} 입니다.",
-  restock_product_choice_title: "유사한 상품이 여러 개입니다. 아래에서 번호를 선택해 주세요.",
-  order_choice_title: "조회된 주문이 여러 건입니다. 변경하실 주문을 번호로 선택해 주세요.",
-  order_choice_header: "아래 주문 중 번호를 선택해 주세요.",
-  numbered_choice_example: "예: 1",
+  restock_lead_days_example: "예) {example}",
+  restock_lead_days_retry_title: "선택이 부족해요. 최소 {min}개를 골라주세요. (가능: {options})",
+  restock_product_choice_title: "다음 중 어떤 상품의 재입고 알림을 원하시나요?",
+  order_choice_title: "다음 주문 중 어떤 주문을 조회/변경하시나요?",
+  order_choice_header: "주문 번호를 선택해주세요.",
+  numbered_choice_example: "예) 1",
 };
 
 type ResolveTemplateInput = {
@@ -196,4 +196,3 @@ export function buildNumberedChoicePrompt(input: {
   }
   return output.filter(Boolean).join("\n");
 }
-

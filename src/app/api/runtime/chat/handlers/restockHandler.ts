@@ -611,7 +611,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           message: reply,
           mcp_actions: mcpActions,
           quick_replies: candidateRows.map((candidate: RestockCandidateRow) => ({
-            label: `${candidate.index}번`,
+            label: String(candidate.index),
             value: String(candidate.index),
           })),
           quick_reply_config: quickReplyConfig,

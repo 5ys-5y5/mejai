@@ -51,6 +51,8 @@ export default function LaboratoryPage() {
     onChangeConversationMode: ctrl.handleChangeConversationMode,
     onCopyConversation: ctrl.handleCopyTranscript,
     onCopyIssue: ctrl.handleCopyIssueTranscript,
+    conversationDebugOptions: ctrl.conversationDebugOptions,
+    onUpdateConversationDebugOptions: ctrl.updateConversationDebugOptions,
     onToggleMessageSelection: ctrl.toggleMessageSelection,
     onSubmitMessage: ctrl.submitMessage,
     onExpand: ctrl.expandModelLayout,

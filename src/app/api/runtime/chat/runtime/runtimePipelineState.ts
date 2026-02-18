@@ -2,6 +2,8 @@ export type RuntimePipelineState = {
   resolvedIntent: string;
   resolvedOrderId: string | null;
   expectedInput: string | null;
+  expectedInputs: string[];
+  expectedInputStage: string | null;
   customerVerificationToken: string | null;
   derivedChannel: string | null;
   derivedOrderId: string | null;
@@ -41,6 +43,8 @@ export function createRuntimePipelineState(
     RuntimePipelineState,
     | "resolvedIntent"
     | "expectedInput"
+    | "expectedInputs"
+    | "expectedInputStage"
     | "customerVerificationToken"
     | "derivedChannel"
     | "derivedOrderId"

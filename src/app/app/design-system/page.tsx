@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState, type ComponentType, type ReactNode, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -74,6 +74,8 @@ import {
 import { cn } from "@/lib/utils";
 import { RENDER_POLICY } from "@/app/api/runtime/chat/policies/renderPolicy";
 import { getDefaultConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
+import { DEFAULT_CONVERSATION_DEBUG_OPTIONS } from "@/lib/transcriptCopyPolicy";
+import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
 import {
   createDefaultModel,
@@ -1120,6 +1122,9 @@ export function DesignSystemContent() {
   const [conversationAdminOpen, setConversationAdminOpen] = useState(false);
   const [conversationSelectionEnabled, setConversationSelectionEnabled] = useState(false);
   const [conversationShowLogs, setConversationShowLogs] = useState(false);
+  const [conversationDebugOptions, setConversationDebugOptions] = useState<DebugTranscriptOptions>(
+    () => structuredClone(DEFAULT_CONVERSATION_DEBUG_OPTIONS)
+  );
   const [conversationQuickReplyDrafts, setConversationQuickReplyDrafts] = useState<Record<string, string[]>>({});
   const [conversationLockedReplySelections, setConversationLockedReplySelections] = useState<Record<string, string[]>>({});
 
@@ -1411,6 +1416,8 @@ export function DesignSystemContent() {
     },
     onCopyConversation: () => undefined,
     onCopyIssue: () => undefined,
+    conversationDebugOptions,
+    onUpdateConversationDebugOptions: (next) => setConversationDebugOptions(next),
     onToggleMessageSelection: (_id, messageId) => {
       updateDemoModel((prev) => ({
         ...prev,
@@ -1609,6 +1616,8 @@ export function DesignSystemContent() {
               onToggleLogs={() => setConversationShowLogs((prev) => !prev)}
               onCopyConversation={() => undefined}
               onCopyIssue={() => undefined}
+              debugOptions={conversationDebugOptions}
+              onUpdateDebugOptions={(next) => setConversationDebugOptions(next)}
             />
           </div>
         </div>

@@ -8,6 +8,16 @@ export type RuntimeQuickReplyDerivation = {
   source_function: string;
   source_module: string;
 };
+export type RuntimeChoiceField = { label: string; value: string };
+export type RuntimeChoiceItem = {
+  value: string;
+  label: string;
+  title?: string;
+  subtitle?: string;
+  description?: string;
+  fields?: RuntimeChoiceField[];
+  image_url?: string | null;
+};
 export type RuntimeQuickReplyConfig = {
   selection_mode: "single" | "multi";
   min_select?: number;
@@ -16,6 +26,7 @@ export type RuntimeQuickReplyConfig = {
   criteria?: string;
   source_function?: string;
   source_module?: string;
+  preset?: "yes_no" | null;
 };
 
 export function deriveQuickRepliesWithTrace(
@@ -29,7 +40,7 @@ export function deriveQuickRepliesWithTrace(
   if (numberMatches.length > 0) {
     const uniq = numberMatches.slice(0, quickReplyMax);
     return {
-      quickReplies: uniq.map((n) => ({ label: `${n}번`, value: String(n) })),
+      quickReplies: uniq.map((n) => ({ label: String(n), value: String(n) })),
       derivation: {
         criteria: "decorator:numbered_options_text",
         source_function: "deriveQuickRepliesWithTrace",
@@ -54,6 +65,22 @@ export function deriveQuickRepliesWithTrace(
 
 export function deriveQuickReplies(message: unknown, quickReplyMax: number): RuntimeQuickReply[] {
   return deriveQuickRepliesWithTrace(message, quickReplyMax).quickReplies;
+}
+
+export function deriveQuickRepliesFromChoiceItems(
+  choiceItems: RuntimeChoiceItem[],
+  quickReplyMax: number
+): RuntimeQuickReply[] {
+  if (!Array.isArray(choiceItems) || choiceItems.length === 0) return [];
+  const limited = choiceItems.slice(0, Math.max(1, quickReplyMax));
+  return limited.map((item) => {
+    const value = String(item.value || "");
+    const numericValue = /^\d+$/.test(value);
+    return {
+      label: numericValue ? value : String(item.label || item.title || value || ""),
+      value,
+    };
+  });
 }
 
 export function deriveQuickReplyConfig(
@@ -82,6 +109,10 @@ export function deriveQuickReplyConfig(
 
 export function deriveQuickRepliesFromConfig(config: unknown): RuntimeQuickReply[] {
   if (!config || typeof config !== "object") return [];
+  const preset = String((config as Record<string, any>).preset || "").toLowerCase();
+  if (preset === "yes_no" || preset === "yes/no") {
+    return [...YES_NO_QUICK_REPLIES];
+  }
   const criteria = String((config as Record<string, any>).criteria || "").toLowerCase();
   if (criteria.includes("yes_no") || criteria.includes("yes/no")) {
     return [...YES_NO_QUICK_REPLIES];

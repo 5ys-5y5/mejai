@@ -1,4 +1,4 @@
-import type { RuntimeQuickReply, RuntimeQuickReplyConfig } from "./ui-responseDecorators";
+import type { RuntimeChoiceItem, RuntimeQuickReply, RuntimeQuickReplyConfig } from "./ui-responseDecorators";
 import type { RuntimeUiTypeId } from "@/components/design-system/conversation/runtimeUiCatalog";
 
 export type RuntimeUiHints = {
@@ -22,6 +22,7 @@ export type RuntimeResponseSchema = {
   quick_replies: RuntimeQuickReply[];
   quick_reply_config: RuntimeQuickReplyConfig | null;
   cards: RuntimeCard[];
+  choice_items?: RuntimeChoiceItem[];
 };
 
 export type RuntimeResponderPayload = Record<string, any> & {
@@ -29,6 +30,7 @@ export type RuntimeResponderPayload = Record<string, any> & {
   quick_replies?: RuntimeQuickReply[];
   quick_reply_config?: RuntimeQuickReplyConfig | null;
   product_cards?: RuntimeCard[];
+  choice_items?: RuntimeChoiceItem[];
 };
 
 export function extractRuntimeCards(payload: Record<string, any>) {
@@ -37,11 +39,17 @@ export function extractRuntimeCards(payload: Record<string, any>) {
   return productCards;
 }
 
+export function extractRuntimeChoiceItems(payload: Record<string, any>) {
+  const raw = payload["choice_items"];
+  return Array.isArray(raw) ? (raw as RuntimeChoiceItem[]) : [];
+}
+
 export function buildRuntimeResponseSchema(input: {
   message: unknown;
   quickReplies: RuntimeQuickReply[];
   quickReplyConfig: RuntimeQuickReplyConfig | null;
   cards: RuntimeCard[];
+  choiceItems: RuntimeChoiceItem[];
   decidedView: "text" | "choice" | "cards";
   decidedChoiceMode: "single" | "multi";
   decidedUiTypeId: RuntimeUiTypeId;
@@ -61,6 +69,7 @@ export function buildRuntimeResponseSchema(input: {
     quick_replies: quickReplies,
     quick_reply_config: quickReplyConfig,
     cards,
+    choice_items: input.choiceItems.length > 0 ? input.choiceItems : undefined,
   };
 }
 

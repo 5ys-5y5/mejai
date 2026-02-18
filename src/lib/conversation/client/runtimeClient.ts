@@ -1,7 +1,8 @@
 import { apiFetch } from "@/lib/apiClient";
-import type { LogBundle } from "@/lib/debugTranscript";
+import type { LogBundle, DebugTranscriptOptions } from "@/lib/debugTranscript";
 import type { RuntimeRunResponseLike } from "@/lib/runtimeResponseTranscript";
-import type { CopyPageKey } from "@/lib/transcriptCopyPolicy";
+import { resolvePageConversationDebugOptions, type CopyPageKey } from "@/lib/transcriptCopyPolicy";
+import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
 
 export type RuntimeRunResponse = RuntimeRunResponseLike & {
   session_id: string;
@@ -87,6 +88,23 @@ export async function fetchTranscriptCopy(input: {
       limit: input.limit,
     }),
   });
+}
+
+export async function fetchConversationDebugOptions(page: CopyPageKey): Promise<DebugTranscriptOptions | null> {
+  const path = "/api/auth-settings/providers?provider=chat_policy";
+  try {
+    const payload = await apiFetch<{ provider?: ConversationFeaturesProviderShape }>(path, { cache: "no-store" });
+    return resolvePageConversationDebugOptions(page, payload.provider || null);
+  } catch {
+    try {
+      const res = await fetch(path, { cache: "no-store" });
+      if (!res.ok) return null;
+      const payload = (await res.json()) as { provider?: ConversationFeaturesProviderShape };
+      return resolvePageConversationDebugOptions(page, payload.provider || null);
+    } catch {
+      return null;
+    }
+  }
 }
 
 export async function fetchWidgetTranscriptCopy(input: {

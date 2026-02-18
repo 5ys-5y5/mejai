@@ -36,6 +36,8 @@ type DebugSnapshot = {
   usedTemplateIds: string[];
   usedToolPolicies: string[];
   slotExpectedInput: string | null;
+  slotExpectedInputs?: string[];
+  slotExpectedInputStage?: string | null;
   slotOrderId: string | null;
   slotPhone: string | null;
   slotPhoneMasked: string;
@@ -175,8 +177,8 @@ type InsertTurnParams = {
   orgId?: string | null;
 };
 
-const ASK_ADDRESS_REGEX = /(주소|배송지).*(알려|입력|적어)/;
-const KOREAN_ADDRESS_REGEX = /(서울|경기|인천|부산|대구|광주|대전|울산|세종|제주|강원|충북|충남|전북|전남|경북|경남).*(구|군|시|동|읍|면|로|길)/;
+const ASK_ADDRESS_REGEX = /(주소|배송지|수령지|우편번호)/;
+const KOREAN_ADDRESS_REGEX = /([가-힣]+(시|군|구|동|읍|면|로|길)\s*\d{0,4})/;
 
 function nowIso() {
   return new Date().toISOString();

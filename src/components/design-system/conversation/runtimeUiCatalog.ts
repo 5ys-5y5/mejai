@@ -70,7 +70,7 @@ export function buildIntentDisambiguationTableHtmlFromText(message: unknown): st
   const title = lines[0];
   const itemRows = lines
     .map((line) => {
-      const match = line.match(/^-\s*(\d{1,2})번\s*\|\s*(.+)$/);
+      const match = line.match(/^-\s*(\d{1,2})\s*(?:\uBC88)?\s*\|\s*(.+)$/);
       if (!match) return null;
       const index = match[1];
       const cols = String(match[2] || "")
@@ -83,22 +83,38 @@ export function buildIntentDisambiguationTableHtmlFromText(message: unknown): st
     .filter((row): row is { index: string; cols: string[] } => Boolean(row));
   if (itemRows.length === 0) return null;
 
-  const example = lines.find((line) => /^예\s*:/.test(line)) || "";
+  const example = lines.find((line) => /^\uC608\s*:/.test(line)) || "";
+  const hasDetailColumn = itemRows.some((row) => row.cols.length > 1);
+  const headerPrimary = "\uBB38\uC758 \uC720\uD615";
+  const headerDetail = hasDetailColumn ? "\uC9C0\uC6D0 \uBC94\uC704" : "";
   const rowsHtml = itemRows
     .map((row) => {
       const name = row.cols[0] || "-";
-      const schedule = row.cols.slice(1).join(" | ") || "-";
-      return `<tr><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#0f172a;font-size:11px;font-weight:700;white-space:nowrap;">${escapeHtml(row.index)}</td><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:inherit;font-size:12px;line-height:1.35;">${escapeHtml(name)}</td><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;line-height:1.35;white-space:nowrap;">${escapeHtml(schedule)}</td></tr>`;
+      const detail = row.cols.slice(1).join(" | ") || "-";
+      if (!hasDetailColumn) {
+        return `<tr><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#0f172a;font-size:11px;font-weight:700;white-space:nowrap;">${escapeHtml(row.index)}</td><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:inherit;font-size:12px;line-height:1.35;">${escapeHtml(name)}</td></tr>`;
+      }
+      return `<tr><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#0f172a;font-size:11px;font-weight:700;white-space:nowrap;">${escapeHtml(row.index)}</td><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:inherit;font-size:12px;line-height:1.35;">${escapeHtml(name)}</td><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;line-height:1.35;white-space:nowrap;">${escapeHtml(detail)}</td></tr>`;
     })
     .join("");
 
   const exampleHtml = example
-    ? `<div style="margin-top:8px;color:inherit;"><strong>입력 예시</strong>: ${escapeHtml(
-        example.replace(/^예\s*:\s*/, "")
+    ? `<div style="margin-top:8px;color:inherit;"><strong>\uC608\uC2DC</strong>: ${escapeHtml(
+        example.replace(/^\uC608\s*:\s*/, "")
       )}</div>`
     : "";
 
+  const headerColumns = hasDetailColumn
+    ? `<tr><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:center;width:42px;">\uBC88\uD638</th><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:left;">${escapeHtml(
+        headerPrimary
+      )}</th><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:left;width:110px;">${escapeHtml(
+        headerDetail
+      )}</th></tr>`
+    : `<tr><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:center;width:42px;">\uBC88\uD638</th><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:left;">${escapeHtml(
+        headerPrimary
+      )}</th></tr>`;
+
   return `<div style="display:block;margin:0;padding:0;color:inherit;font:inherit;line-height:inherit;"><div style="margin:0;padding:0;color:inherit;font:inherit;line-height:inherit;">${escapeHtml(
     title
-  )}</div><div style="margin-top:4px;overflow:hidden;border:1px solid #e2e8f0;border-radius:8px;background:rgba(255,255,255,0.55);"><table style="width:100%;border-collapse:collapse;table-layout:fixed;color:inherit;font:inherit;margin:0;"><thead><tr><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:center;width:42px;">번호</th><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:left;">항목명</th><th style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#334155;font-size:10px;text-align:left;width:110px;">일정</th></tr></thead><tbody>${rowsHtml}</tbody></table></div>${exampleHtml}</div>`;
+  )}</div><div style="margin-top:4px;overflow:hidden;border:1px solid #e2e8f0;border-radius:8px;background:rgba(255,255,255,0.55);"><table style="width:100%;border-collapse:collapse;table-layout:fixed;color:inherit;font:inherit;margin:0;"><thead>${headerColumns}</thead><tbody>${rowsHtml}</tbody></table></div>${exampleHtml}</div>`;
 }

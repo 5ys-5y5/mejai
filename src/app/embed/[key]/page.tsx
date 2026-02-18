@@ -22,6 +22,7 @@ import {
 import { useConversationAdminStatus } from "@/lib/conversation/client/useConversationAdminStatus";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 import {
+  fetchConversationDebugOptions,
   fetchSessionLogs,
   fetchWidgetSessionLogs,
   fetchWidgetTranscriptCopy,
@@ -861,6 +862,11 @@ export default function WidgetEmbedPage() {
         toast.error("\ub300\ud654 \uae30\ub85d\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.");
         return false;
       }
+      const latestDebugOptions =
+        !widgetToken && kind === "conversation"
+          ? await fetchConversationDebugOptions(WIDGET_PAGE_KEY).catch(() => null)
+          : null;
+      const effectiveDebugOptions = latestDebugOptions || debugOptions;
       let mergedLogs = messageLogs;
       let prebuiltTextOverride: string | null = null;
       if (widgetToken) {
@@ -895,7 +901,7 @@ export default function WidgetEmbedPage() {
         messageLogs: mergedLogs,
         enabledOverride:
           kind === "conversation" ? pageFeatures.adminPanel.copyConversation : pageFeatures.adminPanel.copyIssue,
-        conversationDebugOptionsOverride: kind === "conversation" ? debugOptions : undefined,
+        conversationDebugOptionsOverride: kind === "conversation" ? effectiveDebugOptions : undefined,
         prebuiltTextOverride,
       });
     },

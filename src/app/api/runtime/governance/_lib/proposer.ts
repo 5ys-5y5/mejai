@@ -216,7 +216,7 @@ function qualityGateProposal(input: {
         how_to_improve:
           "Normalize address payload by splitting base address/address detail before update call (address1=base, address2=detail), then verify response structure.",
         rationale:
-          "Prefer API-structure-aware fix over prompt tuning (Café24 receiver uses structured fields address1/address2).",
+          "Prefer API-structure-aware fix over prompt tuning (Cafe24 receiver uses structured fields address1/address2).",
         target_files: [
           "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts",
           "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",

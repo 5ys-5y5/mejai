@@ -5,7 +5,11 @@ import { toast } from "sonner";
 import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 import { loadLaboratoryLogs, sendLaboratoryMessage, type LaboratoryRunConfig } from "@/lib/conversation/client/laboratoryTransport";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
-import { fetchTranscriptCopy, saveTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
+import {
+  fetchConversationDebugOptions,
+  fetchTranscriptCopy,
+  saveTranscriptSnapshot,
+} from "@/lib/conversation/client/runtimeClient";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import type { TranscriptMessage, LogBundle } from "@/lib/debugTranscript";
 import type { ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
@@ -350,8 +354,12 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
       if (!target) return false;
       const activeSessionId = resolveActiveSessionId(target);
       const viewMessages = visibleMessages(target);
+      const latestDebugOptions = await fetchConversationDebugOptions(pageKey).catch(() => null);
+      const effectiveDebugOptions = latestDebugOptions || conversationDebugOptionsOverride;
       let prebuiltTextOverride: string | null = null;
-      if (activeSessionId) {
+      const hasSelection = (target.selectedMessageIds || []).length > 0;
+      const hasUnpersisted = viewMessages.some((msg) => msg.role === "bot" && !msg.turnId);
+      if (activeSessionId && !hasSelection && !hasUnpersisted) {
         try {
           const serverCopy = await fetchTranscriptCopy({
             sessionId: activeSessionId,
@@ -373,7 +381,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         selectedMessageIds: target.selectedMessageIds || [],
         messageLogs: target.messageLogs || {},
         enabledOverride,
-        conversationDebugOptionsOverride,
+        conversationDebugOptionsOverride: effectiveDebugOptions || undefined,
         prebuiltTextOverride,
         blockedMessage: "이 페이지에서는 대화 복사를 지원하지 않습니다.",
         onCopiedText: async (text) => {

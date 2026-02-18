@@ -15,6 +15,7 @@ type DisambiguationParams = {
   detectIntentCandidates: (text: string) => string[];
   hasChoiceAnswerCandidates: (count: number) => boolean;
   intentLabel: (intent: string) => string;
+  intentSupportScope: (intent: string) => string;
   parseIndexedChoices: (text: string, max: number) => number[];
   isYesText: (text: string) => boolean;
   makeReply: (text: string) => string;
@@ -42,37 +43,70 @@ type DisambiguationResult = {
 function buildIntentDisambiguationPrompt(input: {
   options: string[];
   intentLabel: (intent: string) => string;
+  intentSupportScope: (intent: string) => string;
   prevBotContext: Record<string, any>;
 }) {
-  const defaultTitle = "요청이 모호해서 의도 확인이 필요합니다. 아래에서 선택해 주세요. (복수 선택 가능)";
-  const defaultExample = "예: 1,2";
-  const title = resolveRuntimeTemplate({
-    key: "intent_disambiguation_title",
-    botContext: {
-      ...(input.prevBotContext || {}),
-      template_intent_disambiguation_title: String(
-        (input.prevBotContext as Record<string, any>).intent_disambiguation_prompt_title || ""
-      ),
-    },
-  }) || defaultTitle;
-  const example = resolveRuntimeTemplate({
-    key: "intent_disambiguation_example",
-    botContext: {
-      ...(input.prevBotContext || {}),
-      template_intent_disambiguation_example: String(
-        (input.prevBotContext as Record<string, any>).intent_disambiguation_prompt_example || ""
-      ),
-    },
-  }) || defaultExample;
-  const lines = input.options.map((intent, idx) => `- ${idx + 1}번 | ${input.intentLabel(intent)}`);
+  const defaultTitle = "원하시는 문의 유형을 선택해주세요. (번호로 답변)";
+  const defaultExample = "예) 1,2";
+  const title =
+    resolveRuntimeTemplate({
+      key: "intent_disambiguation_title",
+      botContext: {
+        ...(input.prevBotContext || {}),
+        template_intent_disambiguation_title: String(
+          (input.prevBotContext as Record<string, any>).intent_disambiguation_prompt_title || ""
+        ),
+      },
+    }) || defaultTitle;
+  const example =
+    resolveRuntimeTemplate({
+      key: "intent_disambiguation_example",
+      botContext: {
+        ...(input.prevBotContext || {}),
+        template_intent_disambiguation_example: String(
+          (input.prevBotContext as Record<string, any>).intent_disambiguation_prompt_example || ""
+        ),
+      },
+    }) || defaultExample;
+  const lines = input.options.map((intent, idx) => {
+    const label = input.intentLabel(intent);
+    const scope = input.intentSupportScope(intent);
+    return `- ${idx + 1}번 | ${label}${scope ? ` | ${scope}` : ""}`;
+  });
   return `${title}\n${lines.join("\n")}\n${example}`;
 }
 
-function buildIndexedQuickReplies(options: string[], intentLabel: (intent: string) => string) {
+function buildIndexedQuickReplies(
+  options: string[],
+  intentLabel: (intent: string) => string,
+  intentSupportScope: (intent: string) => string
+) {
   return options.map((intent, idx) => ({
-    label: `${idx + 1}번 | ${intentLabel(intent)}`,
+    label: String(idx + 1),
     value: String(idx + 1),
   }));
+}
+
+function buildIntentDisambiguationChoiceItems(
+  options: string[],
+  intentLabel: (intent: string) => string,
+  intentSupportScope: (intent: string) => string
+) {
+  return options.map((intent, idx) => {
+    const label = intentLabel(intent);
+    const scope = intentSupportScope(intent);
+    const fields = [
+      { label: "항목", value: label },
+      ...(scope ? [{ label: "지원 범위", value: scope }] : []),
+    ];
+    return {
+      value: String(idx + 1),
+      label: `${idx + 1}번 | ${label}${scope ? ` | ${scope}` : ""}`,
+      title: label,
+      description: scope || "",
+      fields,
+    };
+  });
 }
 
 function resolveIntentDisambiguationQuickReplyConfig(input: {
@@ -85,7 +119,7 @@ function resolveIntentDisambiguationQuickReplyConfig(input: {
   const configuredMaxRaw = Number(prevContext.intent_disambiguation_max_select ?? 0);
   const explicitMode = prevContext.intent_disambiguation_mode;
   const explicitMulti = Boolean(prevContext.intent_disambiguation_multi === true);
-  const connectorSignal = /(,|\/|그리고|및|and)/i.test(String(input.sourceText || ""));
+  const connectorSignal = /(,|\/|그리고|또는|and)/i.test(String(input.sourceText || ""));
   return resolveQuickReplyConfig({
     optionsCount: input.options.length,
     minSelectHint: configuredMinRaw,
@@ -123,6 +157,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
     detectIntentCandidates,
     hasChoiceAnswerCandidates,
     intentLabel,
+    intentSupportScope,
     parseIndexedChoices,
     isYesText,
     makeReply,
@@ -152,6 +187,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
         buildIntentDisambiguationPrompt({
           options,
           intentLabel,
+          intentSupportScope,
           prevBotContext,
         })
       );
@@ -160,7 +196,8 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
         prevBotContext,
         sourceText: intentDisambiguationSourceText || message,
       });
-      const quickReplies = buildIndexedQuickReplies(options, intentLabel);
+      const quickReplies = buildIndexedQuickReplies(options, intentLabel, intentSupportScope);
+      const choiceItems = buildIntentDisambiguationChoiceItems(options, intentLabel, intentSupportScope);
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -188,6 +225,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
           mcp_actions: [],
           quick_replies: quickReplies,
           quick_reply_config: quickReplyConfig,
+          choice_items: choiceItems,
         }),
       };
     }
@@ -209,7 +247,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
           .map((v) => String(v))
           .filter(Boolean)
       : [];
-    if (queuedIntents.length > 0 && (isYesText(message) || /다음|계속/.test(message))) {
+    if (queuedIntents.length > 0 && (isYesText(message) || /계속|진행|다음/.test(message))) {
       forcedIntentQueue = [queuedIntents[0]];
       pendingIntentQueue = queuedIntents.slice(1);
     }
@@ -219,6 +257,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
         buildIntentDisambiguationPrompt({
           options: candidates,
           intentLabel,
+          intentSupportScope,
           prevBotContext,
         })
       );
@@ -227,7 +266,8 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
         prevBotContext,
         sourceText: message,
       });
-      const quickReplies = buildIndexedQuickReplies(candidates, intentLabel);
+      const quickReplies = buildIndexedQuickReplies(candidates, intentLabel, intentSupportScope);
+      const choiceItems = buildIntentDisambiguationChoiceItems(candidates, intentLabel, intentSupportScope);
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -271,6 +311,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
           mcp_actions: [],
           quick_replies: quickReplies,
           quick_reply_config: quickReplyConfig,
+          choice_items: choiceItems,
         }),
       };
     }
@@ -303,5 +344,3 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
     response: null,
   };
 }
-
-

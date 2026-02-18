@@ -1,14 +1,15 @@
-const RESTOCK_KEYWORDS = /재입고|입고|재고|품절|다시\s*입고|다시\s*들어|재판매/;
+const RESTOCK_KEYWORDS = /(재입고|재고|입고|품절|restock|stock)/i;
+const RESTOCK_SUBSCRIBE_KEYWORDS = /(알림|신청|구독|예약|notify|subscribe|sms|문자|카톡|카카오|email|이메일)/i;
+const ORDER_CHANGE_KEYWORDS =
+  /(?:배송지|주소|수령지)\s*(?:변경|수정|바꾸|바꿔|교체|업데이트)|(?:변경|수정)\s*(?:배송지|주소|수령지)/i;
+const SHIPPING_KEYWORDS = /(배송|출고|운송장|송장|배송조회|배송\s*상태|배송\s*언제|도착|지연)/i;
+const REFUND_KEYWORDS = /(환불|반품|교환|취소)/i;
+const FAQ_KEYWORDS = /(문의|질문|faq|사용법|방법|안내|가능한가|알려줘)/i;
 
 const RESTOCK_LEAD_DAY_OPTIONS = [1, 2, 3, 7, 14] as const;
 
 export function isRestockSubscribe(text: string) {
-  return (
-    RESTOCK_KEYWORDS.test(text) &&
-    /(알림|신청|예약|구독|등록|받고|받을|문자|sms|카카오|카톡|이메일|메일|입고되면|재입고되면|notify|subscribe)/i.test(
-      text
-    )
-  );
+  return RESTOCK_KEYWORDS.test(text) && RESTOCK_SUBSCRIBE_KEYWORDS.test(text);
 }
 
 export function isRestockInquiry(text: string) {
@@ -18,10 +19,9 @@ export function isRestockInquiry(text: string) {
 export function detectIntent(text: string) {
   if (isRestockSubscribe(text)) return "restock_subscribe";
   if (isRestockInquiry(text)) return "restock_inquiry";
-  if (/주소|배송지|수령인|연락처/.test(text)) return "order_change";
-  if (/조회|확인/.test(text) && /배송|송장|출고|운송장/.test(text)) return "shipping_inquiry";
-  if (/배송|송장|출고|운송장|배송조회/.test(text)) return "shipping_inquiry";
-  if (/환불|취소|반품|교환/.test(text)) return "refund_request";
+  if (isAddressChangeUtterance(text)) return "order_change";
+  if (SHIPPING_KEYWORDS.test(text)) return "shipping_inquiry";
+  if (REFUND_KEYWORDS.test(text)) return "refund_request";
   return "general";
 }
 
@@ -29,9 +29,10 @@ export function detectIntentCandidates(text: string) {
   const out: string[] = [];
   if (isRestockSubscribe(text)) out.push("restock_subscribe");
   if (isRestockInquiry(text)) out.push("restock_inquiry");
-  if (/문의|문의사항|질문|도움|상담/.test(text)) out.push("faq");
-  if (/주소|배송지|수령인|연락처/.test(text)) out.push("order_change");
-  if (/환불|취소|반품|교환/.test(text)) out.push("refund_request");
+  if (FAQ_KEYWORDS.test(text)) out.push("faq");
+  if (isAddressChangeUtterance(text)) out.push("order_change");
+  if (REFUND_KEYWORDS.test(text)) out.push("refund_request");
+  if (SHIPPING_KEYWORDS.test(text)) out.push("shipping_inquiry");
   if (out.length === 0) out.push("general");
   return Array.from(new Set(out));
 }
@@ -39,25 +40,43 @@ export function detectIntentCandidates(text: string) {
 export function intentLabel(intent: string) {
   switch (intent) {
     case "restock_inquiry":
-      return "재입고 일정 안내";
+      return "재입고 문의";
     case "restock_subscribe":
       return "재입고 알림 신청";
     case "faq":
-      return "일반 문의";
+      return "FAQ 문의";
     case "order_change":
       return "배송지 변경";
     case "refund_request":
-      return "취소/환불";
+      return "환불/반품";
+    case "shipping_inquiry":
+      return "배송 문의";
     default:
-      return "기타 문의";
+      return "일반 문의";
+  }
+}
+
+export function intentSupportScope(intent: string) {
+  switch (intent) {
+    case "restock_inquiry":
+      return "재입고 일정 확인";
+    case "restock_subscribe":
+      return "재입고 알림 신청";
+    case "faq":
+      return "이용/정책/일반 문의";
+    case "order_change":
+      return "배송지/수령인 정보 변경";
+    case "refund_request":
+      return "취소/반품/환불";
+    case "shipping_inquiry":
+      return "배송 상태/송장 조회";
+    default:
+      return "";
   }
 }
 
 export function isAddressChangeUtterance(text: string) {
-  const v = String(text || "");
-  return /(주소|배송지|수령지|받는\s*곳).*(바꿔|바꾸|변경|수정|고쳐|옮겨)|(?:바꿔|바꾸|변경|수정|고쳐|옮겨).*(주소|배송지|수령지|받는\s*곳)/.test(
-    v
-  );
+  return ORDER_CHANGE_KEYWORDS.test(String(text || ""));
 }
 
 export function toOrderDateShort(value: string | null | undefined) {
@@ -87,31 +106,31 @@ export function toMoneyText(value: unknown) {
 export function isYesText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
-  return /^(네|네요|예|예요|응|응응|맞아|맞아요|맞습니다|yes|y)$/.test(v);
+  return /^(네|예|응|그래|맞아|맞아요|맞습니다|좋아요|가능|ㅇㅇ|ok|okay|yes|y)$/.test(v);
 }
 
 export function isNoText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
-  return /^(아니|아니오|아니요|아뇨|no|n)$/.test(v);
+  return /^(아니요|아니|아니오|싫어요|안돼|불가|no|n)$/.test(v);
 }
 
 export function isExecutionAffirmativeText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
-  return /(도와|도움|진행|해줘|해주세요|부탁|신청할래|신청할게|신청해|예약해|등록해|알림해|해볼게|할래요|할게요)/.test(v);
+  return /(진행|처리|신청|접수|해주세요|해줘|바로|확인|할게|할래)/i.test(v);
 }
 
 export function isEndConversationText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
-  return /^(대화\s*종료|종료|끝|그만|close|end)$/.test(v) || isNoText(v);
+  return /^(종료|끝|그만|닫아|대화 종료|상담 종료|close|end)$/i.test(v) || isNoText(v);
 }
 
 export function isOtherInquiryText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
-  return /^(다른\s*문의|다른문의|추가\s*문의|계속|other|new)$/.test(v);
+  return /^(다른 문의|다른 질문|다른 내용|새 문의|새 질문|다른 거|other|new)$/i.test(v);
 }
 
 export function parseSatisfactionScore(text: string) {
@@ -125,14 +144,14 @@ export function parseSatisfactionScore(text: string) {
 
 export function extractRestockChannel(text: string) {
   const v = String(text || "");
-  if (/카카오|카톡/.test(v)) return "kakao";
-  if (/이메일|메일|email/i.test(v)) return "email";
-  if (/문자|sms/i.test(v)) return "sms";
+  if (/(카카오|카톡|kakao)/i.test(v)) return "kakao";
+  if (/(이메일|email)/i.test(v)) return "email";
+  if (/(문자|sms)/i.test(v)) return "sms";
   return null;
 }
 
 export function parseIndexedChoice(text: string) {
-  const m = String(text || "").trim().match(/^(\d{1,2})\s*번?$/);
+  const m = String(text || "").trim().match(/^(\d{1,2})\s*(?:번|번요)?$/);
   if (!m) return null;
   const idx = Number(m[1]);
   return Number.isFinite(idx) && idx > 0 ? idx : null;
@@ -155,13 +174,13 @@ export function availableRestockLeadDays(diffDays: number) {
 export function parseLeadDaysSelection(text: string, available: number[]) {
   const raw = String(text || "").trim();
   if (!raw) return [];
-  if (/전체|all|모두/i.test(raw)) return [...available];
+  if (/(모두|전체|전부|all)/i.test(raw)) return [...available];
   const picked = Array.from(new Set((raw.match(/\d{1,2}/g) || []).map((v) => Number(v)).filter(Number.isFinite)));
   return picked.filter((n) => available.includes(n)).sort((a, b) => a - b);
 }
 
 export function extractNumberedOptionIndicesFromText(text: string, max = 99) {
-  const values = Array.from(String(text || "").matchAll(/-\s*(\d{1,2})번\s*\|/g))
+  const values = Array.from(String(text || "").matchAll(/-\s*(\d{1,2})\s*(?:번)?\s*\|/g))
     .map((m) => Number(m[1]))
     .filter((n) => Number.isFinite(n) && n >= 1 && n <= max);
   return Array.from(new Set(values));
@@ -169,7 +188,7 @@ export function extractNumberedOptionIndicesFromText(text: string, max = 99) {
 
 export function extractLeadDayOptionsFromText(text: string, max = 31) {
   const raw = String(text || "");
-  const hasLeadDaySignal = /(선택 가능|알림일|쉼표|D-)/.test(raw);
+  const hasLeadDaySignal = /D-\d{1,2}/.test(raw);
   if (!hasLeadDaySignal) return [];
   const values = Array.from(raw.matchAll(/D-(\d{1,2})/g))
     .map((m) => Number(m[1]))

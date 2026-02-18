@@ -3,6 +3,7 @@ import type { RuntimeTimingStage } from "./runtimeSupport";
 type SlotDerivationParams = {
   message: string;
   expectedInput: string | null;
+  expectedInputs: string[];
   resolvedIntent: string;
   agentLlm: "chatgpt" | "gemini" | null;
   timingStages: RuntimeTimingStage[];
@@ -46,6 +47,7 @@ export async function deriveSlotsForTurn(params: SlotDerivationParams): Promise<
   const {
     message,
     expectedInput,
+    expectedInputs,
     resolvedIntent,
     agentLlm,
     timingStages,
@@ -64,41 +66,43 @@ export async function deriveSlotsForTurn(params: SlotDerivationParams): Promise<
   let nextZipcode = params.derivedZipcode;
   let nextAddress = params.derivedAddress;
   let nextResolvedIntent = resolvedIntent;
+  const restricted = expectedInputs.length > 0;
+  const expectedSet = new Set(expectedInputs.map((item) => String(item || "").trim()).filter(Boolean));
 
-  if (expectedInput === "otp_code") {
+  if (expectedSet.has("otp_code")) {
     nextOrderId = null;
     nextPhone = null;
     nextZipcode = null;
     nextAddress = null;
-  } else if (expectedInput === "zipcode") {
+  } else if (expectedSet.has("zipcode") || expectedInput === "zipcode") {
     nextOrderId = null;
     nextPhone = null;
     nextAddress = null;
     const rawDigits = message.replace(/[^\d]/g, "");
     const strictFive = /^\d{5}$/.test(rawDigits) ? rawDigits : null;
     nextZipcode = extractZipcode(message) || strictFive || null;
-  } else if (expectedInput === "phone") {
+  } else if (expectedSet.has("phone") || expectedInput === "phone") {
     nextOrderId = null;
     nextZipcode = null;
     nextAddress = null;
     nextPhone = extractPhone(message);
-  } else if (expectedInput === "order_id") {
+  } else if (expectedSet.has("order_id") || expectedInput === "order_id") {
     nextPhone = null;
     nextZipcode = null;
     nextAddress = null;
     nextOrderId = extractOrderId(message);
-  } else if (expectedInput === "address") {
+  } else if (expectedSet.has("address") || expectedInput === "address") {
     nextOrderId = null;
     nextPhone = null;
     nextZipcode = extractZipcode(message);
-    const cleaned = message.replace(/^(주소|배송지)\s*[:\-]?\s*/g, "").trim();
+    const cleaned = message.replace(/^(address|addr|shipping address)\s*[:\-]?\s*/i, "").trim();
     const extractedAddress = extractAddress(message, null, null, nextZipcode) || cleaned || null;
     if (extractedAddress && isLikelyAddressDetailOnly(extractedAddress)) {
       nextAddress = extractAddressDetail(extractedAddress) || extractedAddress;
     } else {
       nextAddress = extractedAddress;
     }
-  } else if (expectedInput === "order_id_or_phone") {
+  } else if (expectedSet.has("order_id") && expectedSet.has("phone")) {
     nextZipcode = null;
     nextAddress = null;
     const phone = extractPhone(message);
@@ -109,8 +113,12 @@ export async function deriveSlotsForTurn(params: SlotDerivationParams): Promise<
       nextOrderId = extractOrderId(message);
       nextPhone = null;
     }
+  } else if (restricted) {
+    nextOrderId = null;
+    nextPhone = null;
+    nextZipcode = null;
+    nextAddress = null;
   }
-
   if (!nextOrderId && !nextPhone && message.length > 8 && !expectedInput && agentLlm) {
     const extractEntityLlmStartedAt = Date.now();
     const llmExt = await extractEntitiesWithLlm(message, agentLlm);
@@ -138,4 +146,5 @@ export async function deriveSlotsForTurn(params: SlotDerivationParams): Promise<
     resolvedIntent: nextResolvedIntent,
   };
 }
+
 

@@ -1,3 +1,5 @@
+import { shouldRequireBeforeAfterSummaryForMutations } from "../policies/principles";
+
 export type MutationIntentContract = {
   intent: string;
   mutationTool: string;
@@ -7,6 +9,69 @@ export type MutationIntentContract = {
   debugReason: string;
   debugNextAction: string;
 };
+
+export type IntentContract = {
+  intent: string;
+  reuseSlots?: string[];
+  preventEscalation?: boolean;
+  slotLabels?: Record<string, string>;
+};
+
+export type SlotContract = {
+  key: string;
+  label: string;
+};
+
+export type SubstitutionPlan = {
+  target: string;
+  ask: readonly string[];
+  tools: readonly string[];
+  requires: readonly string[];
+};
+
+const SLOT_CONTRACTS: SlotContract[] = [
+  { key: "order_id", label: "\uC8FC\uBB38\uBC88\uD638" },
+  { key: "phone", label: "\uC5F0\uB77D\uCC98" },
+  { key: "address", label: "\uBC30\uC1A1\uC9C0" },
+  { key: "zipcode", label: "\uC6B0\uD3B8\uBC88\uD638" },
+  { key: "email", label: "\uC774\uBA54\uC77C" },
+  { key: "name", label: "\uC218\uB839\uC778" },
+  { key: "channel", label: "\uC5F0\uB77D \uCC44\uB110" },
+  { key: "product", label: "\uC0C1\uD488" },
+];
+
+const INTENT_CONTRACTS: IntentContract[] = [
+  {
+    intent: "order_change",
+    reuseSlots: ["order_id", "phone", "address", "zipcode"],
+    preventEscalation: true,
+  },
+  {
+    intent: "refund_request",
+    reuseSlots: ["order_id", "phone"],
+    preventEscalation: true,
+  },
+  {
+    intent: "shipping_inquiry",
+    reuseSlots: ["order_id", "phone"],
+  },
+  {
+    intent: "restock_inquiry",
+    reuseSlots: ["product", "channel"],
+  },
+  {
+    intent: "restock_subscribe",
+    reuseSlots: ["product", "channel"],
+  },
+  {
+    intent: "faq",
+    reuseSlots: [],
+  },
+  {
+    intent: "general",
+    reuseSlots: [],
+  },
+];
 
 const MUTATION_INTENT_CONTRACTS: MutationIntentContract[] = [
   {
@@ -19,6 +84,79 @@ const MUTATION_INTENT_CONTRACTS: MutationIntentContract[] = [
     debugNextAction: "\uCD94\uAC00 \uBCC0\uACBD \uC0AC\uD56D\uC774 \uC788\uC73C\uBA74 \uC54C\uB824\uC8FC\uC138\uC694.",
   },
 ];
+
+export function getIntentContract(intent: string | null | undefined) {
+  const safeIntent = String(intent || "").trim();
+  if (!safeIntent) return null;
+  return INTENT_CONTRACTS.find((contract) => contract.intent === safeIntent) || null;
+}
+
+export function getSlotContract(slotKey: string | null | undefined) {
+  const key = String(slotKey || "").trim();
+  if (!key) return null;
+  return SLOT_CONTRACTS.find((contract) => contract.key === key) || null;
+}
+
+export function getSlotLabel(slotKey: string | null | undefined, intent?: string | null) {
+  const intentContract = intent ? getIntentContract(intent) : null;
+  if (intentContract?.slotLabels && intentContract.slotLabels[slotKey || ""]) {
+    return intentContract.slotLabels[slotKey || ""];
+  }
+  const slotContract = getSlotContract(slotKey);
+  if (slotContract?.label) return slotContract.label;
+  const key = String(slotKey || "").trim();
+  if (!key) return "\uC815\uBCF4";
+  return key.replace(/_/g, " ");
+}
+
+const SUPPORTED_SUBSTITUTION_ASK_SLOTS = new Set(["phone", "address"]);
+
+function pickSubstitutionAskSlot(plan: SubstitutionPlan, entity?: Record<string, any> | null) {
+  const askList = Array.isArray(plan.ask) ? plan.ask.map((slot) => String(slot || "").trim()).filter(Boolean) : [];
+  if (askList.length === 0) return null;
+  for (const slot of askList) {
+    if (!SUPPORTED_SUBSTITUTION_ASK_SLOTS.has(slot)) continue;
+    if (!entity || !String(entity[slot] || "").trim()) return slot;
+  }
+  const firstSupported = askList.find((slot) => SUPPORTED_SUBSTITUTION_ASK_SLOTS.has(slot));
+  return firstSupported || null;
+}
+
+export function resolveSubstitutionPrompt(input: {
+  targetSlot: string;
+  intent?: string | null;
+  plan: SubstitutionPlan | null;
+  entity?: Record<string, any> | null;
+}) {
+  if (!input.plan) return null;
+  const askSlot = pickSubstitutionAskSlot(input.plan, input.entity || null);
+  if (!askSlot) return null;
+  const askLabel = getSlotLabel(askSlot, input.intent);
+  const targetLabel = getSlotLabel(input.targetSlot, input.intent);
+  if (input.targetSlot === "zipcode") {
+    return {
+      askSlot,
+      prompt: "우편번호를 몰라도 괜찮아요. 도로명/지번 주소를 알려주세요.",
+    };
+  }
+  if (input.targetSlot === "order_id") {
+    return {
+      askSlot,
+      prompt: `주문번호를 몰라도 괜찮아요. ${askLabel}를 알려주세요.`,
+    };
+  }
+  return {
+    askSlot,
+    prompt: `${targetLabel} 대신 ${askLabel}를 알려주세요.`,
+  };
+}
+
+export function shouldReuseSlotForIntent(intent: string | null | undefined, slotKey: string | null | undefined) {
+  const contract = getIntentContract(intent);
+  if (!contract) return true;
+  if (!Array.isArray(contract.reuseSlots)) return true;
+  return contract.reuseSlots.includes(String(slotKey || "").trim());
+}
 
 export function getMutationIntentContract(intent: string | null | undefined) {
   const safeIntent = String(intent || "").trim();
@@ -86,10 +224,12 @@ export function buildMutationSuccessMessages(input: {
     requestText,
     hasSemanticMismatch,
   } = input;
+  const requireBeforeAfter = shouldRequireBeforeAfterSummaryForMutations();
   const userLines = [
     contract.userSuccessPrefix,
     `\uC8FC\uBB38\uBC88\uD638 ${resolvedOrderId || "-"}\uC758 \uBC30\uC1A1\uC9C0\uAC00 \uC5C5\uB370\uC774\uD2B8\uB418\uC5C8\uC2B5\uB2C8\uB2E4.`,
-    `\uBCC0\uACBD\uB41C \uBC30\uC1A1\uC9C0: ${appliedText}`,
+    requireBeforeAfter ? `\uBCC0\uACBD \uC804: ${beforeText}` : null,
+    requireBeforeAfter ? `\uBCC0\uACBD \uD6C4: ${appliedText}` : `\uBCC0\uACBD\uB41C \uBC30\uC1A1\uC9C0: ${appliedText}`,
     hasSemanticMismatch
       ? "\uC694\uCCAD\uD558\uC2E0 \uC8FC\uC18C\uC640 \uC801\uC6A9\uB41C \uC8FC\uC18C\uAC00 \uB2EC\uB77C \uD655\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4. \uB2E4\uC2DC \uC54C\uB824\uC8FC\uC138\uC694."
       : null,
