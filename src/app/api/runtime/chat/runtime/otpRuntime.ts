@@ -1,5 +1,5 @@
 import { resolvePhoneWithReuse } from "./memoryReuseRuntime";
-import { shouldForceOtpBeforeSensitiveIntentFlow } from "../policies/principles";
+import { requiresOtpForIntent, shouldForceOtpBeforeSensitiveIntentFlow } from "../policies/principles";
 
 export function readOtpState(lastTurn: unknown) {
   const lastTurnRecord = (lastTurn ?? {}) as Record<string, any>;
@@ -537,7 +537,7 @@ export async function handleOtpLifecycleAndOrderGate(input: Record<string, any>)
     otpVerifiedThisTurn = true;
   }
 
-  if (resolvedOrderId && !customerVerificationToken && !otpVerifiedThisTurn && !otpPending) {
+  if (requiresOtpForIntent(resolvedIntent) && resolvedOrderId && !customerVerificationToken && !otpVerifiedThisTurn && !otpPending) {
     const otpDestination =
       resolvePhoneWithReuse({
         derivedPhone,

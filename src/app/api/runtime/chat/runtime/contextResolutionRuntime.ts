@@ -1,6 +1,7 @@
 import type { PolicyEvalContext } from "@/lib/policyEngine";
 import { resolveAddressWithReuse, resolvePhoneWithReuse } from "./memoryReuseRuntime";
 import { getExpectedSlotKeys } from "./inputContractRuntime";
+import { requiresOtpForIntent } from "../policies/principles";
 
 type ContextResolutionParams = {
   context: any;
@@ -125,6 +126,12 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     }
   };
 
+  const expectedSlotKeys = new Set(getExpectedSlotKeys(expectedInputs || []));
+  const hasExpectedInputs = Array.isArray(expectedInputs) && expectedInputs.length > 0;
+  const allowOrderIdReuse =
+    !hasExpectedInputs ||
+    expectedSlotKeys.has("order_id") ||
+    requiresOtpForIntent(resolvedIntent);
   const orderChoiceIndex =
     !derivedOrderId && prevChoices.length > 0 ? extractChoiceIndex(message, prevChoices.length) : null;
   const orderIdFromChoice =
@@ -174,6 +181,30 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     resolvedOrderId = null;
   }
 
+  if (resolvedOrderId && !allowOrderIdReuse) {
+    noteContamination({
+      slot: "order_id",
+      candidate: resolvedOrderId,
+      reason: "ORDER_ID_CARRYOVER_BLOCKED_BY_EXPECTED_INPUTS",
+      action: "CLEARED",
+    });
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "CONTEXT_CONTAMINATION_DETECTED",
+      {
+        slot: "order_id",
+        candidate: resolvedOrderId,
+        reason: "ORDER_ID_CARRYOVER_BLOCKED_BY_EXPECTED_INPUTS",
+        action: "CLEARED",
+        expected_inputs: expectedInputs || [],
+      },
+      { intent_name: resolvedIntent, entity: prevEntity as Record<string, any> }
+    );
+    resolvedOrderId = null;
+  }
+
   if (resolvedOrderId && prevChoices.length > 0) {
     const listedOrderIds = new Set(
       prevChoices
@@ -204,8 +235,6 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     }
   }
 
-  const expectedSlotKeys = new Set(getExpectedSlotKeys(expectedInputs || []));
-  const hasExpectedInputs = Array.isArray(expectedInputs) && expectedInputs.length > 0;
   const allowAddressReuse = !hasExpectedInputs || expectedSlotKeys.has("address") || expectedSlotKeys.has("zipcode");
   const allowZipHistoryFallback = !hasExpectedInputs || expectedSlotKeys.has("address") || expectedSlotKeys.has("zipcode");
 

@@ -691,6 +691,7 @@ export async function handleToolForcedResponse(input: {
   latestTurnId: string | null;
   policyContext: PolicyContext;
   resolvedOrderId: string | null;
+  otpVerifiedThisTurn: boolean;
   customerVerificationToken: string | null;
   productDecisionRes: { decision?: Record<string, any> | null };
   normalizeOrderChangeAddressPrompt: (intent: string, text: string) => string;

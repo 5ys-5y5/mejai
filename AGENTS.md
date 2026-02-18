@@ -39,6 +39,7 @@ Goal: Prevent syntax/compile errors from reaching Railway builds.
 - After any non-trivial code change, **run `npm run build` locally** and fix errors before pushing. If you cannot run it, explicitly state that and minimize changes.
 - Avoid mid-function refactors unless required. If you must add a new block inside a long function, **place the closing braces immediately**, then fill in the block.
 - If you add new fields to debug payloads, **update all related types** in the same patch (e.g., `runtimeSupport.ts`, `runtimeConversationIoRuntime.ts`, `runtimeTurnIo.ts`).
+- If you add new fields passed between runtime stages or shared helpers, **update the shared contract types** (e.g., `runtimeStepContracts.ts`) and the receiving helper input types in the same patch.
 - If a build error occurs, **fix it before any further edits**. Do not stack unrelated changes.
 
 ## Terminal Encoding (PowerShell + Codex CLI)
