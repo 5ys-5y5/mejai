@@ -135,6 +135,18 @@ import type {
   SlotDerivationStepOutput,
 } from "./runtimeStepContracts";
 
+function normalizeEntityRecord(
+  input: Record<string, string | null | undefined> | null | undefined,
+): Record<string, string | null> {
+  const next: Record<string, string | null> = {};
+  if (!input) return next;
+  for (const [key, value] of Object.entries(input)) {
+    if (value === undefined) continue;
+    next[key] = value;
+  }
+  return next;
+}
+
 const EXECUTION_GUARD_RULES = {
   updateAddress: {
     missingZipcodeCode: "MISSING_ZIPCODE",
@@ -535,7 +547,10 @@ export async function POST(req: NextRequest) {
       entity: prevEntity,
     });
     if (memoryEntity) {
-      recentEntity = { ...memoryEntity, ...(recentEntity || {}) };
+      recentEntity = {
+        ...normalizeEntityRecord(memoryEntity),
+        ...normalizeEntityRecord(recentEntity),
+      };
     }
     const derivedChannel = initialized.derivedChannel;
     pipelineStateForError = pipelineState;
@@ -816,18 +831,10 @@ export async function POST(req: NextRequest) {
       },
       decorateReplyText,
       onInsertTurn: (payload) => {
-        const safePayload =
-          payload && typeof payload === "object" ? (payload as Record<string, any>) : {};
-        const botContext =
-          safePayload.bot_context && typeof safePayload.bot_context === "object"
-            ? ({ ...(safePayload.bot_context as Record<string, any>) } as Record<string, any>)
-            : {};
-        const derivedConfirmed = deriveConfirmedEntityFromBotContext(botContext);
-        const mergedConfirmed = mergeConfirmedEntity(confirmedEntityState, derivedConfirmed);
-        confirmedEntityState = mergedConfirmed;
-        botContext.confirmed_entity = mergedConfirmed;
-        safePayload.bot_context = botContext;
-        latestInsertedBotContext = botContext;
+        latestInsertedBotContext =
+          payload && typeof payload.bot_context === "object"
+            ? (payload.bot_context as Record<string, any>)
+            : null;
       },
     });
     const baseInsertTurn = insertTurn;
@@ -838,6 +845,12 @@ export async function POST(req: NextRequest) {
         safePayload.bot_context && typeof safePayload.bot_context === "object"
           ? ({ ...(safePayload.bot_context as Record<string, any>) } as Record<string, any>)
           : {};
+      const derivedConfirmed = deriveConfirmedEntityFromBotContext(botContext);
+      const mergedConfirmed = mergeConfirmedEntity(confirmedEntityState, derivedConfirmed);
+      confirmedEntityState = mergedConfirmed;
+      botContext.confirmed_entity = mergedConfirmed;
+      safePayload.bot_context = botContext;
+      latestInsertedBotContext = botContext;
       const intentName = String(botContext.intent_name || resolvedIntent || "").trim();
       const answerText =
         typeof safePayload.final_answer === "string"
