@@ -1,5 +1,5 @@
 import { YES_NO_QUICK_REPLIES, resolveQuickReplyConfig } from "../runtime/quickReplyConfigRuntime";
-import { toLeadDayQuickReplies } from "../policies/intentSlotPolicy";
+import { ACTION_TOKENS, toLeadDayQuickReplies } from "../policies/intentSlotPolicy";
 import { generateAlternativeRestockConsentQuestion } from "../policies/restockResponsePolicy";
 import { saveRestockSubscriptionLite } from "../services/restockSubscriptionRuntime";
 import {
@@ -164,8 +164,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         message: reply,
         mcp_actions: mcpActions,
         quick_replies: [
-          { label: "재입고 알림 신청", value: "네" },
-          { label: "대화 종료", value: "대화 종료" },
+          { label: "재입고 알림 신청", value: ACTION_TOKENS.restockSubscribe },
+          { label: "대화 종료", value: ACTION_TOKENS.endConversation },
         ],
         quick_reply_config: quickReplyConfig,
         product_cards: [],
@@ -246,8 +246,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           message: reply,
           mcp_actions: mcpActions,
           quick_replies: [
-            { label: "재입고 알림 신청", value: "네" },
-            { label: "대화 종료", value: "대화 종료" },
+            { label: "재입고 알림 신청", value: ACTION_TOKENS.restockSubscribe },
+            { label: "대화 종료", value: ACTION_TOKENS.endConversation },
           ],
           quick_reply_config: quickReplyConfig,
           product_cards: [],
@@ -894,8 +894,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           message: reply,
           mcp_actions: mcpActions,
           quick_replies: [
-            { label: "재입고 알림 신청", value: "네" },
-            { label: "대화 종료", value: "대화 종료" },
+            { label: "재입고 알림 신청", value: ACTION_TOKENS.restockSubscribe },
+            { label: "대화 종료", value: ACTION_TOKENS.endConversation },
           ],
           quick_reply_config: quickReplyConfig,
           product_cards: [],
@@ -1112,7 +1112,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     const shouldPreferKbSchedule = kbPreferEnabled && kbMatchFromQuery && !hasNameMatch;
     if (shouldPreferKbSchedule) {
       const due = toRestockDueText(kbMatchFromQuery.month, kbMatchFromQuery.day);
-      const newLabel = String(CHAT_PRINCIPLES?.response?.restockNewProductLabel || "신상품").trim();
+      const newLabel = String(CHAT_PRINCIPLES?.response?.restockNewProductLabel || "\uC2E0\uC0C1\uD488").trim();
       const displayName = newLabel ? `${newLabel} ${kbMatchFromQuery.product_name}` : kbMatchFromQuery.product_name;
       const reply = makeReply(buildRestockFinalAnswerWithChoices(displayName, due));
       await insertTurn({
@@ -1167,8 +1167,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         message: reply,
         mcp_actions: mcpActions,
         quick_replies: [
-          { label: "재입고 알림 신청", value: "네" },
-          { label: "대화 종료", value: "대화 종료" },
+          { label: "재입고 알림 신청", value: ACTION_TOKENS.restockSubscribe },
+          { label: "대화 종료", value: ACTION_TOKENS.endConversation },
         ],
         quick_reply_config: quickReplyConfig,
         product_cards: [],
@@ -1461,8 +1461,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             message: reply,
             mcp_actions: mcpActions,
             quick_replies: [
-              { label: "대화 종료", value: "대화 종료" },
-              { label: "다른 문의", value: "다른 문의" },
+              { label: "대화 종료", value: ACTION_TOKENS.endConversation },
+              { label: "다른 문의", value: ACTION_TOKENS.otherInquiry },
             ],
             quick_reply_config: quickReplyConfig,
           });
@@ -1569,8 +1569,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             message: reply,
             mcp_actions: mcpActions,
             quick_replies: [
-              { label: "대화 종료", value: "대화 종료" },
-              { label: "다른 문의", value: "다른 문의" },
+              { label: "대화 종료", value: ACTION_TOKENS.endConversation },
+              { label: "다른 문의", value: ACTION_TOKENS.otherInquiry },
             ],
             quick_reply_config: quickReplyConfig,
           });

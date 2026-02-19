@@ -15,6 +15,7 @@ export type IntentContract = {
   reuseSlots?: string[];
   preventEscalation?: boolean;
   slotLabels?: Record<string, string>;
+  completionCues?: string[];
 };
 
 export type SlotContract = {
@@ -45,6 +46,7 @@ const INTENT_CONTRACTS: IntentContract[] = [
     intent: "order_change",
     reuseSlots: ["order_id", "phone", "address", "zipcode"],
     preventEscalation: true,
+    completionCues: ["\uBC30\uC1A1\uC9C0 \uBCC0\uACBD\uC774 \uC644\uB8CC", "\uBCC0\uACBD\uC774 \uC644\uB8CC"],
   },
   {
     intent: "refund_request",
@@ -58,10 +60,12 @@ const INTENT_CONTRACTS: IntentContract[] = [
   {
     intent: "restock_inquiry",
     reuseSlots: ["product", "channel"],
+    completionCues: ["\uC785\uACE0 \uC608\uC815\uC77C", "\uC694\uC57D:"],
   },
   {
     intent: "restock_subscribe",
     reuseSlots: ["product", "channel", "phone"],
+    completionCues: ["\uC7AC\uC785\uACE0 \uC54C\uB9BC \uC2E0\uCCAD\uC774 \uC644\uB8CC", "\uC694\uC57D:"],
   },
   {
     intent: "faq",

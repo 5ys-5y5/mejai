@@ -1,10 +1,12 @@
 import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "../runtime/quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "../runtime/promptTemplateRuntime";
 import {
+  getPolicyBundle,
   shouldRequireCandidateSelectionWhenMultipleZipcodes,
   shouldRequireAddressRetryWhenZipcodeNotFound,
   shouldRequireJibunRoadZipTripleInChoice,
   shouldResolveZipcodeViaJusoWhenAddressGiven,
+  type ChatPrinciples,
 } from "../policies/principles";
 import {
   buildAddressCandidateChoicePrompt,
@@ -99,6 +101,7 @@ type HandleOrderChangePostToolsInput = {
 
 type MissingZipcodeFlowInput = {
   resolvedIntent: string;
+  policy: ChatPrinciples;
   callAddressSearchWithAudit: (
     context: any,
     keyword: string,
@@ -137,6 +140,7 @@ type MissingZipcodeFlowInput = {
 async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): Promise<Response> {
   const {
     resolvedIntent,
+    policy,
     callAddressSearchWithAudit,
     context,
     currentAddress,
@@ -159,7 +163,7 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
     confirmCriteria,
   } = input;
 
-  if (!shouldResolveZipcodeViaJusoWhenAddressGiven()) {
+  if (!shouldResolveZipcodeViaJusoWhenAddressGiven(policy)) {
     const directZipReply = makeReply("\uB3C4\uB85C\uBA85/\uC9C0\uBC88 \uC8FC\uC18C\uB97C \uC54C\uB824\uC8FC\uC138\uC694.");
     await insertEvent(
       context,
@@ -231,7 +235,7 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
       },
       { intent_name: resolvedIntent }
     );
-    if (candidates.length >= 2 && shouldRequireCandidateSelectionWhenMultipleZipcodes()) {
+    if (candidates.length >= 2 && shouldRequireCandidateSelectionWhenMultipleZipcodes(policy)) {
       const prompt = buildAddressCandidateChoicePrompt({
         candidates,
         originalAddress: currentAddress || "",
@@ -299,7 +303,7 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
     const first = candidates[0];
     if (
       first?.zip_no &&
-      (!shouldRequireJibunRoadZipTripleInChoice() ||
+      (!shouldRequireJibunRoadZipTripleInChoice(policy) ||
         hasCompleteAddressTriple({
           zipNo: first.zip_no,
           roadAddr: first.road_addr,
@@ -357,7 +361,7 @@ async function handleMissingZipcodeAddressFlow(input: MissingZipcodeFlowInput): 
         quick_reply_config: quickReplyConfig,
       });
     }
-    if (first?.zip_no && shouldRequireJibunRoadZipTripleInChoice()) {
+    if (first?.zip_no && shouldRequireJibunRoadZipTripleInChoice(policy)) {
       await insertEvent(
         context,
         sessionId,
@@ -438,6 +442,8 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
     executionGuardRules,
   } = input;
 
+  const policy = getPolicyBundle(resolvedIntent);
+
     const currentZipcode =
       typeof policyContextEntity?.zipcode === "string" ? String(policyContextEntity.zipcode).trim() : "";
     const hasUpdateAttempt = toolResults.some((tool) => tool.name === "update_order_shipping_address");
@@ -457,6 +463,7 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
       );
       return handleMissingZipcodeAddressFlow({
         resolvedIntent,
+        policy,
         callAddressSearchWithAudit,
         context,
         currentAddress,
@@ -489,6 +496,7 @@ export async function handleOrderChangePostTools(input: HandleOrderChangePostToo
       if (missingZipcode) {
         return handleMissingZipcodeAddressFlow({
           resolvedIntent,
+          policy,
           callAddressSearchWithAudit,
           context,
           currentAddress,

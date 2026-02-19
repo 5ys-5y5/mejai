@@ -1,4 +1,4 @@
-import { CHAT_PRINCIPLES, shouldEnforceNoRepeatQuestions, shouldReuseProvidedInfoWithYesNo, getSubstitutionPlan } from "../policies/principles";
+import { getPolicyBundle, getSubstitutionPlan } from "../policies/principles";
 import { getSlotLabel, shouldReuseSlotForIntent } from "./intentContractRuntime";
 
 type OptionalText = string | null | undefined;
@@ -13,14 +13,14 @@ function resolveByConfiguredOrder(input: {
   prevEntity?: OptionalText;
   prevTranscript?: OptionalText;
   recentEntity?: OptionalText;
-}) {
+}, order: readonly string[]) {
   const byKey: Record<string, string | null> = {
     derived: normalizeText(input.derived),
     prevEntity: normalizeText(input.prevEntity),
     prevTranscript: normalizeText(input.prevTranscript),
     recentEntity: normalizeText(input.recentEntity),
   };
-  for (const key of CHAT_PRINCIPLES.memory.entityReuseOrder) {
+  for (const key of order) {
     const candidate = byKey[key];
     if (candidate) return candidate;
   }
@@ -41,12 +41,13 @@ export function resolveSlotWithReuse(input: {
   if (!canReuse) {
     return normalizeText(input.derived);
   }
+  const policy = getPolicyBundle(input.resolvedIntent || undefined);
   return resolveByConfiguredOrder({
     derived: input.derived,
     prevEntity: input.prevEntity,
     prevTranscript: input.prevTranscript,
     recentEntity: input.recentEntity,
-  });
+  }, policy.memory.entityReuseOrder);
 }
 
 export function resolvePhoneWithReuse(input: {
@@ -100,8 +101,9 @@ export function shouldOfferReusePromptForSlot(input: {
   listOrdersCalled?: boolean;
   resolvedIntent?: string | null;
 }) {
-  if (!shouldEnforceNoRepeatQuestions()) return false;
-  if (!shouldReuseProvidedInfoWithYesNo()) return false;
+  const policy = getPolicyBundle(input.resolvedIntent || undefined);
+  if (!policy.memory.enforceNoRepeatQuestions) return false;
+  if (!policy.substitution.reuseProvidedInfoWithYesNo) return false;
   const slotKey = String(input.slotKey || "").trim();
   if (!slotKey) return false;
   if (!normalizeText(input.slotValue)) return false;
@@ -152,8 +154,9 @@ export function getReuseSlotLabel(slotKey: string, resolvedIntent?: string | nul
   return getSlotLabel(slotKey, resolvedIntent || null);
 }
 
-export function getPreferredPromptSlot(slotKey: string) {
-  const plan = getSubstitutionPlan(slotKey);
+export function getPreferredPromptSlot(slotKey: string, resolvedIntent?: string | null) {
+  const policy = getPolicyBundle(resolvedIntent || undefined);
+  const plan = getSubstitutionPlan(slotKey, policy);
   if (plan?.ask?.length) return plan.ask[0];
   return slotKey;
 }

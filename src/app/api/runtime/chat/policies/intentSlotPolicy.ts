@@ -1,38 +1,74 @@
-const RESTOCK_KEYWORDS = /(재입고|재고|입고|품절|restock|stock)/i;
-const RESTOCK_SUBSCRIBE_KEYWORDS = /(알림|신청|구독|예약|notify|subscribe|sms|문자|카톡|카카오|email|이메일)/i;
-const ORDER_CHANGE_KEYWORDS =
-  /(?:배송지|주소|수령지)\s*(?:변경|수정|바꾸|바꿔|교체|업데이트)|(?:변경|수정)\s*(?:배송지|주소|수령지)/i;
-const SHIPPING_KEYWORDS = /(배송|출고|운송장|송장|배송조회|배송\s*상태|배송\s*언제|도착|지연)/i;
-const REFUND_KEYWORDS = /(환불|반품|교환|취소)/i;
-const FAQ_KEYWORDS = /(문의|질문|faq|사용법|방법|안내|가능한가|알려줘)/i;
+import {
+  END_CONVERSATION_PATTERN,
+  EXECUTION_AFFIRMATIVE_PATTERN,
+  INTENT_KEYWORDS,
+  NO_TEXT_PATTERN,
+  OTHER_INQUIRY_PATTERN,
+  RESTOCK_LEAD_DAY_OPTIONS,
+  YES_TEXT_PATTERN,
+} from "./lexicon";
 
-const RESTOCK_LEAD_DAY_OPTIONS = [1, 2, 3, 7, 14] as const;
+export const ACTION_TOKENS = {
+  restockSubscribe: "action:restock_subscribe",
+  endConversation: "action:end_conversation",
+  otherInquiry: "action:other_inquiry",
+} as const;
+
+const ACTION_TOKEN_MAP: Record<string, { action: string; label: string }> = {
+  [ACTION_TOKENS.restockSubscribe]: { action: "restock_subscribe", label: "재입고 알림 신청" },
+  [ACTION_TOKENS.endConversation]: { action: "end_conversation", label: "대화 종료" },
+  [ACTION_TOKENS.otherInquiry]: { action: "other_inquiry", label: "다른 문의" },
+};
+
+export function parseActionToken(text: string) {
+  const v = String(text || "").trim().toLowerCase();
+  if (!v) return null;
+  return ACTION_TOKEN_MAP[v]?.action ?? null;
+}
+
+export function resolveActionLabel(text: string) {
+  const v = String(text || "").trim().toLowerCase();
+  if (!v) return null;
+  return ACTION_TOKEN_MAP[v]?.label ?? null;
+}
+
+export function replaceActionTokensForDisplay(text: string) {
+  const value = String(text || "");
+  if (!value) return value;
+  return value.replace(/action:[a-z_]+/gi, (token) => resolveActionLabel(token) || token);
+}
 
 export function isRestockSubscribe(text: string) {
-  return RESTOCK_KEYWORDS.test(text) && RESTOCK_SUBSCRIBE_KEYWORDS.test(text);
+  const action = parseActionToken(text);
+  if (action === "restock_subscribe") return true;
+  return INTENT_KEYWORDS.restock.test(text) && INTENT_KEYWORDS.restockSubscribe.test(text);
 }
 
 export function isRestockInquiry(text: string) {
-  return RESTOCK_KEYWORDS.test(text) && !isRestockSubscribe(text);
+  return INTENT_KEYWORDS.restock.test(text) && !isRestockSubscribe(text);
 }
 
 export function detectIntent(text: string) {
+  const action = parseActionToken(text);
+  if (action === "restock_subscribe") return "restock_subscribe";
   if (isRestockSubscribe(text)) return "restock_subscribe";
   if (isRestockInquiry(text)) return "restock_inquiry";
   if (isAddressChangeUtterance(text)) return "order_change";
-  if (SHIPPING_KEYWORDS.test(text)) return "shipping_inquiry";
-  if (REFUND_KEYWORDS.test(text)) return "refund_request";
+  if (INTENT_KEYWORDS.shipping.test(text)) return "shipping_inquiry";
+  if (INTENT_KEYWORDS.refund.test(text)) return "refund_request";
   return "general";
 }
 
 export function detectIntentCandidates(text: string) {
   const out: string[] = [];
+  const action = parseActionToken(text);
+  if (action === "restock_subscribe") out.push("restock_subscribe");
   if (isRestockSubscribe(text)) out.push("restock_subscribe");
   if (isRestockInquiry(text)) out.push("restock_inquiry");
-  if (FAQ_KEYWORDS.test(text)) out.push("faq");
+  if (INTENT_KEYWORDS.faq.test(text)) out.push("faq");
   if (isAddressChangeUtterance(text)) out.push("order_change");
-  if (REFUND_KEYWORDS.test(text)) out.push("refund_request");
-  if (SHIPPING_KEYWORDS.test(text)) out.push("shipping_inquiry");
+  if (INTENT_KEYWORDS.refund.test(text)) out.push("refund_request");
+  if (INTENT_KEYWORDS.shipping.test(text)) out.push("shipping_inquiry");
   if (out.length === 0) out.push("general");
   return Array.from(new Set(out));
 }
@@ -76,7 +112,7 @@ export function intentSupportScope(intent: string) {
 }
 
 export function isAddressChangeUtterance(text: string) {
-  return ORDER_CHANGE_KEYWORDS.test(String(text || ""));
+  return INTENT_KEYWORDS.orderChange.test(String(text || ""));
 }
 
 export function toOrderDateShort(value: string | null | undefined) {
@@ -124,12 +160,14 @@ export function isExecutionAffirmativeText(text: string) {
 export function isEndConversationText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
+  if (parseActionToken(v) === "end_conversation") return true;
   return /^(종료|끝|그만|닫아|대화 종료|상담 종료|close|end)$/i.test(v) || isNoText(v);
 }
 
 export function isOtherInquiryText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
+  if (parseActionToken(v) === "other_inquiry") return true;
   return /^(다른 문의|다른 질문|다른 내용|새 문의|새 질문|다른 거|other|new)$/i.test(v);
 }
 

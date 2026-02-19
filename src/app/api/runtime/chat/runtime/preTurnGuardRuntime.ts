@@ -140,7 +140,7 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
       }
       nextExpectedInput = null;
     } else if (isNoText(message)) {
-      const nextSlot = getPreferredPromptSlot(slotKey);
+      const nextSlot = getPreferredPromptSlot(slotKey, resolvedIntent);
       const label = getReuseSlotLabel(nextSlot, resolvedIntent);
       const reply = makeReply(`아래 정보를 알려주세요. (${label})`);
       await insertTurn({

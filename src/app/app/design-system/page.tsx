@@ -72,7 +72,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { RENDER_POLICY } from "@/app/api/runtime/chat/policies/renderPolicy";
+import { RENDER_POLICY } from "@/app/api/runtime/chat/policies/uiPolicy";
 import { getDefaultConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
 import { DEFAULT_CONVERSATION_DEBUG_OPTIONS } from "@/lib/transcriptCopyPolicy";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
@@ -1426,14 +1426,15 @@ export function DesignSystemContent() {
           : [...prev.selectedMessageIds, messageId],
       }));
     },
-    onSubmitMessage: (_id, text) => {
+    onSubmitMessage: (_id, text, displayText) => {
       if (!text.trim()) return;
+      const display = String(displayText ?? text).trim();
       updateDemoModel((prev) => ({
         ...prev,
         input: "",
         messages: [
           ...prev.messages,
-          { id: `u-${Date.now()}`, role: "user", content: text },
+          { id: `u-${Date.now()}`, role: "user", content: display || text },
           { id: `b-${Date.now()}`, role: "bot", content: "샘플 응답입니다." },
         ],
       }));

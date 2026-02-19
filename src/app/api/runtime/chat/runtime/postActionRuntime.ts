@@ -10,6 +10,7 @@ type SupabaseLike = {
 };
 
 import type { RuntimeContext } from "../shared/runtimeTypes";
+import { ACTION_TOKENS, parseActionToken } from "../policies/intentSlotPolicy";
 
 type RuntimeContextAny = RuntimeContext;
 
@@ -39,8 +40,8 @@ const SATISFACTION_QUICK_REPLIES = [
   { label: "5점", value: "5" },
 ];
 const POST_ACTION_CHOICE_QUICK_REPLIES = [
-  { label: "대화 종료", value: "대화 종료" },
-  { label: "다른 문의", value: "다른 문의" },
+  { label: "대화 종료", value: ACTION_TOKENS.endConversation },
+  { label: "다른 문의", value: ACTION_TOKENS.otherInquiry },
 ];
 
 export async function handlePostActionStage(params: PostActionRuntimeParams): Promise<{
@@ -58,13 +59,16 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
     parseSatisfactionScore,
     isEndConversationText,
     isOtherInquiryText,
-    isYesText,
     makeReply,
     insertTurn,
     respond,
   } = params;
 
   if (prevBotContext.post_action_stage === "awaiting_choice") {
+    const actionToken = parseActionToken(message);
+    if (actionToken && actionToken !== "end_conversation" && actionToken !== "other_inquiry") {
+      return { response: null };
+    }
     if (isEndConversationText(message)) {
       const reply = makeReply("상담이 도움이 되었나요? 만족도를 선택해 주세요. (1~5점)");
       const quickReplyConfig = resolveQuickReplyConfig({
@@ -100,7 +104,7 @@ export async function handlePostActionStage(params: PostActionRuntimeParams): Pr
         }),
       };
     }
-    if (isOtherInquiryText(message) || isYesText(message)) {
+    if (isOtherInquiryText(message)) {
       const reply = makeReply("좋아요. 다른 문의 내용을 입력해 주세요.");
       await insertTurn({
         session_id: sessionId,

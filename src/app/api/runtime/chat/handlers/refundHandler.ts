@@ -1,7 +1,7 @@
 import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "../runtime/quickReplyConfigRuntime";
 import { buildYesNoConfirmationPrompt } from "../runtime/promptTemplateRuntime";
 import { resolveSubstitutionPrompt } from "../runtime/intentContractRuntime";
-import { getSubstitutionPlan } from "../policies/principles";
+import { getPolicyBundle, getSubstitutionPlan } from "../policies/principles";
 
 type RefundToolResult = { name: string; ok: boolean; data?: Record<string, any>; error?: unknown };
 
@@ -53,10 +53,12 @@ export async function handleRefundRequest(input: HandleRefundRequestInput): Prom
     mcpActions,
   } = input;
 
+  const policy = getPolicyBundle(resolvedIntent);
+
   if (resolvedIntent !== "refund_request") return null;
 
   if (!resolvedOrderId) {
-    const plan = getSubstitutionPlan("order_id");
+    const plan = getSubstitutionPlan("order_id", policy);
     const substitution = resolveSubstitutionPrompt({
       targetSlot: "order_id",
       intent: resolvedIntent,

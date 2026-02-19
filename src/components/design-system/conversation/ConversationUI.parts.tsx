@@ -742,7 +742,7 @@ type ReplyProps<TMessage extends ReplyMessageShape> = {
   setLockedReplySelections: Dispatch<SetStateAction<Record<string, string[]>>>;
   enableQuickReplies?: boolean;
   enableProductCards?: boolean;
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string, displayText?: string) => void;
 };
 
 function parseLeadDayValue(value: string) {
@@ -750,6 +750,65 @@ function parseLeadDayValue(value: string) {
   if (!m) return null;
   const n = Number(m[0]);
   return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function extractIndexedSelections(rawText: string) {
+  const raw = String(rawText || "").trim();
+  if (!raw) return null;
+  const stripped = raw.replace(/(?:번째|번)\s*(?:버튼)?\s*(?:이요|요|입니다|으로|로)?/g, "");
+  const normalized = stripped.replace(/[,\s/.-]+/g, " ").trim();
+  if (!normalized) return null;
+  if (!/^\d+( \d+)*$/.test(normalized)) return null;
+  const values = normalized
+    .split(" ")
+    .map((v) => Number(v))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (values.length === 0) return null;
+  return Array.from(new Set(values));
+}
+
+function resolveNumericChoiceInput(
+  rawText: string,
+  messages: Array<ReplyMessageShape>
+): { submitText: string; displayText: string } | null {
+  const indices = extractIndexedSelections(rawText);
+  if (!indices || indices.length === 0) return null;
+
+  const lastBotMessage = [...messages]
+    .reverse()
+    .find((msg) => msg.role === "bot" && (msg.quickReplies?.length || msg.productCards?.length));
+  if (!lastBotMessage) return null;
+
+  const renderPlan = lastBotMessage.renderPlan;
+  const selectionMode = renderPlan?.selection_mode || "single";
+  const isMulti = selectionMode === "multi" || renderPlan?.submit_format === "csv";
+  const preferCards = renderPlan?.view === "cards";
+  const hasCards = Boolean(lastBotMessage.productCards && lastBotMessage.productCards.length > 0);
+  const hasQuickReplies = Boolean(lastBotMessage.quickReplies && lastBotMessage.quickReplies.length > 0);
+
+  const useCards = preferCards ? hasCards : !hasQuickReplies && hasCards;
+  const choices = useCards ? (lastBotMessage.productCards || []) : (lastBotMessage.quickReplies || []);
+  if (choices.length === 0) return null;
+
+  const maxIndex = choices.length;
+  if (indices.some((idx) => idx < 1 || idx > maxIndex)) return null;
+  const pickedIndices = isMulti ? indices : [indices[0]];
+
+  if (useCards) {
+    const pickedValues = pickedIndices.map((idx) => String((choices[idx - 1] as ProductCard).value));
+    const pickedLabels = pickedIndices.map((idx) => String((choices[idx - 1] as ProductCard).title || idx));
+    return {
+      submitText: isMulti ? pickedValues.join(",") : pickedValues[0],
+      displayText: isMulti ? pickedLabels.join(",") : pickedLabels[0],
+    };
+  }
+
+  const pickedValues = pickedIndices.map((idx) => String((choices[idx - 1] as QuickReply).value));
+  const pickedLabels = pickedIndices.map((idx) => String((choices[idx - 1] as QuickReply).label || idx));
+  return {
+    submitText: isMulti ? pickedValues.join(",") : pickedValues[0],
+    displayText: isMulti ? pickedLabels.join(",") : pickedLabels[0],
+  };
 }
 
 export function ConversationReplySelectors<TMessage extends ReplyMessageShape>({
@@ -771,6 +830,17 @@ export function ConversationReplySelectors<TMessage extends ReplyMessageShape>({
   const productCards = message.productCards || [];
   const renderPlan = message.renderPlan;
   if (!renderPlan) return null;
+
+  const quickValueToLabel = new Map<string, string>();
+  quickReplies.forEach((item) => {
+    const num = parseLeadDayValue(item.value);
+    const normalized = num ? String(num) : String(item.value);
+    quickValueToLabel.set(normalized, item.label);
+  });
+  const cardValueToLabel = new Map<string, string>();
+  productCards.forEach((card) => {
+    cardValueToLabel.set(String(card.value), card.title);
+  });
 
   const selectionMode = renderPlan?.selection_mode || "single";
   const isMultiSelectPrompt = selectionMode === "multi";
@@ -849,7 +919,16 @@ export function ConversationReplySelectors<TMessage extends ReplyMessageShape>({
                     delete next[quickDraftKey];
                     return next;
                   });
-                  onSubmit(isMultiSelectPrompt || renderPlan?.submit_format === "csv" ? normalizedPicked.join(",") : normalizedPicked[0]);
+                  const submitText =
+                    isMultiSelectPrompt || renderPlan?.submit_format === "csv"
+                      ? normalizedPicked.join(",")
+                      : normalizedPicked[0];
+                  const displayValues = normalizedPicked.map((value) => quickValueToLabel.get(value) ?? value);
+                  const displayText =
+                    isMultiSelectPrompt || renderPlan?.submit_format === "csv"
+                      ? displayValues.join(",")
+                      : displayValues[0];
+                  onSubmit(submitText, displayText);
                 }}
               />
             </div>
@@ -891,7 +970,8 @@ export function ConversationReplySelectors<TMessage extends ReplyMessageShape>({
                     delete next[cardDraftKey];
                     return next;
                   });
-                  onSubmit(selectedCard);
+                  const displayText = cardValueToLabel.get(selectedCard) ?? selectedCard;
+                  onSubmit(selectedCard, displayText);
                 }}
               />
             </div>
@@ -1536,7 +1616,14 @@ function ConversationModelChatColumnCore({
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            onSubmitMessage(model.input.trim());
+            const rawText = model.input.trim();
+            if (!rawText) return;
+            const mapped = resolveNumericChoiceInput(rawText, effectiveVisibleMessages);
+            if (mapped) {
+              onSubmitMessage(mapped.submitText, mapped.displayText);
+              return;
+            }
+            onSubmitMessage(rawText);
           }}
           className="relative z-20 flex gap-2 bg-white"
         >
@@ -1684,7 +1771,7 @@ type ConversationModelCardProps = {
   conversationDebugOptions?: DebugTranscriptOptions;
   onUpdateConversationDebugOptions?: (next: DebugTranscriptOptions) => void | Promise<void>;
   onToggleMessageSelection: (id: string, messageId: string) => void;
-  onSubmitMessage: (id: string, text: string) => Promise<boolean> | boolean | Promise<void> | void;
+  onSubmitMessage: (id: string, text: string, displayText?: string) => Promise<boolean> | boolean | Promise<void> | void;
   onExpand: (id: string) => void;
   onCollapse: (id: string) => void;
   onInputChange: (id: string, value: string) => void;
@@ -1941,7 +2028,7 @@ export type ConversationModelChatColumnLegoProps = {
   debugOptions?: DebugTranscriptOptions;
   onUpdateDebugOptions?: (next: DebugTranscriptOptions) => void | Promise<void>;
   onToggleMessageSelection: (messageId: string) => void;
-  onSubmitMessage: (text: string) => void | boolean | Promise<void> | Promise<boolean>;
+  onSubmitMessage: (text: string, displayText?: string) => void | boolean | Promise<void> | Promise<boolean>;
   onExpand: () => void;
   onCollapse: () => void;
   onInputChange: (value: string) => void;
@@ -2310,7 +2397,7 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
     debugOptions: conversationDebugOptions,
     onUpdateDebugOptions: onUpdateConversationDebugOptions,
     onToggleMessageSelection: (messageId) => onToggleMessageSelection(model.id, messageId),
-    onSubmitMessage: (text) => onSubmitMessage(model.id, text),
+    onSubmitMessage: (text, displayText) => onSubmitMessage(model.id, text, displayText),
     onExpand: () => onExpand(model.id),
     onCollapse: () => onCollapse(model.id),
     onInputChange: (value) => onInputChange(model.id, value),

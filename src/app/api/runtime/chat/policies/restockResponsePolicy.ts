@@ -1,8 +1,10 @@
 import { runLlm } from "@/lib/llm_mk2";
 
-import { CHAT_PRINCIPLES } from "./principles";
+import { getPolicyBundle } from "./principles";
 import { normalizeAddressText } from "../shared/slotUtils";
 
+
+const RESTOCK_POLICY = getPolicyBundle("restock_inquiry");
 
 
 type RestockScheduleEntry = {
@@ -113,7 +115,7 @@ export function rankRestockEntries(queryText: string, entries: RestockScheduleEn
     })
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
-    .slice(0, CHAT_PRINCIPLES.response.choicePreviewMax);
+    .slice(0, RESTOCK_POLICY.response.choicePreviewMax);
 }
 
 export function findBestRestockEntryByProductName(productName: string, entries: RestockScheduleEntry[]) {

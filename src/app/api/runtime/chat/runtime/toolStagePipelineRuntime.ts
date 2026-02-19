@@ -267,6 +267,7 @@ export async function runToolStagePipeline(input: Record<string, any> & { compil
     toolGate,
     conversationMode,
     resolvedIntent,
+    CHAT_PRINCIPLES,
     insertEvent,
     context,
     sessionId,
@@ -292,7 +293,7 @@ export async function runToolStagePipeline(input: Record<string, any> & { compil
     return { response: forcedToolResponse };
   }
 
-  const orderIdPlan = getSubstitutionPlan("order_id");
+  const orderIdPlan = getSubstitutionPlan("order_id", CHAT_PRINCIPLES);
   if (resolvedIntent === "order_change" && !resolvedOrderId && orderIdPlan) {
     const phone = typeof policyContext?.entity?.phone === "string" ? String(policyContext.entity.phone).trim() : "";
     const alreadyPlanned = finalCalls.some((call: { name: string }) => call.name === "list_orders");

@@ -1,13 +1,22 @@
 import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "./quickReplyConfigRuntime";
-import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
+import { buildThreePhasePrompt, buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
 import {
-  shouldRequireCandidateSelectionWhenMultipleZipcodes,
+  getPolicyBundle,
+  getThreePhasePromptLabels,
+  shouldEnforceLastQuestionAnswerBinding,
+  shouldRequireThreePhasePrompt,
+  getSubstitutionPlan,
   shouldRequireAddressRetryWhenZipcodeNotFound,
+  shouldRequireCandidateSelectionWhenMultipleZipcodes,
   shouldRequireJibunRoadZipTripleInChoice,
   shouldResolveZipcodeViaJusoWhenAddressGiven,
-  getSubstitutionPlan,
 } from "../policies/principles";
-import { resolveSubstitutionPrompt } from "./intentContractRuntime";
+import {
+  getMutationIntentContract,
+  getSlotLabel,
+  resolveMutationReadyState,
+  resolveSubstitutionPrompt,
+} from "./intentContractRuntime";
 import {
   buildAddressCandidateChoicePrompt,
   buildAddressCandidateChoiceItems,
@@ -130,6 +139,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
   } = params;
 
   let nextDerivedOrderId = params.derivedOrderId;
+  const policy = getPolicyBundle(resolvedIntent);
   let nextDerivedZipcode = params.derivedZipcode;
   let nextDerivedAddress = params.derivedAddress;
   let nextUpdateConfirmAccepted = params.updateConfirmAcceptedThisTurn;
@@ -240,7 +250,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
       { intent_name: resolvedIntent }
     );
     if (
-      shouldRequireJibunRoadZipTripleInChoice() &&
+      shouldRequireJibunRoadZipTripleInChoice(policy) &&
       !hasCompleteAddressTriple({
         zipNo: picked.zip_no,
         roadAddr: picked.road_addr,
@@ -432,11 +442,11 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
     const pendingStrictFive = /^\d{5}$/.test(pendingDigits) ? pendingDigits : "";
     const pendingZip = extractZipcode(message) || pendingStrictFive;
     if (!pendingZip) {
-      if (!shouldResolveZipcodeViaJusoWhenAddressGiven()) {
+      if (!shouldResolveZipcodeViaJusoWhenAddressGiven(policy)) {
         const substitution = resolveSubstitutionPrompt({
           targetSlot: "zipcode",
           intent: resolvedIntent,
-          plan: getSubstitutionPlan("zipcode"),
+          plan: getSubstitutionPlan("zipcode", policy),
           entity: prevEntity,
         });
         const prompt = substitution?.prompt || "도로명/지번 주소를 다시 입력해 주세요.";
@@ -509,7 +519,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
             },
             { intent_name: resolvedIntent }
           );
-          if (candidates.length >= 2 && shouldRequireCandidateSelectionWhenMultipleZipcodes()) {
+          if (candidates.length >= 2 && shouldRequireCandidateSelectionWhenMultipleZipcodes(policy)) {
             const prompt = buildAddressCandidateChoicePrompt({
               candidates,
               originalAddress: pendingAddress,
@@ -574,7 +584,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
           const first = candidates[0];
           if (
             first?.zip_no &&
-            (!shouldRequireJibunRoadZipTripleInChoice() ||
+            (!shouldRequireJibunRoadZipTripleInChoice(policy) ||
               hasCompleteAddressTriple({
                 zipNo: first.zip_no,
                 roadAddr: first.road_addr,
@@ -630,7 +640,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
               refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
             };
           }
-          if (first?.zip_no && shouldRequireJibunRoadZipTripleInChoice()) {
+          if (first?.zip_no && shouldRequireJibunRoadZipTripleInChoice(policy)) {
             await insertEvent(
               context,
               sessionId,
@@ -841,6 +851,86 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
     const pendingOrderId = String(prevBotContext.pending_order_id || "").trim();
     if (isYesText(message)) {
       if (targetKind === "order" && isLikelyOrderId(pendingOrderId)) nextDerivedOrderId = pendingOrderId;
+      if (shouldEnforceLastQuestionAnswerBinding()) {
+        const mutationContract = getMutationIntentContract(resolvedIntent);
+        if (mutationContract) {
+          const readyState = resolveMutationReadyState({
+            contract: mutationContract,
+            entity: prevEntity,
+            resolvedOrderId: nextDerivedOrderId || pendingOrderId,
+          });
+          if (!readyState.ready) {
+            const missingSlot = Object.keys(readyState.missing).find((slot) => readyState.missing[slot]) || "";
+            if (missingSlot) {
+              const policy = getPolicyBundle(resolvedIntent);
+              const plan = getSubstitutionPlan(missingSlot, policy);
+              const substitution = resolveSubstitutionPrompt({
+                targetSlot: missingSlot,
+                intent: resolvedIntent,
+                plan,
+                entity: prevEntity,
+              });
+              const askSlot = substitution?.askSlot || missingSlot;
+              const askLabel = getSlotLabel(askSlot, resolvedIntent);
+              const promptText = substitution?.prompt || `${askLabel}\uB97C \uC54C\uB824\uC8FC\uC138\uC694.`;
+              const confirmedSummary = pendingOrderId
+                ? `\uC8FC\uBB38 \uD655\uC778 \uC644\uB8CC (\uC8FC\uBB38\uBC88\uD638 ${pendingOrderId})`
+                : `\uC8FC\uBB38 \uD655\uC778 \uC644\uB8CC`;
+              const nextHint =
+                askSlot === "address" || askSlot === "zipcode"
+                  ? `\uB2F5\uBCC0\uC744 \uC8FC\uC2DC\uBA74 \uC8FC\uC18C \uD6C4\uBCF4\uAC00 \uC5EC\uB7EC \uAC1C\uC778 \uACBD\uC6B0 \uC120\uD0DD\uC744 \uC548\uB0B4\uD558\uACA0\uC2B5\uB2C8\uB2E4.`
+                  : `\uB2F5\uBCC0\uC744 \uC8FC\uC2DC\uBA74 \uB2E4\uC74C \uB2E8\uACC4\uB97C \uC548\uB0B4\uD558\uACA0\uC2B5\uB2C8\uB2E4.`;
+              const reply = makeReply(
+                shouldRequireThreePhasePrompt()
+                  ? buildThreePhasePrompt({
+                      confirmed: confirmedSummary,
+                      confirming: promptText,
+                      next: nextHint,
+                      labels: getThreePhasePromptLabels(),
+                    })
+                  : promptText
+              );
+              const addressPending =
+                askSlot === "address" || askSlot === "zipcode"
+                  ? {
+                      address_pending: true,
+                      address_stage: askSlot === "zipcode" ? "awaiting_zipcode" : "awaiting_address",
+                      pending_order_id: pendingOrderId || null,
+                    }
+                  : {};
+              await insertTurn({
+                session_id: sessionId,
+                seq: nextSeq,
+                transcript_text: message,
+                answer_text: reply,
+                final_answer: reply,
+                bot_context: {
+                  intent_name: resolvedIntent,
+                  entity: prevEntity,
+                  selected_order_id: nextDerivedOrderId || prevSelectedOrderId,
+                  expected_input: askSlot,
+                  three_phase_confirmed: confirmedSummary,
+                  three_phase_next: nextHint,
+                  ...addressPending,
+                },
+              });
+              return {
+                response: respond({
+                  session_id: sessionId,
+                  step: "confirm",
+                  message: reply,
+                  mcp_actions: [],
+                }),
+                derivedOrderId: nextDerivedOrderId,
+                derivedZipcode: nextDerivedZipcode,
+                derivedAddress: nextDerivedAddress,
+                updateConfirmAcceptedThisTurn: nextUpdateConfirmAccepted,
+                refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
+              };
+            }
+          }
+        }
+      }
     } else if (isNoText(message)) {
       const reply = makeReply("알겠습니다. 주문 내역을 다시 찾을 수 있도록 주문 시 사용한 연락처나 상품 정보를 알려주세요.");
       await insertTurn({
@@ -963,5 +1053,4 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
     refundConfirmAcceptedThisTurn: nextRefundConfirmAccepted,
   };
 }
-
 

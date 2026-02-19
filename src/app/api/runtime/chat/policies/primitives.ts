@@ -1,0 +1,109 @@
+export const CHAT_PRIMITIVES = {
+  architecture: {
+    enforceIntentContractRuntime: true,
+    rejectCaseSpecificHotfixAsPrimaryFix: true,
+    requireGeneralizableFixAcrossTools: true,
+    requireSlotRequestResponseContractValidation: true,
+  },
+  safety: {
+    otpRequiredIntents: ["order_change", "shipping_inquiry", "refund_request"] as const,
+    otpRequiredTools: [
+      "find_customer_by_phone",
+      "list_orders",
+      "lookup_order",
+      "track_shipment",
+      "update_order_shipping_address",
+    ] as const,
+    forceOtpBeforeSensitiveIntentFlow: true,
+  },
+  response: {
+    uniqueAnswerCount: 1,
+    choiceAnswerMinCount: 2,
+    orderLookupPreviewMax: 3,
+    choicePreviewMax: 5,
+    quickReplyMax: 9,
+    requireNextActionForNonTerminal: true,
+    requireConsentBeforeAlternativeSuggestion: true,
+    alternativeSuggestionConsentIntents: ["restock_inquiry"] as const,
+    hideAlternativeCandidatesBeforeConsent: true,
+    requireImageCardsForChoiceWhenAvailable: true,
+    restockPreferKbWhenNoMallNameMatch: true,
+    restockNewProductLabel: "\uC2E0\uC0C1\uD488",
+  },
+  dialogue: {
+    enforceIntentScopedSlotGate: true,
+    blockFinalAnswerUntilRequiredSlotsResolved: true,
+    requireFollowupQuestionForMissingRequiredSlots: true,
+    requireScopeStateTransitionLogging: true,
+    enforceLastQuestionAnswerBinding: true,
+    requireThreePhasePrompt: true,
+    threePhasePromptLabels: {
+      confirmed: "\uD655\uC778\uD55C \uAC83",
+      confirming: "\uD655\uC778\uD560 \uAC83",
+      next: "\uADF8 \uB2E4\uC74C\uC73C\uB85C \uD655\uC778\uD560 \uAC83",
+    } as const,
+  },
+  address: {
+    resolveZipcodeViaJusoWhenAddressGiven: true,
+    requireCandidateSelectionWhenMultipleZipcodes: true,
+    requireJibunRoadZipTripleInChoice: true,
+    requireAddressRetryWhenZipcodeNotFound: true,
+  },
+  mutation: {
+    requireTargetConfirmationAlways: true,
+    requireTargetSummaryFields: ["order_id", "product_name", "option_name", "price", "quantity"] as const,
+    requireBeforeAfterSummaryForMutations: true,
+  },
+  targetConfirmation: {
+    requireSingleCandidateConfirmation: true,
+    summaryFieldsByTarget: {
+      order: ["order_id", "product_name", "option_name", "price", "quantity"] as const,
+      address: ["jibun_address", "road_address", "zipcode"] as const,
+    },
+  },
+  substitution: {
+    whatUserDontKnow: ["zipcode", "order_id"] as const,
+    resolution: {
+      zipcode: {
+        ask: ["address", "road_address", "jibun_address"] as const,
+        tools: ["search_address"] as const,
+        requires: ["address"] as const,
+      },
+      order_id: {
+        ask: ["phone", "email"] as const,
+        tools: ["list_orders"] as const,
+        requires: ["phone"] as const,
+      },
+    },
+    requireChoiceWhenMultipleCandidates: true,
+    reuseProvidedInfoWithYesNo: true,
+  },
+  memory: {
+    enforceNoRepeatQuestions: true,
+    reusePriority: "highest",
+    selfUpdateEnabledByDefault: true,
+    selfUpdateVisibilityDefault: "admin" as const,
+    entityReuseOrder: ["derived", "prevEntity", "prevTranscript", "recentEntity"] as const,
+    requireReuseConfirmationOnEndUserMatch: true,
+    reuseConfirmationScope: "intent" as const,
+    reuseConfirmationMaxPerScope: 1,
+    reuseConfirmationTargets: ["phone", "order_id", "address", "zipcode", "email"] as const,
+    ownerModules: {
+      phoneReusePrompt: "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+      phoneReuseNextTurn: "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
+      entityCarryOver: "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
+    } as const,
+  },
+  audit: {
+    requireBeforeAfterOnMutation: true,
+    requireFailureBoundaryLogs: true,
+    requireMcpLastFunctionAlwaysRecorded: true,
+    mutationTools: ["update_order_shipping_address"] as const,
+    mutationEvidenceFields: ["before", "request", "after", "diff"] as const,
+    preserveOriginalEntityForMutationTargets: true,
+    preserveOriginalEntityMutationKinds: ["update", "delete"] as const,
+    preserveOriginalEntityScope: "all_mcp_and_api_calls" as const,
+  },
+} as const;
+
+export type ChatPrimitiveRules = typeof CHAT_PRIMITIVES;

@@ -3,7 +3,7 @@ import {
   maybeBuildYesNoQuickReplyRule,
   resolveQuickReplyConfig,
 } from "./quickReplyConfigRuntime";
-import { buildNumberedChoicePrompt, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
+import { buildNumberedChoicePrompt, buildYesNoConfirmationPrompt, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
 import { getMutationIntentContract, resolveSubstitutionPrompt } from "./intentContractRuntime";
 import { splitAddressForUpdate } from "../shared/slotUtils";
 import {
@@ -13,6 +13,7 @@ import {
   shouldRenderImageCardsForChoiceWhenAvailable,
   shouldRequireMutationTargetConfirmationAlways,
   shouldRequireSingleTargetConfirmation,
+  type ChatPrinciples,
 } from "../policies/principles";
 import type { CompiledPolicy } from "../shared/runtimeTypes";
 
@@ -313,6 +314,61 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
       normalized.includes(":delete_")
     );
   };
+  const ensureShippingBeforeSnapshot = async (orderId: string | null) => {
+    const safeOrderId = String(orderId || "").trim();
+    if (!safeOrderId) return;
+    const entity = (policyContext?.entity || {}) as Record<string, any>;
+    const hasBefore = Boolean(
+      String(entity.shipping_before_zipcode || "").trim() ||
+      String(entity.shipping_before_address1 || "").trim() ||
+      String(entity.shipping_before_address2 || "").trim() ||
+      String(entity.shipping_before_address_full || "").trim()
+    );
+    if (hasBefore) return;
+    if (!canUseTool("lookup_order") || !hasAllowedToolName("lookup_order")) {
+      noteMcpSkip(
+        "lookup_order",
+        "SKIP_PREFETCH_SHIPPING_BEFORE",
+        { reason: "LOOKUP_ORDER_NOT_ALLOWED", order_id: safeOrderId },
+        { order_id: safeOrderId }
+      );
+      return;
+    }
+    const lookup = await callMcpTool(
+      context,
+      "lookup_order",
+      buildLookupOrderArgs(safeOrderId, customerVerificationToken),
+      sessionId,
+      latestTurnId,
+      { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> },
+      allowedTools
+    );
+    noteMcp("lookup_order", lookup);
+    toolResults.push({
+      name: "lookup_order",
+      ok: lookup.ok,
+      data: lookup.ok ? (lookup.data as Record<string, any>) : undefined,
+      error: lookup.ok ? undefined : lookup.error,
+    });
+    if (!mcpActions.includes("lookup_order")) mcpActions.push("lookup_order");
+    if (!lookup.ok) return;
+    const parsed = readLookupOrderView(lookup.data);
+    const order = toRecord(parsed.order);
+    const receivers = Array.isArray(order.receivers) ? (order.receivers as Array<Record<string, any>>) : [];
+    const first = (receivers[0] || {}) as Record<string, any>;
+    const zipcode = String(first.zipcode || "").trim();
+    const address1 = String(first.address1 || "").trim();
+    const address2 = String(first.address2 || "").trim();
+    const addressFull = String(first.address_full || "").trim();
+    if (!zipcode && !address1 && !address2 && !addressFull) return;
+    policyContext.entity = {
+      ...(policyContext.entity || {}),
+      shipping_before_zipcode: zipcode || null,
+      shipping_before_address1: address1 || null,
+      shipping_before_address2: address2 || null,
+      shipping_before_address_full: addressFull || null,
+    };
+  };
 
   for (const call of finalCalls) {
     if (!hasAllowedToolName(call.name)) {
@@ -334,6 +390,8 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
       continue;
     }
     if (call.name === "update_order_shipping_address") {
+      const orderIdForSnapshot = String(call?.args?.order_id || policyContext?.entity?.order_id || "").trim() || null;
+      await ensureShippingBeforeSnapshot(orderIdForSnapshot);
       const entity = ((policyContext?.entity || {}) as Record<string, any>);
       const requestZipcode = String(call?.args?.zipcode || "").trim();
       const requestAddress1 = String(call?.args?.address1 || "").trim();
@@ -684,6 +742,7 @@ export async function handleToolForcedResponse(input: {
   conversationMode?: string;
   compiledPolicy: CompiledPolicy;
   resolvedIntent: string;
+  CHAT_PRINCIPLES: ChatPrinciples;
   usedTemplateIds: string[];
   message: string;
   sessionId: string;
@@ -715,6 +774,7 @@ export async function handleToolForcedResponse(input: {
     toolGate,
     conversationMode,
     resolvedIntent,
+    CHAT_PRINCIPLES,
     insertEvent,
     context,
     sessionId,
@@ -788,7 +848,7 @@ export async function handleToolForcedResponse(input: {
     usedTemplateIds.includes("order_change_need_order_id");
   const currentAddress = typeof policyContext.entity?.address === "string" ? String(policyContext.entity.address).trim() : "";
   const shouldDeferZipcodeTemplate = isNeedZipcodeTemplate && resolvedIntent === "order_change" && Boolean(currentAddress);
-  const zipcodePlan = getSubstitutionPlan("zipcode");
+  const zipcodePlan = getSubstitutionPlan("zipcode", CHAT_PRINCIPLES);
   const zipcodeSubstitution = resolveSubstitutionPrompt({
     targetSlot: "zipcode",
     intent: resolvedIntent,
@@ -800,7 +860,7 @@ export async function handleToolForcedResponse(input: {
     zipcodeSubstitution?.prompt || "도로명/지번 주소를 알려주세요.";
   const zipcodeExpectedInput = zipcodeSubstitution?.askSlot || "address";
   const phone = typeof policyContext.entity?.phone === "string" ? String(policyContext.entity.phone).trim() : "";
-  const orderIdPlan = getSubstitutionPlan("order_id");
+  const orderIdPlan = getSubstitutionPlan("order_id", CHAT_PRINCIPLES);
   const shouldDeferOrderIdTemplate =
     isNeedOrderIdTemplate &&
     resolvedIntent === "order_change" &&
@@ -1120,26 +1180,34 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     const selected = listOrdersChoices[0];
     const mutationContract = getMutationIntentContract(resolvedIntent);
     const requireTargetConfirmation =
-      shouldRequireSingleTargetConfirmation() &&
-      shouldRequireMutationTargetConfirmationAlways() &&
+      shouldRequireSingleTargetConfirmation(CHAT_PRINCIPLES) &&
+      shouldRequireMutationTargetConfirmationAlways(CHAT_PRINCIPLES) &&
       Boolean(mutationContract);
     if (requireTargetConfirmation) {
       const selectedOrderId = String(selected.order_id || "").trim();
-      const summaryFields = getTargetSummaryFields("order").length
-        ? getTargetSummaryFields("order")
-        : getMutationTargetSummaryFields();
+      const summaryFields = getTargetSummaryFields("order", CHAT_PRINCIPLES).length
+        ? getTargetSummaryFields("order", CHAT_PRINCIPLES)
+        : getMutationTargetSummaryFields(CHAT_PRINCIPLES);
       const summaryLines = buildTargetSummaryLines(selected, summaryFields);
       const summaryBlock = summaryLines.length
         ? summaryLines.map((line) => `- ${line}`).join("\n")
         : selected.label
           ? String(selected.label)
           : `주문번호 ${selectedOrderId || "-"}`;
-      const authAck = otpVerifiedThisTurn ? "인증이 완료되었습니다." : null;
+      const authAck = otpVerifiedThisTurn ? "\uC778\uC99D\uC774 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : null;
+      const question = ["\uC544\uB798 \uC8FC\uBB38\uC774 \uB9DE\uB294\uC9C0 \uD655\uC778\uD574 \uC8FC\uC138\uC694.", summaryBlock]
+        .filter(Boolean)
+        .join("\n");
       const reply = makeReply(
-        [authAck, "아래 주문이 맞는지 확인해 주세요.", summaryBlock, "네/아니오로 답해주세요."]
-          .filter(Boolean)
-          .join("\n")
+        buildYesNoConfirmationPrompt(question, {
+          entity: policyContext.entity,
+          phase: {
+            confirmed: authAck,
+            next: "\uB2F5\uBCC0\uC744 \uC8FC\uC2DC\uBA74 \uC5B4\uB290 \uC8FC\uC18C\uB85C \uBCC0\uACBD\uD560\uC9C0 \uD655\uC778\uD558\uACA0\uC2B5\uB2C8\uB2E4.",
+          },
+        })
       );
+
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -1156,6 +1224,8 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
           target_confirm_kind: "order",
           pending_order_id: selectedOrderId || null,
           pending_target_summary: summaryLines,
+          three_phase_confirmed: authAck,
+          three_phase_next: "\uB2F5\uBCC0\uC744 \uC8FC\uC2DC\uBA74 \uC5B4\uB290 \uC8FC\uC18C\uB85C \uBCC0\uACBD\uD560\uC9C0 \uD655\uC778\uD558\uACA0\uC2B5\uB2C8\uB2E4.",
           mcp_actions: mcpActions,
         },
       });
@@ -1303,7 +1373,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     const reply = makeReply(replyText);
     const choiceItems = buildOrderChoiceItems({
       choices: listOrdersChoices,
-      includeImages: shouldRenderImageCardsForChoiceWhenAvailable(),
+      includeImages: shouldRenderImageCardsForChoiceWhenAvailable(CHAT_PRINCIPLES),
     });
     await insertTurn({
       session_id: sessionId,
@@ -1349,7 +1419,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
   }
 
   if (listOrdersCalled && listOrdersEmpty) {
-    const orderIdPlan = getSubstitutionPlan("order_id");
+    const orderIdPlan = getSubstitutionPlan("order_id", CHAT_PRINCIPLES);
     const substitution = resolveSubstitutionPrompt({
       targetSlot: "order_id",
       intent: resolvedIntent,

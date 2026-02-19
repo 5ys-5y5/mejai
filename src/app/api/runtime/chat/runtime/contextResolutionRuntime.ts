@@ -2,6 +2,7 @@ import type { PolicyEvalContext } from "@/lib/policyEngine";
 import { resolveAddressWithReuse, resolvePhoneWithReuse } from "./memoryReuseRuntime";
 import { getExpectedSlotKeys } from "./inputContractRuntime";
 import { requiresOtpForIntent } from "../policies/principles";
+import { getSlotLabel } from "./intentContractRuntime";
 
 type ContextResolutionParams = {
   context: any;
@@ -58,6 +59,8 @@ function shouldPreserveEntityAuditKey(key: string) {
   const normalized = String(key || "").trim();
   if (!normalized) return false;
   if (normalized.startsWith("shipping_before_")) return true;
+  if (normalized.startsWith("shipping_request_")) return true;
+  if (normalized.startsWith("resolved_")) return true;
   if (normalized.startsWith("original_")) return true;
   if (normalized.startsWith("mutation_")) return true;
   if (normalized.endsWith("_before")) return true;
@@ -65,12 +68,85 @@ function shouldPreserveEntityAuditKey(key: string) {
   return false;
 }
 
-function pickPreservedEntityAuditFields(entity: Record<string, any>) {
+const CONVERSATION_ENTITY_KEYS = new Set([
+  "order_id",
+  "phone",
+  "address",
+  "zipcode",
+  "channel",
+  "product_query",
+  "product_name",
+  "product_id",
+  "member_id",
+  "resolved_road_address",
+  "resolved_jibun_address",
+]);
+
+const ENTITY_UPDATE_NOTICE_KEYS = new Set([
+  "order_id",
+  "phone",
+  "address",
+  "zipcode",
+  "channel",
+  "product_query",
+  "product_name",
+  "product_id",
+]);
+
+function isConversationEntityKey(key: string) {
+  const normalized = String(key || "").trim();
+  if (!normalized) return false;
+  if (CONVERSATION_ENTITY_KEYS.has(normalized)) return true;
+  return shouldPreserveEntityAuditKey(normalized);
+}
+
+function pickConversationEntityBase(entity: Record<string, any>) {
   const entries = Object.entries(entity || {}).filter(([key, value]) => {
-    if (!shouldPreserveEntityAuditKey(key)) return false;
+    if (!isConversationEntityKey(key)) return false;
     return value !== undefined;
   });
   return Object.fromEntries(entries);
+}
+
+function normalizeEntityValue(value: unknown) {
+  const text = String(value ?? "").trim();
+  return text || "";
+}
+
+function buildEntityUpdateNotice(updates: Array<{ field: string; prev: string; next: string }>, intent: string) {
+  if (!updates.length) return "";
+  const lines = updates.map((update) => {
+    const label = getSlotLabel(update.field, intent);
+    return `${label} ${update.prev} -> ${update.next}`;
+  });
+  return `\uC815\uBCF4 \uC5C5\uB370\uC774\uD2B8: ${lines.join(", ")}. \uC774\uD6C4 \uC548\uB0B4\uB294 \uBCC0\uACBD\uB41C \uC815\uBCF4 \uAE30\uC900\uC73C\uB85C \uC9C4\uD589\uD569\uB2C8\uB2E4.`;
+}
+
+function mergeConversationEntity(input: {
+  base: Record<string, any>;
+  nextValues: Record<string, string | null | undefined>;
+  noticeKeys: Set<string>;
+}) {
+  const merged = { ...(input.base || {}) } as Record<string, any>;
+  const updates: Array<{ field: string; prev: string; next: string }> = [];
+  const noticeUpdates: Array<{ field: string; prev: string; next: string }> = [];
+  Object.entries(input.nextValues || {}).forEach(([field, nextRaw]) => {
+    const next = normalizeEntityValue(nextRaw);
+    if (!next) return;
+    const prev = normalizeEntityValue(merged[field]);
+    if (!prev) {
+      merged[field] = nextRaw;
+      return;
+    }
+    if (prev === next) return;
+    merged[field] = nextRaw;
+    const update = { field, prev, next };
+    updates.push(update);
+    if (input.noticeKeys.has(field)) {
+      noticeUpdates.push(update);
+    }
+  });
+  return { merged, updates, noticeUpdates };
 }
 
 export async function resolveIntentAndPolicyContext(params: ContextResolutionParams): Promise<ContextResolutionResult> {
@@ -431,13 +507,11 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     resolvedIntent: nextResolvedIntent,
     forceReuse: forceReuseAddress,
   });
-  const preservedAuditFields = pickPreservedEntityAuditFields(prevEntity);
-  const policyContext: PolicyEvalContext = {
-    input: { text: message },
-    intent: { name: nextResolvedIntent },
-    entity: {
-      ...preservedAuditFields,
-      channel: derivedChannel ?? (typeof prevEntity.channel === "string" ? prevEntity.channel : null),
+  const baseEntity = pickConversationEntityBase(prevEntity);
+  const { merged, updates, noticeUpdates } = mergeConversationEntity({
+    base: baseEntity,
+    nextValues: {
+      channel: derivedChannel ?? null,
       order_id: resolvedOrderId,
       phone: resolvedPhone,
       address: resolvedAddress,
@@ -445,9 +519,38 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
       resolved_road_address: carriedRoadAddress,
       resolved_jibun_address: carriedJibunAddress,
     },
+    noticeKeys: ENTITY_UPDATE_NOTICE_KEYS,
+  });
+  const updateNotice = buildEntityUpdateNotice(noticeUpdates, nextResolvedIntent);
+  const policyContext: PolicyEvalContext = {
+    input: { text: message },
+    intent: { name: nextResolvedIntent },
+    entity: {
+      ...merged,
+    },
     user: { confirmed: explicitUserConfirmed },
-    conversation: { repeat_count: 0, flags: {} },
+    conversation: {
+      repeat_count: 0,
+      flags: {
+        entity_updates: noticeUpdates,
+        entity_update_notice: updateNotice || null,
+      },
+    },
   };
+  if (updates.length > 0) {
+    await insertEvent(
+      context,
+      sessionId,
+      latestTurnId,
+      "ENTITY_FIELD_UPDATED",
+      {
+        intent: nextResolvedIntent,
+        updates,
+        update_notice: updateNotice || null,
+      },
+      { intent_name: nextResolvedIntent, entity: policyContext.entity as Record<string, any> }
+    );
+  }
 
   return {
     resolvedIntent: nextResolvedIntent,

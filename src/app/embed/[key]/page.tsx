@@ -685,8 +685,9 @@ export default function WidgetEmbedPage() {
   }, [callInit, pendingUser]);
 
   const handleSendText = useCallback(
-    async (rawText: string) => {
+    async (rawText: string, displayText?: string) => {
       const text = String(rawText || "").trim();
+      const display = String(displayText ?? rawText ?? "").trim();
       if (!text || !widgetToken || !sessionId || sending) return;
       setInputValue("");
       setSending(true);
@@ -694,7 +695,7 @@ export default function WidgetEmbedPage() {
       const botId = buildId();
       setMessages((prev) => [
         ...prev,
-        { id: userId, role: "user", content: text },
+        { id: userId, role: "user", content: display || text },
         { id: botId, role: "bot", content: "답변 생성 중...", isLoading: true },
       ]);
       setStatus("응답 중");

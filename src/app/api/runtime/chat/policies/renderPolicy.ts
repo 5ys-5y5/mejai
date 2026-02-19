@@ -1,6 +1,7 @@
 import type { RuntimeQuickReply, RuntimeQuickReplyConfig } from "../presentation/ui-responseDecorators";
 import type { RuntimeCard } from "../presentation/runtimeResponseSchema";
-import { RUNTIME_UI_PROMPT_RULES, type RuntimeUiTypeId } from "@/components/design-system/conversation/runtimeUiCatalog";
+import { type RuntimeUiTypeId } from "@/components/design-system/conversation/runtimeUiCatalog";
+import { RENDER_POLICY } from "./uiPolicy";
 
 export type QuickReplySourceType = "explicit" | "config" | "fallback" | "none";
 
@@ -45,26 +46,6 @@ export type RenderPlan = {
     submit_format_source: "config" | "default";
   };
 };
-
-export const RENDER_POLICY = {
-  version: "v1",
-  interaction_scope: "latest_only",
-  quick_reply_sources: {
-    explicit: true,
-    config: true,
-    fallback: true,
-  },
-  grid_max_columns: {
-    quick_replies: 3,
-    cards: 3,
-  },
-  prompt_rules: {
-    lead_day_prompt_keyword: RUNTIME_UI_PROMPT_RULES.leadDayPromptKeyword,
-    intent_disambiguation_keywords: [...RUNTIME_UI_PROMPT_RULES.intentDisambiguationKeywords],
-    min_select_regex: RUNTIME_UI_PROMPT_RULES.minSelectRegex,
-    criteria_map: RUNTIME_UI_PROMPT_RULES.criteriaMap,
-  },
-} as const;
 
 type UiTypeResolve = {
   uiTypeId: RuntimeUiTypeId;

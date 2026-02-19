@@ -167,7 +167,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
   );
 
   const submitMessage = useCallback(
-    async (modelId: string, text: string) => {
+    async (modelId: string, text: string, displayText?: string) => {
       const target = models.find((model) => model.id === modelId);
       if (!target) return false;
       if (!text) return false;
@@ -190,7 +190,8 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         sending: true,
       }));
 
-      const userMessage = { id: makeId(), role: "user" as const, content: text } as unknown as TMessage;
+      const display = String(displayText ?? text).trim();
+      const userMessage = { id: makeId(), role: "user" as const, content: display || text } as unknown as TMessage;
       const loadingMessageId = makeId();
       const loadingStartedAt = Date.now();
       const appendLoadingLog = (line: string) => {

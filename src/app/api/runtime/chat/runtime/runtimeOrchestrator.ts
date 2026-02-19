@@ -8,6 +8,7 @@ import {
 } from "@/lib/policyEngine";
 import {
   CHAT_PRINCIPLES,
+  getPolicyBundle,
   hasChoiceAnswerCandidates,
   hasUniqueAnswerCandidate,
   isOtpRequiredTool,
@@ -112,8 +113,17 @@ import { createRuntimeMcpOps } from "./runtimeMcpOpsRuntime";
 import { runInputStageRuntime } from "./runtimeInputStageRuntime";
 import { initializeRuntimeState } from "./runtimeInitializationRuntime";
 import { createRuntimeResponder } from "../presentation/ui-runtimeResponseRuntime";
-import { mergeRuntimeTemplateOverrides, resolveRuntimeTemplateOverridesFromPolicy } from "./promptTemplateRuntime";
+import {
+  decorateWithThreePhasePrompt,
+  mergeRuntimeTemplateOverrides,
+  resolveRuntimeTemplateOverridesFromPolicy,
+} from "./promptTemplateRuntime";
 import { applyReplyStyle, resolveReplyStyleDirective } from "../policies/replyStyleRuntime";
+import {
+  appendPostActionQuickReplies,
+  resolveCompletionState,
+  shouldAppendPostActionChoices,
+} from "./intentCompletionRuntime";
 import type { RuntimeContext } from "../shared/runtimeTypes";
 import type {
   DisambiguationStepInput,
@@ -170,11 +180,14 @@ export async function POST(req: NextRequest) {
   let currentSessionId: string | null = null;
   let firstTurnInSession = false;
   let latestTurnId: string | null = null;
+  let resolvedIntent = "general";
   let lastDebugPrefixJson: Record<string, any> | null = null;
   let auditMessage: string | null = null;
   let auditConversationMode: string | null = null;
   let auditIntent: string | null = null;
   let auditEntity: Record<string, any> = {};
+  let latestInsertedBotContext: Record<string, any> | null = null;
+  let policyContext = {} as PolicyEvalContext;
   let pipelineStateForError: RuntimePipelineState | null = null;
   let lastStage = "bootstrap.start";
   const stageHistory: Array<{ stage: string; at: string }> = [];
@@ -391,7 +404,7 @@ export async function POST(req: NextRequest) {
   };
   pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts", "POST");
   markStage("bootstrap.start");
-  const respond = createRuntimeResponder({
+  const baseRespond = createRuntimeResponder({
     runtimeTraceId,
     requestStartedAt,
     timingStages,
@@ -401,6 +414,26 @@ export async function POST(req: NextRequest) {
     getLatestTurnId: () => latestTurnId,
     getFirstTurnInSession: () => firstTurnInSession,
   });
+  let respond = (payload: Record<string, any>, init?: ResponseInit) => {
+    const message = typeof payload?.message === "string" ? payload.message : "";
+    const intent = String(resolvedIntent || "");
+    const shouldAppend = shouldAppendPostActionChoices({
+      intent,
+      message,
+      botContext: latestInsertedBotContext,
+    });
+    if (!shouldAppend) {
+      return baseRespond(payload, init);
+    }
+    const mergedQuickReplies = appendPostActionQuickReplies(
+      Array.isArray(payload.quick_replies) ? payload.quick_replies : []
+    );
+    const nextPayload = {
+      ...payload,
+      quick_replies: mergedQuickReplies,
+    };
+    return baseRespond(nextPayload, init);
+  };
   try {
     pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeBootstrap.ts", "bootstrapRuntime");
     const bootstrap = await bootstrapRuntime({
@@ -483,7 +516,7 @@ export async function POST(req: NextRequest) {
     });
     const hasAllowedToolName = initialized.hasAllowedToolName;
     const prevIntent = initialized.prevIntent;
-    let resolvedIntent = initialized.resolvedIntent;
+    resolvedIntent = initialized.resolvedIntent;
     const prevEntity = initialized.prevEntity;
     const prevSelectedOrderId = initialized.prevSelectedOrderId;
     const prevChoices = initialized.prevChoices;
@@ -575,10 +608,11 @@ export async function POST(req: NextRequest) {
     };
     const computeExpectedToolNames = (intent: string) => {
       if (["order_change", "shipping_inquiry", "refund_request"].includes(intent)) {
+        const policy = getPolicyBundle(intent);
         return [
           "send_otp",
           "verify_otp",
-          ...CHAT_PRINCIPLES.safety.otpRequiredTools,
+          ...policy.safety.otpRequiredTools,
         ];
       }
       return [];
@@ -726,17 +760,42 @@ export async function POST(req: NextRequest) {
     const decorateReplyText = (text: string) => {
       const baseText = String(text || "");
       const hasAck = /인증이 완료되었습니다/.test(baseText);
+      let mergedText = baseText;
       if (otpAckPending && hasAck) {
         otpAckPending = false;
-        return applyReplyStyle(baseText, replyStyleDirective);
-      }
-      if (otpAckPending) {
+      } else if (otpAckPending) {
         otpAckPending = false;
-        return applyReplyStyle(`인증이 완료되었습니다.\n${baseText}`, replyStyleDirective);
+        mergedText = `인증이 완료되었습니다.\n${baseText}`;
       }
-      return applyReplyStyle(baseText, replyStyleDirective);
+      const threePhaseText = decorateWithThreePhasePrompt({
+        message: mergedText,
+        intent: resolvedIntent,
+        expectedInput,
+        expectedInputs,
+        expectedInputStage,
+        prevBotContext: effectivePrevBotContext as Record<string, any>,
+        policyEntity: (policyContext?.entity || prevEntity || {}) as Record<string, any>,
+        derivedSlots: {
+          order_id: derivedOrderId,
+          phone: derivedPhone,
+          address: derivedAddress,
+          zipcode: derivedZipcode,
+          channel: derivedChannel,
+          product_query: message,
+        },
+        lastUserMessage: message,
+        maskPhone,
+        entityUpdates: Array.isArray((policyContext as Record<string, any>)?.conversation?.flags?.entity_updates)
+          ? ((policyContext as Record<string, any>).conversation.flags.entity_updates as Array<{
+              field: string;
+              prev: string;
+              next: string;
+            }>)
+          : [],
+      });
+      return applyReplyStyle(threePhaseText, replyStyleDirective);
     };
-    const { makeReply, insertTurn } = createRuntimeConversationIo({
+    let { makeReply, insertTurn } = createRuntimeConversationIo({
       context,
       insertFinalTurn,
       pendingIntentQueue,
@@ -754,7 +813,52 @@ export async function POST(req: NextRequest) {
         latestTurnId = id;
       },
       decorateReplyText,
+      onInsertTurn: (payload) => {
+        latestInsertedBotContext =
+          payload && typeof payload.bot_context === "object"
+            ? (payload.bot_context as Record<string, any>)
+            : null;
+      },
     });
+    const baseInsertTurn = insertTurn;
+    insertTurn = async (payload: Record<string, any>) => {
+      const safePayload =
+        payload && typeof payload === "object" ? (payload as Record<string, any>) : {};
+      const botContext =
+        safePayload.bot_context && typeof safePayload.bot_context === "object"
+          ? ({ ...(safePayload.bot_context as Record<string, any>) } as Record<string, any>)
+          : {};
+      const intentName = String(botContext.intent_name || resolvedIntent || "").trim();
+      const answerText =
+        typeof safePayload.final_answer === "string"
+          ? safePayload.final_answer
+          : typeof safePayload.answer_text === "string"
+            ? safePayload.answer_text
+            : typeof safePayload.message === "string"
+              ? safePayload.message
+              : "";
+      const completion = resolveCompletionState({
+        intent: intentName,
+        message: answerText,
+        botContext,
+      });
+      const shouldStage =
+        intentName &&
+        intentName !== "general" &&
+        completion.completed &&
+        !botContext.conversation_closed &&
+        !botContext.post_action_stage;
+      if (!shouldStage) {
+        return baseInsertTurn(safePayload);
+      }
+      const nextBotContext = {
+        ...botContext,
+        post_action_stage: "awaiting_choice",
+        post_action_origin_intent: intentName,
+        post_action_source: "completion_detection",
+      };
+      return baseInsertTurn({ ...safePayload, bot_context: nextBotContext });
+    };
     const disambiguationInput: DisambiguationStepInput = {
       message,
       expectedInput,
@@ -1101,7 +1205,7 @@ export async function POST(req: NextRequest) {
     pipelineState.resolvedOrderId = resolvedOrderId;
     resolvedIntent = resolvedContext.resolvedIntent;
     pipelineState.resolvedIntent = resolvedIntent;
-    let policyContext: PolicyEvalContext = resolvedContext.policyContext;
+    policyContext = resolvedContext.policyContext;
     auditIntent = resolvedIntent;
     auditEntity = (policyContext.entity || {}) as Record<string, any>;
     markStage("input_stage.start");
@@ -1274,7 +1378,7 @@ export async function POST(req: NextRequest) {
           restock_policy: decision.restock_policy,
           restock_at: decision.restock_at ?? null,
         },
-      };
+      } as PolicyEvalContext;
       auditEntity = (policyContext.entity || {}) as Record<string, any>;
     }
 
@@ -1293,6 +1397,7 @@ export async function POST(req: NextRequest) {
       label?: string;
     }> = [];
     let mcpSummary = "";
+    const policyBundle = getPolicyBundle(resolvedIntent);
     markStage("tool_stage.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts", "runToolStagePipeline");
     const toolStage = await runToolStagePipeline({
@@ -1338,7 +1443,7 @@ export async function POST(req: NextRequest) {
       isLikelyOrderId,
       noteContamination,
       validateToolArgs,
-      CHAT_PRINCIPLES,
+      CHAT_PRINCIPLES: policyBundle,
       buildLookupOrderArgs,
       readLookupOrderView,
       toOrderDateShort,
@@ -1407,7 +1512,7 @@ export async function POST(req: NextRequest) {
       normalizeKoreanMatchText,
       stripRestockNoise,
       hasChoiceAnswerCandidates,
-      CHAT_PRINCIPLES,
+      CHAT_PRINCIPLES: policyBundle,
       canUseTool,
       hasAllowedToolName,
       callMcpTool,

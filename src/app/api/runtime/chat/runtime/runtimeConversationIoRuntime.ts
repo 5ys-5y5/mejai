@@ -1,4 +1,5 @@
 import { insertTurnWithDebug, makeReplyWithDebug } from "./runtimeTurnIo";
+import { replaceActionTokensForDisplay } from "../policies/intentSlotPolicy";
 import type { RuntimeContext } from "../shared/runtimeTypes";
 
 type RuntimeStateSnapshot = {
@@ -89,6 +90,7 @@ export function createRuntimeConversationIo(input: {
   setLastDebugPrefixJson: (next: Record<string, any> | null) => void;
   setLatestTurnId: (id: string | null) => void;
   decorateReplyText?: (text: string) => string;
+  onInsertTurn?: (payload: Record<string, any>) => void;
 }) {
   const {
     context,
@@ -104,6 +106,7 @@ export function createRuntimeConversationIo(input: {
     setLastDebugPrefixJson,
     setLatestTurnId,
     decorateReplyText,
+    onInsertTurn,
   } = input;
 
   function makeReply(text: string, llmModel?: string | null, tools?: string[]) {
@@ -123,6 +126,12 @@ export function createRuntimeConversationIo(input: {
   }
 
   async function insertTurn(payload: Record<string, any>) {
+    if (onInsertTurn) {
+      onInsertTurn(payload);
+    }
+    if (typeof payload.transcript_text === "string") {
+      payload.transcript_text = replaceActionTokensForDisplay(payload.transcript_text);
+    }
     const inserted = await insertTurnWithDebug({
       payload,
       currentDebugPrefixJson: getLastDebugPrefixJson(),

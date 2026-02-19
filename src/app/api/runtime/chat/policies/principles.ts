@@ -1,135 +1,17 @@
-export const CHAT_PRINCIPLES = {
-  // Runtime architecture contract (non-negotiable).
-  // Goal: keep intent-driven flexibility by using semantic contracts, not case-specific hardcoding.
-  architecture: {
-    enforceIntentContractRuntime: true,
-    rejectCaseSpecificHotfixAsPrimaryFix: true,
-    requireGeneralizableFixAcrossTools: true,
-    // Required self-heal design baseline:
-    // 1) intent/slot semantics -> request contract mapping
-    // 2) response contract -> conversation/entity projection
-    // 3) deterministic invariants at pre/post tool boundaries
-    requireSlotRequestResponseContractValidation: true,
-  },
-  // Non-negotiable privacy gate for high-risk operations.
-  safety: {
-    otpRequiredIntents: ["order_change", "shipping_inquiry", "refund_request"] as const,
-    otpRequiredTools: [
-      "find_customer_by_phone",
-      "list_orders",
-      "lookup_order",
-      "track_shipment",
-      "update_order_shipping_address",
-    ] as const,
-    // For sensitive intents, require OTP before any user-specific flow continues.
-    forceOtpBeforeSensitiveIntentFlow: true,
-  },
-  // Deterministic answer-shape policy used by choice flows.
-  response: {
-    uniqueAnswerCount: 1,
-    choiceAnswerMinCount: 2,
-    orderLookupPreviewMax: 3,
-    choicePreviewMax: 5,
-    quickReplyMax: 9,
-    requireNextActionForNonTerminal: true,
-    requireConsentBeforeAlternativeSuggestion: true,
-    alternativeSuggestionConsentIntents: ["restock_inquiry"] as const,
-    hideAlternativeCandidatesBeforeConsent: true,
-    requireImageCardsForChoiceWhenAvailable: true,
-    // Restock KB takes priority when mall product name does not match KB product name.
-    restockPreferKbWhenNoMallNameMatch: true,
-    restockNewProductLabel: "신상품",
-  },
-  // Intent-scoped slot gate contract.
-  // Promise: do not progress to tool/final-answer stage until required intent slots are resolved.
-  dialogue: {
-    enforceIntentScopedSlotGate: true,
-    blockFinalAnswerUntilRequiredSlotsResolved: true,
-    requireFollowupQuestionForMissingRequiredSlots: true,
-    requireScopeStateTransitionLogging: true,
-  },
-  // Address/zipcode resolution contract for shipping address changes.
-  address: {
-    // Users usually know road/jibun address but not zipcode.
-    resolveZipcodeViaJusoWhenAddressGiven: true,
-    // If JUSO returns multiple candidates, force user choice from explicit triples.
-    requireCandidateSelectionWhenMultipleZipcodes: true,
-    // Candidate choice must include jibun/road/zipcode together for deterministic confirmation.
-    requireJibunRoadZipTripleInChoice: true,
-    // If zipcode cannot be found from input address, treat as typo and ask address again.
-    requireAddressRetryWhenZipcodeNotFound: true,
-  },
-  // Mutation safety contract for user-scoped changes.
-  mutation: {
-    // Always confirm the target entity even when only one candidate exists.
-    // The confirmation prompt must include identifying summary fields.
-    requireTargetConfirmationAlways: true,
-    requireTargetSummaryFields: ["order_id", "product_name", "option_name", "price", "quantity"] as const,
-    // After any CRUD mutation, show before/after snapshots to verify correctness.
-    requireBeforeAfterSummaryForMutations: true,
-  },
-  // Target confirmation contract for single-candidate selections.
-  targetConfirmation: {
-    requireSingleCandidateConfirmation: true,
-    summaryFieldsByTarget: {
-      order: ["order_id", "product_name", "option_name", "price", "quantity"] as const,
-      address: ["jibun_address", "road_address", "zipcode"] as const,
-    },
-  },
-  // Missing user-specific identifiers should be backfilled via substitute inputs, not asked directly.
-  // Promise: do not directly ask for zipcode/order_id when the user indicates they do not know them.
-  substitution: {
-    // Slots that users explicitly do not know (expandable list).
-    whatUserDontKnow: ["zipcode", "order_id"] as const,
-    // Resolution strategies for unknown slots (expandable map).
-    resolution: {
-      zipcode: {
-        ask: ["address", "road_address", "jibun_address"] as const,
-        tools: ["search_address"] as const,
-        requires: ["address"] as const,
-      },
-      order_id: {
-        ask: ["phone", "email"] as const,
-        tools: ["list_orders"] as const,
-        requires: ["phone"] as const,
-      },
-    },
-    // When multiple candidates are found, require explicit user selection.
-    requireChoiceWhenMultipleCandidates: true,
-    // If a slot was provided before, do not ask again; confirm reuse with yes/no and proceed.
-    reuseProvidedInfoWithYesNo: true,
-  },
-  // High-priority memory reuse contract.
-  // Promise: do not ask again for information already provided by the user when it can be safely reused.
-  memory: {
-    enforceNoRepeatQuestions: true,
-    reusePriority: "highest",
-    selfUpdateEnabledByDefault: true,
-    selfUpdateVisibilityDefault: "admin" as const,
-    // Deterministic source precedence for slot carry-over.
-    entityReuseOrder: ["derived", "prevEntity", "prevTranscript", "recentEntity"] as const,
-    // Navigator-only metadata: runtime owners that execute this principle.
-    ownerModules: {
-      phoneReusePrompt: "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
-      phoneReuseNextTurn: "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
-      entityCarryOver: "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
-    } as const,
-  },
-  // Mutation audit contract.
-  // Promise: every state-changing operation must persist before/after evidence for deterministic debugging.
-  audit: {
-    requireBeforeAfterOnMutation: true,
-    requireFailureBoundaryLogs: true,
-    requireMcpLastFunctionAlwaysRecorded: true,
-    mutationTools: ["update_order_shipping_address"] as const,
-    mutationEvidenceFields: ["before", "request", "after", "diff"] as const,
-    // Generic contract: for every mutating MCP/API call, preserve original entity snapshot
-    // whenever the target has an existing value (update/delete style operations).
-    preserveOriginalEntityForMutationTargets: true,
-    preserveOriginalEntityMutationKinds: ["update", "delete"] as const,
-    preserveOriginalEntityScope: "all_mcp_and_api_calls" as const,
-  },
-} as const;
+import { DEFAULT_RULE_BUNDLE, type ChatRuleBundle } from "./composed";
+import { getRuleBundle } from "./registry";
+
+export const CHAT_PRINCIPLES = DEFAULT_RULE_BUNDLE;
+
+export type ChatPrinciples = ChatRuleBundle;
+
+const resolvePolicy = (policy?: ChatPrinciples) => policy ?? CHAT_PRINCIPLES;
+
+export function getPolicyBundle(intent?: string) {
+  return getRuleBundle(intent);
+}
+
+
 
 export function requiresOtpForIntent(intent: string) {
   return (CHAT_PRINCIPLES.safety.otpRequiredIntents as readonly string[]).includes(String(intent || ""));
@@ -178,8 +60,9 @@ export function shouldHideAlternativeCandidatesBeforeConsent() {
   return Boolean(CHAT_PRINCIPLES.response.hideAlternativeCandidatesBeforeConsent);
 }
 
-export function shouldRenderImageCardsForChoiceWhenAvailable() {
-  return Boolean(CHAT_PRINCIPLES.response.requireImageCardsForChoiceWhenAvailable);
+export function shouldRenderImageCardsForChoiceWhenAvailable(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.response.requireImageCardsForChoiceWhenAvailable);
 }
 
 export function shouldPreferRestockKbWhenNoMallNameMatch() {
@@ -187,38 +70,42 @@ export function shouldPreferRestockKbWhenNoMallNameMatch() {
 }
 
 export function getRestockNewProductLabel() {
-  return String(CHAT_PRINCIPLES.response.restockNewProductLabel || "신상품");
+  return String(CHAT_PRINCIPLES.response.restockNewProductLabel || "\uC2E0\uC0C1\uD488");
 }
 
-export function shouldEnforceNoRepeatQuestions() {
-  return Boolean(CHAT_PRINCIPLES.memory.enforceNoRepeatQuestions);
+export function shouldEnforceNoRepeatQuestions(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.memory.enforceNoRepeatQuestions);
 }
 
-export function shouldResolveZipcodeViaJusoWhenAddressGiven() {
-  return Boolean(CHAT_PRINCIPLES.address.resolveZipcodeViaJusoWhenAddressGiven);
+export function shouldResolveZipcodeViaJusoWhenAddressGiven(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.address.resolveZipcodeViaJusoWhenAddressGiven);
 }
 
-export function getWhatUserDontKnow() {
-  return CHAT_PRINCIPLES.substitution.whatUserDontKnow as readonly string[];
+export function getWhatUserDontKnow(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return rules.substitution.whatUserDontKnow as readonly string[];
 }
 
-export function getSubstitutionResolutionMap() {
-  return CHAT_PRINCIPLES.substitution.resolution as Record<
+export function getSubstitutionResolutionMap(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return rules.substitution.resolution as Record<
     string,
     { ask: readonly string[]; tools: readonly string[]; requires: readonly string[] }
   >;
 }
 
-export function shouldResolveWithSubstitution(targetSlot: string) {
-  const unknown = new Set(getWhatUserDontKnow());
+export function shouldResolveWithSubstitution(targetSlot: string, policy?: ChatPrinciples) {
+  const unknown = new Set(getWhatUserDontKnow(policy));
   if (!unknown.has(String(targetSlot || ""))) return false;
-  const plan = getSubstitutionResolutionMap()[String(targetSlot || "")];
+  const plan = getSubstitutionResolutionMap(policy)[String(targetSlot || "")];
   return Boolean(plan);
 }
 
-export function getSubstitutionPlan(targetSlot: string) {
-  if (!shouldResolveWithSubstitution(targetSlot)) return null;
-  const plan = getSubstitutionResolutionMap()[String(targetSlot || "")];
+export function getSubstitutionPlan(targetSlot: string, policy?: ChatPrinciples) {
+  if (!shouldResolveWithSubstitution(targetSlot, policy)) return null;
+  const plan = getSubstitutionResolutionMap(policy)[String(targetSlot || "")];
   if (!plan) return null;
   return {
     target: String(targetSlot || ""),
@@ -228,24 +115,29 @@ export function getSubstitutionPlan(targetSlot: string) {
   };
 }
 
-export function shouldRequireChoiceWhenMultipleCandidates() {
-  return Boolean(CHAT_PRINCIPLES.substitution.requireChoiceWhenMultipleCandidates);
+export function shouldRequireChoiceWhenMultipleCandidates(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.substitution.requireChoiceWhenMultipleCandidates);
 }
 
-export function shouldReuseProvidedInfoWithYesNo() {
-  return Boolean(CHAT_PRINCIPLES.substitution.reuseProvidedInfoWithYesNo);
+export function shouldReuseProvidedInfoWithYesNo(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.substitution.reuseProvidedInfoWithYesNo);
 }
 
-export function shouldRequireCandidateSelectionWhenMultipleZipcodes() {
-  return Boolean(CHAT_PRINCIPLES.address.requireCandidateSelectionWhenMultipleZipcodes);
+export function shouldRequireCandidateSelectionWhenMultipleZipcodes(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.address.requireCandidateSelectionWhenMultipleZipcodes);
 }
 
-export function shouldRequireJibunRoadZipTripleInChoice() {
-  return Boolean(CHAT_PRINCIPLES.address.requireJibunRoadZipTripleInChoice);
+export function shouldRequireJibunRoadZipTripleInChoice(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.address.requireJibunRoadZipTripleInChoice);
 }
 
-export function shouldRequireAddressRetryWhenZipcodeNotFound() {
-  return Boolean(CHAT_PRINCIPLES.address.requireAddressRetryWhenZipcodeNotFound);
+export function shouldRequireAddressRetryWhenZipcodeNotFound(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.address.requireAddressRetryWhenZipcodeNotFound);
 }
 
 export function getEntityReuseOrder() {
@@ -268,24 +160,29 @@ export function shouldRequireFailureBoundaryLogs() {
   return Boolean(CHAT_PRINCIPLES.audit.requireFailureBoundaryLogs);
 }
 
-export function shouldRequireMutationTargetConfirmationAlways() {
-  return Boolean(CHAT_PRINCIPLES.mutation.requireTargetConfirmationAlways);
+export function shouldRequireMutationTargetConfirmationAlways(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.mutation.requireTargetConfirmationAlways);
 }
 
-export function getMutationTargetSummaryFields() {
-  return CHAT_PRINCIPLES.mutation.requireTargetSummaryFields as readonly string[];
+export function getMutationTargetSummaryFields(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return rules.mutation.requireTargetSummaryFields as readonly string[];
 }
 
-export function shouldRequireBeforeAfterSummaryForMutations() {
-  return Boolean(CHAT_PRINCIPLES.mutation.requireBeforeAfterSummaryForMutations);
+export function shouldRequireBeforeAfterSummaryForMutations(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.mutation.requireBeforeAfterSummaryForMutations);
 }
 
-export function shouldRequireSingleTargetConfirmation() {
-  return Boolean(CHAT_PRINCIPLES.targetConfirmation.requireSingleCandidateConfirmation);
+export function shouldRequireSingleTargetConfirmation(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.targetConfirmation.requireSingleCandidateConfirmation);
 }
 
-export function getTargetSummaryFields(targetKind: string) {
-  const fields = (CHAT_PRINCIPLES.targetConfirmation.summaryFieldsByTarget as Record<string, readonly string[]> | undefined) || {};
+export function getTargetSummaryFields(targetKind: string, policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  const fields = (rules.targetConfirmation.summaryFieldsByTarget as Record<string, readonly string[]> | undefined) || {};
   return (fields[targetKind] || []) as readonly string[];
 }
 
@@ -303,6 +200,22 @@ export function shouldRequireFollowupQuestionForMissingRequiredSlots() {
 
 export function shouldRequireScopeStateTransitionLogging() {
   return Boolean(CHAT_PRINCIPLES.dialogue.requireScopeStateTransitionLogging);
+}
+
+export function shouldEnforceLastQuestionAnswerBinding() {
+  return Boolean(CHAT_PRINCIPLES.dialogue.enforceLastQuestionAnswerBinding);
+}
+
+export function shouldRequireThreePhasePrompt() {
+  return Boolean(CHAT_PRINCIPLES.dialogue.requireThreePhasePrompt);
+}
+
+export function getThreePhasePromptLabels() {
+  return CHAT_PRINCIPLES.dialogue.threePhasePromptLabels as {
+    confirmed: string;
+    confirming: string;
+    next: string;
+  };
 }
 
 export function shouldRequireMcpLastFunctionAlwaysRecorded() {
@@ -327,4 +240,24 @@ export function getPreserveOriginalEntityMutationKinds() {
 
 export function getPreserveOriginalEntityScope() {
   return CHAT_PRINCIPLES.audit.preserveOriginalEntityScope as "all_mcp_and_api_calls";
+}
+
+export function shouldRequireReuseConfirmationOnEndUserMatch(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.memory.requireReuseConfirmationOnEndUserMatch);
+}
+
+export function getReuseConfirmationScope(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return rules.memory.reuseConfirmationScope as "intent";
+}
+
+export function getReuseConfirmationMaxPerScope(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Number(rules.memory.reuseConfirmationMaxPerScope);
+}
+
+export function getReuseConfirmationTargets(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return rules.memory.reuseConfirmationTargets as readonly string[];
 }

@@ -1,4 +1,4 @@
-import { CHAT_PRINCIPLES } from "@/app/api/runtime/chat/policies/principles";
+import { CHAT_PRINCIPLES, getPolicyBundle } from "@/app/api/runtime/chat/policies/principles";
 
 export type PrincipleBaseline = {
   source: string;
@@ -19,27 +19,28 @@ export type PrincipleBaseline = {
   };
 };
 
-export function getPrincipleBaseline(): PrincipleBaseline {
+export function getPrincipleBaseline(intent?: string | null): PrincipleBaseline {
+  const policy = intent ? getPolicyBundle(intent) : CHAT_PRINCIPLES;
   return {
     source: "src/app/api/runtime/chat/policies/principles.ts",
     version: 1,
     memory: {
-      enforceNoRepeatQuestions: Boolean(CHAT_PRINCIPLES.memory.enforceNoRepeatQuestions),
-      reusePriority: String(CHAT_PRINCIPLES.memory.reusePriority || "highest"),
-      entityReuseOrder: CHAT_PRINCIPLES.memory.entityReuseOrder,
+      enforceNoRepeatQuestions: Boolean(policy.memory.enforceNoRepeatQuestions),
+      reusePriority: String(policy.memory.reusePriority || "highest"),
+      entityReuseOrder: policy.memory.entityReuseOrder,
     },
     dialogue: {
-      enforceIntentScopedSlotGate: Boolean(CHAT_PRINCIPLES.dialogue.enforceIntentScopedSlotGate),
+      enforceIntentScopedSlotGate: Boolean(policy.dialogue.enforceIntentScopedSlotGate),
       blockFinalAnswerUntilRequiredSlotsResolved: Boolean(
-        CHAT_PRINCIPLES.dialogue.blockFinalAnswerUntilRequiredSlotsResolved
+        policy.dialogue.blockFinalAnswerUntilRequiredSlotsResolved
       ),
       requireFollowupQuestionForMissingRequiredSlots: Boolean(
-        CHAT_PRINCIPLES.dialogue.requireFollowupQuestionForMissingRequiredSlots
+        policy.dialogue.requireFollowupQuestionForMissingRequiredSlots
       ),
-      requireScopeStateTransitionLogging: Boolean(CHAT_PRINCIPLES.dialogue.requireScopeStateTransitionLogging),
+      requireScopeStateTransitionLogging: Boolean(policy.dialogue.requireScopeStateTransitionLogging),
     },
     audit: {
-      requireMcpLastFunctionAlwaysRecorded: Boolean(CHAT_PRINCIPLES.audit.requireMcpLastFunctionAlwaysRecorded),
+      requireMcpLastFunctionAlwaysRecorded: Boolean(policy.audit.requireMcpLastFunctionAlwaysRecorded),
     },
   };
 }
