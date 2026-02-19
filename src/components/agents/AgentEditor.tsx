@@ -17,6 +17,7 @@ type AgentItem = {
   llm: string | null;
   kb_id: string | null;
   mcp_tool_ids?: string[] | null;
+  admin_kb_ids?: string[] | null;
   version: string | null;
   is_active: boolean | null;
   created_at?: string | null;
@@ -148,6 +149,9 @@ function buildChangeSummary(current: AgentItem, prev?: AgentItem | null) {
   if (JSON.stringify(normalizeIds(current.mcp_tool_ids)) !== JSON.stringify(normalizeIds(prev.mcp_tool_ids))) {
     changes.push("MCP");
   }
+  if (JSON.stringify(normalizeIds(current.admin_kb_ids)) !== JSON.stringify(normalizeIds(prev.admin_kb_ids))) {
+    changes.push("ADMIN KB");
+  }
   if ((current.website || "") !== (prev.website || "")) changes.push("웹사이트");
   if ((current.goal || "") !== (prev.goal || "")) changes.push("목표");
   return changes.length > 0 ? `${changes.join(", ")} 변경` : "변경 없음";
@@ -188,6 +192,7 @@ export function AgentEditor({
   const [llm, setLlm] = useState("chatgpt");
   const [kbId, setKbId] = useState("");
   const [mcpToolIds, setMcpToolIds] = useState<string[]>([]);
+  const [adminKbIds, setAdminKbIds] = useState<string[]>([]);
   const [website, setWebsite] = useState("");
   const [goal, setGoal] = useState("");
 
@@ -225,6 +230,8 @@ export function AgentEditor({
         setLlm(res.llm === "gemini" ? "gemini" : "chatgpt");
         setKbId(res.kb_id || "");
         setMcpToolIds(res.mcp_tool_ids ?? []);
+        const nextAdminKbIds = Array.isArray(res.admin_kb_ids) ? res.admin_kb_ids : [];
+        setAdminKbIds(nextAdminKbIds);
         setWebsite(res.website || "");
         setGoal(res.goal || "");
         setCurrentVersion(res.version || "");
@@ -300,6 +307,11 @@ export function AgentEditor({
     return kbItems.filter((item) => isAdminKbValue(item.is_admin) && item.org_id === userOrgId);
   }, [kbItems, isAdmin, userOrgId]);
 
+  const assignedAdminKbItems = useMemo(
+    () => adminKbItems.filter((item) => adminKbIds.includes(item.id)),
+    [adminKbItems, adminKbIds]
+  );
+
   const activeKbByParent = useMemo(() => getActiveKbByParent(scopedKbItems), [scopedKbItems]);
   const selectedKb = kbId ? kbById.get(kbId) ?? null : null;
   const selectedKbParentId = selectedKb ? selectedKb.parent_id ?? selectedKb.id : null;
@@ -367,8 +379,16 @@ export function AgentEditor({
   const configChanged = useMemo(() => {
     if (llm !== baseLlm) return true;
     if ((kbId || "") !== (baseKbId || "")) return true;
-    return JSON.stringify(normalizeIds(mcpToolIds)) !== JSON.stringify(normalizeIds(baseMcpToolIds));
-  }, [llm, kbId, mcpToolIds, baseLlm, baseKbId, baseMcpToolIds]);
+    if (JSON.stringify(normalizeIds(mcpToolIds)) !== JSON.stringify(normalizeIds(baseMcpToolIds))) return true;
+    return false;
+  }, [
+    llm,
+    kbId,
+    mcpToolIds,
+    baseLlm,
+    baseKbId,
+    baseMcpToolIds,
+  ]);
 
   const metaChanged = useMemo(() => {
     if (name.trim() !== baseName.trim()) return true;
@@ -408,7 +428,6 @@ export function AgentEditor({
       if (JSON.stringify(normalizeIds(mcpToolIds)) !== JSON.stringify(normalizeIds(baseMcpToolIds))) {
         payload.mcp_tool_ids = mcpToolIds;
       }
-
       const saved = await apiFetch<AgentItem>(`/api/agents/${agentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -420,12 +439,14 @@ export function AgentEditor({
       setBaseLlm(saved.llm === "gemini" ? "gemini" : "chatgpt");
       setBaseKbId(saved.kb_id || "");
       setBaseMcpToolIds(saved.mcp_tool_ids ?? []);
+      const savedAdminKbIds = Array.isArray(saved.admin_kb_ids) ? saved.admin_kb_ids : [];
       setBaseWebsite(saved.website || "");
       setBaseGoal(saved.goal || "");
       setName(saved.name || "");
       setLlm(saved.llm === "gemini" ? "gemini" : "chatgpt");
       setKbId(saved.kb_id || "");
       setMcpToolIds(saved.mcp_tool_ids ?? []);
+      setAdminKbIds(savedAdminKbIds);
       setWebsite(saved.website || "");
       setGoal(saved.goal || "");
       setCurrentVersion(saved.version || "");
@@ -797,24 +818,30 @@ export function AgentEditor({
                   ) : null}
                   {isAdmin ? (
                     <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
-                      <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
-                        <span>admin KB</span>
-                        <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
-                          ADMIN
-                        </span>
-                      </div>
-                      {adminKbItems.length > 0 ? (
-                        <div className="mt-2 space-y-1">
-                          {adminKbItems.map((item) => (
-                            <div key={item.id} className="flex items-center justify-between gap-2">
-                              <span className="truncate">{item.title}{item.version ? ` (${item.version})` : ""}</span>
-                              <span className="text-[10px] text-slate-500">ID: {item.id}</span>
-                            </div>
-                          ))}
+                        <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-600">
+                          <span>admin KB</span>
+                          <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">
+                            ADMIN
+                          </span>
                         </div>
-                      ) : (
-                        <div className="mt-2 text-[11px] text-slate-500">적용 가능한 admin KB가 없습니다.</div>
-                      )}
+                        <div className="mt-2 text-[11px] text-slate-500">
+                          Admin KB는 DB 트리거로 자동 관리됩니다. 여기서는 변경할 수 없습니다.
+                        </div>
+                        {assignedAdminKbItems.length > 0 ? (
+                          <div className="mt-2 space-y-1">
+                            {assignedAdminKbItems.map((item) => (
+                              <div key={item.id} className="flex items-center justify-between gap-2">
+                                <span className="truncate">
+                                  {item.title}
+                                  {item.version ? ` (${item.version})` : ""}
+                                </span>
+                                <span className="text-[10px] text-slate-500">ID: {item.id}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-2 text-[11px] text-slate-500">적용된 admin KB가 없습니다.</div>
+                        )}
                     </div>
                   ) : null}
                 </div>

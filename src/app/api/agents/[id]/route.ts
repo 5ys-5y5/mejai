@@ -52,6 +52,24 @@ function isValidLlm(value?: string | null) {
   return value === "chatgpt" || value === "gemini";
 }
 
+function normalizeIdArray(value: unknown) {
+  if (value === null) return null;
+  if (!Array.isArray(value)) return undefined;
+  return value.map((item) => String(item || "").trim()).filter(Boolean);
+}
+
+function normalizeIdList(value?: string[] | null) {
+  if (!Array.isArray(value)) return null;
+  return [...value].map((item) => String(item || "").trim()).filter(Boolean).sort();
+}
+
+function isSameIdList(a?: string[] | null, b?: string[] | null) {
+  const left = normalizeIdList(a);
+  const right = normalizeIdList(b);
+  if (left === null && right === null) return true;
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function buildScopedQuery(client: SupabaseClient, id: string, orgId: string) {
   return client.from("B_bot_agents").select("*").eq("id", id).or(`org_id.eq.${orgId},org_id.is.null`);
 }
@@ -127,6 +145,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     llm?: string;
     kb_id?: string;
     mcp_tool_ids?: string[];
+    admin_kb_ids?: string[] | null;
     agent_type?: string | null;
     industry?: string | null;
     use_case?: string | null;
@@ -139,6 +158,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   if (typeof body.llm === "string") payload.llm = body.llm;
   if (typeof body.kb_id === "string") payload.kb_id = body.kb_id;
   if (Array.isArray(body.mcp_tool_ids)) payload.mcp_tool_ids = body.mcp_tool_ids;
+  const normalizedAdminKbIds = normalizeIdArray(body.admin_kb_ids);
+  if (normalizedAdminKbIds !== undefined) payload.admin_kb_ids = normalizedAdminKbIds;
   if (body.agent_type === null || typeof body.agent_type === "string") payload.agent_type = body.agent_type;
   if (body.industry === null || typeof body.industry === "string") payload.industry = body.industry;
   if (body.use_case === null || typeof body.use_case === "string") payload.use_case = body.use_case;
@@ -186,6 +207,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const nextLlm = payload.llm ?? existing.llm;
   const nextKbId = payload.kb_id ?? existing.kb_id;
   const nextMcpToolIds = payload.mcp_tool_ids ?? existing.mcp_tool_ids ?? [];
+  const nextAdminKbIds =
+    payload.admin_kb_ids === undefined ? (existing.admin_kb_ids ?? null) : payload.admin_kb_ids;
   const nextAgentType = payload.agent_type ?? existing.agent_type ?? null;
   const nextIndustry = payload.industry ?? existing.industry ?? null;
   const nextUseCase = payload.use_case ?? existing.use_case ?? null;
@@ -196,8 +219,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
   const mcpChanged =
     JSON.stringify(nextMcpToolIds ?? []) !== JSON.stringify(existing.mcp_tool_ids ?? []);
+  const adminKbChanged = !isSameIdList(nextAdminKbIds, existing.admin_kb_ids ?? null);
   const configChanged =
-    nextLlm !== existing.llm || nextKbId !== existing.kb_id || mcpChanged;
+    nextLlm !== existing.llm || nextKbId !== existing.kb_id || mcpChanged || adminKbChanged;
   const metaChanged =
     nextName !== existing.name ||
     nextAgentType !== (existing.agent_type ?? null) ||
@@ -227,6 +251,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       llm: nextLlm,
       kb_id: nextKbId,
       mcp_tool_ids: nextMcpToolIds,
+      admin_kb_ids: Array.isArray(nextAdminKbIds) ? nextAdminKbIds : null,
       agent_type: nextAgentType,
       industry: nextIndustry,
       use_case: nextUseCase,

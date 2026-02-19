@@ -333,6 +333,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         llm: agent.llm,
         kb_id: data.id,
         mcp_tool_ids: agent.mcp_tool_ids ?? [],
+        admin_kb_ids: agent.admin_kb_ids ?? null,
         agent_type: agent.agent_type ?? null,
         industry: agent.industry ?? null,
         use_case: agent.use_case ?? null,

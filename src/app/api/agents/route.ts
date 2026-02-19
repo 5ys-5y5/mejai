@@ -20,6 +20,12 @@ function isValidLlm(value?: string | null) {
   return value === "chatgpt" || value === "gemini";
 }
 
+function normalizeIdArray(value: unknown) {
+  if (value === null) return null;
+  if (!Array.isArray(value)) return undefined;
+  return value.map((item) => String(item || "").trim()).filter(Boolean);
+}
+
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
@@ -77,6 +83,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "INVALID_KB_ID" }, { status: 400 });
   }
 
+  const normalizedAdminKbIds = normalizeIdArray(body.admin_kb_ids);
+
   const newId = crypto.randomUUID();
   const payload = {
     id: newId,
@@ -85,6 +93,7 @@ export async function POST(req: NextRequest) {
     llm: body.llm,
     kb_id: body.kb_id,
     mcp_tool_ids: Array.isArray(body.mcp_tool_ids) ? body.mcp_tool_ids : [],
+    admin_kb_ids: normalizedAdminKbIds === undefined ? null : normalizedAdminKbIds,
     agent_type: body.agent_type ?? null,
     industry: body.industry ?? null,
     use_case: body.use_case ?? null,

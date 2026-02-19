@@ -49,6 +49,7 @@ type AgentShape = {
   llm?: string | null;
   kb_id?: string | null;
   mcp_tool_ids?: string[] | null;
+  admin_kb_ids?: string[] | null;
   is_active?: boolean | null;
 };
 
@@ -299,7 +300,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       return { response: respond({ error: agentRes.error || "AGENT_NOT_FOUND" }, { status: 404 }), state: null };
     }
     agent = agentRes.data;
-    if (isWidgetRequest && agent) {
+    if (agent) {
       const activeFlag = agent.is_active;
       const rawParentId = agent.parent_id;
       const shouldResolveChild =
@@ -331,6 +332,10 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   if (!agent) {
     return { response: respond({ error: "AGENT_NOT_FOUND" }, { status: 404 }), state: null };
   }
+
+  const agentAdminKbIds = Array.isArray(agent.admin_kb_ids)
+    ? agent.admin_kb_ids.map((id) => String(id)).filter(Boolean)
+    : [];
 
   const kbLookupStartedAt = Date.now();
   let kb: KbRow;
@@ -423,39 +428,50 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     reason: string;
   }> = [];
   let adminKbs = adminKbAll;
-  if (overrideAdminKbIds !== null) {
-    const allowed = new Set(overrideAdminKbIds);
-    adminKbFilterMeta = adminKbs.map((item) => ({
-      id: String(item.id || ""),
-      title: String((item as Record<string, any>).title || "") || null,
-      apply_groups: (item as Record<string, any>).apply_groups ?? null,
-      apply_groups_mode: String((item as Record<string, any>).apply_groups_mode || "") || null,
-      matched: allowed.has(item.id),
-      reason: allowed.has(item.id) ? "override_selected" : "override_not_selected",
-    }));
-    adminKbs = adminKbs.filter((item) => allowed.has(item.id));
-  } else {
-    adminKbFilterMeta = adminKbs.map((item) => {
-      const applyGroups = Array.isArray(item.apply_groups) ? item.apply_groups : null;
-      const applyMode = item.apply_groups_mode === "any" ? "any" : "all";
-      const matched = matchesAdminGroup(applyGroups, userGroup, applyMode);
-      return {
+    if (agentId) {
+      const allowed = new Set(agentAdminKbIds);
+      adminKbFilterMeta = adminKbAll.map((item) => ({
         id: String(item.id || ""),
         title: String((item as Record<string, any>).title || "") || null,
-        apply_groups: applyGroups,
-        apply_groups_mode: String(item.apply_groups_mode || "") || null,
-        matched,
-        reason: matched ? "group_match" : "group_mismatch",
-      };
-    });
-    adminKbs = adminKbs.filter((item) =>
-      matchesAdminGroup(
-        Array.isArray(item.apply_groups) ? item.apply_groups : null,
-        userGroup,
-        item.apply_groups_mode === "any" ? "any" : "all"
-      )
-    );
-  }
+        apply_groups: (item as Record<string, any>).apply_groups ?? null,
+        apply_groups_mode: String((item as Record<string, any>).apply_groups_mode || "") || null,
+        matched: allowed.has(item.id),
+        reason: allowed.has(item.id) ? "agent_selected" : "agent_not_selected",
+      }));
+      adminKbs = adminKbAll.filter((item) => allowed.has(item.id));
+    } else if (!agentId && overrideAdminKbIds !== null) {
+      const allowed = new Set(overrideAdminKbIds);
+      adminKbFilterMeta = adminKbAll.map((item) => ({
+        id: String(item.id || ""),
+        title: String((item as Record<string, any>).title || "") || null,
+        apply_groups: (item as Record<string, any>).apply_groups ?? null,
+        apply_groups_mode: String((item as Record<string, any>).apply_groups_mode || "") || null,
+        matched: allowed.has(item.id),
+        reason: allowed.has(item.id) ? "override_selected" : "override_not_selected",
+      }));
+      adminKbs = adminKbAll.filter((item) => allowed.has(item.id));
+    } else {
+      adminKbFilterMeta = adminKbAll.map((item) => {
+        const applyGroups = Array.isArray(item.apply_groups) ? item.apply_groups : null;
+        const applyMode = item.apply_groups_mode === "any" ? "any" : "all";
+        const matched = matchesAdminGroup(applyGroups, userGroup, applyMode);
+        return {
+          id: String(item.id || ""),
+          title: String((item as Record<string, any>).title || "") || null,
+          apply_groups: applyGroups,
+          apply_groups_mode: applyMode,
+          matched,
+          reason: matched ? "group_match" : "group_mismatch",
+        };
+      });
+      adminKbs = adminKbAll.filter((item) =>
+        matchesAdminGroup(
+          Array.isArray(item.apply_groups) ? item.apply_groups : null,
+          userGroup,
+          item.apply_groups_mode === "any" ? "any" : "all"
+        )
+      );
+    }
   const policyPacks = adminKbs
     .filter((item) => item.content_json)
     .map((item) => item.content_json as PolicyPack);
