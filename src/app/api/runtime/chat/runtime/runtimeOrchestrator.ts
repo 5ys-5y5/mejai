@@ -1404,6 +1404,19 @@ export async function POST(req: NextRequest) {
       } as PolicyEvalContext;
       auditEntity = (policyContext.entity || {}) as Record<string, any>;
     }
+    const confirmedProductId =
+      typeof confirmedEntityState.product_id === "string" ? confirmedEntityState.product_id.trim() : "";
+    const entityProductId =
+      typeof policyContext?.entity?.product_id === "string" ? String(policyContext.entity.product_id).trim() : "";
+    if (!policyContext.product?.id && (confirmedProductId || entityProductId)) {
+      policyContext = {
+        ...policyContext,
+        product: {
+          ...(policyContext.product || {}),
+          id: confirmedProductId || entityProductId || null,
+        },
+      } as PolicyEvalContext;
+    }
 
     let listOrdersCalled = false;
     let listOrdersEmpty = false;
