@@ -79,6 +79,7 @@ import {
 } from "../policies/restockResponsePolicy";
 import { callAddressSearchWithAudit, callMcpTool } from "../services/mcpRuntime";
 import { handleRestockIntent } from "../handlers/restockHandler";
+import { deriveConfirmedEntityFromBotContext, mergeConfirmedEntity, normalizeConfirmedEntity } from "../shared/confirmedEntity";
 import {
   buildDebugPrefixJson,
   buildDefaultOrderRange,
@@ -525,6 +526,7 @@ export async function POST(req: NextRequest) {
     const prevZipFromTranscript = initialized.prevZipFromTranscript;
     const prevAddressFromTranscript = initialized.prevAddressFromTranscript;
     let recentEntity = initialized.recentEntity;
+    let confirmedEntityState = normalizeConfirmedEntity(effectivePrevBotContext?.confirmed_entity);
     const pipelineState = initialized.pipelineState;
     const memoryEntity = await fetchEndUserMemoryEntity({
       context,
@@ -814,10 +816,18 @@ export async function POST(req: NextRequest) {
       },
       decorateReplyText,
       onInsertTurn: (payload) => {
-        latestInsertedBotContext =
-          payload && typeof payload.bot_context === "object"
-            ? (payload.bot_context as Record<string, any>)
-            : null;
+        const safePayload =
+          payload && typeof payload === "object" ? (payload as Record<string, any>) : {};
+        const botContext =
+          safePayload.bot_context && typeof safePayload.bot_context === "object"
+            ? ({ ...(safePayload.bot_context as Record<string, any>) } as Record<string, any>)
+            : {};
+        const derivedConfirmed = deriveConfirmedEntityFromBotContext(botContext);
+        const mergedConfirmed = mergeConfirmedEntity(confirmedEntityState, derivedConfirmed);
+        confirmedEntityState = mergedConfirmed;
+        botContext.confirmed_entity = mergedConfirmed;
+        safePayload.bot_context = botContext;
+        latestInsertedBotContext = botContext;
       },
     });
     const baseInsertTurn = insertTurn;

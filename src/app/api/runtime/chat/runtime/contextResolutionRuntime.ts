@@ -3,6 +3,7 @@ import { resolveAddressWithReuse, resolvePhoneWithReuse } from "./memoryReuseRun
 import { getExpectedSlotKeys } from "./inputContractRuntime";
 import { requiresOtpForIntent } from "../policies/principles";
 import { getSlotLabel } from "./intentContractRuntime";
+import { normalizeConfirmedEntity } from "../shared/confirmedEntity";
 
 type ContextResolutionParams = {
   context: any;
@@ -507,6 +508,7 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     resolvedIntent: nextResolvedIntent,
     forceReuse: forceReuseAddress,
   });
+  const confirmedEntity = normalizeConfirmedEntity(prevBotContext?.confirmed_entity);
   const baseEntity = pickConversationEntityBase(prevEntity);
   const { merged, updates, noticeUpdates } = mergeConversationEntity({
     base: baseEntity,
@@ -522,11 +524,12 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     noticeKeys: ENTITY_UPDATE_NOTICE_KEYS,
   });
   const updateNotice = buildEntityUpdateNotice(noticeUpdates, nextResolvedIntent);
+  const mergedEntity = { ...confirmedEntity, ...merged };
   const policyContext: PolicyEvalContext = {
     input: { text: message },
     intent: { name: nextResolvedIntent },
     entity: {
-      ...merged,
+      ...mergedEntity,
     },
     user: { confirmed: explicitUserConfirmed },
     conversation: {

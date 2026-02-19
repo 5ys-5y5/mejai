@@ -1,5 +1,10 @@
 import crypto from "crypto";
 import { isUuidLike, normalizePhoneDigits } from "../shared/slotUtils";
+import {
+  normalizeConfirmedEntity,
+  stringifyConfirmedValue,
+  type ConfirmedEntity,
+} from "../shared/confirmedEntity";
 import type { RuntimeContext } from "../shared/runtimeTypes";
 
 export type EndUserSyncContext = Pick<RuntimeContext, "supabase" | "orgId" | "runtimeEndUser">;
@@ -34,6 +39,7 @@ type EndUserMemoryEntity = {
   address?: string | null;
   zipcode?: string | null;
   order_id?: string | null;
+  [key: string]: string | null | undefined;
 };
 
 function nowIso() {
@@ -243,17 +249,7 @@ function buildIdentityCandidates(profile: EndUserProfile): IdentityCandidate[] {
 
 function mergeMemoryEntity(base: EndUserMemoryEntity, override: EndUserMemoryEntity) {
   const next: EndUserMemoryEntity = { ...base };
-  const keys: Array<keyof EndUserMemoryEntity> = [
-    "phone",
-    "email",
-    "member_id",
-    "name",
-    "address",
-    "zipcode",
-    "order_id",
-  ];
-  keys.forEach((key) => {
-    const value = override[key];
+  Object.entries(override || {}).forEach(([key, value]) => {
     if (typeof value === "string" && value.trim()) {
       next[key] = value.trim();
     }
@@ -280,6 +276,23 @@ function buildMemoryEntityFromRows(rows: Array<Record<string, any>>) {
     if (key === "address") next.address = value;
     if (key === "zipcode") next.zipcode = value;
     if (key === "order_id") next.order_id = value;
+  });
+  return next;
+}
+
+function buildConfirmedEntityFromRows(rows: Array<Record<string, any>>) {
+  const next: EndUserMemoryEntity = {};
+  const seen = new Set<string>();
+  rows.forEach((row) => {
+    const key = readString(row.memory_key);
+    if (!key || seen.has(key)) return;
+    const content = readString(row.content);
+    const valueJson = readRecord(row.value_json) || {};
+    const fallback = readString(valueJson.value);
+    const value = content || fallback;
+    if (!value) return;
+    seen.add(key);
+    next[key] = value;
   });
   return next;
 }
@@ -344,6 +357,16 @@ export async function fetchEndUserMemoryEntity(input: {
     .in("memory_key", ["phone", "email", "member_id", "name", "address", "zipcode", "order_id"])
     .order("updated_at", { ascending: false });
   const memoryEntity = buildMemoryEntityFromRows((memoryRows || []) as Array<Record<string, any>>);
+  const { data: confirmedRows } = await context.supabase
+    .from("A_end_user_memories")
+    .select("memory_key, content, value_json, updated_at")
+    .eq("org_id", orgId)
+    .eq("end_user_id", endUserId)
+    .eq("memory_type", "confirmed")
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(200);
+  const confirmedEntity = buildConfirmedEntityFromRows((confirmedRows || []) as Array<Record<string, any>>);
   const fallbackEntity: EndUserMemoryEntity = {
     phone: normalizePhone(readString((entity || {})?.phone) || null),
     email: normalizeEmail(readString((entity || {})?.email) || null),
@@ -353,7 +376,7 @@ export async function fetchEndUserMemoryEntity(input: {
     zipcode: readString((entity || {})?.zipcode),
     order_id: readString((entity || {})?.order_id),
   };
-  return mergeMemoryEntity(memoryEntity, fallbackEntity);
+  return mergeMemoryEntity(mergeMemoryEntity(memoryEntity, confirmedEntity), fallbackEntity);
 }
 
 function buildContentSummary(value: string | null, fallback?: string | null, maxLength = 200) {
@@ -772,6 +795,23 @@ export async function syncEndUserFromTurn(input: {
         memoryKey: target.key,
         content: target.value,
         valueJson: { value: target.value },
+        sourceSessionId: sessionId,
+        sourceTurnId: turnId,
+      });
+    }
+
+    const confirmedEntity = normalizeConfirmedEntity((turnPayload.bot_context || {})?.confirmed_entity) as ConfirmedEntity;
+    for (const [key, value] of Object.entries(confirmedEntity)) {
+      const content = stringifyConfirmedValue(value);
+      if (!content) continue;
+      await upsertMemory({
+        context,
+        orgId,
+        endUserId,
+        memoryType: "confirmed",
+        memoryKey: key,
+        content,
+        valueJson: { value, source: "confirmed_entity" },
         sourceSessionId: sessionId,
         sourceTurnId: turnId,
       });
