@@ -176,7 +176,7 @@ export function mapRuntimeResponseToTranscriptFields(res: RuntimeRunResponseLike
         }
       : undefined;
 
-  const quickReplies = Array.isArray(res.quick_replies)
+  const quickRepliesFromPayload = Array.isArray(res.quick_replies)
     ? res.quick_replies
         .map((item) => ({
           label: String(item?.label || item?.value || "").trim(),
@@ -184,8 +184,10 @@ export function mapRuntimeResponseToTranscriptFields(res: RuntimeRunResponseLike
         }))
         .filter((item) => item.label && item.value)
     : [];
+  const quickRepliesFromSchema = responseSchema?.quick_replies || [];
+  const quickReplies = quickRepliesFromPayload.length > 0 ? quickRepliesFromPayload : quickRepliesFromSchema;
 
-  const productCards = Array.isArray(res.product_cards)
+  const productCardsFromPayload = Array.isArray(res.product_cards)
     ? res.product_cards
         .map((item, idx) => ({
           id: String(item?.id || `card-${idx}`).trim(),
@@ -197,6 +199,19 @@ export function mapRuntimeResponseToTranscriptFields(res: RuntimeRunResponseLike
         }))
         .filter((item) => item.title && item.value)
     : [];
+  const productCardsFromSchema = Array.isArray(responseSchema?.cards)
+    ? responseSchema!.cards!
+        .map((item, idx) => ({
+          id: String(item?.id || `card-${idx}`).trim(),
+          title: String((item as Record<string, any>)?.title || "").trim(),
+          subtitle: String((item as Record<string, any>)?.subtitle || "").trim(),
+          description: String((item as Record<string, any>)?.description || "").trim(),
+          imageUrl: String((item as Record<string, any>)?.image_url || "").trim(),
+          value: String((item as Record<string, any>)?.value || "").trim(),
+        }))
+        .filter((item) => item.title && item.value)
+    : [];
+  const productCards = productCardsFromPayload.length > 0 ? productCardsFromPayload : productCardsFromSchema;
 
   return {
     turnId: res.turn_id || null,

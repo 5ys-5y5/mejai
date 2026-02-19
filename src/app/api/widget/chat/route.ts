@@ -276,6 +276,12 @@ export async function POST(req: NextRequest) {
       },
     });
   }
+  const responseSchema = data.response_schema && typeof data.response_schema === "object" ? (data.response_schema as Record<string, any>) : null;
+  const renderPlan = data.render_plan && typeof data.render_plan === "object" ? (data.render_plan as Record<string, any>) : null;
+  const quickReplyCount = Array.isArray(data.quick_replies) ? data.quick_replies.length : 0;
+  const productCardCount = Array.isArray(data.product_cards) ? data.product_cards.length : 0;
+  const schemaQuickReplyCount = Array.isArray(responseSchema?.quick_replies) ? responseSchema?.quick_replies?.length || 0 : 0;
+  const schemaCardCount = Array.isArray(responseSchema?.cards) ? responseSchema?.cards?.length || 0 : 0;
   await logWidgetProxyEvent({
     supabase: supabaseAdmin,
     sessionId,
@@ -287,6 +293,15 @@ export async function POST(req: NextRequest) {
       ...requestMeta,
       status: res.status,
       ok: res.ok,
+      ui_signal: {
+        render_view: String(renderPlan?.view || ""),
+        enable_cards: Boolean(renderPlan?.enable_cards),
+        enable_quick_replies: Boolean(renderPlan?.enable_quick_replies),
+        quick_replies: quickReplyCount,
+        product_cards: productCardCount,
+        response_schema_quick_replies: schemaQuickReplyCount,
+        response_schema_cards: schemaCardCount,
+      },
     },
   });
 
