@@ -79,7 +79,14 @@ import {
 } from "../policies/restockResponsePolicy";
 import { callAddressSearchWithAudit, callMcpTool } from "../services/mcpRuntime";
 import { handleRestockIntent } from "../handlers/restockHandler";
-import { deriveConfirmedEntityFromBotContext, mergeConfirmedEntity, normalizeConfirmedEntity } from "../shared/confirmedEntity";
+import {
+  deriveConfirmedEntityFromBotContext,
+  extractPromotedFieldsFromBotContext,
+  mergeConfirmedEntity,
+  normalizeConfirmedEntity,
+  stringifyConfirmedValue,
+  type ConfirmedEntity,
+} from "../shared/confirmedEntity";
 import {
   buildDebugPrefixJson,
   buildDefaultOrderRange,
@@ -530,6 +537,18 @@ export async function POST(req: NextRequest) {
     const hasAllowedToolName = initialized.hasAllowedToolName;
     const prevIntent = initialized.prevIntent;
     resolvedIntent = initialized.resolvedIntent;
+    const prevFlowId =
+      typeof (effectivePrevBotContext as Record<string, any>)?.flow_id === "string"
+        ? String((effectivePrevBotContext as Record<string, any>)?.flow_id).trim()
+        : "";
+    const prevFlowIndexRaw = (effectivePrevBotContext as Record<string, any>)?.flow_index;
+    const prevFlowIndex = Number.isFinite(Number(prevFlowIndexRaw)) ? Number(prevFlowIndexRaw) : 0;
+    let activeFlowId = prevFlowId || crypto.randomUUID();
+    let activeFlowIndex = prevFlowIndex || 1;
+    if (isOtherInquiryText(message)) {
+      activeFlowId = crypto.randomUUID();
+      activeFlowIndex = prevFlowIndex > 0 ? prevFlowIndex + 1 : 1;
+    }
     const prevEntity = initialized.prevEntity;
     const prevSelectedOrderId = initialized.prevSelectedOrderId;
     const prevChoices = initialized.prevChoices;
@@ -846,12 +865,58 @@ export async function POST(req: NextRequest) {
           ? ({ ...(safePayload.bot_context as Record<string, any>) } as Record<string, any>)
           : {};
       const derivedConfirmed = deriveConfirmedEntityFromBotContext(botContext);
+      const promotedConfirmed = extractPromotedFieldsFromBotContext(botContext);
+      const confirmedDelta: ConfirmedEntity = { ...promotedConfirmed };
+      Object.entries(derivedConfirmed).forEach(([key, value]) => {
+        const prevValue = (confirmedEntityState as Record<string, unknown>)[key];
+        if (prevValue === undefined) {
+          confirmedDelta[key] = value;
+          return;
+        }
+        const prevText =
+          prevValue !== undefined ? stringifyConfirmedValue(prevValue as any) : null;
+        const nextText = stringifyConfirmedValue(value);
+        if (prevText !== nextText) {
+          confirmedDelta[key] = value;
+        }
+      });
       const mergedConfirmed = mergeConfirmedEntity(confirmedEntityState, derivedConfirmed);
       confirmedEntityState = mergedConfirmed;
       botContext.confirmed_entity = mergedConfirmed;
+      if (Object.keys(confirmedDelta).length > 0) {
+        botContext.confirmed_entity_delta = confirmedDelta;
+        const now = nowIso();
+        const baseMeta =
+          botContext.confirmed_entity_meta && typeof botContext.confirmed_entity_meta === "object"
+            ? ({ ...(botContext.confirmed_entity_meta as Record<string, any>) } as Record<string, any>)
+            : {};
+        Object.keys(confirmedDelta).forEach((key) => {
+          const existing = baseMeta[key];
+          const meta =
+            existing && typeof existing === "object"
+              ? ({ ...(existing as Record<string, any>) } as Record<string, any>)
+              : {};
+          if (!meta.confirmed_at) meta.confirmed_at = now;
+          meta.last_used_at = now;
+          if (!meta.flow_id) meta.flow_id = activeFlowId;
+          if (!meta.source) meta.source = "confirmed_entity";
+          baseMeta[key] = meta;
+        });
+        botContext.confirmed_entity_meta = baseMeta;
+      }
+      const intentName = String(botContext.intent_name || resolvedIntent || "").trim();
+      botContext.flow_id =
+        typeof botContext.flow_id === "string" && botContext.flow_id.trim()
+          ? botContext.flow_id
+          : activeFlowId;
+      botContext.flow_index = Number.isFinite(Number(botContext.flow_index))
+        ? Number(botContext.flow_index)
+        : activeFlowIndex;
+      if (intentName) {
+        botContext.flow_intent = intentName;
+      }
       safePayload.bot_context = botContext;
       latestInsertedBotContext = botContext;
-      const intentName = String(botContext.intent_name || resolvedIntent || "").trim();
       const answerText =
         typeof safePayload.final_answer === "string"
           ? safePayload.final_answer
@@ -871,16 +936,45 @@ export async function POST(req: NextRequest) {
         completion.completed &&
         !botContext.conversation_closed &&
         !botContext.post_action_stage;
-      if (!shouldStage) {
-        return baseInsertTurn(safePayload);
+      let payloadToInsert = safePayload;
+      if (shouldStage) {
+        const nextBotContext = {
+          ...botContext,
+          post_action_stage: "awaiting_choice",
+          post_action_origin_intent: intentName,
+          post_action_source: "completion_detection",
+        };
+        payloadToInsert = { ...safePayload, bot_context: nextBotContext };
       }
-      const nextBotContext = {
-        ...botContext,
-        post_action_stage: "awaiting_choice",
-        post_action_origin_intent: intentName,
-        post_action_source: "completion_detection",
-      };
-      return baseInsertTurn({ ...safePayload, bot_context: nextBotContext });
+      const inserted = await baseInsertTurn(payloadToInsert);
+      if (Object.keys(confirmedDelta).length > 0) {
+        const eventSessionId = String(payloadToInsert.session_id || currentSessionId || "").trim();
+        if (eventSessionId) {
+          const insertedTurnId = String(
+            (inserted as { data?: { id?: string | null } } | null)?.data?.id ||
+              (payloadToInsert as Record<string, any>)?.id ||
+              ""
+          ).trim();
+          const keys = Object.keys(confirmedDelta);
+          await insertEvent(
+            context,
+            eventSessionId,
+            insertedTurnId || latestTurnId,
+            "CONFIRMED_ENTITY_DELTA_APPLIED",
+            {
+              key_count: keys.length,
+              keys: keys.slice(0, 50),
+              flow_id: String((payloadToInsert.bot_context as Record<string, any>)?.flow_id || activeFlowId || ""),
+              delta: confirmedDelta,
+            },
+            {
+              intent_name: intentName,
+              confirmed_entity_delta: confirmedDelta,
+            }
+          );
+        }
+      }
+      return inserted;
     };
     const disambiguationInput: DisambiguationStepInput = {
       message,
@@ -1387,9 +1481,17 @@ export async function POST(req: NextRequest) {
     pipelineState.mcpCandidateCalls = mcpCandidateCalls;
     otpAckPending = Boolean(otpVerifiedThisTurn);
 
+    const confirmedProductId =
+      typeof confirmedEntityState.product_id === "string" ? confirmedEntityState.product_id.trim() : "";
+    const entityProductId =
+      typeof policyContext?.entity?.product_id === "string" ? String(policyContext.entity.product_id).trim() : "";
     markStage("product_decision.start");
     pushRuntimeCall("src/app/api/runtime/chat/services/dataAccess.ts", "resolveProductDecision");
-    const productDecisionRes = await resolveProductDecision(context, message);
+    const productDecisionRes = await resolveProductDecision(
+      context,
+      message,
+      confirmedProductId || entityProductId || null
+    );
     if (productDecisionRes.decision) {
       const decision = productDecisionRes.decision;
       policyContext = {
@@ -1404,10 +1506,6 @@ export async function POST(req: NextRequest) {
       } as PolicyEvalContext;
       auditEntity = (policyContext.entity || {}) as Record<string, any>;
     }
-    const confirmedProductId =
-      typeof confirmedEntityState.product_id === "string" ? confirmedEntityState.product_id.trim() : "";
-    const entityProductId =
-      typeof policyContext?.entity?.product_id === "string" ? String(policyContext.entity.product_id).trim() : "";
     if (!policyContext.product?.id && (confirmedProductId || entityProductId)) {
       policyContext = {
         ...policyContext,

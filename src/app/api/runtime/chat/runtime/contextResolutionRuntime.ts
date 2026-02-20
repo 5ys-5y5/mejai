@@ -4,6 +4,7 @@ import { getExpectedSlotKeys } from "./inputContractRuntime";
 import { requiresOtpForIntent } from "../policies/principles";
 import { getSlotLabel } from "./intentContractRuntime";
 import { normalizeConfirmedEntity } from "../shared/confirmedEntity";
+import { resolveSelectionFromPrevContext } from "./selectionResolutionRuntime";
 
 type ContextResolutionParams = {
   context: any;
@@ -508,18 +509,39 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     resolvedIntent: nextResolvedIntent,
     forceReuse: forceReuseAddress,
   });
+  const selection = resolveSelectionFromPrevContext({
+    message,
+    prevBotContext: prevBotContext as Record<string, any>,
+    expectedInputs: expectedInputs || [],
+  });
+  const selectionEntity = selection.entity || {};
+  const selectionOrderId = String(selectionEntity.order_id || "").trim() || null;
+  const selectionPhone = String(selectionEntity.phone || "").trim() || null;
+  const selectionAddress = String(selectionEntity.address || "").trim() || null;
+  const selectionZipcode = String(selectionEntity.zipcode || "").trim() || null;
+  const finalOrderId = selectionOrderId || resolvedOrderId;
+  const finalPhone = selectionPhone || resolvedPhone;
+  const finalAddress = selectionAddress || resolvedAddress;
+  const finalZipcode = selectionZipcode || resolvedZipcode;
+  resolvedOrderId = finalOrderId || null;
+  const selectionExtras = { ...selectionEntity };
+  delete selectionExtras.order_id;
+  delete selectionExtras.phone;
+  delete selectionExtras.address;
+  delete selectionExtras.zipcode;
   const confirmedEntity = normalizeConfirmedEntity(prevBotContext?.confirmed_entity);
   const baseEntity = pickConversationEntityBase(prevEntity);
   const { merged, updates, noticeUpdates } = mergeConversationEntity({
     base: baseEntity,
     nextValues: {
       channel: derivedChannel ?? null,
-      order_id: resolvedOrderId,
-      phone: resolvedPhone,
-      address: resolvedAddress,
-      zipcode: resolvedZipcode,
+      order_id: finalOrderId,
+      phone: finalPhone,
+      address: finalAddress,
+      zipcode: finalZipcode,
       resolved_road_address: carriedRoadAddress,
       resolved_jibun_address: carriedJibunAddress,
+      ...selectionExtras,
     },
     noticeKeys: ENTITY_UPDATE_NOTICE_KEYS,
   });

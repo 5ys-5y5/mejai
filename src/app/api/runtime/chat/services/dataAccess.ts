@@ -24,7 +24,35 @@ function readGroupValue(group: Record<string, any> | null, path: string) {
   }, group as unknown);
 }
 
-export async function resolveProductDecision(context: RuntimeContext, text: string) {
+async function fetchBestProductRule(context: RuntimeContext, productId: string) {
+  const ruleRes = await context.supabase
+    .from("G_com_product_rules")
+    .select("org_id, product_id, answerability, restock_policy, restock_at, updated_at, source")
+    .eq("product_id", productId)
+    .or(`org_id.eq.${context.orgId},org_id.is.null`);
+  if (ruleRes.error) {
+    return { rule: null as ProductRuleRow | null, error: ruleRes.error.message };
+  }
+  const rules = (ruleRes.data || []) as ProductRuleRow[];
+  const bestRule =
+    rules.find((row) => row.org_id === context.orgId) ||
+    rules.find((row) => row.org_id === null) ||
+    null;
+  return { rule: bestRule, error: null as string | null };
+}
+
+function buildProductDecision(productId: string, rule: ProductRuleRow | null): ProductDecision | null {
+  if (!rule) return null;
+  return {
+    product_id: rule.product_id || productId,
+    answerability: rule.answerability || "UNKNOWN",
+    restock_policy: rule.restock_policy || "UNKNOWN",
+    restock_at: rule.restock_at ?? null,
+    source: rule.source ?? null,
+  };
+}
+
+export async function resolveProductDecision(context: RuntimeContext, text: string, productId?: string | null) {
   const aliasRes = await context.supabase
     .from("G_com_product_aliases")
     .select("org_id, alias, product_id, match_type, priority, is_active")
@@ -36,36 +64,30 @@ export async function resolveProductDecision(context: RuntimeContext, text: stri
   const aliases = (aliasRes.data || []) as ProductAliasRow[];
   const matchedAlias = chooseBestAlias(text, aliases);
   if (!matchedAlias) {
-    return { decision: null as ProductDecision | null, alias: null as ProductAliasRow | null, error: null as string | null };
+    const fallbackProductId = String(productId || "").trim();
+    if (!fallbackProductId) {
+      return { decision: null as ProductDecision | null, alias: null as ProductAliasRow | null, error: null as string | null };
+    }
+    const fallbackRule = await fetchBestProductRule(context, fallbackProductId);
+    if (fallbackRule.error) {
+      return { decision: null as ProductDecision | null, alias: null as ProductAliasRow | null, error: fallbackRule.error };
+    }
+    const fallbackDecision = buildProductDecision(fallbackProductId, fallbackRule.rule);
+    return { decision: fallbackDecision, alias: null as ProductAliasRow | null, error: null as string | null };
   }
 
-  const ruleRes = await context.supabase
-    .from("G_com_product_rules")
-    .select("org_id, product_id, answerability, restock_policy, restock_at, updated_at, source")
-    .eq("product_id", matchedAlias.product_id)
-    .or(`org_id.eq.${context.orgId},org_id.is.null`);
+  const ruleRes = await fetchBestProductRule(context, matchedAlias.product_id);
   if (ruleRes.error) {
-    return { decision: null as ProductDecision | null, alias: matchedAlias, error: ruleRes.error.message };
+    return { decision: null as ProductDecision | null, alias: matchedAlias, error: ruleRes.error };
   }
-  const rules = (ruleRes.data || []) as ProductRuleRow[];
-  const bestRule =
-    rules.find((row) => row.org_id === context.orgId) ||
-    rules.find((row) => row.org_id === null) ||
-    null;
-  const decision: ProductDecision = bestRule
-    ? {
-      product_id: bestRule.product_id,
-      answerability: bestRule.answerability || "UNKNOWN",
-      restock_policy: bestRule.restock_policy || "UNKNOWN",
-      restock_at: bestRule.restock_at ?? null,
-      source: bestRule.source ?? null,
-    }
-    : {
+  const decision =
+    buildProductDecision(matchedAlias.product_id, ruleRes.rule) ||
+    ({
       product_id: matchedAlias.product_id,
       answerability: "UNKNOWN",
       restock_policy: "UNKNOWN",
       restock_at: null,
-    };
+    } as ProductDecision);
 
   return { decision, alias: matchedAlias, error: null as string | null };
 }

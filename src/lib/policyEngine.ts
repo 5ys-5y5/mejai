@@ -30,6 +30,7 @@ export type PolicyEvalContext = {
   intent?: { name?: string };
   entity?: {
     order_id?: string | null;
+    product_id?: string | null;
     address?: string | null;
     zipcode?: string | null;
     phone?: string | null;
@@ -119,9 +120,11 @@ function matchPredicate(predicate: string, ctx: PolicyEvalContext, args?: Predic
       return RESTOCK_PATTERN.test(ctx.input.text) && RESTOCK_SUBSCRIBE_PATTERN.test(ctx.input.text);
     case "product.answerable":
       if (!ctx.product?.id) return false;
+      if (ctx.product.answerable === null || ctx.product.answerable === undefined) return false;
       return Boolean(ctx.product?.answerable) === Boolean(args?.value);
     case "product.restock_known":
       if (!ctx.product?.id) return false;
+      if (ctx.product.restock_known === null || ctx.product.restock_known === undefined) return false;
       return Boolean(ctx.product?.restock_known) === Boolean(args?.value);
     default:
       return false;

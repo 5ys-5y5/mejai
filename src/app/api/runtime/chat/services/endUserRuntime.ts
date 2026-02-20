@@ -406,17 +406,21 @@ async function upsertMemory(input: {
   valueJson: Record<string, any>;
   sourceSessionId: string;
   sourceTurnId: string;
+  insertOnly?: boolean;
 }) {
-  const { context, orgId, endUserId, memoryType, memoryKey, content, valueJson, sourceSessionId, sourceTurnId } = input;
-  const { data: existing, error: fetchError } = await context.supabase
-    .from("A_end_user_memories")
-    .select("id")
-    .eq("org_id", orgId)
-    .eq("end_user_id", endUserId)
-    .eq("memory_type", memoryType)
-    .eq("memory_key", memoryKey)
-    .maybeSingle();
-  if (fetchError) return;
+  const {
+    context,
+    orgId,
+    endUserId,
+    memoryType,
+    memoryKey,
+    content,
+    valueJson,
+    sourceSessionId,
+    sourceTurnId,
+    insertOnly,
+  } = input;
+  const now = nowIso();
   const payload = {
     org_id: orgId,
     end_user_id: endUserId,
@@ -431,14 +435,30 @@ async function upsertMemory(input: {
     ttl_days: null,
     expires_at: null,
     is_active: true,
-    updated_at: nowIso(),
+    updated_at: now,
   };
+  if (insertOnly) {
+    await context.supabase.from("A_end_user_memories").insert({
+      ...payload,
+      created_at: now,
+    });
+    return;
+  }
+  const { data: existing, error: fetchError } = await context.supabase
+    .from("A_end_user_memories")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("end_user_id", endUserId)
+    .eq("memory_type", memoryType)
+    .eq("memory_key", memoryKey)
+    .maybeSingle();
+  if (fetchError) return;
   if (existing?.id) {
     await context.supabase.from("A_end_user_memories").update(payload).eq("id", existing.id);
   } else {
     await context.supabase.from("A_end_user_memories").insert({
       ...payload,
-      created_at: nowIso(),
+      created_at: now,
     });
   }
 }
@@ -800,10 +820,26 @@ export async function syncEndUserFromTurn(input: {
       });
     }
 
-    const confirmedEntity = normalizeConfirmedEntity((turnPayload.bot_context || {})?.confirmed_entity) as ConfirmedEntity;
-    for (const [key, value] of Object.entries(confirmedEntity)) {
+    const confirmedDelta = normalizeConfirmedEntity((turnPayload.bot_context || {})?.confirmed_entity_delta) as ConfirmedEntity;
+    const confirmedMeta = readRecord((turnPayload.bot_context || {})?.confirmed_entity_meta) || {};
+    const flowId = readString((turnPayload.bot_context || {})?.flow_id);
+    const confirmedEntries = confirmedDelta;
+    const confirmedKeys: string[] = [];
+    for (const [key, value] of Object.entries(confirmedEntries)) {
       const content = stringifyConfirmedValue(value);
       if (!content) continue;
+      const meta = readRecord(confirmedMeta[key]) || {};
+      const valueJson = {
+        value,
+        source: "confirmed_entity",
+        confirmed_at: now,
+        last_used_at: now,
+        flow_id: flowId,
+        ...meta,
+      };
+      if (!valueJson.flow_id && flowId) {
+        valueJson.flow_id = flowId;
+      }
       await upsertMemory({
         context,
         orgId,
@@ -811,9 +847,31 @@ export async function syncEndUserFromTurn(input: {
         memoryType: "confirmed",
         memoryKey: key,
         content,
-        valueJson: { value, source: "confirmed_entity" },
+        valueJson,
         sourceSessionId: sessionId,
         sourceTurnId: turnId,
+        insertOnly: true,
+      });
+      confirmedKeys.push(key);
+    }
+    if (confirmedKeys.length > 0) {
+      const maxKeys = 50;
+      await insertEndUserAuditEvent({
+        context,
+        sessionId,
+        turnId,
+        eventType: "END_USER_CONFIRMED_ENTITY_SAVED",
+        payload: {
+          key_count: confirmedKeys.length,
+          keys: confirmedKeys.slice(0, maxKeys),
+          keys_truncated: confirmedKeys.length > maxKeys,
+          flow_id: flowId || null,
+        },
+        botContext: {
+          org_id: orgId,
+          end_user_id: endUserId,
+          flow_id: flowId || null,
+        },
       });
     }
 

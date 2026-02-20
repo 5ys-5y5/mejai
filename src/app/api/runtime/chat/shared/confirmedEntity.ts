@@ -73,7 +73,7 @@ function shouldPromoteKey(baseKey: string) {
   return !SKIP_PROMOTION_SUFFIXES.some((suffix) => lower.endsWith(suffix));
 }
 
-function extractPromotedFields(botContext: Record<string, any>) {
+export function extractPromotedFieldsFromBotContext(botContext: Record<string, any>) {
   const next: ConfirmedEntity = {};
   Object.entries(botContext || {}).forEach(([key, value]) => {
     if (!key.startsWith("pending_") && !key.startsWith("selected_")) return;
@@ -91,7 +91,7 @@ function extractPromotedFields(botContext: Record<string, any>) {
 export function deriveConfirmedEntityFromBotContext(botContext: Record<string, any>): ConfirmedEntity {
   const base = normalizeConfirmedEntity(botContext?.confirmed_entity);
   const fromEntity = normalizeConfirmedEntity(botContext?.entity);
-  const promoted = extractPromotedFields(botContext || {});
+  const promoted = extractPromotedFieldsFromBotContext(botContext || {});
   return mergeConfirmedEntity(base, fromEntity, promoted);
 }
 
