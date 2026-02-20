@@ -88,6 +88,8 @@ export const CHAT_PRIMITIVES = {
     reuseConfirmationScope: "intent" as const,
     reuseConfirmationMaxPerScope: 1,
     reuseConfirmationTargets: ["phone", "order_id", "address", "zipcode", "email"] as const,
+    requireKnownInfoConfirmation: true,
+    knownIdentitySlots: ["phone", "email"] as const,
     ownerModules: {
       phoneReusePrompt: "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
       phoneReuseNextTurn: "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",

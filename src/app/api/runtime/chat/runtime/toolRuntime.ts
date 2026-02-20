@@ -1194,7 +1194,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
         : selected.label
           ? String(selected.label)
           : `주문번호 ${selectedOrderId || "-"}`;
-      const authAck = otpVerifiedThisTurn ? "\uC778\uC99D\uC774 \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : null;
+      const authAck = otpVerifiedThisTurn ? "\uC778\uC99D\uC774 \uD655\uC778\uB418\uC5C8\uC2B5\uB2C8\uB2E4." : null;
       const question = ["\uC544\uB798 \uC8FC\uBB38\uC774 \uB9DE\uB294\uC9C0 \uD655\uC778\uD574 \uC8FC\uC138\uC694.", summaryBlock]
         .filter(Boolean)
         .join("\n");

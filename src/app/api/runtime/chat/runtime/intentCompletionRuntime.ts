@@ -14,6 +14,14 @@ function normalizeMessage(text: string) {
     .trim();
 }
 
+function isAuthGateTurn(botContext?: Record<string, any> | null) {
+  const ctx = botContext && typeof botContext === "object" ? botContext : {};
+  if (ctx.otp_pending) return true;
+  if (ctx.otp_stage) return true;
+  const expected = typeof ctx.expected_input === "string" ? ctx.expected_input : "";
+  return expected === "otp_code";
+}
+
 function isCompletionCue(intent: string, message: string) {
   const normalized = normalizeMessage(message);
   if (!normalized) return false;
@@ -43,6 +51,9 @@ export function resolveCompletionState(input: {
 }) {
   const intent = String(input.intent || "").trim();
   const botContext = input.botContext && typeof input.botContext === "object" ? input.botContext : {};
+  if (isAuthGateTurn(botContext)) {
+    return { completed: false, nextText: null };
+  }
   const completed =
     Boolean(botContext.conversation_closed) ||
     isCompletionCue(intent, input.message);
@@ -60,6 +71,7 @@ export function shouldAppendPostActionChoices(input: {
   const intent = String(input.intent || "").trim();
   if (!intent || intent === "general") return false;
   const botContext = input.botContext && typeof input.botContext === "object" ? input.botContext : {};
+  if (isAuthGateTurn(botContext)) return false;
   const isCompletion = isCompletionCue(intent, input.message);
   if (!isCompletion) return false;
   if (botContext.conversation_closed) return false;

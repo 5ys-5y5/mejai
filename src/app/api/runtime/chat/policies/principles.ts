@@ -261,3 +261,20 @@ export function getReuseConfirmationTargets(policy?: ChatPrinciples) {
   const rules = resolvePolicy(policy);
   return rules.memory.reuseConfirmationTargets as readonly string[];
 }
+
+export function shouldRequireKnownInfoConfirmation(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return Boolean(rules.memory.requireKnownInfoConfirmation);
+}
+
+export function getKnownIdentitySlots(policy?: ChatPrinciples) {
+  const rules = resolvePolicy(policy);
+  return rules.memory.knownIdentitySlots as readonly string[];
+}
+
+export function isKnownIdentitySlot(slotKey: string, policy?: ChatPrinciples) {
+  const safeKey = String(slotKey || "").trim();
+  if (!safeKey) return false;
+  const slots = new Set(getKnownIdentitySlots(policy).map((item) => String(item || "").trim()));
+  return slots.has(safeKey);
+}

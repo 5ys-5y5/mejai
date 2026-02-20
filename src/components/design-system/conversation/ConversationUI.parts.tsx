@@ -922,6 +922,7 @@ export function ConversationReplySelectors<TMessage extends ReplyMessageShape>({
   const quickReplies = message.quickReplies || [];
   const productCards = message.productCards || [];
   const renderPlan = message.renderPlan;
+  if (!renderPlan) return null;
   if (quickReplies.length === 0 && productCards.length === 0) return null;
 
   const quickValueToLabel = new Map<string, string>();
@@ -935,7 +936,7 @@ export function ConversationReplySelectors<TMessage extends ReplyMessageShape>({
     cardValueToLabel.set(String(card.value), card.title);
   });
 
-  const selectionMode = renderPlan?.selection_mode || "single";
+  const selectionMode = renderPlan.selection_mode || "single";
   const isMultiSelectPrompt = selectionMode === "multi";
   const quickRepliesAvailable = enableQuickReplies && quickReplies.length > 0;
   const productCardsAvailable = enableProductCards && productCards.length > 0;
@@ -947,7 +948,7 @@ export function ConversationReplySelectors<TMessage extends ReplyMessageShape>({
   const shouldRenderQuickByType = bucket === "quick";
   const shouldRenderCardsByType = bucket === "cards";
   if (!shouldRenderQuickByType && !shouldRenderCardsByType) return null;
-  const canInteractWithMessage = renderPlan?.interaction_scope === "any" ? true : isLatest;
+  const canInteractWithMessage = renderPlan.interaction_scope === "any" ? true : isLatest;
 
   const quickDraftKey = `${modelId}:${message.id}:quick`;
   const quickSelected = quickReplyDrafts[quickDraftKey] || [];

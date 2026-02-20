@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+﻿import { NextRequest } from "next/server";
 import { runLlm } from "@/lib/llm_mk2";
 import {
   formatOutputDefault,
@@ -13,6 +13,8 @@ import {
   hasUniqueAnswerCandidate,
   isOtpRequiredTool,
   requiresOtpForIntent,
+  getKnownIdentitySlots,
+  shouldRequireKnownInfoConfirmation,
 } from "../policies/principles";
 import {
   availableRestockLeadDays,
@@ -150,6 +152,21 @@ function normalizeEntityRecord(
   for (const [key, value] of Object.entries(input)) {
     if (value === undefined) continue;
     next[key] = value;
+  }
+  return next;
+}
+
+function filterMemoryEntityByAllowedSlots(
+  input: Record<string, string | null | undefined> | null | undefined,
+  allowedSlots: Set<string>
+) {
+  if (!input) return null;
+  const next: Record<string, string | null> = {};
+  for (const [key, value] of Object.entries(input)) {
+    const safeKey = String(key || "").trim();
+    if (!safeKey || !allowedSlots.has(safeKey)) continue;
+    if (value === undefined) continue;
+    next[safeKey] = value ?? null;
   }
   return next;
 }
@@ -304,7 +321,7 @@ export async function POST(req: NextRequest) {
       }
     }
     const resolvedTurnId = isUuidLike(runtimeTurnId) ? runtimeTurnId : crypto.randomUUID();
-    const fallback = "죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+    const fallback = "二꾩넚?⑸땲?? ?쇱떆?곸씤 ?ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄?댁＜?몄슂.";
     const failed = buildFailedPayload({
       code: "INTERNAL_ERROR",
       summary: errorMessage || "INTERNAL_ERROR",
@@ -565,9 +582,16 @@ export async function POST(req: NextRequest) {
       runtimeEndUser: (context as Record<string, any>)?.runtimeEndUser || null,
       entity: prevEntity,
     });
-    if (memoryEntity) {
+    const requireKnownInfoConfirmation = shouldRequireKnownInfoConfirmation();
+    const knownIdentitySlots = new Set(
+      getKnownIdentitySlots().map((slot) => String(slot || "").trim()).filter(Boolean)
+    );
+    const filteredMemoryEntity = requireKnownInfoConfirmation
+      ? filterMemoryEntityByAllowedSlots(memoryEntity, knownIdentitySlots)
+      : memoryEntity;
+    if (filteredMemoryEntity) {
       recentEntity = {
-        ...normalizeEntityRecord(memoryEntity),
+        ...normalizeEntityRecord(filteredMemoryEntity),
         ...normalizeEntityRecord(recentEntity),
       };
     }
@@ -793,15 +817,16 @@ export async function POST(req: NextRequest) {
       adminKbContents: adminKbs.map((item) => item.content || ""),
     });
     let otpAckPending = false;
+    const OTP_ACK_TEXT = "\uC778\uC99D\uC774 \uD655\uC778\uB418\uC5C8\uC2B5\uB2C8\uB2E4.";
     const decorateReplyText = (text: string) => {
       const baseText = String(text || "");
-      const hasAck = /인증이 완료되었습니다/.test(baseText);
+      const hasAck = baseText.includes(OTP_ACK_TEXT);
       let mergedText = baseText;
       if (otpAckPending && hasAck) {
         otpAckPending = false;
       } else if (otpAckPending) {
         otpAckPending = false;
-        mergedText = `인증이 완료되었습니다.\n${baseText}`;
+        mergedText = `${OTP_ACK_TEXT}\n${baseText}`;
       }
       const threePhaseText = decorateWithThreePhasePrompt({
         message: mergedText,
@@ -1803,5 +1828,6 @@ export async function POST(req: NextRequest) {
     return runtimeError.response;
   }
 }
+
 
 

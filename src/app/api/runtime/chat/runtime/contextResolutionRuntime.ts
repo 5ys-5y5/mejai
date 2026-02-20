@@ -1,7 +1,7 @@
 import type { PolicyEvalContext } from "@/lib/policyEngine";
-import { resolveAddressWithReuse, resolvePhoneWithReuse } from "./memoryReuseRuntime";
+import { resolveAddressWithReuse } from "./memoryReuseRuntime";
 import { getExpectedSlotKeys } from "./inputContractRuntime";
-import { requiresOtpForIntent } from "../policies/principles";
+import { getKnownIdentitySlots, requiresOtpForIntent, shouldRequireKnownInfoConfirmation } from "../policies/principles";
 import { getSlotLabel } from "./intentContractRuntime";
 import { normalizeConfirmedEntity } from "../shared/confirmedEntity";
 import { resolveSelectionFromPrevContext } from "./selectionResolutionRuntime";
@@ -84,6 +84,18 @@ const CONVERSATION_ENTITY_KEYS = new Set([
   "resolved_jibun_address",
 ]);
 
+const CONFIRM_REQUIRED_ENTITY_KEYS = new Set([
+  "order_id",
+  "phone",
+  "address",
+  "zipcode",
+  "channel",
+  "product_query",
+  "product_name",
+  "product_id",
+  "member_id",
+]);
+
 const ENTITY_UPDATE_NOTICE_KEYS = new Set([
   "order_id",
   "phone",
@@ -113,6 +125,14 @@ function pickConversationEntityBase(entity: Record<string, any>) {
 function normalizeEntityValue(value: unknown) {
   const text = String(value ?? "").trim();
   return text || "";
+}
+
+function pickKnownCandidate(...values: Array<unknown>) {
+  for (const value of values) {
+    const text = String(value ?? "").trim();
+    if (text) return text;
+  }
+  return "";
 }
 
 function buildEntityUpdateNotice(updates: Array<{ field: string; prev: string; next: string }>, intent: string) {
@@ -204,6 +224,12 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     }
   };
 
+  const requireKnownConfirmation = shouldRequireKnownInfoConfirmation();
+  const knownIdentitySlots = new Set(
+    getKnownIdentitySlots().map((slot) => String(slot || "").trim()).filter(Boolean)
+  );
+  const confirmedEntity = normalizeConfirmedEntity(prevBotContext?.confirmed_entity);
+
   const expectedSlotKeys = new Set(getExpectedSlotKeys(expectedInputs || []));
   const hasExpectedInputs = Array.isArray(expectedInputs) && expectedInputs.length > 0;
   const allowOrderIdReuse =
@@ -216,25 +242,11 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     orderChoiceIndex && prevChoices[orderChoiceIndex - 1]?.order_id
       ? String(prevChoices[orderChoiceIndex - 1]?.order_id)
       : null;
-  const safePrevEntityOrderId =
-    typeof prevEntity.order_id === "string" && isLikelyOrderId(prevEntity.order_id)
-      ? prevEntity.order_id
+  const confirmedOrderId =
+    typeof confirmedEntity.order_id === "string" && isLikelyOrderId(confirmedEntity.order_id)
+      ? confirmedEntity.order_id
       : null;
-  const safePrevOrderIdFromTranscript =
-    prevOrderIdFromTranscript && isLikelyOrderId(prevOrderIdFromTranscript)
-      ? prevOrderIdFromTranscript
-      : null;
-  const safePrevSelectedOrderId =
-    prevSelectedOrderId && isLikelyOrderId(prevSelectedOrderId) ? prevSelectedOrderId : null;
-  const safeRecentOrderId =
-    recentEntity?.order_id && isLikelyOrderId(recentEntity.order_id) ? recentEntity.order_id : null;
-  let resolvedOrderId =
-    derivedOrderId ??
-    orderIdFromChoice ??
-    safePrevSelectedOrderId ??
-    safePrevEntityOrderId ??
-    safePrevOrderIdFromTranscript ??
-    (safeRecentOrderId || null);
+  let resolvedOrderId = derivedOrderId ?? orderIdFromChoice ?? confirmedOrderId ?? null;
 
   if (resolvedOrderId && !isLikelyOrderId(resolvedOrderId)) {
     noteContamination({
@@ -316,17 +328,9 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
   const allowAddressReuse = !hasExpectedInputs || expectedSlotKeys.has("address") || expectedSlotKeys.has("zipcode");
   const allowZipHistoryFallback = !hasExpectedInputs || expectedSlotKeys.has("address") || expectedSlotKeys.has("zipcode");
 
-  const safePrevEntityZipcode =
-    typeof prevEntity.zipcode === "string" && isLikelyZipcode(prevEntity.zipcode)
-      ? String(prevEntity.zipcode).trim()
-      : null;
-  const safePrevZipFromTranscript =
-    prevZipFromTranscript && isLikelyZipcode(prevZipFromTranscript)
-      ? prevZipFromTranscript
-      : null;
-  const safeRecentZipcode =
-    recentEntity?.zipcode && isLikelyZipcode(recentEntity.zipcode)
-      ? String(recentEntity.zipcode).trim()
+  const confirmedZipcode =
+    typeof confirmedEntity.zipcode === "string" && isLikelyZipcode(confirmedEntity.zipcode)
+      ? String(confirmedEntity.zipcode).trim()
       : null;
   const addressStage = String(prevBotContext.address_stage || "").trim();
   const hasActiveAddressPending =
@@ -365,7 +369,7 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
   }
   const blockedZipFallback =
     !allowZipHistoryFallback && !derivedZipcode
-      ? safePrevEntityZipcode || safePrevZipFromTranscript || safeRecentZipcode
+      ? confirmedZipcode
       : null;
   if (blockedZipFallback) {
     noteContamination({
@@ -392,9 +396,7 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
   let resolvedZipcode =
     derivedZipcode ??
     pendingZipFromContext ??
-    (allowZipHistoryFallback
-      ? safePrevEntityZipcode ?? safePrevZipFromTranscript ?? (safeRecentZipcode || null)
-      : null);
+    (allowZipHistoryFallback ? confirmedZipcode : null);
   if (resolvedZipcode && !isLikelyZipcode(resolvedZipcode)) {
     noteContamination({
       slot: "zipcode",
@@ -434,11 +436,20 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     (typeof prevEntity.resolved_jibun_address === "string" ? String(prevEntity.resolved_jibun_address).trim() : "") ||
     null;
 
+  const confirmedPhone =
+    typeof confirmedEntity.phone === "string" && confirmedEntity.phone.trim()
+      ? String(confirmedEntity.phone).trim()
+      : null;
+  const confirmedAddress =
+    typeof confirmedEntity.address === "string" && String(confirmedEntity.address).trim()
+      ? String(confirmedEntity.address).trim()
+      : null;
+
   const explicitUserConfirmed = isYesText(message);
   const detectedIntent = detectIntent(message);
   const hasAddressSignal =
     Boolean(derivedAddress) ||
-    (typeof prevEntity.address === "string" && Boolean(prevEntity.address.trim())) ||
+    Boolean(confirmedAddress) ||
     Boolean(prevBotContext.address_pending);
   let seededIntent =
     forcedIntentQueue.length > 0
@@ -453,31 +464,14 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
   const nextResolvedIntent = seededIntent;
   const prevIntentName = String(prevBotContext.intent_name || prevIntent || "").trim();
   const allowFlowCarryover = Boolean(prevIntentName) && prevIntentName === nextResolvedIntent && hasExpectedInputs;
-  const forceReusePhone =
-    allowFlowCarryover &&
-    !expectedSlotKeys.has("phone") &&
-    typeof prevEntity.phone === "string" &&
-    Boolean(prevEntity.phone.trim());
+  const resolvedPhone = derivedPhone ?? confirmedPhone ?? null;
   const forceReuseAddress =
     allowFlowCarryover &&
     !expectedSlotKeys.has("address") &&
     !expectedSlotKeys.has("zipcode") &&
-    typeof prevEntity.address === "string" &&
-    Boolean(prevEntity.address.trim());
-  const resolvedPhone = resolvePhoneWithReuse({
-    derivedPhone,
-    prevEntityPhone: typeof prevEntity.phone === "string" ? prevEntity.phone : null,
-    prevPhoneFromTranscript,
-    recentEntityPhone: recentEntity?.phone || null,
-    resolvedIntent: nextResolvedIntent,
-    forceReuse: forceReusePhone,
-  });
+    Boolean(confirmedAddress);
   const blockedAddressFallback =
-    !allowAddressReuse && !forceReuseAddress && !derivedAddress
-      ? typeof prevEntity.address === "string"
-        ? prevEntity.address
-        : prevAddressFromTranscript || recentEntity?.address || null
-      : null;
+    !allowAddressReuse && !forceReuseAddress && !derivedAddress ? confirmedAddress : null;
   if (blockedAddressFallback) {
     noteContamination({
       slot: "address",
@@ -503,9 +497,9 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
   const resolvedAddress = resolveAddressWithReuse({
     derivedAddress,
     prevEntityAddress:
-      (allowAddressReuse || forceReuseAddress) && typeof prevEntity.address === "string" ? prevEntity.address : null,
-    prevAddressFromTranscript: allowAddressReuse || forceReuseAddress ? prevAddressFromTranscript : null,
-    recentEntityAddress: allowAddressReuse || forceReuseAddress ? recentEntity?.address || null : null,
+      (allowAddressReuse || forceReuseAddress) && confirmedAddress ? confirmedAddress : null,
+    prevAddressFromTranscript: null,
+    recentEntityAddress: null,
     resolvedIntent: nextResolvedIntent,
     forceReuse: forceReuseAddress,
   });
@@ -524,15 +518,35 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
   const finalAddress = selectionAddress || resolvedAddress;
   const finalZipcode = selectionZipcode || resolvedZipcode;
   resolvedOrderId = finalOrderId || null;
+  const knownEntity: Record<string, string> = {};
+  if (requireKnownConfirmation) {
+    if (!finalPhone && knownIdentitySlots.has("phone")) {
+      const candidate = pickKnownCandidate(
+        prevEntity.phone,
+        prevPhoneFromTranscript,
+        recentEntity?.phone
+      );
+      if (candidate) {
+        knownEntity.phone = candidate;
+      }
+    }
+  }
   const selectionExtras = { ...selectionEntity };
   delete selectionExtras.order_id;
   delete selectionExtras.phone;
   delete selectionExtras.address;
   delete selectionExtras.zipcode;
-  const confirmedEntity = normalizeConfirmedEntity(prevBotContext?.confirmed_entity);
   const baseEntity = pickConversationEntityBase(prevEntity);
+  const sanitizedBase: Record<string, any> = { ...baseEntity };
+  CONFIRM_REQUIRED_ENTITY_KEYS.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(confirmedEntity, key)) {
+      sanitizedBase[key] = (confirmedEntity as Record<string, unknown>)[key];
+      return;
+    }
+    delete sanitizedBase[key];
+  });
   const { merged, updates, noticeUpdates } = mergeConversationEntity({
-    base: baseEntity,
+    base: sanitizedBase,
     nextValues: {
       channel: derivedChannel ?? null,
       order_id: finalOrderId,
@@ -559,6 +573,7 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
       flags: {
         entity_updates: noticeUpdates,
         entity_update_notice: updateNotice || null,
+        ...(Object.keys(knownEntity).length > 0 ? { known_entity: knownEntity } : {}),
       },
     },
   };

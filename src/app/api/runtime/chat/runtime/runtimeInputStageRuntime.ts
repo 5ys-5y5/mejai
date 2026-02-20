@@ -1,5 +1,10 @@
 import { runPolicyStage, type PolicyEvalContext } from "@/lib/policyEngine";
 import { extractTemplateIds } from "./runtimeSupport";
+import { YES_NO_QUICK_REPLIES, resolveSingleChoiceQuickReplyConfig } from "./quickReplyConfigRuntime";
+import { buildYesNoConfirmationPrompt } from "./promptTemplateRuntime";
+import { getIntentContract } from "./intentContractRuntime";
+import { getReuseSlotLabel } from "./memoryReuseRuntime";
+import { getKnownIdentitySlots, shouldRequireKnownInfoConfirmation } from "../policies/principles";
 import {
   emitPolicyStaticConflict,
   emitSlotExtracted,
@@ -17,6 +22,50 @@ type ContextResolutionResult = {
   resolvedIntent: string;
   policyContext: PolicyEvalContext;
 };
+
+const SUPPORTED_REUSE_SLOTS = new Set(["phone", "order_id", "address", "zipcode"]);
+
+function readKnownEntityFromContext(policyContext: PolicyEvalContext) {
+  const conversation = policyContext.conversation && typeof policyContext.conversation === "object"
+    ? (policyContext.conversation as Record<string, any>)
+    : {};
+  const flags = conversation.flags && typeof conversation.flags === "object"
+    ? (conversation.flags as Record<string, any>)
+    : {};
+  const known = flags.known_entity && typeof flags.known_entity === "object"
+    ? (flags.known_entity as Record<string, string>)
+    : null;
+  return known || {};
+}
+
+function pickKnownReuseCandidate(input: {
+  resolvedIntent: string;
+  policyContext: PolicyEvalContext;
+  expectedInput: string | null;
+}) {
+  if (!shouldRequireKnownInfoConfirmation()) return null;
+  const knownEntity = readKnownEntityFromContext(input.policyContext);
+  const hasKnown = Object.keys(knownEntity).length > 0;
+  if (!hasKnown) return null;
+  const intentContract = getIntentContract(input.resolvedIntent);
+  const reuseSlots = new Set(
+    Array.isArray(intentContract?.reuseSlots) ? intentContract!.reuseSlots.map((slot) => String(slot || "").trim()) : []
+  );
+  const identitySlots = getKnownIdentitySlots()
+    .map((slot) => String(slot || "").trim())
+    .filter((slot) => slot && SUPPORTED_REUSE_SLOTS.has(slot));
+
+  for (const slotKey of identitySlots) {
+    if (reuseSlots.size > 0 && !reuseSlots.has(slotKey)) continue;
+    if (input.expectedInput && input.expectedInput !== slotKey) continue;
+    const currentValue = String((input.policyContext.entity as Record<string, any>)?.[slotKey] || "").trim();
+    if (currentValue) continue;
+    const candidate = String(knownEntity[slotKey] || "").trim();
+    if (!candidate) continue;
+    return { slotKey, value: candidate };
+  }
+  return null;
+}
 
 export async function runInputStageRuntime(input: {
   compiledPolicy: CompiledPolicy;
@@ -175,6 +224,55 @@ export async function runInputStageRuntime(input: {
     resolvedSlots: gate.resolved_slots,
     missingSlots: gate.missing_slots,
   });
+
+  const knownReuseCandidate = pickKnownReuseCandidate({
+    resolvedIntent,
+    policyContext,
+    expectedInput,
+  });
+  if (knownReuseCandidate) {
+    const label = getReuseSlotLabel(knownReuseCandidate.slotKey, resolvedIntent);
+    const reply = makeReply(
+      buildYesNoConfirmationPrompt(
+        `이전에 알려주신 ${label}(${knownReuseCandidate.value || "-"})로 진행할까요?`,
+        { entity: policyContext.entity }
+      )
+    );
+    const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
+      optionsCount: YES_NO_QUICK_REPLIES.length,
+      criteria: "policy:known_info_reuse_prompt",
+      sourceFunction: "runInputStageRuntime",
+      sourceModule: "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
+      contextText: reply,
+    });
+    await insertTurn({
+      session_id: sessionId,
+      seq: nextSeq,
+      transcript_text: message,
+      answer_text: reply,
+      final_answer: reply,
+      bot_context: {
+        intent_name: resolvedIntent,
+        entity: policyContext.entity,
+        selected_order_id: resolvedOrderId,
+        reuse_pending: true,
+        pending_reuse_slot: knownReuseCandidate.slotKey,
+        pending_reuse_value: knownReuseCandidate.value,
+        expected_input: null,
+        mcp_actions: mcpActions,
+      },
+    });
+    return {
+      response: respond({
+        session_id: sessionId,
+        step: "confirm",
+        message: reply,
+        mcp_actions: mcpActions,
+        quick_replies: YES_NO_QUICK_REPLIES,
+        quick_reply_config: quickReplyConfig,
+      }),
+    };
+  }
 
   await insertEvent(
     context,
