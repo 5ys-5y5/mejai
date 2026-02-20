@@ -2,6 +2,11 @@ import { parseActionToken, parseIndexedChoices } from "../policies/intentSlotPol
 
 type CandidateItem = Record<string, any>;
 
+export type SelectionResolution = {
+  entity: Record<string, string>;
+  source: string | null;
+};
+
 const EXCLUDED_KEYS = new Set([
   "index",
   "value",
@@ -134,12 +139,13 @@ export function resolveSelectionFromPrevContext(input: {
   message: string;
   prevBotContext: Record<string, any>;
   expectedInputs: string[];
-}) {
+}): SelectionResolution {
   const message = normalizeText(input.message);
-  if (!message) return { entity: {}, source: null };
-  if (parseActionToken(message)) return { entity: {}, source: null };
+  const empty: SelectionResolution = { entity: {}, source: null };
+  if (!message) return empty;
+  if (parseActionToken(message)) return empty;
   const sources = extractChoiceSources(input.prevBotContext || {});
-  if (sources.length === 0) return { entity: {}, source: null };
+  if (sources.length === 0) return empty;
   let best: { entity: Record<string, string>; source: string } | null = null;
   for (const source of sources) {
     const byIndex = pickByIndex(message, source.items);
@@ -156,5 +162,5 @@ export function resolveSelectionFromPrevContext(input: {
     best = { entity: patch, source: source.key };
     break;
   }
-  return best || { entity: {}, source: null };
+  return best || empty;
 }

@@ -16,6 +16,11 @@ import { renderBotContent } from "@/lib/conversation/messageRenderUtils";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/conversation/client/laboratoryPageState";
 
+const globalScope = typeof globalThis !== "undefined" ? (globalThis as Record<string, any>) : undefined;
+if (globalScope && typeof globalScope.process === "undefined") {
+  globalScope.process = { env: { NODE_ENV: "production" } };
+}
+
 // ------------------------------------------------------------
 // Unified widget UI assembly file.
 // Edit this file to affect widget UI service-wide.
