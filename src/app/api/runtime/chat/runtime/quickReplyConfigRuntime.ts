@@ -1,4 +1,4 @@
-export type RuntimeQuickReplyConfig = {
+﻿export type RuntimeQuickReplyConfig = {
   selection_mode: "single" | "multi";
   min_select: number;
   max_select: number;
@@ -38,7 +38,7 @@ function clamp(value: number, min: number, max: number) {
 function inferModeFromContextText(text: string, optionsCount: number) {
   const normalized = String(text || "").trim();
   if (!normalized) return optionsCount > 1 ? "multi" : "single";
-  const hasDelimiterSignal = /,|\/|그리고|및|and/i.test(normalized);
+  const hasDelimiterSignal = /,|\/|洹몃━怨?諛?and/i.test(normalized);
   const hasExampleCsv = /\b\d+\s*,\s*\d+/.test(normalized);
   if (hasDelimiterSignal || hasExampleCsv) return "multi";
   return optionsCount > 1 ? "multi" : "single";
@@ -101,12 +101,10 @@ export function maybeBuildYesNoQuickReplyRule(input: {
 }) {
   const text = String(input.message || "");
   const isYesNoPrompt =
-    /맞으면\s*'네'[\s\S]*'아니오'/u.test(text) ||
     /네\s*\/\s*아니오/u.test(text) ||
-    /네\s*(?:또는|혹은)\s*아니오/u.test(text) ||
-    /네\s*\/\s*아니오로\s*답/u.test(text) ||
-    /네\s*아니오\s*로\s*답/u.test(text) ||
-    /네\s*아니오\s*중/u.test(text);
+    /예\s*\/\s*아니오/u.test(text) ||
+    /네\s*(?:또는|혹은|아니면)\s*아니오/u.test(text) ||
+    /예\s*(?:또는|혹은|아니면)\s*아니오/u.test(text);
   if (!isYesNoPrompt) return null;
   return resolveSingleChoiceQuickReplyConfig({
     optionsCount: YES_NO_QUICK_REPLIES.length,

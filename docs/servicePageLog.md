@@ -4,9 +4,9 @@
 - 단계별 로그를 촘촘히 남겨 범위를 줄인다 (5->2->1 단계).
 - 실패 지점의 직전/직후 로그를 반드시 기록한다.
 
-기대 목록(MCP): solapi:send_otp, cafe24:lookup_order, cafe24:list_orders, solapi:verify_otp, search_address, cafe24:update_order_shipping_address
-기대 목록(Event): QUICK_REPLY_RULE_DECISION, FINAL_ANSWER_READY, POLICY_DECISION, RUNTIME_SELF_UPDATE_REVIEW_COMPLETED, RUNTIME_SELF_UPDATE_REVIEW_STARTED, END_USER_WRITE_LATENCY, END_USER_CONTEXT_RESOLVED, END_USER_MATCH_HIT, CONFIRMED_ENTITY_DELTA_APPLIED, END_USER_CONFIRMED_ENTITY_SAVED, AUTH_GATE_TRIGGERED, AUTH_GATE_PRECHECK, EXECUTION_GUARD_TRIGGERED, INTENT_SCOPE_GATE_REVIEW_COMPLETED, INTENT_SCOPE_GATE_REVIEW_STARTED, SLOT_EXTRACTED, POLICY_STATIC_CONFLICT, INPUT_CONTRACT_REVIEW_COMPLETED, INPUT_CONTRACT_REVIEW_STARTED, ORDER_CHOICES_PRESENTED, PRE_MCP_DECISION, RUNTIME_PATCH_PROPOSAL_CREATED, PRINCIPLE_VIOLATION_DETECTED, ADDRESS_CANDIDATES_PRESENTED, ADDRESS_SEARCH_COMPLETED, ADDRESS_SEARCH_STARTED, ENTITY_FIELD_UPDATED, ADDRESS_CANDIDATE_SELECTED
-기대 목록(Debug): NO_TOOL_CALLED, send_otp, lookup_order, update_order_shipping_address
+기대 목록(MCP): cafe24:read_product, cafe24:resolve_product
+기대 목록(Event): QUICK_REPLY_RULE_DECISION, POLICY_DECISION, RUNTIME_SELF_UPDATE_REVIEW_COMPLETED, RUNTIME_SELF_UPDATE_REVIEW_STARTED, END_USER_WRITE_LATENCY, END_USER_CONTEXT_RESOLVED, END_USER_MATCH_HIT, PRE_MCP_DECISION, INTENT_SCOPE_GATE_REVIEW_COMPLETED, INTENT_SCOPE_GATE_REVIEW_STARTED, SLOT_EXTRACTED, INPUT_CONTRACT_REVIEW_COMPLETED, INPUT_CONTRACT_REVIEW_STARTED, FINAL_ANSWER_READY, CONFIRMED_ENTITY_DELTA_APPLIED, END_USER_CONFIRMED_ENTITY_SAVED, RUNTIME_PATCH_PROPOSAL_CREATED, PRINCIPLE_VIOLATION_DETECTED
+기대 목록(Debug): read_product, NO_TOOL_CALLED
 
 사용 모듈(Runtime): src/app/api/runtime/chat/runtime/runtimeTurnIo.ts
 사용 모듈(Handlers): -
@@ -14,31 +14,30 @@
 사용 모듈(Policies): -
 사용 모듈(Shared): -
 
-점검 완료 항목: mcp.solapi:send_otp, mcp.cafe24:lookup_order, mcp.cafe24:list_orders, mcp.solapi:verify_otp, mcp.search_address, mcp.cafe24:update_order_shipping_address, event.QUICK_REPLY_RULE_DECISION, event.FINAL_ANSWER_READY, event.POLICY_DECISION, event.RUNTIME_SELF_UPDATE_REVIEW_COMPLETED, event.RUNTIME_SELF_UPDATE_REVIEW_STARTED, event.END_USER_WRITE_LATENCY, event.END_USER_CONTEXT_RESOLVED, event.END_USER_MATCH_HIT, event.CONFIRMED_ENTITY_DELTA_APPLIED, event.END_USER_CONFIRMED_ENTITY_SAVED, event.AUTH_GATE_TRIGGERED, event.AUTH_GATE_PRECHECK, event.EXECUTION_GUARD_TRIGGERED, event.INTENT_SCOPE_GATE_REVIEW_COMPLETED, event.INTENT_SCOPE_GATE_REVIEW_STARTED, event.SLOT_EXTRACTED, event.POLICY_STATIC_CONFLICT, event.INPUT_CONTRACT_REVIEW_COMPLETED, event.INPUT_CONTRACT_REVIEW_STARTED, event.ORDER_CHOICES_PRESENTED, event.PRE_MCP_DECISION, event.RUNTIME_PATCH_PROPOSAL_CREATED, event.PRINCIPLE_VIOLATION_DETECTED, event.ADDRESS_CANDIDATES_PRESENTED, event.ADDRESS_SEARCH_COMPLETED, event.ADDRESS_SEARCH_STARTED, event.ENTITY_FIELD_UPDATED, event.ADDRESS_CANDIDATE_SELECTED, debug.NO_TOOL_CALLED, debug.send_otp, debug.lookup_order, debug.update_order_shipping_address, response_schema.present, response_schema.valid
+점검 완료 항목: mcp.cafe24:read_product, mcp.cafe24:resolve_product, event.QUICK_REPLY_RULE_DECISION, event.POLICY_DECISION, event.RUNTIME_SELF_UPDATE_REVIEW_COMPLETED, event.RUNTIME_SELF_UPDATE_REVIEW_STARTED, event.END_USER_WRITE_LATENCY, event.END_USER_CONTEXT_RESOLVED, event.END_USER_MATCH_HIT, event.PRE_MCP_DECISION, event.INTENT_SCOPE_GATE_REVIEW_COMPLETED, event.INTENT_SCOPE_GATE_REVIEW_STARTED, event.SLOT_EXTRACTED, event.INPUT_CONTRACT_REVIEW_COMPLETED, event.INPUT_CONTRACT_REVIEW_STARTED, event.FINAL_ANSWER_READY, event.CONFIRMED_ENTITY_DELTA_APPLIED, event.END_USER_CONFIRMED_ENTITY_SAVED, event.RUNTIME_PATCH_PROPOSAL_CREATED, event.PRINCIPLE_VIOLATION_DETECTED, debug.read_product, debug.NO_TOOL_CALLED, response_schema.present, response_schema.valid
 점검 미완료: -
 점검 불가: -
 
 
-TURN_ID: d227e07c-ff09-4680-854c-ae63ff78718a
+TURN_ID: 018db875-76c4-4b8f-9bfc-3df9faa9b611
 
 [TOKEN_USED]
 
 USER:
-배송지 변경
+원피스 재입고 언제 되나요?
 
 BOT:
-확인한 것: 배송지 변경
-확인할 것: 원하시는 문의 유형을 선택해주세요. (번호로 답변)
-- 1번 | 배송지 변경 | 배송지/수령인 정보 변경
-- 2번 | 배송 문의 | 배송 상태/송장 조회
-예) 1,2
+확인한 것: 원피스 재입고 언제 되나요?
+확인할 것: 다음 중 어떤 상품의 재입고 알림을 원하시나요?
+- 1번 | 아드헬린 린넨 플레어 원피스 그레이 | 03/21 (D-29)
+- 2번 | 아드헬린 린넨 롱 원피스 그레이 | 02/28 (D-8)
 그 다음으로 확인할 것: 다음 단계로 이어서 안내해 드리겠습니다.
-RESPONSE_SCHEMA: view=choice, choice_mode=multi, quick_replies=2, cards=0
+RESPONSE_SCHEMA: view=cards, choice_mode=multi, quick_replies=2, cards=2
 RESPONSE_SCHEMA_DETAIL:
   {
-    "message": "확인한 것: 배송지 변경\n확인할 것: 원하시는 문의 유형을 선택해주세요. (번호로 답변)\n- 1번 | 배송지 변경 | 배송지/수령인 정보 변경\n- 2번 | 배송 문의 | 배송 상태/송장 조회\n예) 1,2\n그 다음으로 확인할 것: 다음 단계로 이어서 안내해 드리겠습니다.",
+    "message": "확인한 것: 원피스 재입고 언제 되나요?\n확인할 것: 다음 중 어떤 상품의 재입고 알림을 원하시나요?\n- 1번 | 아드헬린 린넨 플레어 원피스 그레이 | 03/21 (D-29)\n- 2번 | 아드헬린 린넨 롱 원피스 그레이 | 02/28 (D-8)\n그 다음으로 확인할 것: 다음 단계로 이어서 안내해 드리겠습니다.",
     "ui_hints": {
-      "view": "choice",
+      "view": "cards",
       "choice_mode": "multi"
     },
     "quick_replies": [
@@ -51,18 +50,37 @@ RESPONSE_SCHEMA_DETAIL:
         "value": "2"
       }
     ],
-    "cards": []
+    "cards": [
+      {
+        "id": "restock-1",
+        "title": "아드헬린 린넨 플레어 원피스 그레이",
+        "value": "1",
+        "subtitle": "03/21 입고 예정",
+        "image_url": "https://sungjy2020.cafe24.com/web/product/tiny/202509/6eb884b4e0fc90d8c8135d93eb8e7fda.jpg",
+        "description": "D-29"
+      },
+      {
+        "id": "restock-2",
+        "title": "아드헬린 린넨 롱 원피스 그레이",
+        "value": "2",
+        "subtitle": "02/28 입고 예정",
+        "image_url": "https://sungjy2020.cafe24.com/web/product/tiny/202509/025624c6ca8efcbd5487d14795bf601c.jpg",
+        "description": "D-8"
+      }
+    ]
   }
-RENDER_PLAN: view=choice, quick_replies=true, cards=false, mode=multi, min=1, max=2, submit=csv, prompt=intent_disambiguation
+RENDER_PLAN: view=cards, quick_replies=false, cards=true, mode=multi, min=1, max=2, submit=csv, prompt=-
 RENDER_PLAN_DETAIL:
   {
-    "view": "choice",
-    "enable_quick_replies": true,
-    "enable_cards": false,
+    "view": "cards",
+    "enable_quick_replies": false,
+    "enable_cards": true,
     "interaction_scope": "latest_only",
     "quick_reply_source": {
-      "type": "explicit",
-      "criteria": "payload:quick_replies"
+      "type": "fallback",
+      "criteria": "decorator:numbered_options_text",
+      "source_function": "deriveQuickRepliesWithTrace",
+      "source_module": "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts"
     },
     "selection_mode": "multi",
     "min_select": 1,
@@ -70,24 +88,24 @@ RENDER_PLAN_DETAIL:
     "submit_format": "csv",
     "grid_columns": {
       "quick_replies": 2,
-      "cards": 1
+      "cards": 2
     },
-    "prompt_kind": "intent_disambiguation",
+    "prompt_kind": null,
     "debug": {
       "policy_version": "v1",
       "quick_replies_count": 2,
-      "cards_count": 0,
+      "cards_count": 2,
       "selection_mode_source": "config",
       "min_select_source": "config",
       "max_select_source": "config",
       "submit_format_source": "config"
     }
   }
-QUICK_REPLY_RULE: mode=multi, min=1, max=2, submit=csv, source=explicit, criteria=payload:quick_replies, module=-, function=-
+QUICK_REPLY_RULE: mode=multi, min=1, max=2, submit=csv, source=fallback, criteria=decorator:numbered_options_text, module=src/app/api/runtime/chat/presentation/ui-responseDecorators.ts, function=deriveQuickRepliesWithTrace
 
 [TOKEN_UNUSED]
 DEBUG 로그:
-- a15c4539-4c54-4998-8192-a83e975dc7d4 (turn_id=d227e07c-ff09-4680-854c-ae63ff78718a) (2026-02-20T06:39:05.536+00:00)
+- 74683c80-888e-4925-bcd1-76989c475eb3 (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611) (2026-02-20T11:55:53.479+00:00)
   prefix_json:
     {
       "kb": {
@@ -115,9 +133,9 @@ DEBUG 로그:
       "mcp": {
         "last": {
           "error": null,
-          "status": "none",
-          "function": "NO_TOOL_CALLED",
-          "result_count": null
+          "status": "success",
+          "function": "read_product",
+          "result_count": 1
         }
       },
       "auth": {
@@ -155,7 +173,15 @@ DEBUG 로그:
         "build_at": null,
         "build_id": null,
         "deploy_env": "production",
-        "runtime_started_at": "2026-02-20T06:32:02.831Z"
+        "runtime_started_at": "2026-02-20T11:05:26.099Z"
+      },
+      "policy": {
+        "tool_rules": [
+          "R220_restock_allow_read"
+        ],
+        "input_rules": [
+          "R110_intent_restock_inquiry"
+        ]
       },
       "decision": {
         "line": 152,
@@ -170,10 +196,14 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T06:39:05.273Z",
+        "recorded_at": "2026-02-20T11:55:53.204Z",
         "function_name": "insertTurnWithDebug"
       },
       "kb_admin": {
+        "rule_ids": [
+          "R110_intent_restock_inquiry",
+          "R220_restock_allow_read"
+        ],
         "kb_user_id": "f29567ba-275a-4cd9-add8-fa7b3d6e54c2",
         "kb_admin_ids": [
           "0da02c01-aad4-4286-a445-4db7a89f8ebe",
@@ -197,11 +227,60 @@ DEBUG 로그:
           {
             "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
             "function_name": "resolveIntentDisambiguation"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
+            "function_name": "handlePreTurnGuards"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts",
+            "function_name": "deriveSlotsForTurn"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
+            "function_name": "handleAddressChangeRefundPending"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/restockPendingRuntime.ts",
+            "function_name": "handleRestockPendingStage"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/postActionRuntime.ts",
+            "function_name": "handlePostActionStage"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
+            "function_name": "resolveIntentAndPolicyContext"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
+            "function_name": "runInputStageRuntime"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts",
+            "function_name": "createRuntimeMcpOps"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/otpRuntime.ts",
+            "function_name": "handleOtpLifecycleAndOrderGate"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/services/dataAccess.ts",
+            "function_name": "resolveProductDecision"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts",
+            "function_name": "runToolStagePipeline"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
+            "function_name": "handleRestockIntent"
           }
         ]
       },
       "slot_flow": {
-        "expected_inputs": []
+        "expected_inputs": [],
+        "expected_input_source": "reset_by_restock_intent"
       },
       "templates": {
         "override_count": 1,
@@ -341,7 +420,7 @@ DEBUG 로그:
         "missing_tools_expected_by_intent": []
       },
       "model_resolution": {
-        "input_length": 6,
+        "input_length": 15,
         "length_rule_hit": null,
         "keyword_rule_hit": null,
         "selection_reason": "deterministic_or_skipped"
@@ -350,106 +429,424 @@ DEBUG 로그:
         "conflicts": []
       }
     }
+MCP 로그:
+- 2dd65ed2-266a-474a-9153-f453f59d7c9e cafe24:read_product@1.0: success (2026-02-20T11:55:52.929+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  request:
+    {
+      "path": "/products/{product_no}",
+      "method": "GET",
+      "product_no": "19",
+      "required_scope": "mall.read_product"
+    }
+  response:
+    {
+      "product": {
+        "icon": null,
+        "main": [
+          3,
+          4,
+          5
+        ],
+        "price": "98000.00",
+        "hscode": null,
+        "display": "T",
+        "selling": "T",
+        "shop_no": 1,
+        "buy_unit": 1,
+        "category": [
+          {
+            "new": "F",
+            "recommend": "F",
+            "category_no": 45
+          }
+        ],
+        "sold_out": "F",
+        "tax_rate": 10,
+        "tax_type": "A",
+        "list_icon": {
+          "new_icon": false,
+          "soldout_icon": false,
+          "recommend_icon": false
+        },
+        "made_date": null,
+        "brand_code": "B0000000",
+        "has_option": "F",
+        "list_image": "https://sungjy2020.cafe24.com/web/product/medium/202509/316e7ee2e3da3bb0dd1a502c41b24c04.jpg",
+        "model_name": "",
+        "product_no": 19,
+        "project_no": null,
+        "size_guide": {
+          "use": "F",
+          "type": "default",
+          "default": "",
+          "description": null
+        },
+        "tiny_image": "https://sungjy2020.cafe24.com/web/product/tiny/202509/025624c6ca8efcbd5487d14795bf601c.jpg",
+        "trend_code": "T0000000",
+        "description": "<style>\n  .aisg-banner {\n      box-sizing: border-box; margin: 0 auto; padding: 40px; background: #F3FBFF; border: 1px solid #EBEBEB;\n  }\n  .aisg-banner__container {\n      display: flex; flex-direction: column; align-items: center; gap: 8px;\n  }\n  .aisg-banner__icon-group {\n      display: flex; align-items: center;\n  }\n  .aisg-banner__content {\n      text-align: center;\n  }\n  .aisg-banner__subtitle {\n      display: block; font-family: 'Noto Sans KR', sans-serif; font-size: 16px; line-height: 24px; color: #757575; margin-bottom: 4px;\n  }\n  .aisg-banner__title {\n      display: block; font-family: 'Noto Sans KR', sans-serif; font-weight: 700; font-size: 24px; line-height: 34px; color: #1C1C1C; letter-spacing: -0.5px;\n  }\n\n  @media screen and (max-width: 1024px) {\n      .aisg-banner {\n          padding: 20px 24px;\n      }\n      .aisg-banner__subtitle {\n          font-size: 13px; font-weight: 500; line-height: 20px;\n      }\n      .aisg-banner__title {\n          font-size: 14px; line-height: 20px;\n      }\n  }\n</style>\n<div class=\"aisg-banner\">\n  <div class=\"aisg-banner__container\">\n    <div class=\"aisg-banner__icon\">\n      <img\n        src=\"https://cafe24img.poxo.com/file.cafe24cos.com/aisg/resources/images/icon_product_banner.svg\"\n        alt=\"\"\n      />\n    </div>\n    <div class=\"aisg-banner__content\">\n      <span class=\"aisg-banner__subtitle\">Sample Product Generated by AI</span>\n      <strong class=\"aisg-banner__title\"\n        >본 상품은 AI로 생성된 샘플 상품으로, 실제 판매되는 상품이\n        아닙니다.</strong\n      >\n    </div>\n  </div>\n</div>",
+        "margin_rate": "10.00",
+        "market_sync": "F",
+        "option_type": null,
+        "product_tag": [],
+        "small_image": "https://sungjy2020.cafe24.com/web/product/small/202509/56c10d222442aaa90146117b72be4f1c.jpg",
+        "cloth_fabric": null,
+        "created_date": "2025-09-23T16:27:49+09:00",
+        "detail_image": "https://sungjy2020.cafe24.com/web/product/big/202509/e14c1cace842e021a2bea015ff0e8ea7.jpg",
+        "made_in_code": "KR",
+        "payment_info": null,
+        "product_code": "P000000T",
+        "product_name": "아드헬린 린넨 롱 원피스 그레이",
+        "release_date": null,
+        "retail_price": "0.00",
+        "service_info": null,
+        "supply_price": "98000.00",
+        "updated_date": "2025-09-23T16:27:50+09:00",
+        "use_kakaopay": null,
+        "use_naverpay": null,
+        "buy_unit_type": "O",
+        "exchange_info": null,
+        "naverpay_type": null,
+        "points_amount": null,
+        "price_content": null,
+        "shipping_area": null,
+        "shipping_info": null,
+        "supplier_code": "S0000000",
+        "approve_status": "",
+        "buy_group_list": null,
+        "buy_limit_type": null,
+        "country_hscode": null,
+        "product_volume": {
+          "use_product_volume": "F"
+        },
+        "product_weight": "1.00",
+        "shipping_rates": null,
+        "shipping_scope": "A",
+        "expiration_date": {
+          "end_date": null,
+          "start_date": null
+        },
+        "origin_place_no": 1798,
+        "shipping_method": null,
+        "shipping_period": null,
+        "single_purchase": "F",
+        "soldout_message": "",
+        "tax_calculation": "M",
+        "additional_price": "0.00",
+        "eng_product_name": "",
+        "icon_show_period": {
+          "end_date": null,
+          "start_date": null
+        },
+        "maximum_quantity": 0,
+        "minimum_quantity": 1,
+        "product_material": "",
+        "set_product_type": null,
+        "image_upload_type": "A",
+        "manufacturer_code": "M0000000",
+        "origin_place_code": 1798,
+        "points_by_product": "F",
+        "product_condition": "N",
+        "shipping_fee_type": null,
+        "buy_member_id_list": null,
+        "mobile_description": "<style>\n  .aisg-banner {\n      box-sizing: border-box; margin: 0 auto; padding: 40px; background: #F3FBFF; border: 1px solid #EBEBEB;\n  }\n  .aisg-banner__container {\n      display: flex; flex-direction: column; align-items: center; gap: 8px;\n  }\n  .aisg-banner__icon-group {\n      display: flex; align-items: center;\n  }\n  .aisg-banner__content {\n      text-align: center;\n  }\n  .aisg-banner__subtitle {\n      display: block; font-family: 'Noto Sans KR', sans-serif; font-size: 16px; line-height: 24px; color: #757575; margin-bottom: 4px;\n  }\n  .aisg-banner__title {\n      display: block; font-family: 'Noto Sans KR', sans-serif; font-weight: 700; font-size: 24px; line-height: 34px; color: #1C1C1C; letter-spacing: -0.5px;\n  }\n\n  @media screen and (max-width: 1024px) {\n      .aisg-banner {\n          padding: 20px 24px;\n      }\n      .aisg-banner__subtitle {\n          font-size: 13px; font-weight: 500; line-height: 20px;\n      }\n      .aisg-banner__title {\n          font-size: 14px; line-height: 20px;\n      }\n  }\n</style>\n<div class=\"aisg-banner\">\n  <div class=\"aisg-banner__container\">\n    <div class=\"aisg-banner__icon\">\n      <img\n        src=\"https://cafe24img.poxo.com/file.cafe24cos.com/aisg/resources/images/icon_product_banner.svg\"\n        alt=\"\"\n      />\n    </div>\n    <div class=\"aisg-banner__content\">\n      <span class=\"aisg-banner__subtitle\">Sample Product Generated by AI</span>\n      <strong class=\"aisg-banner__title\"\n        >본 상품은 AI로 생성된 샘플 상품으로, 실제 판매되는 상품이\n        아닙니다.</strong\n      >\n    </div>\n  </div>\n</div>\n",
+        "origin_place_value": "",
+        "product_used_month": null,
+        "relational_product": null,
+        "simple_description": "Sample Product Generated by AI",
+        "adult_certification": "F",
+        "classification_code": "C000000A",
+        "custom_product_code": "",
+        "exposure_group_list": null,
+        "exposure_limit_type": "A",
+        "price_excluding_tax": "89091.00",
+        "summary_description": "",
+        "supply_product_name": "",
+        "buy_limit_by_product": "F",
+        "except_member_points": "F",
+        "prepaid_shipping_fee": null,
+        "select_one_by_option": "F",
+        "shipping_calculation": "M",
+        "internal_product_name": "",
+        "origin_classification": "F",
+        "product_shipping_type": "C",
+        "product_tax_type_text": null,
+        "additional_information": null,
+        "clearance_category_eng": null,
+        "clearance_category_kor": null,
+        "cultural_tax_deduction": "F",
+        "repurchase_restriction": "F",
+        "translated_description": "",
+        "clearance_category_code": null,
+        "payment_info_by_product": "F",
+        "service_info_by_product": "F",
+        "shipping_fee_by_product": "F",
+        "english_product_material": "",
+        "exchange_info_by_product": "F",
+        "shipping_info_by_product": "F",
+        "order_quantity_limit_type": "O",
+        "points_setting_by_payment": null,
+        "single_purchase_restriction": "F",
+        "separated_mobile_description": "F",
+        "translated_additional_description": null
+      }
+    }
+- d3749101-b43d-4c65-a482-a9a64ef460a7 cafe24:resolve_product@1.0: success (2026-02-20T11:55:51.684+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  request:
+    {
+      "path": "internal://resolve_product",
+      "query": "아드헬린 린넨 롱 원피스 그레이",
+      "method": "POST",
+      "required_scope": "mall.read_product"
+    }
+  response:
+    {
+      "matched": true,
+      "match_type": "cafe24_fuzzy",
+      "product_id": "19",
+      "product_name": "아드헬린 린넨 롱 원피스 그레이"
+    }
+- 5c364d43-3952-46da-a082-e38c9fd086ef cafe24:read_product@1.0: success (2026-02-20T11:55:50.15+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  request:
+    {
+      "path": "/products/{product_no}",
+      "method": "GET",
+      "product_no": "20",
+      "required_scope": "mall.read_product"
+    }
+  response:
+    {
+      "product": {
+        "icon": null,
+        "main": [
+          3,
+          4,
+          5
+        ],
+        "price": "1000.00",
+        "hscode": null,
+        "display": "T",
+        "selling": "T",
+        "shop_no": 1,
+        "buy_unit": 1,
+        "category": [
+          {
+            "new": "F",
+            "recommend": "F",
+            "category_no": 45
+          }
+        ],
+        "sold_out": "F",
+        "tax_rate": 10,
+        "tax_type": "A",
+        "list_icon": {
+          "new_icon": false,
+          "soldout_icon": false,
+          "recommend_icon": false
+        },
+        "made_date": "",
+        "brand_code": "B0000000",
+        "has_option": "F",
+        "list_image": "https://sungjy2020.cafe24.com/web/product/medium/202509/5e78e4dd0010dca1a8d7c60180eb2afd.jpg",
+        "model_name": "",
+        "product_no": 20,
+        "project_no": null,
+        "size_guide": {
+          "use": "F",
+          "type": "default",
+          "default": "",
+          "description": null
+        },
+        "tiny_image": "https://sungjy2020.cafe24.com/web/product/tiny/202509/6eb884b4e0fc90d8c8135d93eb8e7fda.jpg",
+        "trend_code": "T0000000",
+        "description": "<style>\r\n  .aisg-banner {\r\n      box-sizing: border-box; margin: 0 auto; padding: 40px; background: #F3FBFF; border: 1px solid #EBEBEB;\r\n  }\r\n  .aisg-banner__container {\r\n      display: flex; flex-direction: column; align-items: center; gap: 8px;\r\n  }\r\n  .aisg-banner__icon-group {\r\n      display: flex; align-items: center;\r\n  }\r\n  .aisg-banner__content {\r\n      text-align: center;\r\n  }\r\n  .aisg-banner__subtitle {\r\n      display: block; font-family: 'Noto Sans KR', sans-serif; font-size: 16px; line-height: 24px; color: #757575; margin-bottom: 4px;\r\n  }\r\n  .aisg-banner__title {\r\n      display: block; font-family: 'Noto Sans KR', sans-serif; font-weight: 700; font-size: 24px; line-height: 34px; color: #1C1C1C; letter-spacing: -0.5px;\r\n  }\r\n\r\n  @media screen and (max-width: 1024px) {\r\n      .aisg-banner {\r\n          padding: 20px 24px;\r\n      }\r\n      .aisg-banner__subtitle {\r\n          font-size: 13px; font-weight: 500; line-height: 20px;\r\n      }\r\n      .aisg-banner__title {\r\n          font-size: 14px; line-height: 20px;\r\n      }\r\n  }\r\n</style>\r\n<div class=\"aisg-banner\">\r\n  <div class=\"aisg-banner__container\">\r\n    <div class=\"aisg-banner__icon\">\r\n      <img src=\"https://cafe24img.poxo.com/file.cafe24cos.com/aisg/resources/images/icon_product_banner.svg\" alt=\"\">\r\n    </div>\r\n    <div class=\"aisg-banner__content\">\r\n      <span class=\"aisg-banner__subtitle\">Sample Product Generated by AI</span>\r\n      <strong class=\"aisg-banner__title\">본 상품은 AI로 생성된 샘플 상품으로, 실제 판매되는 상품이\r\n        아닙니다.</strong>\r\n    </div>\r\n  </div>\r\n</div>",
+        "margin_rate": "10.00",
+        "market_sync": "F",
+        "option_type": null,
+        "product_tag": [],
+        "small_image": "https://sungjy2020.cafe24.com/web/product/small/202509/b5171d9d60505b5d1586bd785d4126e1.jpg",
+        "cloth_fabric": null,
+        "created_date": "2025-09-23T16:27:49+09:00",
+        "detail_image": "https://sungjy2020.cafe24.com/web/product/big/202509/f43b4b5103889f531e9cdfe923deaa22.jpg",
+        "made_in_code": "KR",
+        "payment_info": null,
+        "product_code": "P000000U",
+        "product_name": "아드헬린 린넨 플레어 원피스 그레이",
+        "release_date": "",
+        "retail_price": "0.00",
+        "service_info": null,
+        "supply_price": "1000.00",
+        "updated_date": "2026-01-26T18:42:51+09:00",
+        "use_kakaopay": null,
+        "use_naverpay": null,
+        "buy_unit_type": "O",
+        "exchange_info": null,
+        "naverpay_type": null,
+        "points_amount": null,
+        "price_content": null,
+        "shipping_area": null,
+        "shipping_info": null,
+        "supplier_code": "S0000000",
+        "approve_status": "",
+        "buy_group_list": null,
+        "buy_limit_type": null,
+        "country_hscode": null,
+        "product_volume": {
+          "use_product_volume": "F"
+        },
+        "product_weight": "1.00",
+        "shipping_rates": null,
+        "shipping_scope": "A",
+        "expiration_date": {
+          "end_date": null,
+          "start_date": null
+        },
+        "origin_place_no": 1798,
+        "shipping_method": null,
+        "shipping_period": null,
+        "single_purchase": "F",
+        "soldout_message": "",
+        "tax_calculation": "M",
+        "additional_price": "0.00",
+        "eng_product_name": "",
+        "icon_show_period": {
+          "end_date": null,
+          "start_date": null
+        },
+        "maximum_quantity": 0,
+        "minimum_quantity": 1,
+        "product_material": "",
+        "set_product_type": null,
+        "image_upload_type": "A",
+        "manufacturer_code": "M0000000",
+        "origin_place_code": 1798,
+        "points_by_product": "F",
+        "product_condition": "N",
+        "shipping_fee_type": null,
+        "buy_member_id_list": null,
+        "mobile_description": "<style>\r\n  .aisg-banner {\r\n      box-sizing: border-box; margin: 0 auto; padding: 40px; background: #F3FBFF; border: 1px solid #EBEBEB;\r\n  }\r\n  .aisg-banner__container {\r\n      display: flex; flex-direction: column; align-items: center; gap: 8px;\r\n  }\r\n  .aisg-banner__icon-group {\r\n      display: flex; align-items: center;\r\n  }\r\n  .aisg-banner__content {\r\n      text-align: center;\r\n  }\r\n  .aisg-banner__subtitle {\r\n      display: block; font-family: 'Noto Sans KR', sans-serif; font-size: 16px; line-height: 24px; color: #757575; margin-bottom: 4px;\r\n  }\r\n  .aisg-banner__title {\r\n      display: block; font-family: 'Noto Sans KR', sans-serif; font-weight: 700; font-size: 24px; line-height: 34px; color: #1C1C1C; letter-spacing: -0.5px;\r\n  }\r\n\r\n  @media screen and (max-width: 1024px) {\r\n      .aisg-banner {\r\n          padding: 20px 24px;\r\n      }\r\n      .aisg-banner__subtitle {\r\n          font-size: 13px; font-weight: 500; line-height: 20px;\r\n      }\r\n      .aisg-banner__title {\r\n          font-size: 14px; line-height: 20px;\r\n      }\r\n  }\r\n</style>\r\n<div class=\"aisg-banner\">\r\n  <div class=\"aisg-banner__container\">\r\n    <div class=\"aisg-banner__icon\">\r\n      <img src=\"https://cafe24img.poxo.com/file.cafe24cos.com/aisg/resources/images/icon_product_banner.svg\" alt=\"\">\r\n    </div>\r\n    <div class=\"aisg-banner__content\">\r\n      <span class=\"aisg-banner__subtitle\">Sample Product Generated by AI</span>\r\n      <strong class=\"aisg-banner__title\">본 상품은 AI로 생성된 샘플 상품으로, 실제 판매되는 상품이\r\n        아닙니다.</strong>\r\n    </div>\r\n  </div>\r\n</div>",
+        "origin_place_value": "",
+        "product_used_month": null,
+        "relational_product": null,
+        "simple_description": "Sample Product Generated by AI",
+        "adult_certification": "F",
+        "classification_code": "C000000A",
+        "custom_product_code": "",
+        "exposure_group_list": null,
+        "exposure_limit_type": "A",
+        "price_excluding_tax": "909.00",
+        "summary_description": "",
+        "supply_product_name": "",
+        "buy_limit_by_product": "F",
+        "except_member_points": "F",
+        "prepaid_shipping_fee": null,
+        "select_one_by_option": "F",
+        "shipping_calculation": "M",
+        "internal_product_name": "",
+        "origin_classification": "F",
+        "product_shipping_type": "C",
+        "product_tax_type_text": null,
+        "additional_information": null,
+        "clearance_category_eng": null,
+        "clearance_category_kor": null,
+        "cultural_tax_deduction": "F",
+        "repurchase_restriction": "F",
+        "translated_description": "",
+        "clearance_category_code": null,
+        "payment_info_by_product": "F",
+        "service_info_by_product": "F",
+        "shipping_fee_by_product": "F",
+        "english_product_material": "",
+        "exchange_info_by_product": "F",
+        "shipping_info_by_product": "F",
+        "order_quantity_limit_type": "O",
+        "points_setting_by_payment": null,
+        "single_purchase_restriction": "F",
+        "separated_mobile_description": "F",
+        "translated_additional_description": null
+      }
+    }
+- c8b09836-2ecc-4fa4-a2f9-6b94c69938ee cafe24:resolve_product@1.0: success (2026-02-20T11:55:48.871+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  request:
+    {
+      "path": "internal://resolve_product",
+      "query": "아드헬린 린넨 플레어 원피스 그레이",
+      "method": "POST",
+      "required_scope": "mall.read_product"
+    }
+  response:
+    {
+      "matched": true,
+      "match_type": "cafe24_fuzzy",
+      "product_id": "20",
+      "product_name": "아드헬린 린넨 플레어 원피스 그레이"
+    }
 이벤트 로그:
-- 003d5b35-3b4f-46d8-8484-f6bd60aea5b8 QUICK_REPLY_RULE_DECISION (2026-02-20T06:39:13.016+00:00) (turn_id=d227e07c-ff09-4680-854c-ae63ff78718a)
+- 9a95d112-83ce-4df6-9d77-4b1655edb597 QUICK_REPLY_RULE_DECISION (2026-02-20T11:56:01.439+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
   payload:
     {
       "quick_reply_count": 2,
       "quick_reply_config": {
         "preset": null,
-        "criteria": "policy:ASK_INTENT_DISAMBIGUATION",
+        "criteria": "decorator:default_single",
         "max_select": 2,
         "min_select": 1,
-        "source_module": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
+        "source_module": "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
         "submit_format": "csv",
         "selection_mode": "multi",
-        "source_function": "resolveIntentDisambiguationQuickReplyConfig"
+        "source_function": "deriveQuickReplyConfig"
       },
       "quick_reply_source": {
-        "criteria": "payload:quick_replies"
+        "criteria": "decorator:numbered_options_text",
+        "source_module": "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
+        "source_function": "deriveQuickRepliesWithTrace"
       }
     }
-- e3803aad-2514-451c-b9bb-f93708c78dca FINAL_ANSWER_READY (2026-02-20T06:39:12.756+00:00) (turn_id=d227e07c-ff09-4680-854c-ae63ff78718a)
+- b7f7c836-3b12-4b13-a0a0-0deb3ddd7f88 POLICY_DECISION (2026-02-20T11:56:01.175+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
   payload:
     {
-      "model": "deterministic_intent_disambiguation",
-      "answer": "확인한 것: 배송지 변경\n확인할 것: 원하시는 문의 유형을 선택해주세요. (번호로 답변)\n- 1번 | 배송지 변경 | 배송지/수령인 정보 변경\n- 2번 | 배송 문의 | 배송 상태/송장 조회\n예) 1,2\n그 다음으로 확인할 것: 다음 단계로 이어서 안내해 드리겠습니다.",
+      "stage": "tool",
+      "action": "ASK_RESTOCK_PRODUCT_CHOICE",
       "_decision": {
-        "line": 155,
-        "phase": "after",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 155,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-            "function_name": "emit:FINAL_ANSWER_READY"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-        "recorded_at": "2026-02-20T06:39:12.755Z",
-        "function_name": "emit:FINAL_ANSWER_READY"
-      },
-      "quick_reply_config": {
-        "preset": null,
-        "criteria": "policy:ASK_INTENT_DISAMBIGUATION",
-        "max_select": 2,
-        "min_select": 1,
-        "source_module": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-        "submit_format": "csv",
-        "selection_mode": "multi",
-        "source_function": "resolveIntentDisambiguationQuickReplyConfig"
-      }
-    }
-- f97f9ca8-92c8-4c0b-b82b-b38b85646202 POLICY_DECISION (2026-02-20T06:39:12.493+00:00) (turn_id=d227e07c-ff09-4680-854c-ae63ff78718a)
-  payload:
-    {
-      "stage": "input",
-      "action": "ASK_INTENT_DISAMBIGUATION",
-      "options": [
-        "order_change",
-        "shipping_inquiry"
-      ],
-      "_decision": {
-        "line": 147,
+        "line": 819,
         "phase": "decision",
         "column": 0,
         "call_chain": [
           {
-            "line": 147,
+            "line": 819,
             "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
+            "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
             "function_name": "emit:POLICY_DECISION"
           }
         ],
-        "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-        "recorded_at": "2026-02-20T06:39:12.493Z",
+        "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
+        "recorded_at": "2026-02-20T11:56:01.175Z",
         "function_name": "emit:POLICY_DECISION"
-      }
+      },
+      "candidate_count": 2
     }
-- 99976e5e-fa54-45b8-a705-22e5ae14b007 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T06:39:12.224+00:00) (turn_id=d227e07c-ff09-4680-854c-ae63ff78718a)
+- 0d23690e-9863-4c1f-b7fd-1f2449edaec3 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T11:56:00.913+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "d227e07c-ff09-4680-854c-ae63ff78718a",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
+      "turn_id": "018db875-76c4-4b8f-9bfc-3df9faa9b611",
+      "session_id": "b0e9ad76-5512-47f2-a477-5aa8a101d07e",
       "violation_count": 0,
       "deduped_violation_count": 0
     }
-- eecb0a6e-8d9c-40e6-b0f7-f446beafb341 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T06:39:11.216+00:00) (turn_id=d227e07c-ff09-4680-854c-ae63ff78718a)
+- 84b7ce83-3451-45dd-a38b-80bfd4c1d300 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T11:55:59.381+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "d227e07c-ff09-4680-854c-ae63ff78718a",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
+      "turn_id": "018db875-76c4-4b8f-9bfc-3df9faa9b611",
+      "session_id": "b0e9ad76-5512-47f2-a477-5aa8a101d07e",
       "config_source": "principles_default"
     }
-- 67192efc-0363-44bd-b548-b90ef117e88c END_USER_WRITE_LATENCY (2026-02-20T06:39:10.02+00:00) (turn_id=d227e07c-ff09-4680-854c-ae63ff78718a)
+- 71de4cf4-6a56-4283-ac2e-9cccec418790 END_USER_WRITE_LATENCY (2026-02-20T11:55:58.318+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
   payload:
     {
-      "duration_ms": 4205
+      "duration_ms": 4565
     }
-- ff18ddfd-c40f-40d6-a5f1-a5ae4ee9bae1 END_USER_CONTEXT_RESOLVED (2026-02-20T06:39:06.867+00:00) (turn_id=d227e07c-ff09-4680-854c-ae63ff78718a)
+- 90605b8d-fc04-40a4-afb5-92022cbff35e END_USER_CONTEXT_RESOLVED (2026-02-20T11:55:54.815+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
   payload:
     {
       "match_hit": true,
@@ -471,7 +868,7 @@ DEBUG 로그:
       "runtime_email_masked": "su********@gmail.com",
       "runtime_external_user_id": "fa7baaa2-806f-4457-88f0-7d29f802d126"
     }
-- 2f6dc70d-5cb2-4e27-b9e3-8791c348f6d7 END_USER_MATCH_HIT (2026-02-20T06:39:06.603+00:00) (turn_id=d227e07c-ff09-4680-854c-ae63ff78718a)
+- ebdfb123-b35d-4c27-9fd0-53e57f4196b8 END_USER_MATCH_HIT (2026-02-20T11:55:54.549+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
   payload:
     {
       "matched": true,
@@ -481,9 +878,189 @@ DEBUG 로그:
         "external"
       ]
     }
+- 11a29528-38d4-4548-9acf-7c7aa3cb8454 PRE_MCP_DECISION (2026-02-20T11:55:46.904+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  payload:
+    {
+      "denied": [],
+      "entity": {
+        "order_id": null,
+        "has_address": false,
+        "phone_masked": "-"
+      },
+      "intent": "restock_inquiry",
+      "allowed": [
+        "resolve_product",
+        "read_product",
+        "read_supply"
+      ],
+      "_decision": {
+        "line": 657,
+        "phase": "before",
+        "column": 0,
+        "call_chain": [
+          {
+            "line": 657,
+            "column": 0,
+            "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
+            "function_name": "emit:PRE_MCP_DECISION"
+          }
+        ],
+        "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
+        "recorded_at": "2026-02-20T11:55:46.904Z",
+        "function_name": "emit:PRE_MCP_DECISION"
+      },
+      "query_text": "원피스 재입고 언제 되나요?",
+      "final_calls": [],
+      "forced_calls": [],
+      "query_source": "current_message",
+      "missing_slots": [],
+      "resolved_slots": {
+        "product_query": "원피스 재입고 언제 되나요?"
+      },
+      "policy_conflicts": [],
+      "allowed_tool_names": [],
+      "blocked_by_missing_slots": false,
+      "allowed_tool_names_total": 15
+    }
+- 323ddd78-c988-4453-8e56-1a644c17aa1b INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-20T11:55:46.374+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  payload:
+    {
+      "intent": "restock_inquiry",
+      "blocked": false,
+      "_decision": {
+        "phase": "runtime",
+        "call_chain": [],
+        "module_path": "unknown",
+        "recorded_at": "2026-02-20T11:55:46.374Z",
+        "function_name": "unknown"
+      },
+      "missing_slots": [],
+      "required_slots": [
+        "product_query"
+      ],
+      "resolved_slots": {
+        "product_query": "원피스 재입고 언제 되나요?"
+      }
+    }
+- 802a4508-2e01-4926-a4be-1a79695e73d3 POLICY_DECISION (2026-02-20T11:55:46.108+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  payload:
+    {
+      "stage": "input",
+      "action": "SCOPE_READY",
+      "intent": "restock_inquiry",
+      "_decision": {
+        "line": 147,
+        "phase": "decision",
+        "column": 0,
+        "call_chain": [
+          {
+            "line": 147,
+            "column": 0,
+            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
+            "function_name": "emit:POLICY_DECISION"
+          }
+        ],
+        "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
+        "recorded_at": "2026-02-20T11:55:46.108Z",
+        "function_name": "emit:POLICY_DECISION"
+      },
+      "required_slots": [
+        "product_query"
+      ],
+      "resolved_slots": {
+        "product_query": "원피스 재입고 언제 되나요?"
+      }
+    }
+- 3651d2b4-4d63-44ea-b657-bcb11f5ef8a2 INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-20T11:55:45.839+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  payload:
+    {
+      "intent": "restock_inquiry",
+      "_decision": {
+        "phase": "runtime",
+        "call_chain": [],
+        "module_path": "unknown",
+        "recorded_at": "2026-02-20T11:55:45.839Z",
+        "function_name": "unknown"
+      },
+      "query_source": "current_message",
+      "expected_input": null
+    }
+- 8b95f380-49ce-4cc5-948f-2977ca62e817 SLOT_EXTRACTED (2026-02-20T11:55:45.574+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  payload:
+    {
+      "derived": {
+        "phone": null,
+        "address": null,
+        "zipcode": null,
+        "order_id": null,
+        "phone_masked": "-"
+      },
+      "resolved": {
+        "phone": null,
+        "intent": "restock_inquiry",
+        "address": null,
+        "zipcode": null,
+        "order_id": null,
+        "phone_masked": "-"
+      },
+      "_decision": {
+        "line": 145,
+        "phase": "runtime",
+        "column": 0,
+        "call_chain": [
+          {
+            "line": 145,
+            "column": 0,
+            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
+            "function_name": "emit:SLOT_EXTRACTED"
+          }
+        ],
+        "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
+        "recorded_at": "2026-02-20T11:55:45.574Z",
+        "function_name": "emit:SLOT_EXTRACTED"
+      },
+      "query_source": "current_message",
+      "missing_slots": [],
+      "expected_input": null,
+      "resolved_slots": {
+        "product_query": "원피스 재입고 언제 되나요?"
+      }
+    }
+- 405e944f-1a16-42a8-a955-d3e56c702e55 INPUT_CONTRACT_REVIEW_COMPLETED (2026-02-20T11:55:43.712+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  payload:
+    {
+      "source": "reset_by_restock_intent",
+      "_decision": {
+        "phase": "runtime",
+        "call_chain": [],
+        "module_path": "unknown",
+        "recorded_at": "2026-02-20T11:55:43.712Z",
+        "function_name": "unknown"
+      },
+      "intent_name": "general",
+      "expected_input": null,
+      "expected_inputs": [],
+      "expected_input_stage": null
+    }
+- 7c5cda8e-7378-4fcd-a6a0-19bedf4253c3 INPUT_CONTRACT_REVIEW_STARTED (2026-02-20T11:55:43.449+00:00) (turn_id=018db875-76c4-4b8f-9bfc-3df9faa9b611)
+  payload:
+    {
+      "source": null,
+      "_decision": {
+        "phase": "runtime",
+        "call_chain": [],
+        "module_path": "unknown",
+        "recorded_at": "2026-02-20T11:55:43.449Z",
+        "function_name": "unknown"
+      },
+      "intent_name": "general",
+      "expected_input": null,
+      "expected_inputs": [],
+      "expected_input_stage": null
+    }
 
 
-TURN_ID: 8e28b545-a43e-4871-a8df-4870f548d2a6
+TURN_ID: 88c89d35-e96b-49cf-ac27-fafdc20d9c9e
 
 [TOKEN_USED]
 
@@ -491,69 +1068,84 @@ USER:
 1
 
 BOT:
-확인한 것: 연락처 *******7159, 배송지 1
-확인할 것: 문자로 전송된 인증번호를 입력해주세요.
-그 다음으로 확인할 것: 주문번호 확인
-RESPONSE_SCHEMA: view=text, choice_mode=single, quick_replies=0, cards=0
+확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이
+확인할 것: 요약: 아드헬린 린넨 플레어 원피스 그레이 입고 예정일 03/21입니다.
+상세: 예정일 2026-03-21 (D-29)
+다음 선택: 재입고 알림 신청 / 대화 종료
+그 다음으로 확인할 것: 입고 일정 안내 및 알림 신청 여부 확인
+RESPONSE_SCHEMA: view=choice, choice_mode=single, quick_replies=2, cards=0
 RESPONSE_SCHEMA_DETAIL:
   {
-    "message": "확인한 것: 연락처 *******7159, 배송지 1\n확인할 것: 문자로 전송된 인증번호를 입력해주세요.\n그 다음으로 확인할 것: 주문번호 확인",
+    "message": "확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이\n확인할 것: 요약: 아드헬린 린넨 플레어 원피스 그레이 입고 예정일 03/21입니다.\n상세: 예정일 2026-03-21 (D-29)\n다음 선택: 재입고 알림 신청 / 대화 종료\n그 다음으로 확인할 것: 입고 일정 안내 및 알림 신청 여부 확인",
     "ui_hints": {
-      "view": "text",
+      "view": "choice",
       "choice_mode": "single"
     },
-    "quick_replies": [],
+    "quick_replies": [
+      {
+        "label": "재입고 알림 신청",
+        "value": "action:restock_subscribe"
+      },
+      {
+        "label": "대화 종료",
+        "value": "action:end_conversation"
+      }
+    ],
     "cards": []
   }
-RENDER_PLAN: view=text, quick_replies=false, cards=false, mode=single, min=1, max=1, submit=single, prompt=-
+RENDER_PLAN: view=choice, quick_replies=true, cards=false, mode=single, min=1, max=1, submit=single, prompt=-
 RENDER_PLAN_DETAIL:
   {
-    "view": "text",
-    "enable_quick_replies": false,
+    "view": "choice",
+    "enable_quick_replies": true,
     "enable_cards": false,
     "interaction_scope": "latest_only",
     "quick_reply_source": {
-      "type": "none"
+      "type": "explicit",
+      "criteria": "payload:quick_replies"
     },
     "selection_mode": "single",
     "min_select": 1,
     "max_select": 1,
     "submit_format": "single",
     "grid_columns": {
-      "quick_replies": 1,
+      "quick_replies": 2,
       "cards": 1
     },
     "prompt_kind": null,
     "debug": {
       "policy_version": "v1",
-      "quick_replies_count": 0,
+      "quick_replies_count": 2,
       "cards_count": 0,
-      "selection_mode_source": "default",
-      "min_select_source": "default",
-      "max_select_source": "default",
-      "submit_format_source": "default"
+      "selection_mode_source": "config",
+      "min_select_source": "config",
+      "max_select_source": "config",
+      "submit_format_source": "config"
     }
   }
-QUICK_REPLY_RULE: mode=single, min=1, max=1, submit=single, source=none, criteria=-, module=-, function=-
+QUICK_REPLY_RULE: mode=single, min=1, max=1, submit=single, source=explicit, criteria=payload:quick_replies, module=-, function=-
 
 [TOKEN_UNUSED]
 DEBUG 로그:
-- 803e06b9-5b20-49a0-baf1-f3dc730c009d (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6) (2026-02-20T06:39:27.023+00:00)
+- ae9f5275-8f6c-43c5-9e1d-b0e08e45654a (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e) (2026-02-20T11:56:11.872+00:00)
   prefix_json:
     {
       "mcp": {
         "last": {
           "error": null,
-          "status": "success",
-          "function": "send_otp",
-          "result_count": 6
+          "status": "none",
+          "function": "NO_TOOL_CALLED",
+          "result_count": null
         }
       },
       "slot": {
-        "phone": "01093107159",
-        "address": "1",
-        "phone_masked": "*******7159",
-        "expected_input": "address"
+        "phone_masked": "-",
+        "expected_input": "product_query"
+      },
+      "policy": {
+        "tool_rules": [
+          "R220_restock_allow_read"
+        ]
       },
       "decision": {
         "line": 152,
@@ -568,21 +1160,17 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T06:39:26.755Z",
+        "recorded_at": "2026-02-20T11:56:11.599Z",
         "function_name": "insertTurnWithDebug"
       },
       "kb_admin": {
         "rule_ids": [
-          "R270_order_change_allow_write",
-          "R275_order_change_list_orders_by_phone"
+          "R220_restock_allow_read"
         ],
         "kb_user_id": "f29567ba-275a-4cd9-add8-fa7b3d6e54c2",
         "kb_admin_ids": [
           "0da02c01-aad4-4286-a445-4db7a89f8ebe",
           "878b3ffe-2e18-4820-bda6-ffeccaa4212b"
-        ],
-        "tool_policies": [
-          "list_orders"
         ]
       },
       "execution": {
@@ -646,169 +1234,166 @@ DEBUG 로그:
           {
             "module_path": "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts",
             "function_name": "runToolStagePipeline"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
+            "function_name": "handleRestockIntent"
           }
         ]
       },
       "slot_flow": {
-        "derived_address": "1",
         "expected_inputs": [
-          "address"
+          "product_query"
         ],
-        "expected_input_stage": "legacy.expected_input",
-        "expected_input_source": "derived_from_last_answer"
-      },
-      "tool_allowlist": {
-        "valid_tool_count": 15,
-        "resolved_tool_ids": [
-          "11025bb2-770a-4c55-af11-83ba2caabcb8",
-          "a9cd0a00-59f1-43fd-97d4-5f5c1bca3c07",
-          "bc06a0c1-8f40-4ba8-9668-682170254b34",
-          "aec3bd90-314a-4929-9fe5-6ed33888857c",
-          "ffb90354-4eb0-4dd8-9ba1-d6608a1ea79b",
-          "4b4cec22-7d1b-4c06-8579-08cdfbacc16b",
-          "56cef951-28f5-4b11-85f5-7624adc15862",
-          "0908279c-a369-4684-92ac-8a9f5af1407f",
-          "c962d4b0-d96a-45f6-a985-59b8b93534c0",
-          "bc9adf5e-e09f-4eed-9391-16aab9e3957a",
-          "c78fe2ef-9925-45bf-8f14-2f5954dfb00c",
-          "03b67d63-e22d-4820-b101-bf545df8e78c",
-          "6780420a-3574-4a0f-97d4-5ce43e7ac21e",
-          "1d09fb43-4ca8-4c4c-940f-8ac1bbb43a13",
-          "f45fa968-4bfe-4025-a74c-8f14f241bb43"
-        ],
-        "tools_by_id_count": 15,
-        "allowed_tool_count": 15,
-        "allowed_tool_names": [
-          "cafe24:read_shipping",
-          "cafe24:read_order_settings",
-          "cafe24:create_ticket",
-          "cafe24:lookup_order",
-          "cafe24:track_shipment",
-          "cafe24:read_product",
-          "cafe24:read_supply",
-          "cafe24:update_order_settings",
-          "juso:search_address",
-          "cafe24:api_get_customers_member_id_autoupdate_0d586802",
-          "solapi:send_otp",
-          "solapi:verify_otp",
-          "cafe24:list_orders",
-          "cafe24:update_order_shipping_address",
-          "cafe24:resolve_product"
-        ],
-        "provider_selections": [],
-        "resolved_tool_count": 15,
-        "requested_tool_count": 15,
-        "tools_by_provider_count": 0,
-        "provider_selection_count": 0,
-        "missing_tools_expected_by_intent": [
-          "find_customer_by_phone"
-        ]
+        "expected_input_stage": "restock.awaiting_product",
+        "expected_input_source": "contract_stage"
       },
       "model_resolution": {
         "input_length": 1,
         "length_rule_hit": null,
         "keyword_rule_hit": null,
         "selection_reason": "deterministic_or_skipped"
-      },
-      "policy_conflicts": {
-        "conflicts": [
-          {
-            "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-            "ruleA": "R268_order_change_need_zipcode_tool",
-            "ruleB": "R271_order_change_force_update",
-            "stage": "tool",
-            "intentScope": "order_change"
-          }
-        ],
-        "resolution": "tool_stage_force_response_precedence"
       }
     }
-MCP 로그:
-- dd8c5583-723a-444f-8cac-071233d9d43e solapi:send_otp@1.0: success (2026-02-20T06:39:26.228+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
-  request:
-    {
-      "path": "/messages/v4/send-many/detail",
-      "method": "POST",
-      "destination": "01093107159",
-      "required_scope": "messaging.write"
-    }
-  response:
-    {
-      "otp_ref": "2f464ac1-09ad-4746-ac98-3444c60975a9",
-      "delivery": "sms",
-      "test_code": "101010",
-      "test_mode": true,
-      "expires_at": "2026-02-20T06:44:25.685Z",
-      "destination": "01***59"
-    }
 이벤트 로그:
-- 266e09ce-0e95-42d7-bf4a-5478af840715 CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T06:39:35.331+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- 22da0fc3-3004-4298-ab39-6c95a83d533c QUICK_REPLY_RULE_DECISION (2026-02-20T11:56:20.583+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
+  payload:
+    {
+      "quick_reply_count": 2,
+      "quick_reply_config": {
+        "preset": null,
+        "criteria": "restock:kb_schedule_followup_choice",
+        "max_select": 1,
+        "min_select": 1,
+        "source_module": "src/app/api/runtime/chat/handlers/restockHandler.ts",
+        "submit_format": "single",
+        "selection_mode": "single",
+        "source_function": "handleRestockIntent"
+      },
+      "quick_reply_source": {
+        "criteria": "payload:quick_replies"
+      }
+    }
+- d4354465-8784-41eb-bb33-f05b0ff3b46b FINAL_ANSWER_READY (2026-02-20T11:56:20.315+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
+  payload:
+    {
+      "model": "deterministic_restock_kb",
+      "answer": "확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이\n확인할 것: 요약: 아드헬린 린넨 플레어 원피스 그레이 입고 예정일 03/21입니다.\n상세: 예정일 2026-03-21 (D-29)\n다음 선택: 재입고 알림 신청 / 대화 종료\n그 다음으로 확인할 것: 입고 일정 안내 및 알림 신청 여부 확인",
+      "_decision": {
+        "line": 248,
+        "phase": "after",
+        "column": 0,
+        "call_chain": [
+          {
+            "line": 248,
+            "column": 0,
+            "module_path": "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+            "function_name": "emit:FINAL_ANSWER_READY"
+          }
+        ],
+        "module_path": "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
+        "recorded_at": "2026-02-20T11:56:20.315Z",
+        "function_name": "emit:FINAL_ANSWER_READY"
+      }
+    }
+- 83a9df04-e16b-48ab-821c-c48ae72d73fb POLICY_DECISION (2026-02-20T11:56:20.043+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
+  payload:
+    {
+      "stage": "tool",
+      "action": "RESTOCK_SCHEDULE_ANSWERED_BY_KB_CHOICE",
+      "_decision": {
+        "line": 819,
+        "phase": "decision",
+        "column": 0,
+        "call_chain": [
+          {
+            "line": 819,
+            "column": 0,
+            "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
+            "function_name": "emit:POLICY_DECISION"
+          }
+        ],
+        "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
+        "recorded_at": "2026-02-20T11:56:20.042Z",
+        "function_name": "emit:POLICY_DECISION"
+      },
+      "product_name": "아드헬린 린넨 플레어 원피스 그레이"
+    }
+- 9923838b-2de7-4551-b45e-8b13783648cd CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T11:56:19.773+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
       "keys": [
-        "phone",
-        "address"
+        "product_id",
+        "product_name",
+        "channel",
+        "day",
+        "month"
       ],
       "delta": {
-        "phone": "01093107159",
-        "address": "1"
+        "day": "21",
+        "month": "3",
+        "channel": "sms",
+        "product_id": "20",
+        "product_name": "아드헬린 린넨 플레어 원피스 그레이"
       },
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
+      "flow_id": "c195ff90-c0dc-4986-a3f3-b099ebf414ca",
       "_decision": {
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:35.331Z",
+        "recorded_at": "2026-02-20T11:56:19.772Z",
         "function_name": "unknown"
       },
-      "key_count": 2
+      "key_count": 5
     }
-- 3ce243eb-83f6-42f9-b37b-4888a9a1d257 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T06:39:35.067+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- 4f347913-6aeb-4ae9-b0a7-3c3ef600c1d5 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T11:56:19.511+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "8e28b545-a43e-4871-a8df-4870f548d2a6",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
+      "turn_id": "88c89d35-e96b-49cf-ac27-fafdc20d9c9e",
+      "session_id": "b0e9ad76-5512-47f2-a477-5aa8a101d07e",
       "violation_count": 0,
       "deduped_violation_count": 0
     }
-- 9d4f1483-a7b6-4292-a580-1da724ae900f RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T06:39:33.992+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- c9cde47e-a38d-452f-aadf-6ea1c3507147 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T11:56:18.965+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "8e28b545-a43e-4871-a8df-4870f548d2a6",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
+      "turn_id": "88c89d35-e96b-49cf-ac27-fafdc20d9c9e",
+      "session_id": "b0e9ad76-5512-47f2-a477-5aa8a101d07e",
       "config_source": "principles_default"
     }
-- 3a128180-616f-4944-822b-e3aa3794cfd5 END_USER_WRITE_LATENCY (2026-02-20T06:39:32.924+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- f8366411-cf2f-4b95-b15a-e394bd6aa09f END_USER_WRITE_LATENCY (2026-02-20T11:56:17.918+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
-      "duration_ms": 5619
+      "duration_ms": 5764
     }
-- fa8deecd-a9c3-4a28-a656-0f1adc9b1f41 END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T06:39:32.662+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- 1af1bdcf-495e-4ef2-8336-bcff111639dc END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T11:56:17.66+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
       "keys": [
-        "phone",
-        "address"
+        "day",
+        "month",
+        "channel",
+        "product_id",
+        "product_name"
       ],
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
-      "key_count": 2,
+      "flow_id": "c195ff90-c0dc-4986-a3f3-b099ebf414ca",
+      "key_count": 5,
       "keys_truncated": false
     }
-- f65366c1-1de1-4334-8131-1367758df300 END_USER_CONTEXT_RESOLVED (2026-02-20T06:39:27.83+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- 2a2bbb36-ec8f-4c0b-b552-8df48021d95c END_USER_CONTEXT_RESOLVED (2026-02-20T11:56:13.192+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
-      "match_hit": false,
+      "match_hit": true,
       "end_user_id": "1932cd1e-eeea-4855-ad96-38b22def6179",
-      "identity_count": 3,
+      "identity_count": 2,
       "identity_types": [
         "email",
-        "phone",
         "external"
       ],
       "runtime_source": "auth_user",
-      "match_attempted": false,
+      "match_attempted": true,
       "runtime_end_user": {
         "id": "fa7baaa2-806f-4457-88f0-7d29f802d126",
         "source": "auth_user",
@@ -819,118 +1404,140 @@ MCP 로그:
       "runtime_email_masked": "su********@gmail.com",
       "runtime_external_user_id": "fa7baaa2-806f-4457-88f0-7d29f802d126"
     }
-- e23ee217-580d-4270-9e00-5500a8338f8d AUTH_GATE_TRIGGERED (2026-02-20T06:39:26.486+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- 0786b1e9-743f-4ad7-a6f9-b7520753e6ad END_USER_MATCH_HIT (2026-02-20T11:56:12.931+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
-      "action": "ASK_OTP_CODE",
-      "intent": "order_change",
-      "reason": "OTP_SENT",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:26.486Z",
-        "function_name": "unknown"
-      },
-      "force_otp_gate": true,
-      "has_sensitive_planned_call": true
+      "matched": true,
+      "identity_count": 2,
+      "identity_types": [
+        "email",
+        "external"
+      ]
     }
-- fe4299c5-a8eb-459a-a060-2a845a4980e4 AUTH_GATE_PRECHECK (2026-02-20T06:39:24.278+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- 68f453a8-d8e8-4db6-b86c-7d161053124c PRE_MCP_DECISION (2026-02-20T11:56:11.343+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
-      "intent": "order_change",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:24.278Z",
-        "function_name": "unknown"
+      "denied": [],
+      "entity": {
+        "order_id": null,
+        "has_address": false,
+        "phone_masked": "-"
       },
-      "otp_pending": false,
-      "otp_verified": false,
-      "planned_calls": [
-        "list_orders"
+      "intent": "restock_inquiry",
+      "allowed": [
+        "resolve_product",
+        "read_product",
+        "read_supply"
       ],
-      "force_otp_gate": true,
-      "allowed_tool_names_count": 15,
-      "has_sensitive_planned_call": true,
-      "customer_verification_token_present": false
-    }
-- 87ff86d8-ddcc-42ea-b66b-2385ba28715d EXECUTION_GUARD_TRIGGERED (2026-02-20T06:39:24.022+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
-  payload:
-    {
-      "tool": "update_order_shipping_address",
-      "error": "MUTATION_INTENT_NOT_READY",
-      "reason": "MISSING_REQUIRED_SLOTS",
-      "missing": {
-        "address": false,
-        "zipcode": true,
-        "order_id": true
-      },
       "_decision": {
-        "line": 125,
-        "phase": "runtime",
+        "line": 657,
+        "phase": "before",
         "column": 0,
         "call_chain": [
           {
-            "line": 125,
+            "line": 657,
             "column": 0,
-            "module_path": "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
-            "function_name": "emit:EXECUTION_GUARD_TRIGGERED"
+            "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
+            "function_name": "emit:PRE_MCP_DECISION"
           }
         ],
-        "module_path": "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
-        "recorded_at": "2026-02-20T06:39:24.022Z",
-        "function_name": "emit:EXECUTION_GUARD_TRIGGERED"
-      }
+        "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
+        "recorded_at": "2026-02-20T11:56:11.343Z",
+        "function_name": "emit:PRE_MCP_DECISION"
+      },
+      "query_text": "1",
+      "final_calls": [],
+      "forced_calls": [],
+      "query_source": "current_message",
+      "missing_slots": [],
+      "resolved_slots": {
+        "product_query": "아드헬린 린넨 플레어 원피스 그레이"
+      },
+      "policy_conflicts": [],
+      "allowed_tool_names": [],
+      "blocked_by_missing_slots": false,
+      "allowed_tool_names_total": 15
     }
-- 0cfffe0f-2131-4eb7-9045-39d269ddd785 INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-20T06:39:23.462+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- 94293384-a359-433a-b30e-e84fc629acdd INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-20T11:56:10.56+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
-      "intent": "order_change",
+      "intent": "restock_inquiry",
       "blocked": false,
       "_decision": {
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:23.462Z",
+        "recorded_at": "2026-02-20T11:56:10.560Z",
         "function_name": "unknown"
       },
       "missing_slots": [],
-      "required_slots": [],
-      "resolved_slots": {}
+      "required_slots": [
+        "product_query"
+      ],
+      "resolved_slots": {
+        "product_query": "아드헬린 린넨 플레어 원피스 그레이"
+      }
     }
-- c68bb236-2bfc-4fa6-9275-c66892de2fd3 INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-20T06:39:23.204+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- a4fe450f-4f40-4b0c-843c-b829064aaafa POLICY_DECISION (2026-02-20T11:56:10.3+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
-      "intent": "order_change",
+      "stage": "input",
+      "action": "SCOPE_READY",
+      "intent": "restock_inquiry",
+      "_decision": {
+        "line": 147,
+        "phase": "decision",
+        "column": 0,
+        "call_chain": [
+          {
+            "line": 147,
+            "column": 0,
+            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
+            "function_name": "emit:POLICY_DECISION"
+          }
+        ],
+        "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
+        "recorded_at": "2026-02-20T11:56:10.300Z",
+        "function_name": "emit:POLICY_DECISION"
+      },
+      "required_slots": [
+        "product_query"
+      ],
+      "resolved_slots": {
+        "product_query": "아드헬린 린넨 플레어 원피스 그레이"
+      }
+    }
+- 93e07821-7609-46d4-83d3-84e4c4667c01 INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-20T11:56:10.032+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
+  payload:
+    {
+      "intent": "restock_inquiry",
       "_decision": {
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:23.204Z",
+        "recorded_at": "2026-02-20T11:56:10.032Z",
         "function_name": "unknown"
       },
-      "query_source": "intent_disambiguation_source_text",
-      "expected_input": "address"
+      "query_source": "current_message",
+      "expected_input": "product_query"
     }
-- 16098818-fafb-4841-bf13-df24312888d4 SLOT_EXTRACTED (2026-02-20T06:39:22.94+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
+- 05e3d6bd-dfc3-42d0-84ca-a1f0cb14bc58 SLOT_EXTRACTED (2026-02-20T11:56:09.778+00:00) (turn_id=88c89d35-e96b-49cf-ac27-fafdc20d9c9e)
   payload:
     {
       "derived": {
         "phone": null,
-        "address": "1",
+        "address": null,
         "zipcode": null,
         "order_id": null,
         "phone_masked": "-"
       },
       "resolved": {
-        "phone": "01093107159",
-        "intent": "order_change",
-        "address": "1",
+        "phone": null,
+        "intent": "restock_inquiry",
+        "address": null,
         "zipcode": null,
         "order_id": null,
-        "phone_masked": "*******7159"
+        "phone_masked": "-"
       },
       "_decision": {
         "line": 145,
@@ -945,132 +1552,34 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "recorded_at": "2026-02-20T06:39:22.940Z",
+        "recorded_at": "2026-02-20T11:56:09.778Z",
         "function_name": "emit:SLOT_EXTRACTED"
       },
-      "query_source": "intent_disambiguation_source_text",
+      "query_source": "current_message",
       "missing_slots": [],
-      "expected_input": "address",
-      "resolved_slots": {}
-    }
-- 325e80e7-4f7c-439e-835d-8f5eabe7e6c0 POLICY_STATIC_CONFLICT (2026-02-20T06:39:22.675+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
-  payload:
-    {
-      "intent": "order_change",
-      "_decision": {
-        "line": 42,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 42,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/policyInputRuntime.ts",
-            "function_name": "emit:POLICY_STATIC_CONFLICT"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/policyInputRuntime.ts",
-        "recorded_at": "2026-02-20T06:39:22.675Z",
-        "function_name": "emit:POLICY_STATIC_CONFLICT"
-      },
-      "conflicts": [
-        {
-          "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-          "ruleA": "R268_order_change_need_zipcode_tool",
-          "ruleB": "R271_order_change_force_update",
-          "stage": "tool",
-          "intentScope": "order_change"
-        }
-      ],
-      "resolution": "tool_stage_force_response_precedence"
-    }
-- 79e55e77-4173-4fb6-9592-053bcbcfa664 INPUT_CONTRACT_REVIEW_COMPLETED (2026-02-20T06:39:22.408+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
-  payload:
-    {
-      "source": "derived_from_last_answer",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:22.408Z",
-        "function_name": "unknown"
-      },
-      "intent_name": "general",
-      "expected_input": "address",
-      "expected_inputs": [
-        "address"
-      ],
-      "expected_input_stage": "legacy.expected_input"
-    }
-- 3d30c6f2-5e46-417e-8af4-01d568fc3691 INPUT_CONTRACT_REVIEW_STARTED (2026-02-20T06:39:22.151+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
-  payload:
-    {
-      "source": null,
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:22.151Z",
-        "function_name": "unknown"
-      },
-      "intent_name": "general",
-      "expected_input": null,
-      "expected_inputs": [],
-      "expected_input_stage": null
-    }
-- 49f4354a-de1c-46b6-bb81-d284e0352a3c POLICY_DECISION (2026-02-20T06:39:21.885+00:00) (turn_id=8e28b545-a43e-4871-a8df-4870f548d2a6)
-  payload:
-    {
-      "stage": "input",
-      "action": "INTENT_DISAMBIGUATION_SELECTED",
-      "_decision": {
-        "line": 175,
-        "phase": "decision",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 175,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-            "function_name": "emit:POLICY_DECISION"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-        "recorded_at": "2026-02-20T06:39:21.885Z",
-        "function_name": "emit:POLICY_DECISION"
-      },
-      "selected_indexes": [
-        1
-      ],
-      "selected_intents": [
-        "order_change"
-      ],
-      "source_text_used": true,
-      "source_text_present": true
+      "expected_input": "product_query",
+      "resolved_slots": {
+        "product_query": "아드헬린 린넨 플레어 원피스 그레이"
+      }
     }
 
 
-TURN_ID: a39bad5a-9c27-4a62-847f-1aacc9e911f1
+TURN_ID: c5e28906-313f-495f-8bf3-40bfc7de6a97
 
 [TOKEN_USED]
 
 USER:
-101010
+재입고 알림 신청
 
 BOT:
-확인한 것: 연락처 *******7159, 배송지 1
-확인할 것: 아래 주문이 맞는지 확인해 주세요.
-- 주문번호: 20260127-0000014
-- 상품: 아드헬린 린넨 플레어 원피스 그레이
-- 옵션: 옵션 없음
-- 가격: 1000.00
-- 수량: 1
+확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이, 연락 채널 sms
+확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요?
 네/아니오로 답해주세요.
-그 다음으로 확인할 것: 추가 도움 요청 확인
+그 다음으로 확인할 것: 알림 시작일 선택
 RESPONSE_SCHEMA: view=choice, choice_mode=single, quick_replies=2, cards=0
 RESPONSE_SCHEMA_DETAIL:
   {
-    "message": "확인한 것: 연락처 *******7159, 배송지 1\n확인할 것: 아래 주문이 맞는지 확인해 주세요.\n- 주문번호: 20260127-0000014\n- 상품: 아드헬린 린넨 플레어 원피스 그레이\n- 옵션: 옵션 없음\n- 가격: 1000.00\n- 수량: 1\n네/아니오로 답해주세요.\n그 다음으로 확인할 것: 추가 도움 요청 확인",
+    "message": "확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이, 연락 채널 sms\n확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요?\n네/아니오로 답해주세요.\n그 다음으로 확인할 것: 알림 시작일 선택",
     "ui_hints": {
       "view": "choice",
       "choice_mode": "single"
@@ -1121,22 +1630,19 @@ QUICK_REPLY_RULE: mode=single, min=1, max=1, submit=single, source=explicit, cri
 
 [TOKEN_UNUSED]
 DEBUG 로그:
-- 25314e5c-2c8e-47a4-bf28-f5163e8624fd (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1) (2026-02-20T06:39:50.353+00:00)
+- 001ade61-922f-44e3-9567-edb8fe37157b (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97) (2026-02-20T11:56:39.43+00:00)
   prefix_json:
     {
       "mcp": {
         "last": {
           "error": null,
-          "status": "success",
-          "function": "lookup_order",
-          "result_count": 1
+          "status": "none",
+          "function": "NO_TOOL_CALLED",
+          "result_count": null
         }
       },
       "slot": {
-        "phone": "01093107159",
-        "address": "1",
-        "phone_masked": "*******7159",
-        "expected_input": "otp_code"
+        "phone_masked": "-"
       },
       "decision": {
         "line": 152,
@@ -1151,21 +1657,14 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T06:39:50.088Z",
+        "recorded_at": "2026-02-20T11:56:39.162Z",
         "function_name": "insertTurnWithDebug"
       },
       "kb_admin": {
-        "rule_ids": [
-          "R270_order_change_allow_write",
-          "R275_order_change_list_orders_by_phone"
-        ],
         "kb_user_id": "f29567ba-275a-4cd9-add8-fa7b3d6e54c2",
         "kb_admin_ids": [
           "0da02c01-aad4-4286-a445-4db7a89f8ebe",
           "878b3ffe-2e18-4820-bda6-ffeccaa4212b"
-        ],
-        "tool_policies": [
-          "list_orders"
         ]
       },
       "execution": {
@@ -1213,679 +1712,115 @@ DEBUG 로그:
           {
             "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
             "function_name": "runInputStageRuntime"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts",
-            "function_name": "createRuntimeMcpOps"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/otpRuntime.ts",
-            "function_name": "handleOtpLifecycleAndOrderGate"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/services/dataAccess.ts",
-            "function_name": "resolveProductDecision"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts",
-            "function_name": "runToolStagePipeline"
           }
         ]
       },
       "slot_flow": {
-        "expected_inputs": [
-          "otp_code"
-        ],
-        "expected_input_prev": "otp_code",
-        "expected_input_stage": "auth_gate.otp.awaiting_code",
-        "expected_input_source": "contract_stage"
-      },
-      "tool_allowlist": {
-        "valid_tool_count": 15,
-        "resolved_tool_ids": [
-          "11025bb2-770a-4c55-af11-83ba2caabcb8",
-          "a9cd0a00-59f1-43fd-97d4-5f5c1bca3c07",
-          "bc06a0c1-8f40-4ba8-9668-682170254b34",
-          "aec3bd90-314a-4929-9fe5-6ed33888857c",
-          "ffb90354-4eb0-4dd8-9ba1-d6608a1ea79b",
-          "4b4cec22-7d1b-4c06-8579-08cdfbacc16b",
-          "56cef951-28f5-4b11-85f5-7624adc15862",
-          "0908279c-a369-4684-92ac-8a9f5af1407f",
-          "c962d4b0-d96a-45f6-a985-59b8b93534c0",
-          "bc9adf5e-e09f-4eed-9391-16aab9e3957a",
-          "c78fe2ef-9925-45bf-8f14-2f5954dfb00c",
-          "03b67d63-e22d-4820-b101-bf545df8e78c",
-          "6780420a-3574-4a0f-97d4-5ce43e7ac21e",
-          "1d09fb43-4ca8-4c4c-940f-8ac1bbb43a13",
-          "f45fa968-4bfe-4025-a74c-8f14f241bb43"
-        ],
-        "tools_by_id_count": 15,
-        "allowed_tool_count": 15,
-        "allowed_tool_names": [
-          "cafe24:read_shipping",
-          "cafe24:read_order_settings",
-          "cafe24:create_ticket",
-          "cafe24:lookup_order",
-          "cafe24:track_shipment",
-          "cafe24:read_product",
-          "cafe24:read_supply",
-          "cafe24:update_order_settings",
-          "juso:search_address",
-          "cafe24:api_get_customers_member_id_autoupdate_0d586802",
-          "solapi:send_otp",
-          "solapi:verify_otp",
-          "cafe24:list_orders",
-          "cafe24:update_order_shipping_address",
-          "cafe24:resolve_product"
-        ],
-        "provider_selections": [],
-        "resolved_tool_count": 15,
-        "requested_tool_count": 15,
-        "tools_by_provider_count": 0,
-        "provider_selection_count": 0,
-        "missing_tools_expected_by_intent": [
-          "find_customer_by_phone"
-        ]
+        "expected_inputs": [],
+        "expected_input_stage": "restock.awaiting_confirm",
+        "expected_input_source": "reset_by_restock_intent"
       },
       "model_resolution": {
-        "input_length": 6,
+        "input_length": 24,
         "length_rule_hit": null,
         "keyword_rule_hit": null,
         "selection_reason": "deterministic_or_skipped"
-      },
-      "policy_conflicts": {
-        "conflicts": [
-          {
-            "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-            "ruleA": "R268_order_change_need_zipcode_tool",
-            "ruleB": "R271_order_change_force_update",
-            "stage": "tool",
-            "intentScope": "order_change"
-          }
-        ],
-        "resolution": "tool_stage_force_response_precedence"
       }
-    }
-MCP 로그:
-- 6a254669-593b-47a9-b0df-22ed7585dbb0 cafe24:lookup_order@1.0: success (2026-02-20T06:39:49.786+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
-  request:
-    {
-      "path": "/orders/{order_id}",
-      "method": "GET",
-      "order_id": "20260127-0000014",
-      "required_scope": "mall.read_order",
-      "customer_verification_token": "cbfec468-5a27-4b4e-a49a-c9e2b591ddd7"
-    }
-  response:
-    {
-      "order": {
-        "paid": "T",
-        "buyer": {
-          "name": "mejai",
-          "email": "ydsjy05@naver.com",
-          "phone": "",
-          "shop_no": 1,
-          "user_id": null,
-          "cellphone": "010-9310-7159",
-          "member_id": "mejai",
-          "user_name": null,
-          "company_name": null,
-          "updated_date": null,
-          "buyer_zipcode": "08813",
-          "buyer_address1": "서울 관악구 신림동 1515-7 ",
-          "buyer_address2": "203",
-          "names_furigana": "",
-          "member_group_no": 1,
-          "customer_notification": null,
-          "company_registration_no": null
-        },
-        "items": [
-          {
-            "gift": "F",
-            "labels": null,
-            "hs_code": "",
-            "item_no": 2,
-            "options": [],
-            "shop_no": 1,
-            "quantity": 1,
-            "tax_rate": 10,
-            "option_id": "000A",
-            "claim_code": null,
-            "product_no": 20,
-            "cancel_date": null,
-            "option_type": null,
-            "refund_date": null,
-            "status_code": "N1",
-            "status_text": "배송준비중",
-            "supplier_id": "S0000000",
-            "tracking_no": null,
-            "volume_size": null,
-            "claim_reason": null,
-            "cloth_fabric": null,
-            "made_in_code": "KR",
-            "option_price": "0.00",
-            "option_value": "",
-            "order_status": "N20",
-            "ordered_date": "2026-02-02T16:03:12+09:00",
-            "origin_place": "국내 ",
-            "product_code": "P000000U",
-            "product_name": "아드헬린 린넨 플레어 원피스 그레이",
-            "shipped_date": null,
-            "store_pickup": "F",
-            "subscription": "F",
-            "supply_price": "1000.00",
-            "variant_code": "P000000U000A",
-            "exchange_date": null,
-            "multi_invoice": null,
-            "product_price": "1000.00",
-            "shipping_code": "D-20260127-0000014-00",
-            "supplier_name": "자체공급",
-            "claim_quantity": 0,
-            "delivered_date": null,
-            "market_item_no": null,
-            "payment_amount": null,
-            "product_bundle": "F",
-            "product_weight": "1.00",
-            "request_undone": null,
-            "order_item_code": "20260127-0000014-01",
-            "origin_place_no": 1798,
-            "payment_info_id": "0",
-            "eng_product_name": "",
-            "one_plus_n_event": null,
-            "original_item_no": [],
-            "product_material": "",
-            "product_tax_type": "A",
-            "refund_bank_name": "",
-            "claim_reason_type": null,
-            "post_express_flag": null,
-            "product_bundle_no": "0",
-            "shipping_fee_type": "X",
-            "clearance_category": null,
-            "item_granting_gift": null,
-            "market_fail_reason": null,
-            "naver_pay_order_id": null,
-            "open_market_status": "",
-            "origin_place_value": "",
-            "volume_size_weight": null,
-            "was_product_bundle": null,
-            "cancel_request_date": null,
-            "custom_product_code": "",
-            "custom_variant_code": null,
-            "product_bundle_list": null,
-            "product_bundle_name": null,
-            "product_bundle_type": null,
-            "return_request_date": null,
-            "shipping_company_id": "2",
-            "option_value_default": "",
-            "product_material_eng": null,
-            "product_name_default": "아드헬린 린넨 플레어 원피스 그레이",
-            "bundled_shipping_type": "N",
-            "coupon_discount_price": "0.00",
-            "exchange_request_date": null,
-            "internal_product_name": "",
-            "market_cancel_request": null,
-            "return_collected_date": null,
-            "return_confirmed_date": null,
-            "shipping_company_code": "0001",
-            "shipping_company_name": "자체배송",
-            "supplier_product_name": "",
-            "market_discount_amount": "0.00",
-            "naver_pay_claim_status": null,
-            "order_status_before_cs": null,
-            "refund_bank_account_no": "",
-            "shipping_expected_date": null,
-            "shipping_fee_type_text": "기본배송",
-            "additional_option_value": "",
-            "clearance_category_code": null,
-            "clearance_category_info": null,
-            "individual_shipping_fee": "0.00",
-            "market_fail_reason_type": null,
-            "original_bundle_item_no": null,
-            "shipping_payment_option": "P",
-            "additional_option_values": [
-              {
-                "key": null,
-                "name": null,
-                "type": null,
-                "value": null
-              }
-            ],
-            "app_item_discount_amount": null,
-            "market_fail_reason_guide": null,
-            "additional_discount_price": "0.00",
-            "purchaseconfirmation_date": null,
-            "supplier_transaction_type": " ",
-            "market_custom_variant_code": null,
-            "refund_bank_account_holder": "",
-            "product_bundle_name_default": null,
-            "order_status_additional_info": "",
-            "market_cancel_request_quantity": null
-          }
-        ],
-        "return": [],
-        "postpay": "F",
-        "shop_no": 1,
-        "canceled": "F",
-        "currency": "KRW",
-        "order_id": "20260127-0000014",
-        "bank_code": "bank_13",
-        "market_id": "self",
-        "member_id": "mejai",
-        "receivers": [
-          {
-            "name": "mejai",
-            "phone": "",
-            "city_en": null,
-            "name_en": "",
-            "shop_no": 1,
-            "zipcode": "08793",
-            "address1": "서울특별시 관악구 인헌2길 8-3 (봉천동)",
-            "address2": "11호",
-            "state_en": null,
-            "cellphone": "01093107159",
-            "street_en": null,
-            "address_city": "",
-            "address_full": "서울특별시 관악구 인헌2길 8-3 (봉천동) 11호",
-            "country_code": null,
-            "country_name": null,
-            "address_state": "",
-            "name_furigana": "",
-            "shipping_code": "D-20260127-0000014-00",
-            "address_street": "",
-            "country_name_en": null,
-            "shipping_message": "",
-            "virtual_phone_no": null,
-            "wished_delivery_date": "",
-            "wished_delivery_time": null,
-            "clearance_information": null,
-            "clearance_information_type": null
-          }
-        ],
-        "commission": "0.00",
-        "order_date": "2026-01-27T01:49:00+09:00",
-        "tax_detail": null,
-        "use_escrow": "F",
-        "cancel_date": null,
-        "first_order": "T",
-        "include_tax": "T",
-        "loan_status": null,
-        "naver_point": null,
-        "social_name": null,
-        "billing_name": "성지용",
-        "easypay_name": "",
-        "payment_date": "2026-02-02T16:03:12+09:00",
-        "service_data": null,
-        "service_type": null,
-        "store_pickup": "F",
-        "subscription": "F",
-        "exchange_rate": "1.0000",
-        "shipping_type": "A",
-        "bank_code_name": "농협",
-        "order_place_id": "self",
-        "payment_amount": "3500.00",
-        "payment_method": [
-          "cash"
-        ],
-        "bank_account_no": "3020654717291",
-        "market_order_no": null,
-        "shipping_status": "F",
-        "transaction_ids": null,
-        "market_seller_id": null,
-        "order_place_name": "PC쇼핑몰",
-        "order_from_mobile": "F",
-        "wished_carrier_id": null,
-        "multiple_addresses": "F",
-        "shipping_type_text": "국내배송",
-        "social_member_code": null,
-        "total_supply_price": "1000",
-        "actual_order_amount": {
-          "tax": null,
-          "shipping_fee": "2500.00",
-          "payment_amount": "3500.00",
-          "total_amount_due": "0.00",
-          "order_price_amount": "1000.00",
-          "app_discount_amount": "0.00",
-          "points_spent_amount": "0.00",
-          "credits_spent_amount": "0.00",
-          "coupon_discount_price": "0.00",
-          "point_incentive_amount": "0.00",
-          "coupon_shipping_fee_amount": "0.00",
-          "membership_discount_amount": "0.00",
-          "set_product_discount_amount": "0.00",
-          "market_other_discount_amount": "0.00",
-          "shipping_fee_discount_amount": "0.00"
-        },
-        "payment_method_name": [
-          "무통장입금"
-        ],
-        "shipping_fee_detail": [
-          {
-            "items": [
-              "20260127-0000014-01"
-            ],
-            "shipping_fee": "2500.00",
-            "supplier_code": "S0000000",
-            "cancel_shipping_fee": "0.00",
-            "return_shipping_fee": "0.00",
-            "shipping_group_code": 5,
-            "refunded_shipping_fee": "0.00",
-            "additional_shipping_fee": "0.00"
-          }
-        ],
-        "wished_carrier_name": null,
-        "initial_order_amount": {
-          "tax": null,
-          "shipping_fee": "2500.00",
-          "payment_amount": "3500.00",
-          "total_amount_due": "0.00",
-          "order_price_amount": "1000.00",
-          "app_discount_amount": "0.00",
-          "points_spent_amount": "0.00",
-          "credits_spent_amount": "0.00",
-          "coupon_discount_price": "0.00",
-          "point_incentive_amount": "0.00",
-          "coupon_shipping_fee_amount": "0.00",
-          "membership_discount_amount": "0.00",
-          "set_product_discount_amount": "0.00",
-          "market_other_discount_amount": "0.00",
-          "shipping_fee_discount_amount": "0.00"
-        },
-        "payment_confirmation": null,
-        "wished_delivery_date": "",
-        "wished_delivery_time": null,
-        "first_payment_methods": [
-          "cash"
-        ],
-        "member_authentication": "T",
-        "payment_gateway_names": null,
-        "return_confirmed_date": null,
-        "show_shipping_address": "T",
-        "additional_handling_fee": "0.00",
-        "additional_shipping_fee": "0.00",
-        "admin_additional_amount": null,
-        "bank_account_owner_name": "성지용",
-        "sub_payment_method_code": null,
-        "sub_payment_method_name": null,
-        "regional_surcharge_detail": [],
-        "additional_order_info_list": [],
-        "naverpay_payment_information": null,
-        "customer_group_no_when_ordering": "1",
-        "international_shipping_insurance": "0.00"
-      }
-    }
-- d028caa7-97cc-4e57-a567-c7ebb6227521 cafe24:list_orders@1.0: success (2026-02-20T06:39:48.477+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
-  request:
-    {
-      "path": "/orders",
-      "phone": "01093107159",
-      "method": "GET",
-      "end_date": "2026-02-20",
-      "cellphone": "01093107159",
-      "start_date": "2026-01-21",
-      "required_scope": "mall.read_order"
-    }
-  response:
-    {
-      "links": [],
-      "orders": [
-        {
-          "paid": "T",
-          "postpay": "F",
-          "shop_no": 1,
-          "canceled": "F",
-          "currency": "KRW",
-          "order_id": "20260127-0000014",
-          "bank_code": "bank_13",
-          "market_id": "self",
-          "member_id": "mejai",
-          "commission": "0.00",
-          "order_date": "2026-01-27T01:49:00+09:00",
-          "tax_detail": null,
-          "use_escrow": "F",
-          "cancel_date": null,
-          "first_order": "T",
-          "include_tax": "T",
-          "loan_status": null,
-          "naver_point": null,
-          "social_name": null,
-          "billing_name": "성지용",
-          "easypay_name": "",
-          "member_email": "ydsjy05@naver.com",
-          "payment_date": "2026-02-02T16:03:12+09:00",
-          "service_data": null,
-          "service_type": null,
-          "store_pickup": "F",
-          "subscription": "F",
-          "exchange_rate": "1.0000",
-          "shipping_type": "A",
-          "bank_code_name": "농협",
-          "order_place_id": "self",
-          "payment_amount": "3500.00",
-          "payment_method": [
-            "cash"
-          ],
-          "bank_account_no": "3020654717291",
-          "market_order_no": null,
-          "shipping_status": "F",
-          "transaction_ids": null,
-          "market_seller_id": null,
-          "order_place_name": "PC쇼핑몰",
-          "order_from_mobile": "F",
-          "wished_carrier_id": null,
-          "multiple_addresses": "F",
-          "shipping_type_text": "국내배송",
-          "social_member_code": null,
-          "total_supply_price": "1000",
-          "actual_order_amount": {
-            "tax": null,
-            "shipping_fee": "2500.00",
-            "payment_amount": "3500.00",
-            "total_amount_due": "0.00",
-            "order_price_amount": "1000.00",
-            "app_discount_amount": "0.00",
-            "points_spent_amount": "0.00",
-            "credits_spent_amount": "0.00",
-            "coupon_discount_price": "0.00",
-            "point_incentive_amount": "0.00",
-            "coupon_shipping_fee_amount": "0.00",
-            "membership_discount_amount": "0.00",
-            "set_product_discount_amount": "0.00",
-            "market_other_discount_amount": "0.00",
-            "shipping_fee_discount_amount": "0.00"
-          },
-          "payment_method_name": [
-            "무통장입금"
-          ],
-          "shipping_fee_detail": [
-            {
-              "items": [
-                "20260127-0000014-01"
-              ],
-              "shipping_fee": "2500.00",
-              "supplier_code": "S0000000",
-              "cancel_shipping_fee": "0.00",
-              "return_shipping_fee": "0.00",
-              "shipping_group_code": 5,
-              "refunded_shipping_fee": "0.00",
-              "additional_shipping_fee": "0.00"
-            }
-          ],
-          "wished_carrier_name": null,
-          "initial_order_amount": {
-            "tax": null,
-            "shipping_fee": "2500.00",
-            "payment_amount": "3500.00",
-            "total_amount_due": "0.00",
-            "order_price_amount": "1000.00",
-            "app_discount_amount": "0.00",
-            "points_spent_amount": "0.00",
-            "credits_spent_amount": "0.00",
-            "coupon_discount_price": "0.00",
-            "point_incentive_amount": "0.00",
-            "coupon_shipping_fee_amount": "0.00",
-            "membership_discount_amount": "0.00",
-            "set_product_discount_amount": "0.00",
-            "market_other_discount_amount": "0.00",
-            "shipping_fee_discount_amount": "0.00"
-          },
-          "payment_confirmation": null,
-          "wished_delivery_date": "",
-          "wished_delivery_time": null,
-          "first_payment_methods": [
-            "cash"
-          ],
-          "member_authentication": "T",
-          "payment_gateway_names": null,
-          "return_confirmed_date": null,
-          "show_shipping_address": "T",
-          "group_no_when_ordering": "1",
-          "additional_handling_fee": "0.00",
-          "additional_shipping_fee": "0.00",
-          "admin_additional_amount": null,
-          "bank_account_owner_name": "성지용",
-          "sub_payment_method_code": null,
-          "sub_payment_method_name": null,
-          "regional_surcharge_detail": [],
-          "additional_order_info_list": [],
-          "naverpay_payment_information": null,
-          "international_shipping_insurance": "0.00"
-        }
-      ]
-    }
-- bb3481f8-7085-4b24-bfb6-e0aa15d009f4 solapi:verify_otp@1.0: success (2026-02-20T06:39:45.156+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
-  request:
-    {
-      "code": "101010",
-      "path": "/otp/verify",
-      "method": "POST",
-      "otp_ref": "2f464ac1-09ad-4746-ac98-3444c60975a9",
-      "required_scope": "messaging.write"
-    }
-  response:
-    {
-      "verified": true,
-      "customer_verification_token": "cbfec468-5a27-4b4e-a49a-c9e2b591ddd7"
     }
 이벤트 로그:
-- baf359e2-ec43-4dce-b55d-bff6d11c19e3 QUICK_REPLY_RULE_DECISION (2026-02-20T06:39:59.043+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
+- 91f3dd5c-9fbb-4d3a-ba47-0bf8ed3ffa59 QUICK_REPLY_RULE_DECISION (2026-02-20T11:56:48.067+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
   payload:
     {
       "quick_reply_count": 2,
       "quick_reply_config": {
-        "preset": "yes_no",
-        "criteria": "policy:ORDER_CONFIRMATION_REQUIRED",
+        "preset": null,
+        "criteria": "policy:known_info_reuse_prompt",
         "max_select": 1,
         "min_select": 1,
-        "source_module": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
+        "source_module": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
         "submit_format": "single",
         "selection_mode": "single",
-        "source_function": "runToolRuntime"
+        "source_function": "runInputStageRuntime"
       },
       "quick_reply_source": {
         "criteria": "payload:quick_replies"
       }
     }
-- 89fad058-b5fc-40e8-afcb-fcb1c0b114c7 ORDER_CHOICES_PRESENTED (2026-02-20T06:39:58.786+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
-  payload:
-    {
-      "choices": [
-        {
-          "index": 1,
-          "label": "1번 주문\n  주문일: 01/26 16:49\n  주문번호: 20260127-0000014\n  상품: 아드헬린 린넨 플레어 원피스 그레이\n  옵션: 옵션 없음\n  수량: 1\n  결제금액: 1,000원",
-          "price": "1000.00",
-          "order_id": "20260127-0000014",
-          "quantity": "1",
-          "image_url": null,
-          "order_date": "2026-01-27T01:49:00+09:00",
-          "option_name": "옵션 없음",
-          "product_name": "아드헬린 린넨 플레어 원피스 그레이",
-          "order_date_short": "01/26 16:49"
-        }
-      ],
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:58.786Z",
-        "function_name": "unknown"
-      },
-      "auto_selected": false,
-      "confirm_required": true,
-      "pending_order_id": "20260127-0000014"
-    }
-- 875b4251-65f6-4a3d-994b-2a479c9c60e6 CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T06:39:58.515+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
+- 0c86d195-7797-4609-8a8a-71d8e852e5d2 CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T11:56:47.803+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
   payload:
     {
       "keys": [
-        "order_id",
-        "target_summary"
+        "channel",
+        "product_id",
+        "product_name",
+        "reuse_slot",
+        "reuse_value"
       ],
       "delta": {
-        "order_id": "20260127-0000014",
-        "target_summary": [
-          "주문번호: 20260127-0000014",
-          "상품: 아드헬린 린넨 플레어 원피스 그레이",
-          "옵션: 옵션 없음",
-          "가격: 1000.00",
-          "수량: 1"
-        ]
+        "channel": "sms",
+        "product_id": "20",
+        "reuse_slot": "phone",
+        "reuse_value": "01093107159",
+        "product_name": "아드헬린 린넨 플레어 원피스 그레이"
       },
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
+      "flow_id": "c195ff90-c0dc-4986-a3f3-b099ebf414ca",
       "_decision": {
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:58.515Z",
+        "recorded_at": "2026-02-20T11:56:47.803Z",
         "function_name": "unknown"
       },
-      "key_count": 2
+      "key_count": 5
     }
-- a26e4c83-e020-427f-9810-c9e3e404fc36 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T06:39:58.242+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
+- c5a82f86-3cfa-4a2f-8fc5-5100eed6fb35 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T11:56:47.541+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "a39bad5a-9c27-4a62-847f-1aacc9e911f1",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
+      "turn_id": "c5e28906-313f-495f-8bf3-40bfc7de6a97",
+      "session_id": "b0e9ad76-5512-47f2-a477-5aa8a101d07e",
       "violation_count": 0,
       "deduped_violation_count": 0
     }
-- 23ec48b4-715d-4ea4-bc31-c28c127524dc RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T06:39:57.631+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
+- 83e57c05-1cce-4513-9b5f-11012bbcb8a8 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T11:56:46.747+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "a39bad5a-9c27-4a62-847f-1aacc9e911f1",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
+      "turn_id": "c5e28906-313f-495f-8bf3-40bfc7de6a97",
+      "session_id": "b0e9ad76-5512-47f2-a477-5aa8a101d07e",
       "config_source": "principles_default"
     }
-- af516f88-297b-43b8-a50e-aa65725d4399 END_USER_WRITE_LATENCY (2026-02-20T06:39:56.574+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
+- 7fea26bf-b57c-4b8d-b44a-21629998e0f9 END_USER_WRITE_LATENCY (2026-02-20T11:56:45.679+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
   payload:
     {
-      "duration_ms": 5934
+      "duration_ms": 5974
     }
-- 2ffc09ec-5bf2-4094-8be7-a2f03d6dc303 END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T06:39:56.311+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
+- 829d2199-f7cc-4f4d-a5f3-43e774a88ed5 END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T11:56:45.404+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
   payload:
     {
       "keys": [
-        "order_id",
-        "target_summary"
+        "channel",
+        "product_id",
+        "reuse_slot",
+        "reuse_value",
+        "product_name"
       ],
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
-      "key_count": 2,
+      "flow_id": "c195ff90-c0dc-4986-a3f3-b099ebf414ca",
+      "key_count": 5,
       "keys_truncated": false
     }
-- 510ff1f4-1bd5-4d04-8f5d-45e1dd6a1446 END_USER_CONTEXT_RESOLVED (2026-02-20T06:39:51.174+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
+- 39b203a6-0e54-46b5-a399-8cce505232bd END_USER_CONTEXT_RESOLVED (2026-02-20T11:56:40.777+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
   payload:
     {
-      "match_hit": false,
+      "match_hit": true,
       "end_user_id": "1932cd1e-eeea-4855-ad96-38b22def6179",
-      "identity_count": 3,
+      "identity_count": 2,
       "identity_types": [
         "email",
-        "phone",
         "external"
       ],
       "runtime_source": "auth_user",
-      "match_attempted": false,
+      "match_attempted": true,
       "runtime_end_user": {
         "id": "fa7baaa2-806f-4457-88f0-7d29f802d126",
         "source": "auth_user",
@@ -1896,137 +1831,17 @@ MCP 로그:
       "runtime_email_masked": "su********@gmail.com",
       "runtime_external_user_id": "fa7baaa2-806f-4457-88f0-7d29f802d126"
     }
-- 97811ac2-3082-446c-8934-121f94168d64 PRE_MCP_DECISION (2026-02-20T06:39:46.224+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
+- 4a4f1d96-0b77-41c7-92f1-8704fce7f619 END_USER_MATCH_HIT (2026-02-20T11:56:40.504+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
   payload:
     {
-      "denied": [],
-      "entity": {
-        "order_id": null,
-        "has_address": true,
-        "phone_masked": "*******7159"
-      },
-      "intent": "order_change",
-      "allowed": [
-        "update_order_shipping_address",
-        "list_orders",
-        "lookup_order",
-        "search_address",
-        "send_otp",
-        "verify_otp"
-      ],
-      "_decision": {
-        "line": 657,
-        "phase": "before",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 657,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
-            "function_name": "emit:PRE_MCP_DECISION"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
-        "recorded_at": "2026-02-20T06:39:46.224Z",
-        "function_name": "emit:PRE_MCP_DECISION"
-      },
-      "query_text": "101010",
-      "final_calls": [
-        {
-          "args": {
-            "phone": "01093107159",
-            "end_date": "2026-02-20",
-            "cellphone": "01093107159",
-            "start_date": "2026-01-21"
-          },
-          "name": "list_orders"
-        }
-      ],
-      "forced_calls": [
-        {
-          "args": {
-            "phone": "01093107159"
-          },
-          "name": "list_orders"
-        }
-      ],
-      "query_source": "current_message",
-      "missing_slots": [],
-      "resolved_slots": {},
-      "policy_conflicts": [
-        {
-          "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-          "ruleA": "R268_order_change_need_zipcode_tool",
-          "ruleB": "R271_order_change_force_update",
-          "stage": "tool",
-          "intentScope": "order_change"
-        }
-      ],
-      "allowed_tool_names": [
-        "cafe24:list_orders"
-      ],
-      "blocked_by_missing_slots": false,
-      "allowed_tool_names_total": 15
+      "matched": true,
+      "identity_count": 2,
+      "identity_types": [
+        "email",
+        "external"
+      ]
     }
-- 18f3bbc3-24ac-45b8-a040-00a1e97235be EXECUTION_GUARD_TRIGGERED (2026-02-20T06:39:45.951+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
-  payload:
-    {
-      "tool": "update_order_shipping_address",
-      "error": "MUTATION_INTENT_NOT_READY",
-      "reason": "MISSING_REQUIRED_SLOTS",
-      "missing": {
-        "address": false,
-        "zipcode": true,
-        "order_id": true
-      },
-      "_decision": {
-        "line": 125,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 125,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
-            "function_name": "emit:EXECUTION_GUARD_TRIGGERED"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
-        "recorded_at": "2026-02-20T06:39:45.951Z",
-        "function_name": "emit:EXECUTION_GUARD_TRIGGERED"
-      }
-    }
-- b299640a-d423-4a2b-8027-0a741f492708 INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-20T06:39:43.975+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
-  payload:
-    {
-      "intent": "order_change",
-      "blocked": false,
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:43.975Z",
-        "function_name": "unknown"
-      },
-      "missing_slots": [],
-      "required_slots": [],
-      "resolved_slots": {}
-    }
-- fc5ed8c3-caf8-49aa-94d3-4309c7df501c INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-20T06:39:43.713+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
-  payload:
-    {
-      "intent": "order_change",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:39:43.713Z",
-        "function_name": "unknown"
-      },
-      "query_source": "current_message",
-      "expected_input": "otp_code"
-    }
-- 3ff34e68-c8c3-4b54-8d2b-5dc00ff8b974 SLOT_EXTRACTED (2026-02-20T06:39:43.449+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
+- 7d356645-d742-49cf-878f-8b48c5cc583f SLOT_EXTRACTED (2026-02-20T11:56:38.883+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
   payload:
     {
       "derived": {
@@ -2037,12 +1852,12 @@ MCP 로그:
         "phone_masked": "-"
       },
       "resolved": {
-        "phone": "01093107159",
-        "intent": "order_change",
-        "address": "1",
+        "phone": null,
+        "intent": "restock_subscribe",
+        "address": null,
         "zipcode": null,
         "order_id": null,
-        "phone_masked": "*******7159"
+        "phone_masked": "-"
       },
       "_decision": {
         "line": 145,
@@ -2057,48 +1872,51 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "recorded_at": "2026-02-20T06:39:43.449Z",
+        "recorded_at": "2026-02-20T11:56:38.883Z",
         "function_name": "emit:SLOT_EXTRACTED"
       },
       "query_source": "current_message",
       "missing_slots": [],
-      "expected_input": "otp_code",
+      "expected_input": null,
       "resolved_slots": {}
     }
-- 95612f39-a592-4481-980e-c4d2f7e94d6e POLICY_STATIC_CONFLICT (2026-02-20T06:39:43.192+00:00) (turn_id=a39bad5a-9c27-4a62-847f-1aacc9e911f1)
+- fcce23b5-57b9-44eb-b1fc-54c9884c025b INPUT_CONTRACT_REVIEW_COMPLETED (2026-02-20T11:56:37.967+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
   payload:
     {
-      "intent": "order_change",
+      "source": "reset_by_restock_intent",
       "_decision": {
-        "line": 42,
         "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 42,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/policyInputRuntime.ts",
-            "function_name": "emit:POLICY_STATIC_CONFLICT"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/policyInputRuntime.ts",
-        "recorded_at": "2026-02-20T06:39:43.192Z",
-        "function_name": "emit:POLICY_STATIC_CONFLICT"
+        "call_chain": [],
+        "module_path": "unknown",
+        "recorded_at": "2026-02-20T11:56:37.967Z",
+        "function_name": "unknown"
       },
-      "conflicts": [
-        {
-          "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-          "ruleA": "R268_order_change_need_zipcode_tool",
-          "ruleB": "R271_order_change_force_update",
-          "stage": "tool",
-          "intentScope": "order_change"
-        }
+      "intent_name": "restock_inquiry",
+      "expected_input": null,
+      "expected_inputs": [],
+      "expected_input_stage": "restock.awaiting_confirm"
+    }
+- 97a0acbe-68f9-40f2-b853-e24ac683220d INPUT_CONTRACT_REVIEW_STARTED (2026-02-20T11:56:37.696+00:00) (turn_id=c5e28906-313f-495f-8bf3-40bfc7de6a97)
+  payload:
+    {
+      "source": "contract_stage",
+      "_decision": {
+        "phase": "runtime",
+        "call_chain": [],
+        "module_path": "unknown",
+        "recorded_at": "2026-02-20T11:56:37.696Z",
+        "function_name": "unknown"
+      },
+      "intent_name": "restock_inquiry",
+      "expected_input": "confirm",
+      "expected_inputs": [
+        "confirm"
       ],
-      "resolution": "tool_stage_force_response_precedence"
+      "expected_input_stage": "restock.awaiting_confirm"
     }
 
 
-TURN_ID: 6fe38de9-f2f0-4507-9984-d2d207a713c8
+TURN_ID: 98547c31-ba4b-43fc-b36d-5834893242cb
 
 [TOKEN_USED]
 
@@ -2106,54 +1924,65 @@ USER:
 네
 
 BOT:
-확인한 것: 주문 확인 완료 (주문번호 20260127-0000014)
-확인할 것: 우편번호를 몰라도 괜찮아요. 도로명/지번 주소를 알려주세요.
-그 다음으로 확인할 것: 답변을 주시면 주소 후보가 여러 개인 경우 선택을 안내하겠습니다.
-RESPONSE_SCHEMA: view=text, choice_mode=single, quick_replies=0, cards=0
+확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이, 연락 채널 sms
+확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요?
+네/아니오로 답해주세요.
+그 다음으로 확인할 것: 알림 시작일 선택
+RESPONSE_SCHEMA: view=choice, choice_mode=single, quick_replies=2, cards=0
 RESPONSE_SCHEMA_DETAIL:
   {
-    "message": "확인한 것: 주문 확인 완료 (주문번호 20260127-0000014)\n확인할 것: 우편번호를 몰라도 괜찮아요. 도로명/지번 주소를 알려주세요.\n그 다음으로 확인할 것: 답변을 주시면 주소 후보가 여러 개인 경우 선택을 안내하겠습니다.",
+    "message": "확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이, 연락 채널 sms\n확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요?\n네/아니오로 답해주세요.\n그 다음으로 확인할 것: 알림 시작일 선택",
     "ui_hints": {
-      "view": "text",
+      "view": "choice",
       "choice_mode": "single"
     },
-    "quick_replies": [],
+    "quick_replies": [
+      {
+        "label": "네",
+        "value": "네"
+      },
+      {
+        "label": "아니오",
+        "value": "아니오"
+      }
+    ],
     "cards": []
   }
-RENDER_PLAN: view=text, quick_replies=false, cards=false, mode=single, min=1, max=1, submit=single, prompt=-
+RENDER_PLAN: view=choice, quick_replies=true, cards=false, mode=single, min=1, max=1, submit=single, prompt=-
 RENDER_PLAN_DETAIL:
   {
-    "view": "text",
-    "enable_quick_replies": false,
+    "view": "choice",
+    "enable_quick_replies": true,
     "enable_cards": false,
     "interaction_scope": "latest_only",
     "quick_reply_source": {
-      "type": "none"
+      "type": "explicit",
+      "criteria": "payload:quick_replies"
     },
     "selection_mode": "single",
     "min_select": 1,
     "max_select": 1,
     "submit_format": "single",
     "grid_columns": {
-      "quick_replies": 1,
+      "quick_replies": 2,
       "cards": 1
     },
     "prompt_kind": null,
     "debug": {
       "policy_version": "v1",
-      "quick_replies_count": 0,
+      "quick_replies_count": 2,
       "cards_count": 0,
-      "selection_mode_source": "default",
-      "min_select_source": "default",
-      "max_select_source": "default",
-      "submit_format_source": "default"
+      "selection_mode_source": "config",
+      "min_select_source": "config",
+      "max_select_source": "config",
+      "submit_format_source": "config"
     }
   }
-QUICK_REPLY_RULE: mode=single, min=1, max=1, submit=single, source=none, criteria=-, module=-, function=-
+QUICK_REPLY_RULE: mode=single, min=1, max=1, submit=single, source=explicit, criteria=payload:quick_replies, module=-, function=-
 
 [TOKEN_UNUSED]
 DEBUG 로그:
-- 0c2be41f-b001-4d00-a921-1c0f267002c0 (turn_id=6fe38de9-f2f0-4507-9984-d2d207a713c8) (2026-02-20T06:40:12.477+00:00)
+- 762d358f-a1ee-46ec-a175-cbd79e4e8613 (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb) (2026-02-20T12:01:03.565+00:00)
   prefix_json:
     {
       "mcp": {
@@ -2165,9 +1994,7 @@ DEBUG 로그:
         }
       },
       "slot": {
-        "phone": "01093107159",
-        "address": "1",
-        "phone_masked": "*******7159",
+        "phone_masked": "-",
         "expected_input": "confirm"
       },
       "decision": {
@@ -2183,7 +2010,7 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T06:40:12.201Z",
+        "recorded_at": "2026-02-20T12:01:03.282Z",
         "function_name": "insertTurnWithDebug"
       },
       "kb_admin": {
@@ -2222,6 +2049,22 @@ DEBUG 로그:
           {
             "module_path": "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
             "function_name": "handleAddressChangeRefundPending"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/restockPendingRuntime.ts",
+            "function_name": "handleRestockPendingStage"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/postActionRuntime.ts",
+            "function_name": "handlePostActionStage"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
+            "function_name": "resolveIntentAndPolicyContext"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
+            "function_name": "runInputStageRuntime"
           }
         ]
       },
@@ -2229,121 +2072,97 @@ DEBUG 로그:
         "expected_inputs": [
           "confirm"
         ],
-        "expected_input_stage": "target.awaiting_confirm",
-        "expected_input_source": "contract_stage"
-      },
-      "tool_allowlist": {
-        "valid_tool_count": 15,
-        "resolved_tool_ids": [
-          "11025bb2-770a-4c55-af11-83ba2caabcb8",
-          "a9cd0a00-59f1-43fd-97d4-5f5c1bca3c07",
-          "bc06a0c1-8f40-4ba8-9668-682170254b34",
-          "aec3bd90-314a-4929-9fe5-6ed33888857c",
-          "ffb90354-4eb0-4dd8-9ba1-d6608a1ea79b",
-          "4b4cec22-7d1b-4c06-8579-08cdfbacc16b",
-          "56cef951-28f5-4b11-85f5-7624adc15862",
-          "0908279c-a369-4684-92ac-8a9f5af1407f",
-          "c962d4b0-d96a-45f6-a985-59b8b93534c0",
-          "bc9adf5e-e09f-4eed-9391-16aab9e3957a",
-          "c78fe2ef-9925-45bf-8f14-2f5954dfb00c",
-          "03b67d63-e22d-4820-b101-bf545df8e78c",
-          "6780420a-3574-4a0f-97d4-5ce43e7ac21e",
-          "1d09fb43-4ca8-4c4c-940f-8ac1bbb43a13",
-          "f45fa968-4bfe-4025-a74c-8f14f241bb43"
-        ],
-        "tools_by_id_count": 15,
-        "allowed_tool_count": 15,
-        "allowed_tool_names": [
-          "cafe24:read_shipping",
-          "cafe24:read_order_settings",
-          "cafe24:create_ticket",
-          "cafe24:lookup_order",
-          "cafe24:track_shipment",
-          "cafe24:read_product",
-          "cafe24:read_supply",
-          "cafe24:update_order_settings",
-          "juso:search_address",
-          "cafe24:api_get_customers_member_id_autoupdate_0d586802",
-          "solapi:send_otp",
-          "solapi:verify_otp",
-          "cafe24:list_orders",
-          "cafe24:update_order_shipping_address",
-          "cafe24:resolve_product"
-        ],
-        "provider_selections": [],
-        "resolved_tool_count": 15,
-        "requested_tool_count": 15,
-        "tools_by_provider_count": 0,
-        "provider_selection_count": 0,
-        "missing_tools_expected_by_intent": [
-          "find_customer_by_phone"
-        ]
+        "expected_input_stage": "restock.awaiting_confirm",
+        "expected_input_source": "pre_turn_guard"
       },
       "model_resolution": {
         "input_length": 1,
         "length_rule_hit": null,
         "keyword_rule_hit": null,
         "selection_reason": "deterministic_or_skipped"
-      },
-      "policy_conflicts": {
-        "conflicts": []
       }
     }
 이벤트 로그:
-- 07d7fd94-50fb-4329-ae27-92d5639d8409 CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T06:40:26.296+00:00) (turn_id=6fe38de9-f2f0-4507-9984-d2d207a713c8)
+- 174615ef-51d3-4244-a05e-fef69ef7ff6d QUICK_REPLY_RULE_DECISION (2026-02-20T12:01:18.865+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
+  payload:
+    {
+      "quick_reply_count": 2,
+      "quick_reply_config": {
+        "preset": null,
+        "criteria": "policy:known_info_reuse_prompt",
+        "max_select": 1,
+        "min_select": 1,
+        "source_module": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
+        "submit_format": "single",
+        "selection_mode": "single",
+        "source_function": "runInputStageRuntime"
+      },
+      "quick_reply_source": {
+        "criteria": "payload:quick_replies"
+      }
+    }
+- 41fc8469-ee6d-4330-b5a4-c40eef26579d CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T12:01:18.603+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
       "keys": [
-        "order_id"
+        "channel",
+        "product_id",
+        "product_name",
+        "reuse_slot",
+        "reuse_value"
       ],
       "delta": {
-        "order_id": "20260127-0000014"
+        "channel": "sms",
+        "product_id": "20",
+        "reuse_slot": "phone",
+        "reuse_value": "01093107159",
+        "product_name": "아드헬린 린넨 플레어 원피스 그레이"
       },
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
+      "flow_id": "c195ff90-c0dc-4986-a3f3-b099ebf414ca",
       "_decision": {
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:40:26.295Z",
+        "recorded_at": "2026-02-20T12:01:18.603Z",
         "function_name": "unknown"
       },
-      "key_count": 1
+      "key_count": 5
     }
-- 98adabb1-28b7-4d85-8a17-e822447ec71f RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T06:40:26.033+00:00) (turn_id=6fe38de9-f2f0-4507-9984-d2d207a713c8)
+- 4939dd8a-2f6c-4e2e-ab26-66770448dced RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T12:01:18.343+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "6fe38de9-f2f0-4507-9984-d2d207a713c8",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
+      "turn_id": "98547c31-ba4b-43fc-b36d-5834893242cb",
+      "session_id": "b0e9ad76-5512-47f2-a477-5aa8a101d07e",
       "proposal_count": 1,
       "violation_count": 1,
       "deduped_violation_count": 0
     }
-- b1d63263-b88d-4ecc-a732-1719077e4aef RUNTIME_PATCH_PROPOSAL_CREATED (2026-02-20T06:40:25.762+00:00) (turn_id=6fe38de9-f2f0-4507-9984-d2d207a713c8)
+- 4d067a91-592e-4177-b1d1-11dd898d5d5d RUNTIME_PATCH_PROPOSAL_CREATED (2026-02-20T12:01:18.06+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
       "title": "Principle violation patch proposal",
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
       "status": "pending",
       "trigger": "runtime_turn_write",
-      "turn_id": "6fe38de9-f2f0-4507-9984-d2d207a713c8",
+      "turn_id": "98547c31-ba4b-43fc-b36d-5834893242cb",
       "rationale": "Prefer runtime decision-path fix over principle text changes (force_template_misapplied=false, expected_input=-, policy_reason=-)",
       "confidence": 0.7,
-      "created_at": "2026-02-20T06:40:25.480Z",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
+      "created_at": "2026-02-20T12:01:17.770Z",
+      "session_id": "b0e9ad76-5512-47f2-a477-5aa8a101d07e",
       "why_failed": "Address slot was already resolved, but final response selection re-asked address.",
       "change_plan": [
         "At final response stage, if expected_input=address and resolved address exists, forbid address prompt template.",
         "If policy decision is DEFER_FORCE_RESPONSE_TEMPLATE with ORDER_AND_ADDRESS_ALREADY_AVAILABLE, preserve decision through finalization.",
         "Emit explicit debug evidence (resolved_address / policy_decision_reason / final_template) around failure boundary."
       ],
-      "proposal_id": "rp_1771569621030_s96ap5",
+      "proposal_id": "rp_1771588872199_htw7of",
       "target_files": [
         "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
         "src/app/api/runtime/chat/handlers/restockHandler.ts",
         "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts"
       ],
-      "violation_id": "pv_d14027e2-742c-44a0-8d0d-72db1b35273d_6fe38de9-f2f0-4507-9984-d2d207a713c8_memoryno_repeat_address_question",
+      "violation_id": "pv_b0e9ad76-5512-47f2-a477-5aa8a101d07e_98547c31-ba4b-43fc-b36d-5834893242cb_duplicate_answer",
       "principle_key": "memory.enforceNoRepeatQuestions",
       "runtime_scope": "chat",
       "how_to_improve": "Use finalized slot/policy decision evidence to block address re-ask in final response path; add guard in runtime finalize/handler path.",
@@ -2351,8 +2170,8 @@ DEBUG 로그:
         "track": "contract",
         "gate_version": "v1",
         "exception_stats": {
-          "repeat_count_7d": 23,
-          "repeat_count_30d": 23
+          "repeat_count_7d": 5,
+          "repeat_count_30d": 5
         },
         "promotion_reason": "-",
         "contract_fields_ok": false,
@@ -2360,7 +2179,7 @@ DEBUG 로그:
         "exception_fields_ok": false,
         "evidence_contract_ok": false,
         "case_specific_signals": [],
-        "exception_fingerprint": "ex:memory.enforcenorepeatquestions:memoryno_repeat_address_question:-:-",
+        "exception_fingerprint": "ex:memory.enforcenorepeatquestions:duplicate_answer:-:-",
         "missing_contract_fields": [
           "contract_scope",
           "generalization_scope",
@@ -2370,6 +2189,8 @@ DEBUG 로그:
           "contract_expectation"
         ],
         "missing_evidence_fields": [
+          "known_address_count",
+          "user_provided_address_count",
           "slot_resolved_address",
           "policy_decision_reason",
           "final_response_forced_template_applied"
@@ -2384,79 +2205,68 @@ DEBUG 로그:
         ]
       },
       "suggested_diff": null,
-      "issue_fingerprint": "memory.enforcenorepeatquestions|chat|확인한 것: 주문 확인 완료 (주문번호 20260127-0000014) 확인할 것: 우편번호를 몰라도 괜찮아요. 도로명/지번 주소를 알려주세요. 그 다음으로 확인할 것: 답변을 주시면 주소 후보가 여러 개인 경우 선택을 안내하겠습니다.|address was already known but the bot asked for address again.||||"
+      "issue_fingerprint": "memory.enforcenorepeatquestions|chat|확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이, 연락 채널 sms 확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요? 네/아니오로 답해주세요. 그 다음으로 확인할 것: 알림 시작일 선택|bot repeated the same final answer on consecutive turns.||||"
     }
-- 7ca7c5b5-15bc-4024-afef-0a727b07cc77 PRINCIPLE_VIOLATION_DETECTED (2026-02-20T06:40:25.48+00:00) (turn_id=6fe38de9-f2f0-4507-9984-d2d207a713c8)
+- 165f38f4-4d3f-44bd-a97e-c82cb3a99570 PRINCIPLE_VIOLATION_DETECTED (2026-02-20T12:01:17.77+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "summary": "Address was already known but the bot asked for address again.",
+      "summary": "Bot repeated the same final answer on consecutive turns.",
       "trigger": "runtime_turn_write",
       "evidence": {
-        "answer": "확인한 것: 주문 확인 완료 (주문번호 20260127-0000014)\n확인할 것: 우편번호를 몰라도 괜찮아요. 도로명/지번 주소를 알려주세요.\n그 다음으로 확인할 것: 답변을 주시면 주소 후보가 여러 개인 경우 선택을 안내하겠습니다.",
-        "expected_input": null,
-        "known_address_count": 1,
-        "expected_reuse_order": [
-          "derived",
-          "prevEntity",
-          "prevTranscript",
-          "recentEntity"
-        ],
-        "slot_resolved_address": null,
-        "policy_decision_action": null,
-        "policy_decision_reason": null,
-        "force_template_misapplied": false,
-        "user_provided_address_count": 1,
-        "user_provided_addresses_tail": [
-          "1"
-        ],
-        "final_response_resolved_address": null,
-        "final_response_forced_template_applied": null,
-        "final_response_forced_template_skipped_reason": null
+        "previous_answer": "확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이, 연락 채널 sms 확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요? 네/아니오로 답해주세요. 그 다음으로 확인할 것: 알림 시작일 선택",
+        "repeated_answer": "확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이, 연락 채널 sms 확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요? 네/아니오로 답해주세요. 그 다음으로 확인할 것: 알림 시작일 선택",
+        "previous_turn_id": "c5e28906-313f-495f-8bf3-40bfc7de6a97",
+        "current_user_text": "네",
+        "asking_address_again": false,
+        "address_like_user_input": false
       },
       "severity": "medium",
-      "violation_id": "pv_d14027e2-742c-44a0-8d0d-72db1b35273d_6fe38de9-f2f0-4507-9984-d2d207a713c8_memoryno_repeat_address_question",
+      "violation_id": "pv_b0e9ad76-5512-47f2-a477-5aa8a101d07e_98547c31-ba4b-43fc-b36d-5834893242cb_duplicate_answer",
       "principle_key": "memory.enforceNoRepeatQuestions",
       "runtime_scope": "chat",
       "baseline_source": "src/app/api/runtime/chat/policies/principles.ts",
-      "issue_fingerprint": "memory.enforcenorepeatquestions|chat|확인한 것: 주문 확인 완료 (주문번호 20260127-0000014) 확인할 것: 우편번호를 몰라도 괜찮아요. 도로명/지번 주소를 알려주세요. 그 다음으로 확인할 것: 답변을 주시면 주소 후보가 여러 개인 경우 선택을 안내하겠습니다.|address was already known but the bot asked for address again.||||"
+      "issue_fingerprint": "memory.enforcenorepeatquestions|chat|확인한 것: 상품 아드헬린 린넨 플레어 원피스 그레이, 연락 채널 sms 확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요? 네/아니오로 답해주세요. 그 다음으로 확인할 것: 알림 시작일 선택|bot repeated the same final answer on consecutive turns.||||"
     }
-- a5dc0e7a-751f-49fb-9e78-5eafa8e56570 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T06:40:19.699+00:00) (turn_id=6fe38de9-f2f0-4507-9984-d2d207a713c8)
+- 013dcff4-42bb-4a91-a675-6db1417af836 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T12:01:10.887+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "6fe38de9-f2f0-4507-9984-d2d207a713c8",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
+      "turn_id": "98547c31-ba4b-43fc-b36d-5834893242cb",
+      "session_id": "b0e9ad76-5512-47f2-a477-5aa8a101d07e",
       "config_source": "principles_default"
     }
-- 56f9e37d-3aea-41c0-ad5f-555f4547dd48 END_USER_WRITE_LATENCY (2026-02-20T06:40:18.641+00:00) (turn_id=6fe38de9-f2f0-4507-9984-d2d207a713c8)
+- ad8cfc19-719c-4062-8199-5ed60e62d9a3 END_USER_WRITE_LATENCY (2026-02-20T12:01:09.813+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
-      "duration_ms": 5891
+      "duration_ms": 5923
     }
-- 79e35692-035c-4c1a-b190-db855aa41c66 END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T06:40:18.37+00:00) (turn_id=6fe38de9-f2f0-4507-9984-d2d207a713c8)
+- 7645e5f4-8e64-4cd0-a5d2-b4c392253670 END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T12:01:09.556+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
       "keys": [
-        "order_id"
+        "channel",
+        "product_id",
+        "reuse_slot",
+        "reuse_value",
+        "product_name"
       ],
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
-      "key_count": 1,
+      "flow_id": "c195ff90-c0dc-4986-a3f3-b099ebf414ca",
+      "key_count": 5,
       "keys_truncated": false
     }
-- 076ed0a7-535b-401c-ae5f-7fd3d6f76cab END_USER_CONTEXT_RESOLVED (2026-02-20T06:40:13.285+00:00) (turn_id=6fe38de9-f2f0-4507-9984-d2d207a713c8)
+- 36dc6d44-bf95-4aa3-879c-745c78bd37b1 END_USER_CONTEXT_RESOLVED (2026-02-20T12:01:04.963+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
-      "match_hit": false,
+      "match_hit": true,
       "end_user_id": "1932cd1e-eeea-4855-ad96-38b22def6179",
-      "identity_count": 3,
+      "identity_count": 2,
       "identity_types": [
         "email",
-        "phone",
         "external"
       ],
       "runtime_source": "auth_user",
-      "match_attempted": false,
+      "match_attempted": true,
       "runtime_end_user": {
         "id": "fa7baaa2-806f-4457-88f0-7d29f802d126",
         "source": "auth_user",
@@ -2467,2051 +2277,34 @@ DEBUG 로그:
       "runtime_email_masked": "su********@gmail.com",
       "runtime_external_user_id": "fa7baaa2-806f-4457-88f0-7d29f802d126"
     }
-
-
-TURN_ID: 54cfcf79-cd6e-4b55-8428-8f5463ff5d38
-
-[TOKEN_USED]
-
-USER:
-여수시 둔덕동 라온유아파트 112동 201호
-
-BOT:
-확인한 것: 정보 업데이트: 배송지 1 -> 여수시 둔덕동 라온유아파트 112동 201호. 이후 안내는 변경된 정보 기준으로 진행합니다. 주문 확인 완료 (주문번호 20260127-0000014)
-확인할 것: 입력하신 주소와 매칭된 후보가 여러 개입니다. 정확한 주소를 선택해 주세요.
-입력 주소: 여수시 둔덕동 라온유아파트 112동 201호
-
-1번
-- 지번주소: 전라남도 여수시 둔덕동 266 라온유아파트
-- 도로명주소: 전라남도 여수시 상암로 8 (둔덕동)
-- 우편번호: 59625
-
-2번
-- 지번주소: 전라남도 여수시 둔덕동 266 라온유아파트
-- 도로명주소: 전라남도 여수시 상암로 16 (둔덕동, 라온유아파트)
-- 우편번호: 59625
-
-원하는 번호를 입력해 주세요. (예: 1)
-그 다음으로 확인할 것: 답변을 주시면 주소 후보가 여러 개인 경우 선택을 안내하겠습니다.
-RESPONSE_SCHEMA: view=choice, choice_mode=single, quick_replies=2, cards=0
-RESPONSE_SCHEMA_DETAIL:
-  {
-    "message": "확인한 것: 정보 업데이트: 배송지 1 -> 여수시 둔덕동 라온유아파트 112동 201호. 이후 안내는 변경된 정보 기준으로 진행합니다. 주문 확인 완료 (주문번호 20260127-0000014)\n확인할 것: 입력하신 주소와 매칭된 후보가 여러 개입니다. 정확한 주소를 선택해 주세요.\n입력 주소: 여수시 둔덕동 라온유아파트 112동 201호\n\n1번\n- 지번주소: 전라남도 여수시 둔덕동 266 라온유아파트\n- 도로명주소: 전라남도 여수시 상암로 8 (둔덕동)\n- 우편번호: 59625\n\n2번\n- 지번주소: 전라남도 여수시 둔덕동 266 라온유아파트\n- 도로명주소: 전라남도 여수시 상암로 16 (둔덕동, 라온유아파트)\n- 우편번호: 59625\n\n원하는 번호를 입력해 주세요. (예: 1)\n그 다음으로 확인할 것: 답변을 주시면 주소 후보가 여러 개인 경우 선택을 안내하겠습니다.",
-    "ui_hints": {
-      "view": "choice",
-      "choice_mode": "single"
-    },
-    "quick_replies": [
-      {
-        "label": "1",
-        "value": "1"
-      },
-      {
-        "label": "2",
-        "value": "2"
-      }
-    ],
-    "cards": []
-  }
-RENDER_PLAN: view=choice, quick_replies=true, cards=false, mode=single, min=1, max=1, submit=single, prompt=-
-RENDER_PLAN_DETAIL:
-  {
-    "view": "choice",
-    "enable_quick_replies": true,
-    "enable_cards": false,
-    "interaction_scope": "latest_only",
-    "quick_reply_source": {
-      "type": "explicit",
-      "criteria": "payload:quick_replies"
-    },
-    "selection_mode": "single",
-    "min_select": 1,
-    "max_select": 1,
-    "submit_format": "single",
-    "grid_columns": {
-      "quick_replies": 2,
-      "cards": 1
-    },
-    "prompt_kind": null,
-    "debug": {
-      "policy_version": "v1",
-      "quick_replies_count": 2,
-      "cards_count": 0,
-      "selection_mode_source": "config",
-      "min_select_source": "config",
-      "max_select_source": "config",
-      "submit_format_source": "config"
-    }
-  }
-QUICK_REPLY_RULE: mode=single, min=1, max=1, submit=single, source=explicit, criteria=payload:quick_replies, module=-, function=-
-
-[TOKEN_UNUSED]
-DEBUG 로그:
-- 12ceee6f-f4fb-4816-a494-6ccc0bbc7e0d (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38) (2026-02-20T06:40:50.581+00:00)
-  prefix_json:
-    {
-      "mcp": {
-        "last": {
-          "error": null,
-          "status": "none",
-          "function": "NO_TOOL_CALLED",
-          "result_count": null
-        }
-      },
-      "slot": {
-        "phone": "01093107159",
-        "address": "여수시 둔덕동 라온유아파트 112동 201호",
-        "order_id": "20260127-0000014",
-        "phone_masked": "*******7159",
-        "expected_input": "address"
-      },
-      "decision": {
-        "line": 152,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 152,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-            "function_name": "insertTurnWithDebug"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T06:40:50.290Z",
-        "function_name": "insertTurnWithDebug"
-      },
-      "kb_admin": {
-        "rule_ids": [
-          "R270_order_change_allow_write",
-          "R268_order_change_need_zipcode_tool"
-        ],
-        "kb_user_id": "f29567ba-275a-4cd9-add8-fa7b3d6e54c2",
-        "kb_admin_ids": [
-          "0da02c01-aad4-4286-a445-4db7a89f8ebe",
-          "878b3ffe-2e18-4820-bda6-ffeccaa4212b"
-        ],
-        "template_ids": [
-          "order_change_need_zipcode"
-        ]
-      },
-      "execution": {
-        "call_chain": [
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts",
-            "function_name": "POST"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeBootstrap.ts",
-            "function_name": "bootstrapRuntime"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts",
-            "function_name": "initializeRuntimeState"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-            "function_name": "resolveIntentDisambiguation"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
-            "function_name": "handlePreTurnGuards"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts",
-            "function_name": "deriveSlotsForTurn"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
-            "function_name": "handleAddressChangeRefundPending"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/restockPendingRuntime.ts",
-            "function_name": "handleRestockPendingStage"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/postActionRuntime.ts",
-            "function_name": "handlePostActionStage"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
-            "function_name": "resolveIntentAndPolicyContext"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-            "function_name": "runInputStageRuntime"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts",
-            "function_name": "createRuntimeMcpOps"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/otpRuntime.ts",
-            "function_name": "handleOtpLifecycleAndOrderGate"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/services/dataAccess.ts",
-            "function_name": "resolveProductDecision"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts",
-            "function_name": "runToolStagePipeline"
-          }
-        ]
-      },
-      "slot_flow": {
-        "derived_address": "여수시 둔덕동 라온유아파트 112동 201호",
-        "expected_inputs": [
-          "address"
-        ],
-        "expected_input_prev": "address",
-        "expected_input_stage": "order_change.address.awaiting_address",
-        "expected_input_source": "contract_stage"
-      },
-      "tool_allowlist": {
-        "valid_tool_count": 15,
-        "resolved_tool_ids": [
-          "11025bb2-770a-4c55-af11-83ba2caabcb8",
-          "a9cd0a00-59f1-43fd-97d4-5f5c1bca3c07",
-          "bc06a0c1-8f40-4ba8-9668-682170254b34",
-          "aec3bd90-314a-4929-9fe5-6ed33888857c",
-          "ffb90354-4eb0-4dd8-9ba1-d6608a1ea79b",
-          "4b4cec22-7d1b-4c06-8579-08cdfbacc16b",
-          "56cef951-28f5-4b11-85f5-7624adc15862",
-          "0908279c-a369-4684-92ac-8a9f5af1407f",
-          "c962d4b0-d96a-45f6-a985-59b8b93534c0",
-          "bc9adf5e-e09f-4eed-9391-16aab9e3957a",
-          "c78fe2ef-9925-45bf-8f14-2f5954dfb00c",
-          "03b67d63-e22d-4820-b101-bf545df8e78c",
-          "6780420a-3574-4a0f-97d4-5ce43e7ac21e",
-          "1d09fb43-4ca8-4c4c-940f-8ac1bbb43a13",
-          "f45fa968-4bfe-4025-a74c-8f14f241bb43"
-        ],
-        "tools_by_id_count": 15,
-        "allowed_tool_count": 15,
-        "allowed_tool_names": [
-          "cafe24:read_shipping",
-          "cafe24:read_order_settings",
-          "cafe24:create_ticket",
-          "cafe24:lookup_order",
-          "cafe24:track_shipment",
-          "cafe24:read_product",
-          "cafe24:read_supply",
-          "cafe24:update_order_settings",
-          "juso:search_address",
-          "cafe24:api_get_customers_member_id_autoupdate_0d586802",
-          "solapi:send_otp",
-          "solapi:verify_otp",
-          "cafe24:list_orders",
-          "cafe24:update_order_shipping_address",
-          "cafe24:resolve_product"
-        ],
-        "provider_selections": [],
-        "resolved_tool_count": 15,
-        "requested_tool_count": 15,
-        "tools_by_provider_count": 0,
-        "provider_selection_count": 0,
-        "missing_tools_expected_by_intent": [
-          "find_customer_by_phone"
-        ]
-      },
-      "model_resolution": {
-        "input_length": 24,
-        "length_rule_hit": null,
-        "keyword_rule_hit": null,
-        "selection_reason": "deterministic_or_skipped"
-      },
-      "policy_conflicts": {
-        "conflicts": [
-          {
-            "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-            "ruleA": "R268_order_change_need_zipcode_tool",
-            "ruleB": "R271_order_change_force_update",
-            "stage": "tool",
-            "intentScope": "order_change"
-          }
-        ],
-        "resolution": "tool_stage_force_response_precedence"
-      }
-    }
-MCP 로그:
-- 6f9d5937-dd92-4a00-bc49-8e3a11f72167 search_address@-: success (2026-02-20T06:40:49.505+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  request:
-    {
-      "keyword": "여수시 둔덕동 라온유아파트 112동 201호",
-      "search_keywords": [
-        "여수시 둔덕동 라온유아파트 112동 201호",
-        "여수시 둔덕동 라온유아파트 112동 201",
-        "여수시 둔덕동 라온유아파트 112동",
-        "여수시 둔덕동 라온유아파트 112",
-        "여수시 둔덕동 라온유아파트"
-      ]
-    }
-  response:
-    {
-      "debug": {
-        "url": "https://business.juso.go.kr/addrlink/addrLinkApi.do?confmKey=U01TX0FVVEgyMDI2MDIwMjE3MjcxNTExNzUyODk%3D&currentPage=1&countPerPage=10&keyword=%EC%97%AC%EC%88%98%EC%8B%9C+%EB%91%94%EB%8D%95%EB%8F%99+%EB%9D%BC%EC%98%A8%EC%9C%A0%EC%95%84%ED%8C%8C%ED%8A%B8+112%EB%8F%99+201%ED%98%B8&resultType=json",
-        "source": "JUSO_API",
-        "status": 200,
-        "keyFound": true,
-        "keyLength": 40,
-        "rawResponseLength": 1186
-      },
-      "source": "JUSO_API",
-      "results": [
-        {
-          "rn": "상암로",
-          "bdNm": "라온유아파트",
-          "liNm": "",
-          "mtYn": "0",
-          "siNm": "전라남도",
-          "admCd": "4613012300",
-          "emdNm": "둔덕동",
-          "emdNo": "01",
-          "sggNm": "여수시",
-          "zipNo": "59625",
-          "bdKdcd": "0",
-          "udrtYn": "0",
-          "bdMgtSn": "4613012300102660017000001",
-          "engAddr": "8 Sangam-ro, Yeosu-si, Jeollanam-do",
-          "rnMgtSn": "461303282037",
-          "buldMnnm": "8",
-          "buldSlno": "0",
-          "lnbrMnnm": "266",
-          "lnbrSlno": "0",
-          "roadAddr": "전라남도 여수시 상암로 8 (둔덕동)",
-          "jibunAddr": "전라남도 여수시 둔덕동 266 라온유아파트",
-          "detBdNmList": "상가동",
-          "roadAddrPart1": "전라남도 여수시 상암로 8",
-          "roadAddrPart2": " (둔덕동)"
-        },
-        {
-          "rn": "상암로",
-          "bdNm": "라온유아파트",
-          "liNm": "",
-          "mtYn": "0",
-          "siNm": "전라남도",
-          "admCd": "4613012300",
-          "emdNm": "둔덕동",
-          "emdNo": "01",
-          "sggNm": "여수시",
-          "zipNo": "59625",
-          "bdKdcd": "1",
-          "udrtYn": "0",
-          "bdMgtSn": "4613012300102540000000001",
-          "engAddr": "16 Sangam-ro, Yeosu-si, Jeollanam-do",
-          "rnMgtSn": "461303282037",
-          "buldMnnm": "16",
-          "buldSlno": "0",
-          "lnbrMnnm": "266",
-          "lnbrSlno": "0",
-          "roadAddr": "전라남도 여수시 상암로 16 (둔덕동, 라온유아파트)",
-          "jibunAddr": "전라남도 여수시 둔덕동 266 라온유아파트",
-          "detBdNmList": "101동,105동,108동,상가동,104동,103동,107동,106동,111동,110동,109동,112동,102동",
-          "roadAddrPart1": "전라남도 여수시 상암로 16",
-          "roadAddrPart2": " (둔덕동, 라온유아파트)"
-        }
-      ],
-      "totalCount": "2",
-      "_search_attempts": [
-        {
-          "status": "success",
-          "keyword": "여수시 둔덕동 라온유아파트 112동 201호",
-          "total_count": "2"
-        }
-      ],
-      "_search_keywords": [
-        "여수시 둔덕동 라온유아파트 112동 201호",
-        "여수시 둔덕동 라온유아파트 112동 201",
-        "여수시 둔덕동 라온유아파트 112동",
-        "여수시 둔덕동 라온유아파트 112",
-        "여수시 둔덕동 라온유아파트"
-      ]
-    }
-이벤트 로그:
-- 1aa838ea-f4b6-4864-96ec-a3423d6b0728 QUICK_REPLY_RULE_DECISION (2026-02-20T06:41:00.433+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
+- 41aa7927-3016-4bd6-a105-cc05a72b69c8 END_USER_MATCH_HIT (2026-02-20T12:01:04.702+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
-      "quick_reply_count": 2,
-      "quick_reply_config": {
-        "preset": null,
-        "criteria": "guard:RUNTIME_PRINCIPLE_MISSING_ZIPCODE_CHOICE",
-        "max_select": 1,
-        "min_select": 1,
-        "source_module": "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
-        "submit_format": "single",
-        "selection_mode": "single",
-        "source_function": "handleOrderChangePostTools"
-      },
-      "quick_reply_source": {
-        "criteria": "payload:quick_replies"
-      }
-    }
-- d39259a5-9940-4156-8973-9fe3e7b5d280 EXECUTION_GUARD_TRIGGERED (2026-02-20T06:41:00.163+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "tool": "search_address",
-      "error": "ADDRESS_PRESENT_ZIPCODE_MISSING",
-      "reason": "MISSING_ZIPCODE",
-      "_decision": {
-        "line": 125,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 125,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
-            "function_name": "emit:EXECUTION_GUARD_TRIGGERED"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
-        "recorded_at": "2026-02-20T06:41:00.163Z",
-        "function_name": "emit:EXECUTION_GUARD_TRIGGERED"
-      }
-    }
-- b38a6fdd-3795-445e-bc78-00ee9e88c53d CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T06:40:59.891+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "keys": [
-        "order_id",
-        "address",
-        "candidate_count"
-      ],
-      "delta": {
-        "address": "여수시 둔덕동 라온유아파트 112동 201호",
-        "order_id": "20260127-0000014",
-        "candidate_count": 2
-      },
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:40:59.891Z",
-        "function_name": "unknown"
-      },
-      "key_count": 3
-    }
-- 4159d6e2-c0f2-4c8e-9e6e-2c0ab1a710f6 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T06:40:59.631+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "54cfcf79-cd6e-4b55-8428-8f5463ff5d38",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
-      "violation_count": 0,
-      "deduped_violation_count": 0
-    }
-- 7d5f5bf4-7ef2-4253-8ef5-3e641ed82da2 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T06:40:58.542+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "54cfcf79-cd6e-4b55-8428-8f5463ff5d38",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
-      "config_source": "principles_default"
-    }
-- a7b0d651-34af-4924-9a4b-d6435d65598a END_USER_WRITE_LATENCY (2026-02-20T06:40:57.486+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "duration_ms": 6621
-    }
-- 8f30ee9a-5371-4e85-b90b-ebf458151732 END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T06:40:57.226+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "keys": [
-        "address",
-        "order_id",
-        "candidate_count"
-      ],
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
-      "key_count": 3,
-      "keys_truncated": false
-    }
-- f0bfafbf-8bd2-4612-b70c-716c365fd863 END_USER_CONTEXT_RESOLVED (2026-02-20T06:40:51.398+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "match_hit": false,
-      "end_user_id": "1932cd1e-eeea-4855-ad96-38b22def6179",
-      "identity_count": 3,
+      "matched": true,
+      "identity_count": 2,
       "identity_types": [
         "email",
-        "phone",
         "external"
-      ],
-      "runtime_source": "auth_user",
-      "match_attempted": false,
-      "runtime_end_user": {
-        "id": "fa7baaa2-806f-4457-88f0-7d29f802d126",
-        "source": "auth_user",
-        "email_masked": "su********@gmail.com",
-        "external_user_id": "fa7baaa2-806f-4457-88f0-7d29f802d126"
-      },
-      "resolution_source": "session",
-      "runtime_email_masked": "su********@gmail.com",
-      "runtime_external_user_id": "fa7baaa2-806f-4457-88f0-7d29f802d126"
+      ]
     }
-- dcd1fe2e-e2b0-4ac2-8e82-0ea9d28fc8ca ADDRESS_CANDIDATES_PRESENTED (2026-02-20T06:40:50.027+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:40:50.027Z",
-        "function_name": "unknown"
-      },
-      "candidates": [
-        {
-          "index": 1,
-          "zip_no": "59625",
-          "road_addr": "전라남도 여수시 상암로 8 (둔덕동)",
-          "jibun_addr": "전라남도 여수시 둔덕동 266 라온유아파트",
-          "display_label": "전라남도 여수시 둔덕동 266 라온유아파트 / 전라남도 여수시 상암로 8 (둔덕동) / 59625"
-        },
-        {
-          "index": 2,
-          "zip_no": "59625",
-          "road_addr": "전라남도 여수시 상암로 16 (둔덕동, 라온유아파트)",
-          "jibun_addr": "전라남도 여수시 둔덕동 266 라온유아파트",
-          "display_label": "전라남도 여수시 둔덕동 266 라온유아파트 / 전라남도 여수시 상암로 16 (둔덕동, 라온유아파트) / 59625"
-        }
-      ],
-      "query_text": "여수시 둔덕동 라온유아파트 112동 201호",
-      "candidate_count": 2
-    }
-- bb5e1da8-e63b-4dbb-8a6d-fbf9ab12b610 ADDRESS_SEARCH_COMPLETED (2026-02-20T06:40:49.771+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:40:49.771Z",
-        "function_name": "unknown"
-      },
-      "query_text": "여수시 둔덕동 라온유아파트 112동 201호",
-      "result_count": 2,
-      "candidate_count": 2
-    }
-- 23dbbe41-77ff-4724-ae7c-253c8494b067 ADDRESS_SEARCH_STARTED (2026-02-20T06:40:48.514+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:40:48.514Z",
-        "function_name": "unknown"
-      },
-      "query_text": "여수시 둔덕동 라온유아파트 112동 201호"
-    }
-- 286b17b5-6aa5-4461-b73b-4d38e9ad5d2d POLICY_DECISION (2026-02-20T06:40:48.245+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "stage": "tool",
-      "action": "ENFORCE_RUNTIME_PRINCIPLE_ADDRESS_ZIPCODE_RESOLUTION",
-      "reason": "ADDRESS_PRESENT_ZIPCODE_MISSING",
-      "resolver": "search_address",
-      "_decision": {
-        "line": 819,
-        "phase": "decision",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 819,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
-            "function_name": "emit:POLICY_DECISION"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
-        "recorded_at": "2026-02-20T06:40:48.245Z",
-        "function_name": "emit:POLICY_DECISION"
-      }
-    }
-- 7b579e95-2380-4207-8d1f-e28335785922 POLICY_DECISION (2026-02-20T06:40:47.97+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "stage": "tool",
-      "action": "DEFER_FORCE_RESPONSE_TEMPLATE",
-      "reason": "ORDER_AND_ADDRESS_ALREADY_AVAILABLE",
-      "template": "order_change_need_zipcode",
-      "_decision": {
-        "line": 819,
-        "phase": "decision",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 819,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
-            "function_name": "emit:POLICY_DECISION"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
-        "recorded_at": "2026-02-20T06:40:47.970Z",
-        "function_name": "emit:POLICY_DECISION"
-      }
-    }
-- a37c9b04-78b4-4d7b-9467-3229a4419f09 PRE_MCP_DECISION (2026-02-20T06:40:47.704+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "denied": [],
-      "entity": {
-        "order_id": "20260127-0000014",
-        "has_address": true,
-        "phone_masked": "*******7159"
-      },
-      "intent": "order_change",
-      "allowed": [
-        "update_order_shipping_address",
-        "list_orders",
-        "lookup_order",
-        "search_address",
-        "send_otp",
-        "verify_otp"
-      ],
-      "_decision": {
-        "line": 657,
-        "phase": "before",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 657,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
-            "function_name": "emit:PRE_MCP_DECISION"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
-        "recorded_at": "2026-02-20T06:40:47.704Z",
-        "function_name": "emit:PRE_MCP_DECISION"
-      },
-      "query_text": "여수시 둔덕동 라온유아파트 112동 201호",
-      "final_calls": [],
-      "forced_calls": [],
-      "query_source": "current_message",
-      "missing_slots": [],
-      "resolved_slots": {},
-      "policy_conflicts": [
-        {
-          "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-          "ruleA": "R268_order_change_need_zipcode_tool",
-          "ruleB": "R271_order_change_force_update",
-          "stage": "tool",
-          "intentScope": "order_change"
-        }
-      ],
-      "allowed_tool_names": [],
-      "blocked_by_missing_slots": false,
-      "allowed_tool_names_total": 15
-    }
-- 4773b069-9b2d-43ed-9a32-524bd4da5d14 EXECUTION_GUARD_TRIGGERED (2026-02-20T06:40:47.441+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "tool": "update_order_shipping_address",
-      "error": "MUTATION_INTENT_NOT_READY",
-      "reason": "MISSING_REQUIRED_SLOTS",
-      "missing": {
-        "address": false,
-        "zipcode": true,
-        "order_id": false
-      },
-      "_decision": {
-        "line": 125,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 125,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
-            "function_name": "emit:EXECUTION_GUARD_TRIGGERED"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/handlers/orderChangeHandler.ts",
-        "recorded_at": "2026-02-20T06:40:47.441Z",
-        "function_name": "emit:EXECUTION_GUARD_TRIGGERED"
-      }
-    }
-- 5d1663b3-3809-4398-9ebf-bac9431d27c8 INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-20T06:40:46.912+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "intent": "order_change",
-      "blocked": false,
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:40:46.912Z",
-        "function_name": "unknown"
-      },
-      "missing_slots": [],
-      "required_slots": [],
-      "resolved_slots": {}
-    }
-- 597818e5-3e63-4dd2-9ced-2a69070ce283 INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-20T06:40:46.659+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "intent": "order_change",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:40:46.658Z",
-        "function_name": "unknown"
-      },
-      "query_source": "current_message",
-      "expected_input": "address"
-    }
-- c3eb0548-1dbd-49d3-a581-1b06fbe0ec23 SLOT_EXTRACTED (2026-02-20T06:40:46.393+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
+- c460d6c2-c255-4a6e-8598-6e59b189340f SLOT_EXTRACTED (2026-02-20T12:01:03.011+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
       "derived": {
         "phone": null,
-        "address": "여수시 둔덕동 라온유아파트 112동 201호",
+        "address": null,
         "zipcode": null,
         "order_id": null,
         "phone_masked": "-"
       },
       "resolved": {
-        "phone": "01093107159",
-        "intent": "order_change",
-        "address": "여수시 둔덕동 라온유아파트 112동 201호",
-        "zipcode": null,
-        "order_id": "20260127-0000014",
-        "phone_masked": "*******7159"
-      },
-      "_decision": {
-        "line": 145,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 145,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-            "function_name": "emit:SLOT_EXTRACTED"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "recorded_at": "2026-02-20T06:40:46.393Z",
-        "function_name": "emit:SLOT_EXTRACTED"
-      },
-      "query_source": "current_message",
-      "missing_slots": [],
-      "expected_input": "address",
-      "resolved_slots": {}
-    }
-- cf32fc32-e773-45ed-9e5f-ed0f2003fcaa POLICY_STATIC_CONFLICT (2026-02-20T06:40:46.128+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "intent": "order_change",
-      "_decision": {
-        "line": 42,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 42,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/policyInputRuntime.ts",
-            "function_name": "emit:POLICY_STATIC_CONFLICT"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/policyInputRuntime.ts",
-        "recorded_at": "2026-02-20T06:40:46.128Z",
-        "function_name": "emit:POLICY_STATIC_CONFLICT"
-      },
-      "conflicts": [
-        {
-          "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-          "ruleA": "R268_order_change_need_zipcode_tool",
-          "ruleB": "R271_order_change_force_update",
-          "stage": "tool",
-          "intentScope": "order_change"
-        }
-      ],
-      "resolution": "tool_stage_force_response_precedence"
-    }
-- 29507e70-1b23-4511-bf78-13a954b5221f ENTITY_FIELD_UPDATED (2026-02-20T06:40:45.865+00:00) (turn_id=54cfcf79-cd6e-4b55-8428-8f5463ff5d38)
-  payload:
-    {
-      "intent": "order_change",
-      "updates": [
-        {
-          "next": "여수시 둔덕동 라온유아파트 112동 201호",
-          "prev": "1",
-          "field": "address"
-        }
-      ],
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:40:45.865Z",
-        "function_name": "unknown"
-      },
-      "update_notice": "정보 업데이트: 배송지 1 -> 여수시 둔덕동 라온유아파트 112동 201호. 이후 안내는 변경된 정보 기준으로 진행합니다."
-    }
-
-
-TURN_ID: d1b3ea84-0991-4b32-9782-2be5467f70ca
-
-[TOKEN_USED]
-
-USER:
-1
-
-BOT:
-확인한 것: 주소 여수시 둔덕동 라온유아파트 112동 201호
-확인할 것: 선택하신 주소가 맞는지 확인해 주세요.
-- 지번주소: 전라남도 여수시 둔덕동 266 라온유아파트
-- 도로명주소: 전라남도 여수시 상암로 8 (둔덕동)
-- 우편번호: 59625
-네/아니오로 답해주세요.
-그 다음으로 확인할 것: 배송지 변경 적용
-RESPONSE_SCHEMA: view=choice, choice_mode=single, quick_replies=2, cards=0
-RESPONSE_SCHEMA_DETAIL:
-  {
-    "message": "확인한 것: 주소 여수시 둔덕동 라온유아파트 112동 201호\n확인할 것: 선택하신 주소가 맞는지 확인해 주세요.\n- 지번주소: 전라남도 여수시 둔덕동 266 라온유아파트\n- 도로명주소: 전라남도 여수시 상암로 8 (둔덕동)\n- 우편번호: 59625\n네/아니오로 답해주세요.\n그 다음으로 확인할 것: 배송지 변경 적용",
-    "ui_hints": {
-      "view": "choice",
-      "choice_mode": "single"
-    },
-    "quick_replies": [
-      {
-        "label": "네",
-        "value": "네"
-      },
-      {
-        "label": "아니오",
-        "value": "아니오"
-      }
-    ],
-    "cards": []
-  }
-RENDER_PLAN: view=choice, quick_replies=true, cards=false, mode=single, min=1, max=1, submit=single, prompt=-
-RENDER_PLAN_DETAIL:
-  {
-    "view": "choice",
-    "enable_quick_replies": true,
-    "enable_cards": false,
-    "interaction_scope": "latest_only",
-    "quick_reply_source": {
-      "type": "explicit",
-      "criteria": "payload:quick_replies"
-    },
-    "selection_mode": "single",
-    "min_select": 1,
-    "max_select": 1,
-    "submit_format": "single",
-    "grid_columns": {
-      "quick_replies": 2,
-      "cards": 1
-    },
-    "prompt_kind": null,
-    "debug": {
-      "policy_version": "v1",
-      "quick_replies_count": 2,
-      "cards_count": 0,
-      "selection_mode_source": "config",
-      "min_select_source": "config",
-      "max_select_source": "config",
-      "submit_format_source": "config"
-    }
-  }
-QUICK_REPLY_RULE: mode=single, min=1, max=1, submit=single, source=explicit, criteria=payload:quick_replies, module=-, function=-
-
-[TOKEN_UNUSED]
-DEBUG 로그:
-- da1dc0ca-3657-459a-8911-753017faf9d2 (turn_id=d1b3ea84-0991-4b32-9782-2be5467f70ca) (2026-02-20T06:41:14.113+00:00)
-  prefix_json:
-    {
-      "mcp": {
-        "last": {
-          "error": null,
-          "status": "none",
-          "function": "NO_TOOL_CALLED",
-          "result_count": null
-        }
-      },
-      "slot": {
-        "phone": "01093107159",
-        "address": "여수시 둔덕동 라온유아파트 112동 201호",
-        "phone_masked": "*******7159",
-        "expected_input": "choice"
-      },
-      "decision": {
-        "line": 152,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 152,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-            "function_name": "insertTurnWithDebug"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T06:41:13.837Z",
-        "function_name": "insertTurnWithDebug"
-      },
-      "kb_admin": {
-        "kb_user_id": "f29567ba-275a-4cd9-add8-fa7b3d6e54c2",
-        "kb_admin_ids": [
-          "0da02c01-aad4-4286-a445-4db7a89f8ebe",
-          "878b3ffe-2e18-4820-bda6-ffeccaa4212b"
-        ]
-      },
-      "execution": {
-        "call_chain": [
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts",
-            "function_name": "POST"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeBootstrap.ts",
-            "function_name": "bootstrapRuntime"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts",
-            "function_name": "initializeRuntimeState"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-            "function_name": "resolveIntentDisambiguation"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
-            "function_name": "handlePreTurnGuards"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts",
-            "function_name": "deriveSlotsForTurn"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
-            "function_name": "handleAddressChangeRefundPending"
-          }
-        ]
-      },
-      "slot_flow": {
-        "expected_inputs": [
-          "choice"
-        ],
-        "expected_input_stage": "order_change.address.awaiting_zipcode_choice",
-        "expected_input_source": "contract_stage"
-      },
-      "tool_allowlist": {
-        "valid_tool_count": 15,
-        "resolved_tool_ids": [
-          "11025bb2-770a-4c55-af11-83ba2caabcb8",
-          "a9cd0a00-59f1-43fd-97d4-5f5c1bca3c07",
-          "bc06a0c1-8f40-4ba8-9668-682170254b34",
-          "aec3bd90-314a-4929-9fe5-6ed33888857c",
-          "ffb90354-4eb0-4dd8-9ba1-d6608a1ea79b",
-          "4b4cec22-7d1b-4c06-8579-08cdfbacc16b",
-          "56cef951-28f5-4b11-85f5-7624adc15862",
-          "0908279c-a369-4684-92ac-8a9f5af1407f",
-          "c962d4b0-d96a-45f6-a985-59b8b93534c0",
-          "bc9adf5e-e09f-4eed-9391-16aab9e3957a",
-          "c78fe2ef-9925-45bf-8f14-2f5954dfb00c",
-          "03b67d63-e22d-4820-b101-bf545df8e78c",
-          "6780420a-3574-4a0f-97d4-5ce43e7ac21e",
-          "1d09fb43-4ca8-4c4c-940f-8ac1bbb43a13",
-          "f45fa968-4bfe-4025-a74c-8f14f241bb43"
-        ],
-        "tools_by_id_count": 15,
-        "allowed_tool_count": 15,
-        "allowed_tool_names": [
-          "cafe24:read_shipping",
-          "cafe24:read_order_settings",
-          "cafe24:create_ticket",
-          "cafe24:lookup_order",
-          "cafe24:track_shipment",
-          "cafe24:read_product",
-          "cafe24:read_supply",
-          "cafe24:update_order_settings",
-          "juso:search_address",
-          "cafe24:api_get_customers_member_id_autoupdate_0d586802",
-          "solapi:send_otp",
-          "solapi:verify_otp",
-          "cafe24:list_orders",
-          "cafe24:update_order_shipping_address",
-          "cafe24:resolve_product"
-        ],
-        "provider_selections": [],
-        "resolved_tool_count": 15,
-        "requested_tool_count": 15,
-        "tools_by_provider_count": 0,
-        "provider_selection_count": 0,
-        "missing_tools_expected_by_intent": [
-          "find_customer_by_phone"
-        ]
-      },
-      "model_resolution": {
-        "input_length": 1,
-        "length_rule_hit": null,
-        "keyword_rule_hit": null,
-        "selection_reason": "deterministic_or_skipped"
-      },
-      "policy_conflicts": {
-        "conflicts": []
-      }
-    }
-이벤트 로그:
-- 017a07fe-6fb1-45c7-b5e1-90fbbfe697f0 QUICK_REPLY_RULE_DECISION (2026-02-20T06:41:24.5+00:00) (turn_id=d1b3ea84-0991-4b32-9782-2be5467f70ca)
-  payload:
-    {
-      "quick_reply_count": 2,
-      "quick_reply_config": {
-        "preset": null,
-        "criteria": "state:awaiting_zipcode_confirm_from_choice",
-        "max_select": 1,
-        "min_select": 1,
-        "source_module": "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
-        "submit_format": "single",
-        "selection_mode": "single",
-        "source_function": "handleAddressChangeRefundPending"
-      },
-      "quick_reply_source": {
-        "criteria": "payload:quick_replies"
-      }
-    }
-- f3a94dbc-6f91-4fb6-bb86-84e5804950f3 CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T06:41:24.231+00:00) (turn_id=d1b3ea84-0991-4b32-9782-2be5467f70ca)
-  payload:
-    {
-      "keys": [
-        "order_id",
-        "address",
-        "zipcode",
-        "road_addr",
-        "jibun_addr",
-        "candidate_count",
-        "index"
-      ],
-      "delta": {
-        "index": 1,
-        "address": "여수시 둔덕동 라온유아파트 112동 201호",
-        "zipcode": "59625",
-        "order_id": "20260127-0000014",
-        "road_addr": "전라남도 여수시 상암로 8 (둔덕동)",
-        "jibun_addr": "전라남도 여수시 둔덕동 266 라온유아파트",
-        "candidate_count": 2
-      },
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:41:24.231Z",
-        "function_name": "unknown"
-      },
-      "key_count": 7
-    }
-- 49e10017-d92d-40a0-a665-ad4d74fe939a RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T06:41:23.965+00:00) (turn_id=d1b3ea84-0991-4b32-9782-2be5467f70ca)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "d1b3ea84-0991-4b32-9782-2be5467f70ca",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
-      "violation_count": 0,
-      "deduped_violation_count": 0
-    }
-- b3ee6b32-e87b-4d7f-b518-371481f8988d RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T06:41:22.946+00:00) (turn_id=d1b3ea84-0991-4b32-9782-2be5467f70ca)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "d1b3ea84-0991-4b32-9782-2be5467f70ca",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
-      "config_source": "principles_default"
-    }
-- 1450a997-35ee-44b9-8169-8ca9c7dec7f5 END_USER_WRITE_LATENCY (2026-02-20T06:41:21.889+00:00) (turn_id=d1b3ea84-0991-4b32-9782-2be5467f70ca)
-  payload:
-    {
-      "duration_ms": 7489
-    }
-- 21c734cc-d17f-4d86-a4df-3dbc869ff470 END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T06:41:21.613+00:00) (turn_id=d1b3ea84-0991-4b32-9782-2be5467f70ca)
-  payload:
-    {
-      "keys": [
-        "index",
-        "address",
-        "zipcode",
-        "order_id",
-        "road_addr",
-        "jibun_addr",
-        "candidate_count"
-      ],
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
-      "key_count": 7,
-      "keys_truncated": false
-    }
-- 86c74a43-6d57-4760-8068-2bffbd11f172 END_USER_CONTEXT_RESOLVED (2026-02-20T06:41:14.938+00:00) (turn_id=d1b3ea84-0991-4b32-9782-2be5467f70ca)
-  payload:
-    {
-      "match_hit": false,
-      "end_user_id": "1932cd1e-eeea-4855-ad96-38b22def6179",
-      "identity_count": 3,
-      "identity_types": [
-        "email",
-        "phone",
-        "external"
-      ],
-      "runtime_source": "auth_user",
-      "match_attempted": false,
-      "runtime_end_user": {
-        "id": "fa7baaa2-806f-4457-88f0-7d29f802d126",
-        "source": "auth_user",
-        "email_masked": "su********@gmail.com",
-        "external_user_id": "fa7baaa2-806f-4457-88f0-7d29f802d126"
-      },
-      "resolution_source": "session",
-      "runtime_email_masked": "su********@gmail.com",
-      "runtime_external_user_id": "fa7baaa2-806f-4457-88f0-7d29f802d126"
-    }
-- 3aefeff3-1b57-4ad3-9a38-00ef5baf8a3e ADDRESS_CANDIDATE_SELECTED (2026-02-20T06:41:13.574+00:00) (turn_id=d1b3ea84-0991-4b32-9782-2be5467f70ca)
-  payload:
-    {
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:41:13.574Z",
-        "function_name": "unknown"
-      },
-      "selected_index": 1,
-      "selection_source": "number_input",
-      "selected_candidate": {
-        "index": 1,
-        "zip_no": "59625",
-        "road_addr": "전라남도 여수시 상암로 8 (둔덕동)",
-        "jibun_addr": "전라남도 여수시 둔덕동 266 라온유아파트",
-        "display_label": "전라남도 여수시 둔덕동 266 라온유아파트 / 전라남도 여수시 상암로 8 (둔덕동) / 59625"
-      }
-    }
-
-
-TURN_ID: 23103ab4-09f2-4674-b0d2-39f19b0fbaf1
-
-[TOKEN_USED]
-
-USER:
-네
-
-BOT:
-요약: 배송지 변경이 완료되었습니다.
-근거: 주문 정보 변경 정책에 따라 처리했습니다.
-상세: 주문번호 20260127-0000014의 배송지를 변경했습니다.
-- 변경 전: (08793) 서울특별시 관악구 인헌2길 8-3 (봉천동) 11호
-- 요청: (59625) 전라남도 여수시 상암로 8 (둔덕동) 112동 201호
-- 적용: (59625) 전라남도 여수시 상암로 8 (둔덕동) 112동 201호
-다음 액션: 추가 변경 사항이 있으면 알려주세요.
-RESPONSE_SCHEMA: view=choice, choice_mode=multi, quick_replies=2, cards=0
-RESPONSE_SCHEMA_DETAIL:
-  {
-    "message": "확인한 것: 주소 전라남도 여수시 상암로 8 (둔덕동) (59625)\n확인할 것: 배송지 변경이 완료되었습니다.\n주문번호 20260127-0000014의 배송지가 업데이트되었습니다.\n변경 전: (08793) 서울특별시 관악구 인헌2길 8-3 (봉천동) 11호\n변경 후: (59625) 전라남도 여수시 상암로 8 (둔덕동) 112동 201호\n추가로 변경할 내용이 있으면 알려주세요.\n그 다음으로 확인할 것: 추가 도움 요청 확인",
-    "ui_hints": {
-      "view": "choice",
-      "choice_mode": "multi"
-    },
-    "quick_replies": [
-      {
-        "label": "대화 종료",
-        "value": "action:end_conversation"
-      },
-      {
-        "label": "다른 문의",
-        "value": "action:other_inquiry"
-      }
-    ],
-    "cards": []
-  }
-RENDER_PLAN: view=choice, quick_replies=true, cards=false, mode=multi, min=1, max=2, submit=csv, prompt=-
-RENDER_PLAN_DETAIL:
-  {
-    "view": "choice",
-    "enable_quick_replies": true,
-    "enable_cards": false,
-    "interaction_scope": "latest_only",
-    "quick_reply_source": {
-      "type": "explicit",
-      "criteria": "payload:quick_replies"
-    },
-    "selection_mode": "multi",
-    "min_select": 1,
-    "max_select": 2,
-    "submit_format": "csv",
-    "grid_columns": {
-      "quick_replies": 2,
-      "cards": 1
-    },
-    "prompt_kind": null,
-    "debug": {
-      "policy_version": "v1",
-      "quick_replies_count": 2,
-      "cards_count": 0,
-      "selection_mode_source": "config",
-      "min_select_source": "config",
-      "max_select_source": "config",
-      "submit_format_source": "config"
-    }
-  }
-QUICK_REPLY_RULE: mode=multi, min=1, max=2, submit=csv, source=explicit, criteria=payload:quick_replies, module=-, function=-
-
-[TOKEN_UNUSED]
-DEBUG 로그:
-- 09b1fc19-a600-4b9b-9828-1d33b8715651 (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1) (2026-02-20T06:41:47.821+00:00)
-  prefix_json:
-    {
-      "mcp": {
-        "last": {
-          "error": null,
-          "status": "success",
-          "function": "update_order_shipping_address",
-          "result_count": 1
-        }
-      },
-      "slot": {
-        "phone": "01093107159",
-        "address": "여수시 둔덕동 라온유아파트 112동 201호",
-        "zipcode": "59625",
-        "order_id": "20260127-0000014",
-        "phone_masked": "*******7159",
-        "expected_input": "confirm"
-      },
-      "decision": {
-        "line": 152,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 152,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-            "function_name": "insertTurnWithDebug"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T06:41:47.536Z",
-        "function_name": "insertTurnWithDebug"
-      },
-      "kb_admin": {
-        "rule_ids": [
-          "R270_order_change_allow_write",
-          "R271_order_change_force_update"
-        ],
-        "kb_user_id": "f29567ba-275a-4cd9-add8-fa7b3d6e54c2",
-        "kb_admin_ids": [
-          "0da02c01-aad4-4286-a445-4db7a89f8ebe",
-          "878b3ffe-2e18-4820-bda6-ffeccaa4212b"
-        ],
-        "tool_policies": [
-          "update_order_shipping_address"
-        ]
-      },
-      "execution": {
-        "call_chain": [
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts",
-            "function_name": "POST"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeBootstrap.ts",
-            "function_name": "bootstrapRuntime"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts",
-            "function_name": "initializeRuntimeState"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-            "function_name": "resolveIntentDisambiguation"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
-            "function_name": "handlePreTurnGuards"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts",
-            "function_name": "deriveSlotsForTurn"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
-            "function_name": "handleAddressChangeRefundPending"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/restockPendingRuntime.ts",
-            "function_name": "handleRestockPendingStage"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/postActionRuntime.ts",
-            "function_name": "handlePostActionStage"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
-            "function_name": "resolveIntentAndPolicyContext"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-            "function_name": "runInputStageRuntime"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts",
-            "function_name": "createRuntimeMcpOps"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/otpRuntime.ts",
-            "function_name": "handleOtpLifecycleAndOrderGate"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/services/dataAccess.ts",
-            "function_name": "resolveProductDecision"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts",
-            "function_name": "runToolStagePipeline"
-          }
-        ]
-      },
-      "slot_flow": {
-        "derived_address": "여수시 둔덕동 라온유아파트 112동 201호",
-        "derived_zipcode": "59625",
-        "expected_inputs": [
-          "confirm"
-        ],
-        "derived_order_id": "20260127-0000014",
-        "expected_input_stage": "order_change.address.awaiting_zipcode_confirm",
-        "expected_input_source": "contract_stage"
-      },
-      "tool_allowlist": {
-        "valid_tool_count": 15,
-        "resolved_tool_ids": [
-          "11025bb2-770a-4c55-af11-83ba2caabcb8",
-          "a9cd0a00-59f1-43fd-97d4-5f5c1bca3c07",
-          "bc06a0c1-8f40-4ba8-9668-682170254b34",
-          "aec3bd90-314a-4929-9fe5-6ed33888857c",
-          "ffb90354-4eb0-4dd8-9ba1-d6608a1ea79b",
-          "4b4cec22-7d1b-4c06-8579-08cdfbacc16b",
-          "56cef951-28f5-4b11-85f5-7624adc15862",
-          "0908279c-a369-4684-92ac-8a9f5af1407f",
-          "c962d4b0-d96a-45f6-a985-59b8b93534c0",
-          "bc9adf5e-e09f-4eed-9391-16aab9e3957a",
-          "c78fe2ef-9925-45bf-8f14-2f5954dfb00c",
-          "03b67d63-e22d-4820-b101-bf545df8e78c",
-          "6780420a-3574-4a0f-97d4-5ce43e7ac21e",
-          "1d09fb43-4ca8-4c4c-940f-8ac1bbb43a13",
-          "f45fa968-4bfe-4025-a74c-8f14f241bb43"
-        ],
-        "tools_by_id_count": 15,
-        "allowed_tool_count": 15,
-        "allowed_tool_names": [
-          "cafe24:read_shipping",
-          "cafe24:read_order_settings",
-          "cafe24:create_ticket",
-          "cafe24:lookup_order",
-          "cafe24:track_shipment",
-          "cafe24:read_product",
-          "cafe24:read_supply",
-          "cafe24:update_order_settings",
-          "juso:search_address",
-          "cafe24:api_get_customers_member_id_autoupdate_0d586802",
-          "solapi:send_otp",
-          "solapi:verify_otp",
-          "cafe24:list_orders",
-          "cafe24:update_order_shipping_address",
-          "cafe24:resolve_product"
-        ],
-        "provider_selections": [],
-        "resolved_tool_count": 15,
-        "requested_tool_count": 15,
-        "tools_by_provider_count": 0,
-        "provider_selection_count": 0,
-        "missing_tools_expected_by_intent": [
-          "find_customer_by_phone"
-        ]
-      },
-      "model_resolution": {
-        "input_length": 1,
-        "length_rule_hit": null,
-        "keyword_rule_hit": null,
-        "selection_reason": "deterministic_or_skipped"
-      },
-      "policy_conflicts": {
-        "conflicts": [
-          {
-            "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-            "ruleA": "R268_order_change_need_zipcode_tool",
-            "ruleB": "R271_order_change_force_update",
-            "stage": "tool",
-            "intentScope": "order_change"
-          }
-        ],
-        "resolution": "tool_stage_force_response_precedence"
-      }
-    }
-MCP 로그:
-- 7866c96b-f023-4372-b485-25c42bddde11 cafe24:update_order_shipping_address@1.0: success (2026-02-20T06:41:47.265+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  request:
-    {
-      "path": "/orders/{order_id}/receivers",
-      "method": "PUT",
-      "zipcode": "59625",
-      "address1": "전라남도 여수시 상암로 8 (둔덕동)",
-      "address2": "112동 201호",
-      "order_id": "20260127-0000014",
-      "cellphone": "01093107159",
-      "required_scope": "mall.write_order",
-      "customer_verification_token": "cbfec468-5a27-4b4e-a49a-c9e2b591ddd7"
-    }
-  response:
-    {
-      "receivers": [
-        {
-          "name": "mejai",
-          "phone": "",
-          "city_en": "",
-          "name_en": "",
-          "shop_no": 1,
-          "zipcode": "59625",
-          "address1": "전라남도 여수시 상암로 8 (둔덕동)",
-          "address2": "112동 201호",
-          "state_en": "",
-          "cellphone": "01093107159",
-          "street_en": "",
-          "address_city": "",
-          "address_full": "전라남도 여수시 상암로 8 (둔덕동) 112동 201호",
-          "country_code": "",
-          "country_name": "",
-          "address_state": "",
-          "name_furigana": "",
-          "shipping_code": "D-20260127-0000014-00",
-          "address_street": "",
-          "country_name_en": "",
-          "shipping_message": "",
-          "virtual_phone_no": null,
-          "wished_delivery_date": null,
-          "wished_delivery_time": {
-            "end_hour": null,
-            "start_hour": null
-          },
-          "clearance_information": null,
-          "use_fast_delivery_date": null,
-          "use_fast_delivery_time": null,
-          "clearance_information_type": null,
-          "change_default_shipping_address": "F"
-        }
-      ]
-    }
-- be7f371e-ea47-440f-85a0-edc2c7b474fa cafe24:lookup_order@1.0: success (2026-02-20T06:41:45.466+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  request:
-    {
-      "path": "/orders/{order_id}",
-      "method": "GET",
-      "order_id": "20260127-0000014",
-      "required_scope": "mall.read_order",
-      "customer_verification_token": "cbfec468-5a27-4b4e-a49a-c9e2b591ddd7"
-    }
-  response:
-    {
-      "order": {
-        "paid": "T",
-        "buyer": {
-          "name": "mejai",
-          "email": "ydsjy05@naver.com",
-          "phone": "",
-          "shop_no": 1,
-          "user_id": null,
-          "cellphone": "010-9310-7159",
-          "member_id": "mejai",
-          "user_name": null,
-          "company_name": null,
-          "updated_date": null,
-          "buyer_zipcode": "08813",
-          "buyer_address1": "서울 관악구 신림동 1515-7 ",
-          "buyer_address2": "203",
-          "names_furigana": "",
-          "member_group_no": 1,
-          "customer_notification": null,
-          "company_registration_no": null
-        },
-        "items": [
-          {
-            "gift": "F",
-            "labels": null,
-            "hs_code": "",
-            "item_no": 2,
-            "options": [],
-            "shop_no": 1,
-            "quantity": 1,
-            "tax_rate": 10,
-            "option_id": "000A",
-            "claim_code": null,
-            "product_no": 20,
-            "cancel_date": null,
-            "option_type": null,
-            "refund_date": null,
-            "status_code": "N1",
-            "status_text": "배송준비중",
-            "supplier_id": "S0000000",
-            "tracking_no": null,
-            "volume_size": null,
-            "claim_reason": null,
-            "cloth_fabric": null,
-            "made_in_code": "KR",
-            "option_price": "0.00",
-            "option_value": "",
-            "order_status": "N20",
-            "ordered_date": "2026-02-02T16:03:12+09:00",
-            "origin_place": "국내 ",
-            "product_code": "P000000U",
-            "product_name": "아드헬린 린넨 플레어 원피스 그레이",
-            "shipped_date": null,
-            "store_pickup": "F",
-            "subscription": "F",
-            "supply_price": "1000.00",
-            "variant_code": "P000000U000A",
-            "exchange_date": null,
-            "multi_invoice": null,
-            "product_price": "1000.00",
-            "shipping_code": "D-20260127-0000014-00",
-            "supplier_name": "자체공급",
-            "claim_quantity": 0,
-            "delivered_date": null,
-            "market_item_no": null,
-            "payment_amount": null,
-            "product_bundle": "F",
-            "product_weight": "1.00",
-            "request_undone": null,
-            "order_item_code": "20260127-0000014-01",
-            "origin_place_no": 1798,
-            "payment_info_id": "0",
-            "eng_product_name": "",
-            "one_plus_n_event": null,
-            "original_item_no": [],
-            "product_material": "",
-            "product_tax_type": "A",
-            "refund_bank_name": "",
-            "claim_reason_type": null,
-            "post_express_flag": null,
-            "product_bundle_no": "0",
-            "shipping_fee_type": "X",
-            "clearance_category": null,
-            "item_granting_gift": null,
-            "market_fail_reason": null,
-            "naver_pay_order_id": null,
-            "open_market_status": "",
-            "origin_place_value": "",
-            "volume_size_weight": null,
-            "was_product_bundle": null,
-            "cancel_request_date": null,
-            "custom_product_code": "",
-            "custom_variant_code": null,
-            "product_bundle_list": null,
-            "product_bundle_name": null,
-            "product_bundle_type": null,
-            "return_request_date": null,
-            "shipping_company_id": "2",
-            "option_value_default": "",
-            "product_material_eng": null,
-            "product_name_default": "아드헬린 린넨 플레어 원피스 그레이",
-            "bundled_shipping_type": "N",
-            "coupon_discount_price": "0.00",
-            "exchange_request_date": null,
-            "internal_product_name": "",
-            "market_cancel_request": null,
-            "return_collected_date": null,
-            "return_confirmed_date": null,
-            "shipping_company_code": "0001",
-            "shipping_company_name": "자체배송",
-            "supplier_product_name": "",
-            "market_discount_amount": "0.00",
-            "naver_pay_claim_status": null,
-            "order_status_before_cs": null,
-            "refund_bank_account_no": "",
-            "shipping_expected_date": null,
-            "shipping_fee_type_text": "기본배송",
-            "additional_option_value": "",
-            "clearance_category_code": null,
-            "clearance_category_info": null,
-            "individual_shipping_fee": "0.00",
-            "market_fail_reason_type": null,
-            "original_bundle_item_no": null,
-            "shipping_payment_option": "P",
-            "additional_option_values": [
-              {
-                "key": null,
-                "name": null,
-                "type": null,
-                "value": null
-              }
-            ],
-            "app_item_discount_amount": null,
-            "market_fail_reason_guide": null,
-            "additional_discount_price": "0.00",
-            "purchaseconfirmation_date": null,
-            "supplier_transaction_type": " ",
-            "market_custom_variant_code": null,
-            "refund_bank_account_holder": "",
-            "product_bundle_name_default": null,
-            "order_status_additional_info": "",
-            "market_cancel_request_quantity": null
-          }
-        ],
-        "return": [],
-        "postpay": "F",
-        "shop_no": 1,
-        "canceled": "F",
-        "currency": "KRW",
-        "order_id": "20260127-0000014",
-        "bank_code": "bank_13",
-        "market_id": "self",
-        "member_id": "mejai",
-        "receivers": [
-          {
-            "name": "mejai",
-            "phone": "",
-            "city_en": null,
-            "name_en": "",
-            "shop_no": 1,
-            "zipcode": "08793",
-            "address1": "서울특별시 관악구 인헌2길 8-3 (봉천동)",
-            "address2": "11호",
-            "state_en": null,
-            "cellphone": "01093107159",
-            "street_en": null,
-            "address_city": "",
-            "address_full": "서울특별시 관악구 인헌2길 8-3 (봉천동) 11호",
-            "country_code": null,
-            "country_name": null,
-            "address_state": "",
-            "name_furigana": "",
-            "shipping_code": "D-20260127-0000014-00",
-            "address_street": "",
-            "country_name_en": null,
-            "shipping_message": "",
-            "virtual_phone_no": null,
-            "wished_delivery_date": "",
-            "wished_delivery_time": null,
-            "clearance_information": null,
-            "clearance_information_type": null
-          }
-        ],
-        "commission": "0.00",
-        "order_date": "2026-01-27T01:49:00+09:00",
-        "tax_detail": null,
-        "use_escrow": "F",
-        "cancel_date": null,
-        "first_order": "T",
-        "include_tax": "T",
-        "loan_status": null,
-        "naver_point": null,
-        "social_name": null,
-        "billing_name": "성지용",
-        "easypay_name": "",
-        "payment_date": "2026-02-02T16:03:12+09:00",
-        "service_data": null,
-        "service_type": null,
-        "store_pickup": "F",
-        "subscription": "F",
-        "exchange_rate": "1.0000",
-        "shipping_type": "A",
-        "bank_code_name": "농협",
-        "order_place_id": "self",
-        "payment_amount": "3500.00",
-        "payment_method": [
-          "cash"
-        ],
-        "bank_account_no": "3020654717291",
-        "market_order_no": null,
-        "shipping_status": "F",
-        "transaction_ids": null,
-        "market_seller_id": null,
-        "order_place_name": "PC쇼핑몰",
-        "order_from_mobile": "F",
-        "wished_carrier_id": null,
-        "multiple_addresses": "F",
-        "shipping_type_text": "국내배송",
-        "social_member_code": null,
-        "total_supply_price": "1000",
-        "actual_order_amount": {
-          "tax": null,
-          "shipping_fee": "2500.00",
-          "payment_amount": "3500.00",
-          "total_amount_due": "0.00",
-          "order_price_amount": "1000.00",
-          "app_discount_amount": "0.00",
-          "points_spent_amount": "0.00",
-          "credits_spent_amount": "0.00",
-          "coupon_discount_price": "0.00",
-          "point_incentive_amount": "0.00",
-          "coupon_shipping_fee_amount": "0.00",
-          "membership_discount_amount": "0.00",
-          "set_product_discount_amount": "0.00",
-          "market_other_discount_amount": "0.00",
-          "shipping_fee_discount_amount": "0.00"
-        },
-        "payment_method_name": [
-          "무통장입금"
-        ],
-        "shipping_fee_detail": [
-          {
-            "items": [
-              "20260127-0000014-01"
-            ],
-            "shipping_fee": "2500.00",
-            "supplier_code": "S0000000",
-            "cancel_shipping_fee": "0.00",
-            "return_shipping_fee": "0.00",
-            "shipping_group_code": 5,
-            "refunded_shipping_fee": "0.00",
-            "additional_shipping_fee": "0.00"
-          }
-        ],
-        "wished_carrier_name": null,
-        "initial_order_amount": {
-          "tax": null,
-          "shipping_fee": "2500.00",
-          "payment_amount": "3500.00",
-          "total_amount_due": "0.00",
-          "order_price_amount": "1000.00",
-          "app_discount_amount": "0.00",
-          "points_spent_amount": "0.00",
-          "credits_spent_amount": "0.00",
-          "coupon_discount_price": "0.00",
-          "point_incentive_amount": "0.00",
-          "coupon_shipping_fee_amount": "0.00",
-          "membership_discount_amount": "0.00",
-          "set_product_discount_amount": "0.00",
-          "market_other_discount_amount": "0.00",
-          "shipping_fee_discount_amount": "0.00"
-        },
-        "payment_confirmation": null,
-        "wished_delivery_date": "",
-        "wished_delivery_time": null,
-        "first_payment_methods": [
-          "cash"
-        ],
-        "member_authentication": "T",
-        "payment_gateway_names": null,
-        "return_confirmed_date": null,
-        "show_shipping_address": "T",
-        "additional_handling_fee": "0.00",
-        "additional_shipping_fee": "0.00",
-        "admin_additional_amount": null,
-        "bank_account_owner_name": "성지용",
-        "sub_payment_method_code": null,
-        "sub_payment_method_name": null,
-        "regional_surcharge_detail": [],
-        "additional_order_info_list": [],
-        "naverpay_payment_information": null,
-        "customer_group_no_when_ordering": "1",
-        "international_shipping_insurance": "0.00"
-      }
-    }
-이벤트 로그:
-- efc7ddca-223f-4af2-9e5f-340271735518 QUICK_REPLY_RULE_DECISION (2026-02-20T06:42:00.809+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "quick_reply_count": 2,
-      "quick_reply_config": {
-        "preset": null,
-        "criteria": "decorator:default_single",
-        "max_select": 2,
-        "min_select": 1,
-        "source_module": "src/app/api/runtime/chat/presentation/ui-responseDecorators.ts",
-        "submit_format": "csv",
-        "selection_mode": "multi",
-        "source_function": "deriveQuickReplyConfig"
-      },
-      "quick_reply_source": {
-        "criteria": "payload:quick_replies"
-      }
-    }
-- d27d69b8-2e8c-40a0-b85f-e3aa66a966c7 FINAL_ANSWER_READY (2026-02-20T06:42:00.531+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "model": "deterministic_order_change_success",
-      "answer": "확인한 것: 주소 전라남도 여수시 상암로 8 (둔덕동) (59625)\n확인할 것: 배송지 변경이 완료되었습니다.\n주문번호 20260127-0000014의 배송지가 업데이트되었습니다.\n변경 전: (08793) 서울특별시 관악구 인헌2길 8-3 (봉천동) 11호\n변경 후: (59625) 전라남도 여수시 상암로 8 (둔덕동) 112동 201호\n추가로 변경할 내용이 있으면 알려주세요.\n그 다음으로 확인할 것: 추가 도움 요청 확인",
-      "_decision": {
-        "line": 248,
-        "phase": "after",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 248,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
-            "function_name": "emit:FINAL_ANSWER_READY"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
-        "recorded_at": "2026-02-20T06:42:00.531Z",
-        "function_name": "emit:FINAL_ANSWER_READY"
-      },
-      "change_audit": {
-        "diff": {
-          "applied_changed_from_before": true,
-          "request_changed_from_before": true,
-          "applied_differs_from_request": false
-        },
-        "tool": "cafe24:update_order_shipping_address",
-        "after": {
-          "zipcode": "59625",
-          "address1": "전라남도 여수시 상암로 8 (둔덕동)",
-          "address2": "112동 201호",
-          "rendered": "(59625) 전라남도 여수시 상암로 8 (둔덕동) 112동 201호",
-          "address_full": "전라남도 여수시 상암로 8 (둔덕동) 112동 201호"
-        },
-        "before": {
-          "zipcode": "08793",
-          "address1": "서울특별시 관악구 인헌2길 8-3 (봉천동)",
-          "address2": "11호",
-          "rendered": "(08793) 서울특별시 관악구 인헌2길 8-3 (봉천동) 11호",
-          "address_full": "서울특별시 관악구 인헌2길 8-3 (봉천동) 11호"
-        },
-        "request": {
-          "zipcode": "59625",
-          "address1": "전라남도 여수시 상암로 8 (둔덕동)",
-          "address2": "112동 201호",
-          "rendered": "(59625) 전라남도 여수시 상암로 8 (둔덕동) 112동 201호"
-        }
-      },
-      "debug_answer": "요약: 배송지 변경이 완료되었습니다.\n근거: 주문 정보 변경 정책에 따라 처리했습니다.\n상세: 주문번호 20260127-0000014의 배송지를 변경했습니다.\n- 변경 전: (08793) 서울특별시 관악구 인헌2길 8-3 (봉천동) 11호\n- 요청: (59625) 전라남도 여수시 상암로 8 (둔덕동) 112동 201호\n- 적용: (59625) 전라남도 여수시 상암로 8 (둔덕동) 112동 201호\n다음 액션: 추가 변경 사항이 있으면 알려주세요."
-    }
-- a61b2868-baef-4829-bfb4-b16b0d27ef5d CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T06:42:00.262+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "keys": [
-        "order_id",
-        "resolved_road_address",
-        "resolved_jibun_address",
-        "shipping_before_zipcode",
-        "shipping_before_address1",
-        "shipping_before_address2",
-        "shipping_before_address_full",
-        "shipping_request_zipcode",
-        "shipping_request_address1",
-        "shipping_request_address2",
-        "original_entity_before_last_tool"
-      ],
-      "delta": {
-        "order_id": "20260127-0000014",
-        "resolved_road_address": "전라남도 여수시 상암로 8 (둔덕동)",
-        "resolved_jibun_address": "전라남도 여수시 둔덕동 266 라온유아파트",
-        "shipping_before_zipcode": "08793",
-        "shipping_before_address1": "서울특별시 관악구 인헌2길 8-3 (봉천동)",
-        "shipping_before_address2": "11호",
-        "shipping_request_zipcode": "59625",
-        "shipping_request_address1": "전라남도 여수시 상암로 8 (둔덕동)",
-        "shipping_request_address2": "112동 201호",
-        "shipping_before_address_full": "서울특별시 관악구 인헌2길 8-3 (봉천동) 11호",
-        "original_entity_before_last_tool": "update_order_shipping_address"
-      },
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:42:00.262Z",
-        "function_name": "unknown"
-      },
-      "key_count": 11
-    }
-- fcc2069b-ffc5-4f1a-81ba-4bf06a47804c RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T06:41:59.978+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "23103ab4-09f2-4674-b0d2-39f19b0fbaf1",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
-      "violation_count": 0,
-      "deduped_violation_count": 0
-    }
-- a53a882e-86de-40d4-94b4-3efd8c0fc95b RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T06:41:58.696+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "23103ab4-09f2-4674-b0d2-39f19b0fbaf1",
-      "session_id": "d14027e2-742c-44a0-8d0d-72db1b35273d",
-      "config_source": "principles_default"
-    }
-- 278e8ae1-48c2-4d31-bb94-d1af2fc9a452 END_USER_WRITE_LATENCY (2026-02-20T06:41:57.637+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "duration_ms": 9536
-    }
-- 69987c80-b532-47dd-a99b-dfa1cc3a89e1 END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T06:41:57.374+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "keys": [
-        "order_id",
-        "resolved_road_address",
-        "resolved_jibun_address",
-        "shipping_before_zipcode",
-        "shipping_before_address1",
-        "shipping_before_address2",
-        "shipping_request_zipcode",
-        "shipping_request_address1",
-        "shipping_request_address2",
-        "shipping_before_address_full",
-        "original_entity_before_last_tool"
-      ],
-      "flow_id": "c33491f9-73bc-439f-9dd2-7ec298450d98",
-      "key_count": 11,
-      "keys_truncated": false
-    }
-- 7dd25bb6-f240-473f-9913-e848840b2828 END_USER_CONTEXT_RESOLVED (2026-02-20T06:41:48.639+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "match_hit": false,
-      "end_user_id": "1932cd1e-eeea-4855-ad96-38b22def6179",
-      "identity_count": 3,
-      "identity_types": [
-        "email",
-        "phone",
-        "external"
-      ],
-      "runtime_source": "auth_user",
-      "match_attempted": false,
-      "runtime_end_user": {
-        "id": "fa7baaa2-806f-4457-88f0-7d29f802d126",
-        "source": "auth_user",
-        "email_masked": "su********@gmail.com",
-        "external_user_id": "fa7baaa2-806f-4457-88f0-7d29f802d126"
-      },
-      "resolution_source": "session",
-      "runtime_email_masked": "su********@gmail.com",
-      "runtime_external_user_id": "fa7baaa2-806f-4457-88f0-7d29f802d126"
-    }
-- aa2bb79e-d668-4fe4-8e29-e4ae953209c4 PRE_MCP_DECISION (2026-02-20T06:41:43.731+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "denied": [],
-      "entity": {
-        "order_id": "20260127-0000014",
-        "has_address": true,
-        "phone_masked": "*******7159"
-      },
-      "intent": "order_change",
-      "allowed": [
-        "update_order_shipping_address",
-        "list_orders",
-        "lookup_order",
-        "search_address",
-        "send_otp",
-        "verify_otp"
-      ],
-      "_decision": {
-        "line": 657,
-        "phase": "before",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 657,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
-            "function_name": "emit:PRE_MCP_DECISION"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
-        "recorded_at": "2026-02-20T06:41:43.731Z",
-        "function_name": "emit:PRE_MCP_DECISION"
-      },
-      "query_text": "네",
-      "final_calls": [
-        {
-          "args": {
-            "zipcode": "59625",
-            "address1": "전라남도 여수시 상암로 8 (둔덕동)",
-            "address2": "112동 201호",
-            "order_id": "20260127-0000014",
-            "cellphone": "01093107159",
-            "customer_verification_token": "cbfec468-5a27-4b4e-a49a-c9e2b591ddd7"
-          },
-          "name": "update_order_shipping_address"
-        }
-      ],
-      "forced_calls": [
-        {
-          "args": {
-            "zipcode": "59625",
-            "address1": "전라남도 여수시 상암로 8 (둔덕동)",
-            "address2": "112동 201호",
-            "order_id": "20260127-0000014",
-            "cellphone": "01093107159",
-            "customer_verification_token": "cbfec468-5a27-4b4e-a49a-c9e2b591ddd7"
-          },
-          "name": "update_order_shipping_address"
-        }
-      ],
-      "query_source": "current_message",
-      "missing_slots": [],
-      "resolved_slots": {},
-      "policy_conflicts": [
-        {
-          "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-          "ruleA": "R268_order_change_need_zipcode_tool",
-          "ruleB": "R271_order_change_force_update",
-          "stage": "tool",
-          "intentScope": "order_change"
-        }
-      ],
-      "allowed_tool_names": [
-        "cafe24:update_order_shipping_address"
-      ],
-      "blocked_by_missing_slots": false,
-      "allowed_tool_names_total": 15
-    }
-- 56dd2c9b-85d8-4f16-aaf4-fdec076693a7 INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-20T06:41:43.198+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "intent": "order_change",
-      "blocked": false,
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:41:43.198Z",
-        "function_name": "unknown"
-      },
-      "missing_slots": [],
-      "required_slots": [],
-      "resolved_slots": {}
-    }
-- 2df1e0fa-860d-4959-bdd5-d3e4e151099b INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-20T06:41:42.931+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "intent": "order_change",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T06:41:42.931Z",
-        "function_name": "unknown"
-      },
-      "query_source": "current_message",
-      "expected_input": "confirm"
-    }
-- 891d3c68-e4c9-4fb7-a794-c1d5f7aeefd8 SLOT_EXTRACTED (2026-02-20T06:41:42.655+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
-  payload:
-    {
-      "derived": {
         "phone": null,
-        "address": "여수시 둔덕동 라온유아파트 112동 201호",
-        "zipcode": "59625",
-        "order_id": "20260127-0000014",
+        "intent": "restock_subscribe",
+        "address": null,
+        "zipcode": null,
+        "order_id": null,
         "phone_masked": "-"
       },
-      "resolved": {
-        "phone": "01093107159",
-        "intent": "order_change",
-        "address": "여수시 둔덕동 라온유아파트 112동 201호",
-        "zipcode": "59625",
-        "order_id": "20260127-0000014",
-        "phone_masked": "*******7159"
-      },
       "_decision": {
         "line": 145,
         "phase": "runtime",
@@ -4525,42 +2318,47 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "recorded_at": "2026-02-20T06:41:42.655Z",
+        "recorded_at": "2026-02-20T12:01:03.011Z",
         "function_name": "emit:SLOT_EXTRACTED"
       },
       "query_source": "current_message",
       "missing_slots": [],
-      "expected_input": "confirm",
+      "expected_input": null,
       "resolved_slots": {}
     }
-- c48d9018-313b-4620-a260-1c924c2e983e POLICY_STATIC_CONFLICT (2026-02-20T06:41:42.394+00:00) (turn_id=23103ab4-09f2-4674-b0d2-39f19b0fbaf1)
+- 6c37a620-88f8-4635-ab0b-ea97271adc72 INPUT_CONTRACT_REVIEW_COMPLETED (2026-02-20T12:01:02.742+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
   payload:
     {
-      "intent": "order_change",
+      "source": "pre_turn_guard",
       "_decision": {
-        "line": 42,
         "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 42,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/policyInputRuntime.ts",
-            "function_name": "emit:POLICY_STATIC_CONFLICT"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/policyInputRuntime.ts",
-        "recorded_at": "2026-02-20T06:41:42.394Z",
-        "function_name": "emit:POLICY_STATIC_CONFLICT"
+        "call_chain": [],
+        "module_path": "unknown",
+        "recorded_at": "2026-02-20T12:01:02.742Z",
+        "function_name": "unknown"
       },
-      "conflicts": [
-        {
-          "kind": "FORCE_RESPONSE_VS_FORCE_TOOL",
-          "ruleA": "R268_order_change_need_zipcode_tool",
-          "ruleB": "R271_order_change_force_update",
-          "stage": "tool",
-          "intentScope": "order_change"
-        }
+      "intent_name": "restock_subscribe",
+      "expected_input": null,
+      "expected_inputs": [
+        "confirm"
       ],
-      "resolution": "tool_stage_force_response_precedence"
+      "expected_input_stage": "restock.awaiting_confirm"
+    }
+- 610e4718-7d81-4e7b-b2f5-79f53c4996d5 INPUT_CONTRACT_REVIEW_STARTED (2026-02-20T12:01:02.465+00:00) (turn_id=98547c31-ba4b-43fc-b36d-5834893242cb)
+  payload:
+    {
+      "source": "contract_stage",
+      "_decision": {
+        "phase": "runtime",
+        "call_chain": [],
+        "module_path": "unknown",
+        "recorded_at": "2026-02-20T12:01:02.465Z",
+        "function_name": "unknown"
+      },
+      "intent_name": "restock_subscribe",
+      "expected_input": "confirm",
+      "expected_inputs": [
+        "confirm"
+      ],
+      "expected_input_stage": "restock.awaiting_confirm"
     }

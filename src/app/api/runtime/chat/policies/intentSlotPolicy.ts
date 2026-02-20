@@ -1,4 +1,4 @@
-import {
+﻿import {
   END_CONVERSATION_PATTERN,
   EXECUTION_AFFIRMATIVE_PATTERN,
   INTENT_KEYWORDS,
@@ -15,9 +15,9 @@ export const ACTION_TOKENS = {
 } as const;
 
 const ACTION_TOKEN_MAP: Record<string, { action: string; label: string }> = {
-  [ACTION_TOKENS.restockSubscribe]: { action: "restock_subscribe", label: "재입고 알림 신청" },
-  [ACTION_TOKENS.endConversation]: { action: "end_conversation", label: "대화 종료" },
-  [ACTION_TOKENS.otherInquiry]: { action: "other_inquiry", label: "다른 문의" },
+  [ACTION_TOKENS.restockSubscribe]: { action: "restock_subscribe", label: "?ъ엯怨??뚮┝ ?좎껌" },
+  [ACTION_TOKENS.endConversation]: { action: "end_conversation", label: "???醫낅즺" },
+  [ACTION_TOKENS.otherInquiry]: { action: "other_inquiry", label: "?ㅻⅨ 臾몄쓽" },
 };
 
 export function parseActionToken(text: string) {
@@ -76,36 +76,36 @@ export function detectIntentCandidates(text: string) {
 export function intentLabel(intent: string) {
   switch (intent) {
     case "restock_inquiry":
-      return "재입고 문의";
+      return "?ъ엯怨?臾몄쓽";
     case "restock_subscribe":
-      return "재입고 알림 신청";
+      return "?ъ엯怨??뚮┝ ?좎껌";
     case "faq":
-      return "FAQ 문의";
+      return "FAQ 臾몄쓽";
     case "order_change":
-      return "배송지 변경";
+      return "諛곗넚吏 蹂寃?;
     case "refund_request":
-      return "환불/반품";
+      return "?섎텋/諛섑뭹";
     case "shipping_inquiry":
-      return "배송 문의";
+      return "諛곗넚 臾몄쓽";
     default:
-      return "일반 문의";
+      return "?쇰컲 臾몄쓽";
   }
 }
 
 export function intentSupportScope(intent: string) {
   switch (intent) {
     case "restock_inquiry":
-      return "재입고 일정 확인";
+      return "?ъ엯怨??쇱젙 ?뺤씤";
     case "restock_subscribe":
-      return "재입고 알림 신청";
+      return "?ъ엯怨??뚮┝ ?좎껌";
     case "faq":
-      return "이용/정책/일반 문의";
+      return "?댁슜/?뺤콉/?쇰컲 臾몄쓽";
     case "order_change":
-      return "배송지/수령인 정보 변경";
+      return "배송지/주문정보 변경";
     case "refund_request":
-      return "취소/반품/환불";
+      return "痍⑥냼/諛섑뭹/?섎텋";
     case "shipping_inquiry":
-      return "배송 상태/송장 조회";
+      return "諛곗넚 ?곹깭/?≪옣 議고쉶";
     default:
       return "";
   }
@@ -142,33 +142,33 @@ export function toMoneyText(value: unknown) {
 export function isYesText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
-  return /^(네|예|응|그래|맞아|맞아요|맞습니다|좋아요|가능|ㅇㅇ|ok|okay|yes|y)$/.test(v);
+  return /^(네|예|응|그래|그렇(?:습니다|다)?|맞아|맞아요|맞습니다|좋아요|오케이|ok|okay|yes|y)$/i.test(v);
 }
 
 export function isNoText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
-  return /^(아니요|아니|아니오|싫어요|안돼|불가|no|n)$/.test(v);
+  return /^(아니오|아니요|아니|아뇨|싫어요|안돼|안됩니다|불가|no|n)$/i.test(v);
 }
 
 export function isExecutionAffirmativeText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
-  return /(진행|처리|신청|접수|해주세요|해줘|바로|확인|할게|할래)/i.test(v);
+  return /(진행|처리|신청|접수|해주세요|부탁|바로|확인|진행해|받아|해줘|해 주세요|해줘요)/i.test(v);
 }
 
 export function isEndConversationText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
   if (parseActionToken(v) === "end_conversation") return true;
-  return /^(종료|끝|그만|닫아|대화 종료|상담 종료|close|end)$/i.test(v) || isNoText(v);
+  return /^(종료|그만|닫기|대화 종료|끝|close|end)$/i.test(v) || isNoText(v);
 }
 
 export function isOtherInquiryText(text: string) {
   const v = String(text || "").trim().toLowerCase();
   if (!v) return false;
   if (parseActionToken(v) === "other_inquiry") return true;
-  return /^(다른 문의|다른 질문|다른 내용|새 문의|새 질문|다른 거|other|new)$/i.test(v);
+  return /^(다른 문의|다른 질문|다른 내용|새 문의|새 질문|다른 것|other|new)$/i.test(v);
 }
 
 export function parseSatisfactionScore(text: string) {
@@ -182,14 +182,14 @@ export function parseSatisfactionScore(text: string) {
 
 export function extractRestockChannel(text: string) {
   const v = String(text || "");
-  if (/(카카오|카톡|kakao)/i.test(v)) return "kakao";
-  if (/(이메일|email)/i.test(v)) return "email";
-  if (/(문자|sms)/i.test(v)) return "sms";
+  if (/(移댁뭅??移댄넚|kakao)/i.test(v)) return "kakao";
+  if (/(?대찓??email)/i.test(v)) return "email";
+  if (/(臾몄옄|sms)/i.test(v)) return "sms";
   return null;
 }
 
 export function parseIndexedChoice(text: string) {
-  const m = String(text || "").trim().match(/^(\d{1,2})\s*(?:번|번요)?$/);
+  const m = String(text || "").trim().match(/^(\d{1,2})\s*(?:踰?踰덉슂)?$/);
   if (!m) return null;
   const idx = Number(m[1]);
   return Number.isFinite(idx) && idx > 0 ? idx : null;
@@ -212,13 +212,13 @@ export function availableRestockLeadDays(diffDays: number) {
 export function parseLeadDaysSelection(text: string, available: number[]) {
   const raw = String(text || "").trim();
   if (!raw) return [];
-  if (/(모두|전체|전부|all)/i.test(raw)) return [...available];
+  if (/(紐⑤몢|?꾩껜|?꾨?|all)/i.test(raw)) return [...available];
   const picked = Array.from(new Set((raw.match(/\d{1,2}/g) || []).map((v) => Number(v)).filter(Number.isFinite)));
   return picked.filter((n) => available.includes(n)).sort((a, b) => a - b);
 }
 
 export function extractNumberedOptionIndicesFromText(text: string, max = 99) {
-  const values = Array.from(String(text || "").matchAll(/-\s*(\d{1,2})\s*(?:번)?\s*\|/g))
+  const values = Array.from(String(text || "").matchAll(/-\s*(\d{1,2})\s*(?:踰??\s*\|/g))
     .map((m) => Number(m[1]))
     .filter((n) => Number.isFinite(n) && n >= 1 && n <= max);
   return Array.from(new Set(values));
@@ -245,3 +245,4 @@ export function toLeadDayQuickReplies(days: number[], max = 7) {
   ).slice(0, Math.max(1, max));
   return normalized.map((n) => ({ label: `D-${n}`, value: String(n) }));
 }
+
