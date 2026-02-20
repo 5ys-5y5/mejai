@@ -6,7 +6,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "..");
 
-const banner = "/* AUTO-GENERATED. EDIT WidgetUI.parts.tsx */";
+const banner = [
+  "/* AUTO-GENERATED. EDIT WidgetUI.parts.tsx */",
+  'var process = typeof process !== "undefined" ? process : { env: { NODE_ENV: "production" } };',
+].join("\n");
 
 await build({
   absWorkingDir: projectRoot,
