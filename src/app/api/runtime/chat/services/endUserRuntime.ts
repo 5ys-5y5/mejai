@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { isUuidLike, normalizePhoneDigits } from "../shared/slotUtils";
+import { isUuidLike, maskPhone, normalizePhoneDigits } from "../shared/slotUtils";
 import {
   normalizeConfirmedEntity,
   stringifyConfirmedValue,
@@ -102,6 +102,44 @@ function normalizePhone(value: string | null) {
   if (!value) return null;
   const digits = normalizePhoneDigits(value);
   return digits || null;
+}
+
+function maskEmail(value: string | null) {
+  if (!value) return null;
+  const text = String(value).trim().toLowerCase();
+  if (!text) return null;
+  const parts = text.split("@");
+  const local = parts[0] || "";
+  const domain = parts.slice(1).join("@");
+  if (!domain) {
+    const head = local.slice(0, 1);
+    return head ? `${head}***` : "***";
+  }
+  const prefix = local.slice(0, Math.min(2, local.length));
+  const maskedLocal = `${prefix}${"*".repeat(Math.max(0, local.length - prefix.length))}`;
+  return `${maskedLocal}@${domain}`;
+}
+
+function buildRuntimeSummary(value: Record<string, any> | null) {
+  if (!value) return null;
+  const externalUserId = readString(
+    value.external_user_id ?? value.externalUserId ?? value.user_id ?? value.userId ?? value.id
+  );
+  const memberId = readString(value.member_id ?? value.memberId ?? value.membership_id);
+  const email = normalizeEmail(readString(value.email) || null);
+  const phone = normalizePhone(
+    readString(value.phone ?? value.mobile ?? value.mobile_number ?? value.phone_number) || null
+  );
+  const source = readString(value.source);
+  const summary: Record<string, any> = {};
+  const id = readString(value.id);
+  if (id) summary.id = id;
+  if (externalUserId) summary.external_user_id = externalUserId;
+  if (memberId) summary.member_id = memberId;
+  if (email) summary.email_masked = maskEmail(email);
+  if (phone) summary.phone_masked = maskPhone(phone);
+  if (source) summary.source = source;
+  return Object.keys(summary).length > 0 ? summary : null;
 }
 
 function hashIdentity(value: string) {
@@ -483,7 +521,9 @@ export async function syncEndUserFromTurn(input: {
 
     const metadata = readRecord(sessionRow.metadata) || null;
     const metadataProfile = extractProfileFromMetadata(metadata);
-    const runtimeProfile = extractProfileFromObject((context as Record<string, any>).runtimeEndUser || null);
+    const runtimeEndUser = readRecord((context as Record<string, any>).runtimeEndUser) || null;
+    const runtimeProfile = extractProfileFromObject(runtimeEndUser);
+    const runtimeSummary = buildRuntimeSummary(runtimeEndUser);
     const entity = readRecord((turnPayload.bot_context || {})?.entity) || null;
     const entityProfile = extractProfileFromEntity(entity);
 
@@ -559,8 +599,9 @@ export async function syncEndUserFromTurn(input: {
 
     if (!endUserId) return;
 
+    const identityTypes = identities.map((item) => item.identity_type);
+
     if (matchAttempted) {
-      const identityTypes = identities.map((item) => item.identity_type);
       await insertEndUserAuditEvent({
         context,
         sessionId,
@@ -578,6 +619,43 @@ export async function syncEndUserFromTurn(input: {
         },
       });
     }
+
+    const resolutionSource = existingSessionRow?.end_user_id
+      ? "session"
+      : matchHit
+        ? "identity_match"
+        : isNewUser
+          ? "created"
+          : "unknown";
+    const runtimeSource = readString(runtimeEndUser?.source);
+    const contextPayload: Record<string, any> = {
+      end_user_id: endUserId,
+      resolution_source: resolutionSource,
+      identity_count: identities.length,
+      identity_types: identityTypes,
+      match_attempted: matchAttempted,
+      match_hit: matchHit,
+    };
+    if (runtimeSource) contextPayload.runtime_source = runtimeSource;
+    if (runtimeSummary) {
+      contextPayload.runtime_end_user = runtimeSummary;
+      if (runtimeSummary.external_user_id) contextPayload.runtime_external_user_id = runtimeSummary.external_user_id;
+      if (runtimeSummary.member_id) contextPayload.runtime_member_id = runtimeSummary.member_id;
+      if (runtimeSummary.email_masked) contextPayload.runtime_email_masked = runtimeSummary.email_masked;
+      if (runtimeSummary.phone_masked) contextPayload.runtime_phone_masked = runtimeSummary.phone_masked;
+    }
+    await insertEndUserAuditEvent({
+      context,
+      sessionId,
+      turnId,
+      eventType: "END_USER_CONTEXT_RESOLVED",
+      payload: contextPayload,
+      botContext: {
+        org_id: orgId,
+        end_user_id: endUserId,
+        resolution_source: resolutionSource,
+      },
+    });
 
     if (!isNewUser) {
       const { data: existingUser } = await context.supabase

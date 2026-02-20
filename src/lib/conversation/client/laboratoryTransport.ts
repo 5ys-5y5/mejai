@@ -1,4 +1,6 @@
 import { fetchSessionLogs, runConversation, type RuntimeRunResponse } from "@/lib/conversation/client/runtimeClient";
+import { resolveServiceEndUserPayload } from "@/lib/conversation/client/endUserContext";
+import { resolveRuntimeFlags } from "@/lib/runtimeFlags";
 
 export type LaboratoryRunConfig = {
   route: string;
@@ -39,6 +41,8 @@ export async function sendLaboratoryMessage(
     message_len: message.length,
   });
   try {
+    const endUserPayload = await resolveServiceEndUserPayload();
+    const runtimeFlags = resolveRuntimeFlags();
     const res = await runConversation(
       "/api/laboratory/run",
       {
@@ -53,9 +57,8 @@ export async function sendLaboratoryMessage(
         message,
         session_id: sessionId || undefined,
         agent_id: selectedAgentId || undefined,
-        runtime_flags: {
-          restock_lite: true,
-        },
+        runtime_flags: runtimeFlags,
+        ...(endUserPayload || {}),
       },
       traceId
     );

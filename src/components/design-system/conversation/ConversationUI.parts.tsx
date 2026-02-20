@@ -17,7 +17,7 @@ import { getDebugParts, renderBotContent } from "@/lib/conversation/messageRende
 import type { ConversationPageFeatures, ConversationSetupUi, ExistingSetupFieldKey, ExistingSetupLabelKey } from "@/lib/conversation/pageFeaturePolicy";
 import type { ChatMessage, ModelState, SetupMode } from "@/lib/conversation/client/laboratoryPageState";
 import { appendInlineKbSample, hasConflictingInlineKbSamples } from "@/lib/conversation/inlineKbSamples";
-import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
+import type { DebugTranscriptOptions, LogBundle } from "@/lib/debugTranscript";
 import { applyDebugToggleSelection, DEBUG_COPY_TOGGLE_OPTIONS, resolveDebugToggleValues } from "@/lib/debugTranscriptToggle";
 
 // ------------------------------------------------------------
@@ -454,6 +454,63 @@ export function ConversationThread<T extends BaseMessage>({
       })}
     </>
   );
+}
+
+const END_USER_CONTEXT_EVENT = "END_USER_CONTEXT_RESOLVED";
+
+type EndUserContextSummary = {
+  endUserId: string | null;
+  resolutionSource: string | null;
+  runtimeSource: string | null;
+  identityTypes: string[];
+  identityCount: number | null;
+  runtimeExternalUserId: string | null;
+  runtimeMemberId: string | null;
+  runtimeEmailMasked: string | null;
+  runtimePhoneMasked: string | null;
+};
+
+function readLogRecord(value: unknown): Record<string, any> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, any>;
+}
+
+function readLogText(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  return text ? text : null;
+}
+
+function readLogTextArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+}
+
+function resolveEndUserContextSummary(bundle?: LogBundle | null): EndUserContextSummary | null {
+  if (!bundle) return null;
+  const events = Array.isArray(bundle.event_logs) ? bundle.event_logs : [];
+  if (events.length === 0) return null;
+  const matches = events.filter((event) => String(event?.event_type || "") === END_USER_CONTEXT_EVENT);
+  if (matches.length === 0) return null;
+  const picked = matches.reduce<{ event: (typeof matches)[number]; ts: number } | null>((acc, event) => {
+    const ts = Date.parse(String(event.created_at || "")) || 0;
+    if (!acc || ts >= acc.ts) return { event, ts };
+    return acc;
+  }, null);
+  if (!picked) return null;
+  const payload = readLogRecord(picked.event.payload) || {};
+  const runtime = readLogRecord(payload.runtime_end_user) || {};
+  const identityTypes = readLogTextArray(payload.identity_types);
+  return {
+    endUserId: readLogText(payload.end_user_id),
+    resolutionSource: readLogText(payload.resolution_source),
+    runtimeSource: readLogText(payload.runtime_source || runtime.source),
+    identityTypes,
+    identityCount: typeof payload.identity_count === "number" ? payload.identity_count : null,
+    runtimeExternalUserId: readLogText(payload.runtime_external_user_id || runtime.external_user_id || runtime.id),
+    runtimeMemberId: readLogText(payload.runtime_member_id || runtime.member_id),
+    runtimeEmailMasked: readLogText(payload.runtime_email_masked || runtime.email_masked),
+    runtimePhoneMasked: readLogText(payload.runtime_phone_masked || runtime.phone_masked),
+  };
 }
 
 type SetupFieldsProps = {
@@ -986,7 +1043,7 @@ export function ConversationReplySelectors<TMessage extends ReplyMessageShape>({
 type ConversationExistingMode = "history" | "edit" | "new";
 type ConversationSetupMode = "existing" | "new";
 
-type ConversationExistingSetupProps = {
+export type ConversationExistingSetupProps = {
   showModelSelector: boolean;
   modelSelectorAdminOnly?: boolean;
   showAgentSelector?: boolean;
@@ -1259,7 +1316,7 @@ export function ConversationExistingSetup({
 }
 
 // ---- migrated: ConversationNewModelControls ----
-type ConversationNewModelControlsProps = {
+export type ConversationNewModelControlsProps = {
   showKbSelector: boolean;
   kbLabel?: string;
   kbAdminOnly?: boolean;
@@ -1548,6 +1605,10 @@ function ConversationModelChatColumnCore({
             renderContent={(msg) => {
               const hasDebug = msg.role === "bot" && msg.content.includes("debug_prefix");
               const debugParts = hasDebug ? getDebugParts(msg.content) : null;
+              const endUserSummary =
+                msg.role === "bot" && isAdminUser && adminFeatures.logsToggle && model.showAdminLogs
+                  ? resolveEndUserContextSummary(model.messageLogs?.[msg.id])
+                  : null;
               return (
                 <>
                   {hasDebug && debugParts ? (
@@ -1587,6 +1648,38 @@ function ConversationModelChatColumnCore({
                         {msg.loadingLogs.map((line, idx) => (
                           <div key={`${msg.id}-loading-log-${idx}`}>{line}</div>
                         ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {endUserSummary ? (
+                    <div className="mt-2 rounded-md border border-slate-200 bg-white/70 px-2 py-1.5">
+                      <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                        <span>END USER</span>
+                        <span className="rounded border border-amber-300 bg-amber-50 px-1 py-0 text-[10px] font-semibold text-amber-700">ADMIN</span>
+                      </div>
+                      <div className="space-y-1 text-[11px] text-slate-600">
+                        <div>END_USER_ID: {endUserSummary.endUserId || "-"}</div>
+                        <div>RESOLUTION: {endUserSummary.resolutionSource || "-"}</div>
+                        {endUserSummary.runtimeSource ? (
+                          <div>RUNTIME_SOURCE: {endUserSummary.runtimeSource}</div>
+                        ) : null}
+                        {endUserSummary.identityTypes.length > 0 ? (
+                          <div>IDENTITY_TYPES: {endUserSummary.identityTypes.join(", ")}</div>
+                        ) : endUserSummary.identityCount !== null ? (
+                          <div>IDENTITY_COUNT: {endUserSummary.identityCount}</div>
+                        ) : null}
+                        {endUserSummary.runtimeExternalUserId ? (
+                          <div>EXTERNAL_USER_ID: {endUserSummary.runtimeExternalUserId}</div>
+                        ) : null}
+                        {endUserSummary.runtimeMemberId ? (
+                          <div>MEMBER_ID: {endUserSummary.runtimeMemberId}</div>
+                        ) : null}
+                        {endUserSummary.runtimeEmailMasked ? (
+                          <div>EMAIL: {endUserSummary.runtimeEmailMasked}</div>
+                        ) : null}
+                        {endUserSummary.runtimePhoneMasked ? (
+                          <div>PHONE: {endUserSummary.runtimePhoneMasked}</div>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}
@@ -1706,6 +1799,7 @@ type ConversationModelStateLike = {
   selectedSessionId: string | null;
   historyMessages: ChatMessage[];
   messages: ChatMessage[];
+  messageLogs?: Record<string, LogBundle>;
   conversationMode: ConversationModelMode;
   editSessionId: string | null;
   sessionId: string | null;

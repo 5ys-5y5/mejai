@@ -12,6 +12,8 @@ import {
   saveTranscriptSnapshot,
 } from "@/lib/conversation/client/runtimeClient";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
+import { resolveServiceEndUserPayload } from "@/lib/conversation/client/endUserContext";
+import { resolveRuntimeFlags } from "@/lib/runtimeFlags";
 
 export type ConversationUiMessage = TranscriptMessage & {
   richHtml?: string;
@@ -140,9 +142,21 @@ export function useConversationController(options: ControllerOptions) {
         { id: loadingId, role: "bot", content: "답변 생성 중...", isLoading: true },
       ]);
       try {
+        const baseBody = options.makeRunBody({ text: trimmed, sessionId });
+        const endUserPayload = await resolveServiceEndUserPayload();
+        const shouldApplyEndUser =
+          Boolean(endUserPayload) &&
+          !Object.prototype.hasOwnProperty.call(baseBody, "end_user") &&
+          !Object.prototype.hasOwnProperty.call(baseBody, "visitor");
+        const shouldApplyRuntimeFlags = !Object.prototype.hasOwnProperty.call(baseBody, "runtime_flags");
+        const finalBody = {
+          ...baseBody,
+          ...(shouldApplyEndUser ? endUserPayload : {}),
+          ...(shouldApplyRuntimeFlags ? { runtime_flags: resolveRuntimeFlags() } : {}),
+        };
         const res = await runConversation(
           runEndpoint,
-          options.makeRunBody({ text: trimmed, sessionId }),
+          finalBody,
           makeTraceId(traceIdPrefix)
         );
         const mapped = mapRuntimeResponseToTranscriptFields(res);

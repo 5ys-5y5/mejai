@@ -32,6 +32,8 @@ import {
   ConversationModelSetupColumnLego,
   ConversationReplySelectors,
   ConversationSessionHeader,
+  ConversationExistingSetup,
+  ConversationNewModelControls,
   ConversationSetupBox,
   ConversationSetupFields,
   ConversationThread,
@@ -55,10 +57,6 @@ import {
   type WidgetConversationSession,
   type SelectOption,
 } from "@/components/design-system";
-import {
-  ConversationExistingSetup,
-  ConversationNewModelControls,
-} from "@/components/design-system/conversation/ConversationUI.parts";
 import * as LucideIcons from "lucide-react";
 import {
   Bot,

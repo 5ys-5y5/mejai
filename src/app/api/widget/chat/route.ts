@@ -2,6 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { verifyWidgetToken } from "@/lib/widgetToken";
+import { resolveRuntimeFlags } from "@/lib/runtimeFlags";
+import {
+  applyConversationFeatureVisibility,
+  isProviderEnabled,
+  isToolEnabled,
+  resolveConversationPageFeatures,
+  WIDGET_PAGE_KEY,
+  type ConversationFeaturesProviderShape,
+} from "@/lib/conversation/pageFeaturePolicy";
+import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
 
 function encodeHeaderValue(input: string) {
   const value = String(input || "").trim();
@@ -104,6 +114,9 @@ export async function POST(req: NextRequest) {
   const mcpToolIds = body.mcp_tool_ids;
   const mcpProviderKeys = body.mcp_provider_keys;
   const visitor = body.visitor;
+  const runtimeFlags = resolveRuntimeFlags(
+    body?.runtime_flags && typeof body.runtime_flags === "object" ? body.runtime_flags : undefined
+  );
 
   let supabaseAdmin;
   try {
@@ -123,6 +136,49 @@ export async function POST(req: NextRequest) {
   if (!widget || !widget.is_active) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
+
+  let providerValue: ConversationFeaturesProviderShape | null = null;
+  try {
+    providerValue = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || ""));
+  } catch {
+    providerValue = null;
+  }
+  const featureFlags = applyConversationFeatureVisibility(
+    resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
+    false
+  );
+  const requestToolIds: unknown[] = Array.isArray(mcpToolIds) ? mcpToolIds : [];
+  const requestProviderKeys: unknown[] = Array.isArray(mcpProviderKeys) ? mcpProviderKeys : [];
+  const filteredProviderKeys = featureFlags.mcp.providerSelector
+    ? requestProviderKeys
+        .map((value: unknown) => String(value || "").trim())
+        .filter((key: string) => key.length > 0 && isProviderEnabled(key, featureFlags))
+    : [];
+  const filteredToolIds = featureFlags.mcp.actionSelector
+    ? requestToolIds
+        .map((value: unknown) => String(value || "").trim())
+        .filter((id: string) => id.length > 0 && isToolEnabled(id, featureFlags))
+    : [];
+  const mergedMcpSelectors = Array.from(
+    new Set(
+      [...filteredToolIds, ...filteredProviderKeys]
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+    )
+  );
+  const normalizedLlm = String(llm || "").trim();
+  const effectiveLlm = featureFlags.setup.llmSelector
+    ? normalizedLlm || featureFlags.setup.defaultLlm
+    : featureFlags.setup.defaultLlm;
+  const effectiveKbId = featureFlags.setup.kbSelector ? String(kbId || "").trim() || undefined : undefined;
+  const effectiveInlineKb = featureFlags.setup.inlineUserKbInput
+    ? String(inlineKb || "").trim() || undefined
+    : undefined;
+  const effectiveAdminKbIds = featureFlags.setup.adminKbSelector
+    ? (Array.isArray(adminKbIds) ? adminKbIds : [])
+        .map((value: unknown) => String(value || "").trim())
+        .filter((value: string) => value.length > 0)
+    : [];
 
   const secret = getWidgetRuntimeSecret();
   if (!secret) {
@@ -174,13 +230,15 @@ export async function POST(req: NextRequest) {
         session_id: sessionId,
         agent_id: widget.agent_id || undefined,
         mode: body.mode,
-        llm,
-        kb_id: kbId,
-        inline_kb: inlineKb,
-        admin_kb_ids: adminKbIds,
-        mcp_tool_ids: mcpToolIds,
-        mcp_provider_keys: mcpProviderKeys,
+        llm: effectiveLlm,
+        kb_id: effectiveKbId,
+        inline_kb: effectiveInlineKb,
+        admin_kb_ids: effectiveAdminKbIds,
+        mcp_tool_ids: mergedMcpSelectors,
+        mcp_provider_keys: filteredProviderKeys,
+        page_key: WIDGET_PAGE_KEY,
         visitor,
+        runtime_flags: runtimeFlags,
       }),
     });
   } catch (error) {

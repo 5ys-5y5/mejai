@@ -555,6 +555,9 @@ export async function POST(req: NextRequest) {
         mcp_provider_keys: filteredProviderKeys,
         mode: body.mode,
         runtime_flags: body.runtime_flags || undefined,
+        metadata: body?.metadata && typeof body.metadata === "object" ? body.metadata : undefined,
+        end_user: body?.end_user && typeof body.end_user === "object" ? body.end_user : undefined,
+        visitor: body?.visitor && typeof body.visitor === "object" ? body.visitor : undefined,
       }),
     });
     markStage("lab.proxy.runtime.fetch.done");

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "prebuild": "node scripts/run-if-exists.mjs scripts/validate-imports-no-ts-extension.mjs && node scripts/run-if-exists.mjs scripts/build-widget-launcher.mjs",
+    "prebuild": "node scripts/run-if-exists.mjs scripts/validate-imports-no-ts-extension.mjs && node scripts/run-if-exists.mjs scripts/validate-conversation-centralization.mjs && node scripts/run-if-exists.mjs scripts/build-widget-launcher.mjs",
     "build": "next build",
     "start": "next start",
     "ws": "node ws-server.mjs",
