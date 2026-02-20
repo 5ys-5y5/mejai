@@ -40,6 +40,7 @@ type PreTurnGuardResult = {
   derivedAddress: string | null;
   derivedZipcode: string | null;
   expectedInput: string | null;
+  clearExpectedInputs?: boolean;
 };
 
 export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<PreTurnGuardResult> {
@@ -139,6 +140,15 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
         (prevEntity as Record<string, any>)[slotKey] = pendingValue;
       }
       nextExpectedInput = null;
+      return {
+        response: null,
+        derivedPhone: nextDerivedPhone,
+        derivedOrderId: nextDerivedOrderId,
+        derivedAddress: nextDerivedAddress,
+        derivedZipcode: nextDerivedZipcode,
+        expectedInput: nextExpectedInput,
+        clearExpectedInputs: true,
+      };
     } else if (isNoText(message)) {
       const nextSlot = getPreferredPromptSlot(slotKey, resolvedIntent);
       const label = getReuseSlotLabel(nextSlot, resolvedIntent);
@@ -164,6 +174,7 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
         derivedAddress: nextDerivedAddress,
         derivedZipcode: nextDerivedZipcode,
         expectedInput: nextExpectedInput || nextSlot,
+        clearExpectedInputs: false,
       };
     } else {
       const label = getReuseSlotLabel(slotKey, resolvedIntent);
@@ -209,6 +220,7 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
         derivedAddress: nextDerivedAddress,
         derivedZipcode: nextDerivedZipcode,
         expectedInput: nextExpectedInput,
+        clearExpectedInputs: false,
       };
     }
   }
@@ -219,5 +231,6 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
     derivedAddress: nextDerivedAddress,
     derivedZipcode: nextDerivedZipcode,
     expectedInput: nextExpectedInput,
+    clearExpectedInputs: false,
   };
 }

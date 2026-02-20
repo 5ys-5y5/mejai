@@ -29,6 +29,7 @@ export type PreTurnGuardStepOutput = StepOutput<{
   derivedOrderId: string | null;
   derivedAddress: string | null;
   derivedZipcode: string | null;
+  clearExpectedInputs?: boolean;
 }>;
 
 export type SlotDerivationStepOutput = StepOutput<{

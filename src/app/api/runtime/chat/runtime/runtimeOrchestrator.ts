@@ -1082,6 +1082,7 @@ export async function POST(req: NextRequest) {
       derivedAddress: preTurnGuards.derivedAddress,
       derivedZipcode: preTurnGuards.derivedZipcode,
       expectedInput: preTurnGuards.expectedInput,
+      clearExpectedInputs: preTurnGuards.clearExpectedInputs,
     };
     derivedPhone = preTurnGuardOutput.derivedPhone;
     derivedOrderId = preTurnGuardOutput.derivedOrderId;
@@ -1092,17 +1093,22 @@ export async function POST(req: NextRequest) {
     if (preTurnGuardOutput.expectedInput !== prevExpectedInput) {
       expectedInputSource = "pre_turn_guard";
     }
+    if (preTurnGuardOutput.clearExpectedInputs) {
+      expectedInputs = [];
+      expectedInputStage = null;
+      expectedInputSource = "pre_turn_guard";
+    }
     pipelineState.derivedPhone = derivedPhone;
     pipelineState.derivedOrderId = derivedOrderId;
     pipelineState.derivedAddress = derivedAddress;
     pipelineState.derivedZipcode = derivedZipcode;
-    pipelineState.expectedInput = expectedInput;
-    pipelineState.expectedInputs = expectedInputs;
-    pipelineState.expectedInputStage = expectedInputStage;
     if (!expectedInputStage || expectedInputStage === "legacy.expected_input") {
       expectedInputs = expectedInput ? [expectedInput] : expectedInputs;
       expectedInputStage = expectedInput ? "legacy.expected_input" : expectedInputStage;
     }
+    pipelineState.expectedInput = expectedInput;
+    pipelineState.expectedInputs = expectedInputs;
+    pipelineState.expectedInputStage = expectedInputStage;
     const inputContractAfter = {
       expectedInputs,
       expectedInput,

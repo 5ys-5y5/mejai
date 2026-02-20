@@ -285,6 +285,42 @@ function buildIdentityCandidates(profile: EndUserProfile): IdentityCandidate[] {
   return identities;
 }
 
+const IDENTITY_MATCH_PRIORITY: Record<string, number> = {
+  phone: 3,
+  email: 2,
+  member_id: 1,
+  external: 0,
+};
+
+type IdentityMatch = {
+  end_user_id: string;
+  identity_type: string;
+  is_primary: boolean;
+};
+
+function pickBestIdentityMatch(rows: IdentityMatch[]) {
+  const normalized = rows
+    .map((row) => ({
+      end_user_id: String(row.end_user_id || "").trim(),
+      identity_type: String(row.identity_type || "").trim(),
+      is_primary: Boolean(row.is_primary),
+    }))
+    .filter((row) => row.end_user_id && row.identity_type);
+  if (normalized.length === 0) return null;
+  normalized.sort((a, b) => {
+    const aPriority = IDENTITY_MATCH_PRIORITY[a.identity_type] ?? 0;
+    const bPriority = IDENTITY_MATCH_PRIORITY[b.identity_type] ?? 0;
+    if (bPriority !== aPriority) return bPriority - aPriority;
+    return Number(b.is_primary) - Number(a.is_primary);
+  });
+  return normalized[0] || null;
+}
+
+function isStrongIdentityType(value: string | null | undefined) {
+  const type = String(value || "").trim();
+  return type === "phone" || type === "email";
+}
+
 function mergeMemoryEntity(base: EndUserMemoryEntity, override: EndUserMemoryEntity) {
   const next: EndUserMemoryEntity = { ...base };
   Object.entries(override || {}).forEach(([key, value]) => {
@@ -501,6 +537,79 @@ async function upsertMemory(input: {
   }
 }
 
+async function reassignSessionEndUser(input: {
+  context: EndUserSyncContext;
+  orgId: string;
+  sessionId: string;
+  fromEndUserId: string;
+  toEndUserId: string;
+}) {
+  const { context, orgId, sessionId, fromEndUserId, toEndUserId } = input;
+  if (!fromEndUserId || !toEndUserId || fromEndUserId === toEndUserId) return;
+  await Promise.allSettled([
+    context.supabase
+      .from("A_end_user_sessions")
+      .update({ end_user_id: toEndUserId })
+      .eq("org_id", orgId)
+      .eq("session_id", sessionId),
+    context.supabase
+      .from("A_end_user_messages")
+      .update({ end_user_id: toEndUserId })
+      .eq("org_id", orgId)
+      .eq("session_id", sessionId)
+      .eq("end_user_id", fromEndUserId),
+    context.supabase
+      .from("A_end_user_response_materials")
+      .update({ end_user_id: toEndUserId })
+      .eq("org_id", orgId)
+      .eq("session_id", sessionId)
+      .eq("end_user_id", fromEndUserId),
+    context.supabase
+      .from("A_end_user_session_resources")
+      .update({ end_user_id: toEndUserId })
+      .eq("org_id", orgId)
+      .eq("session_id", sessionId)
+      .eq("end_user_id", fromEndUserId),
+  ]);
+}
+
+async function migrateSessionMemories(input: {
+  context: EndUserSyncContext;
+  orgId: string;
+  sessionId: string;
+  fromEndUserId: string;
+  toEndUserId: string;
+}) {
+  const { context, orgId, sessionId, fromEndUserId, toEndUserId } = input;
+  if (!fromEndUserId || !toEndUserId || fromEndUserId === toEndUserId) return;
+  const { data: memoryRows } = await context.supabase
+    .from("A_end_user_memories")
+    .select("memory_type, memory_key, content, value_json, source_session_id, source_turn_id")
+    .eq("org_id", orgId)
+    .eq("end_user_id", fromEndUserId)
+    .eq("source_session_id", sessionId)
+    .eq("is_active", true)
+    .limit(200);
+  for (const row of memoryRows || []) {
+    const memoryType = readString((row as Record<string, any>).memory_type);
+    const memoryKey = readString((row as Record<string, any>).memory_key);
+    if (!memoryType || !memoryKey) continue;
+    const content = readString((row as Record<string, any>).content) || "";
+    const valueJson = readRecord((row as Record<string, any>).value_json) || {};
+    await upsertMemory({
+      context,
+      orgId,
+      endUserId: toEndUserId,
+      memoryType,
+      memoryKey,
+      content,
+      valueJson,
+      sourceSessionId: String((row as Record<string, any>).source_session_id || sessionId),
+      sourceTurnId: String((row as Record<string, any>).source_turn_id || ""),
+    });
+  }
+}
+
 export async function syncEndUserFromTurn(input: {
   context: EndUserSyncContext;
   sessionId: string;
@@ -528,7 +637,19 @@ export async function syncEndUserFromTurn(input: {
     const entityProfile = extractProfileFromEntity(entity);
 
     const mergedProfile = mergeProfiles(mergeProfiles(entityProfile, metadataProfile), runtimeProfile);
-    const identities = buildIdentityCandidates(mergedProfile);
+    const confirmedEntity = normalizeConfirmedEntity((turnPayload.bot_context || {})?.confirmed_entity);
+    const confirmedProfile: EndUserProfile = {};
+    if (typeof confirmedEntity.phone === "string" && confirmedEntity.phone.trim()) {
+      confirmedProfile.phone = String(confirmedEntity.phone).trim();
+    }
+    if (typeof confirmedEntity.email === "string" && confirmedEntity.email.trim()) {
+      confirmedProfile.email = String(confirmedEntity.email).trim();
+    }
+    if (typeof confirmedEntity.member_id === "string" && confirmedEntity.member_id.trim()) {
+      confirmedProfile.member_id = String(confirmedEntity.member_id).trim();
+    }
+    const mergedProfileFinal = mergeProfiles(mergedProfile, confirmedProfile);
+    const identities = buildIdentityCandidates(mergedProfileFinal);
 
     const { data: existingSessionRow } = await context.supabase
       .from("A_end_user_sessions")
@@ -540,7 +661,8 @@ export async function syncEndUserFromTurn(input: {
     let matchAttempted = false;
     let matchHit = false;
 
-    if (!endUserId && identities.length > 0) {
+    let matchedIdentity: IdentityMatch | null = null;
+    if (identities.length > 0) {
       matchAttempted = true;
       const hashes = identities.map((item) => item.identity_hash);
       const { data: identityRows } = await context.supabase
@@ -551,14 +673,43 @@ export async function syncEndUserFromTurn(input: {
       const matched = (identityRows || [])
         .map((row) => ({
           end_user_id: String(row.end_user_id || "").trim(),
+          identity_type: String((row as Record<string, any>).identity_type || "").trim(),
           is_primary: Boolean(row.is_primary),
         }))
-        .filter((row) => row.end_user_id);
-      if (matched.length > 0) {
-        matched.sort((a, b) => Number(b.is_primary) - Number(a.is_primary));
-        endUserId = matched[0].end_user_id;
+        .filter((row) => row.end_user_id && row.identity_type);
+      matchedIdentity = pickBestIdentityMatch(matched as IdentityMatch[]);
+      if (matchedIdentity) {
         matchHit = true;
+        if (!endUserId) {
+          endUserId = matchedIdentity.end_user_id;
+        }
       }
+    }
+
+    let reassignedFrom: string | null = null;
+    if (
+      endUserId &&
+      matchedIdentity &&
+      matchedIdentity.end_user_id &&
+      matchedIdentity.end_user_id !== endUserId &&
+      isStrongIdentityType(matchedIdentity.identity_type)
+    ) {
+      reassignedFrom = endUserId;
+      endUserId = matchedIdentity.end_user_id;
+      await reassignSessionEndUser({
+        context,
+        orgId,
+        sessionId,
+        fromEndUserId: reassignedFrom,
+        toEndUserId: endUserId,
+      });
+      await migrateSessionMemories({
+        context,
+        orgId,
+        sessionId,
+        fromEndUserId: reassignedFrom,
+        toEndUserId: endUserId,
+      });
     }
 
     const now = nowIso();
@@ -568,18 +719,18 @@ export async function syncEndUserFromTurn(input: {
     if (!endUserId) {
       const insertPayload = {
         org_id: orgId,
-        display_name: mergedProfile.display_name || null,
-        email: normalizeEmail(mergedProfile.email || null),
-        phone: normalizePhone(mergedProfile.phone || null),
-        member_id: mergedProfile.member_id || null,
-        external_user_id: mergedProfile.external_user_id || null,
-        tags: mergedProfile.tags || [],
-        attributes: mergedProfile.attributes || {},
-        locale: mergedProfile.locale || null,
-        time_zone: mergedProfile.time_zone || null,
-        city: mergedProfile.city || null,
-        province: mergedProfile.province || null,
-        country: mergedProfile.country || null,
+        display_name: mergedProfileFinal.display_name || null,
+        email: normalizeEmail(mergedProfileFinal.email || null),
+        phone: normalizePhone(mergedProfileFinal.phone || null),
+        member_id: mergedProfileFinal.member_id || null,
+        external_user_id: mergedProfileFinal.external_user_id || null,
+        tags: mergedProfileFinal.tags || [],
+        attributes: mergedProfileFinal.attributes || {},
+        locale: mergedProfileFinal.locale || null,
+        time_zone: mergedProfileFinal.time_zone || null,
+        city: mergedProfileFinal.city || null,
+        province: mergedProfileFinal.province || null,
+        country: mergedProfileFinal.country || null,
         first_seen_at: now,
         last_seen_at: now,
         last_session_id: sessionId,
@@ -620,13 +771,15 @@ export async function syncEndUserFromTurn(input: {
       });
     }
 
-    const resolutionSource = existingSessionRow?.end_user_id
-      ? "session"
-      : matchHit
-        ? "identity_match"
-        : isNewUser
-          ? "created"
-          : "unknown";
+    const resolutionSource = reassignedFrom
+      ? "identity_match_override"
+      : existingSessionRow?.end_user_id
+        ? "session"
+        : matchHit
+          ? "identity_match"
+          : isNewUser
+            ? "created"
+            : "unknown";
     const runtimeSource = readString(runtimeEndUser?.source);
     const contextPayload: Record<string, any> = {
       end_user_id: endUserId,
@@ -636,6 +789,7 @@ export async function syncEndUserFromTurn(input: {
       match_attempted: matchAttempted,
       match_hit: matchHit,
     };
+    if (reassignedFrom) contextPayload.reassigned_from_end_user_id = reassignedFrom;
     if (runtimeSource) contextPayload.runtime_source = runtimeSource;
     if (runtimeSummary) {
       contextPayload.runtime_end_user = runtimeSummary;
@@ -671,18 +825,18 @@ export async function syncEndUserFromTurn(input: {
         has_chat: true,
         updated_at: now,
       };
-      if (mergedProfile.display_name) updatePayload.display_name = mergedProfile.display_name;
-      if (mergedProfile.email) updatePayload.email = normalizeEmail(mergedProfile.email);
-      if (mergedProfile.phone) updatePayload.phone = normalizePhone(mergedProfile.phone);
-      if (mergedProfile.member_id) updatePayload.member_id = mergedProfile.member_id;
-      if (mergedProfile.external_user_id) updatePayload.external_user_id = mergedProfile.external_user_id;
-      if (mergedProfile.locale) updatePayload.locale = mergedProfile.locale;
-      if (mergedProfile.time_zone) updatePayload.time_zone = mergedProfile.time_zone;
-      if (mergedProfile.city) updatePayload.city = mergedProfile.city;
-      if (mergedProfile.province) updatePayload.province = mergedProfile.province;
-      if (mergedProfile.country) updatePayload.country = mergedProfile.country;
-      if (mergedProfile.tags) updatePayload.tags = mergedProfile.tags;
-      if (mergedProfile.attributes) updatePayload.attributes = mergedProfile.attributes;
+      if (mergedProfileFinal.display_name) updatePayload.display_name = mergedProfileFinal.display_name;
+      if (mergedProfileFinal.email) updatePayload.email = normalizeEmail(mergedProfileFinal.email);
+      if (mergedProfileFinal.phone) updatePayload.phone = normalizePhone(mergedProfileFinal.phone);
+      if (mergedProfileFinal.member_id) updatePayload.member_id = mergedProfileFinal.member_id;
+      if (mergedProfileFinal.external_user_id) updatePayload.external_user_id = mergedProfileFinal.external_user_id;
+      if (mergedProfileFinal.locale) updatePayload.locale = mergedProfileFinal.locale;
+      if (mergedProfileFinal.time_zone) updatePayload.time_zone = mergedProfileFinal.time_zone;
+      if (mergedProfileFinal.city) updatePayload.city = mergedProfileFinal.city;
+      if (mergedProfileFinal.province) updatePayload.province = mergedProfileFinal.province;
+      if (mergedProfileFinal.country) updatePayload.country = mergedProfileFinal.country;
+      if (mergedProfileFinal.tags) updatePayload.tags = mergedProfileFinal.tags;
+      if (mergedProfileFinal.attributes) updatePayload.attributes = mergedProfileFinal.attributes;
 
       if (!existingSessionRow?.end_user_id) {
         updatePayload.sessions_count = existingSessionsCount + 1;
