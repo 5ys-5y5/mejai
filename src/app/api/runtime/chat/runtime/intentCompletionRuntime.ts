@@ -1,4 +1,5 @@
 import { getIntentContract, getMutationIntentContract } from "./intentContractRuntime";
+import { resolveInputContractSnapshot } from "./inputContractRuntime";
 import { ACTION_TOKENS } from "../policies/intentSlotPolicy";
 
 type QuickReply = { label: string; value: string };
@@ -20,6 +21,35 @@ function isAuthGateTurn(botContext?: Record<string, any> | null) {
   if (ctx.otp_stage) return true;
   const expected = typeof ctx.expected_input === "string" ? ctx.expected_input : "";
   return expected === "otp_code";
+}
+
+function hasPendingUserRequest(botContext?: Record<string, any> | null) {
+  const ctx = botContext && typeof botContext === "object" ? botContext : null;
+  if (!ctx) return false;
+
+  if (
+    ctx.reuse_pending ||
+    ctx.phone_reuse_pending ||
+    ctx.order_id_reuse_pending ||
+    ctx.address_reuse_pending ||
+    ctx.zipcode_reuse_pending
+  ) {
+    return true;
+  }
+
+  const snapshot = resolveInputContractSnapshot({
+    botContext: ctx,
+    derivedExpectedInput: null,
+    contractConfig: null,
+  });
+  const stage = String(snapshot.stage || "").trim();
+  const isPostActionStage = stage.startsWith("post_action.");
+  const explicitExpectedInputs = Array.isArray(ctx.expected_inputs)
+    ? ctx.expected_inputs.map((item: unknown) => String(item || "").trim()).filter(Boolean)
+    : [];
+  if (!isPostActionStage && explicitExpectedInputs.length > 0) return true;
+  if (!isPostActionStage && snapshot.expectedInputs.length > 0) return true;
+  return false;
 }
 
 function isCompletionCue(intent: string, message: string) {
@@ -51,11 +81,16 @@ export function resolveCompletionState(input: {
 }) {
   const intent = String(input.intent || "").trim();
   const botContext = input.botContext && typeof input.botContext === "object" ? input.botContext : {};
+  if (botContext.conversation_closed) {
+    return { completed: true, nextText: "\uCD94\uAC00 \uB3C4\uC6C0 \uC694\uCCAD \uD655\uC778" };
+  }
   if (isAuthGateTurn(botContext)) {
     return { completed: false, nextText: null };
   }
+  if (hasPendingUserRequest(botContext)) {
+    return { completed: false, nextText: null };
+  }
   const completed =
-    Boolean(botContext.conversation_closed) ||
     isCompletionCue(intent, input.message);
   return {
     completed,
@@ -72,6 +107,8 @@ export function shouldAppendPostActionChoices(input: {
   if (!intent || intent === "general") return false;
   const botContext = input.botContext && typeof input.botContext === "object" ? input.botContext : {};
   if (isAuthGateTurn(botContext)) return false;
+  if (hasPendingUserRequest(botContext)) return false;
+  if (botContext.post_action_stage) return false;
   const isCompletion = isCompletionCue(intent, input.message);
   if (!isCompletion) return false;
   if (botContext.conversation_closed) return false;
