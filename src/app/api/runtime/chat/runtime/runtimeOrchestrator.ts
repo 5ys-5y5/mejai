@@ -1082,7 +1082,7 @@ export async function POST(req: NextRequest) {
       derivedAddress: preTurnGuards.derivedAddress,
       derivedZipcode: preTurnGuards.derivedZipcode,
       expectedInput: preTurnGuards.expectedInput,
-      clearExpectedInputs: preTurnGuards.clearExpectedInputs,
+      reuseConfirmedSlot: preTurnGuards.reuseConfirmedSlot,
     };
     derivedPhone = preTurnGuardOutput.derivedPhone;
     derivedOrderId = preTurnGuardOutput.derivedOrderId;
@@ -1093,10 +1093,17 @@ export async function POST(req: NextRequest) {
     if (preTurnGuardOutput.expectedInput !== prevExpectedInput) {
       expectedInputSource = "pre_turn_guard";
     }
-    if (preTurnGuardOutput.clearExpectedInputs) {
-      expectedInputs = [];
-      expectedInputStage = null;
-      expectedInputSource = "pre_turn_guard";
+    if (preTurnGuardOutput.reuseConfirmedSlot) {
+      const slotKey = String(preTurnGuardOutput.reuseConfirmedSlot || "").trim();
+      if (slotKey) {
+        if (expectedInput === slotKey) {
+          expectedInput = null;
+          expectedInputSource = "pre_turn_guard";
+        }
+        if (expectedInputs.length > 0) {
+          expectedInputs = expectedInputs.filter((item) => String(item || "").trim() !== slotKey);
+        }
+      }
     }
     pipelineState.derivedPhone = derivedPhone;
     pipelineState.derivedOrderId = derivedOrderId;

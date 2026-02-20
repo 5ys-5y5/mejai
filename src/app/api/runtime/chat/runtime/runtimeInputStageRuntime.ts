@@ -238,6 +238,11 @@ export async function runInputStageRuntime(input: {
         { entity: policyContext.entity }
       )
     );
+    const preservedContext =
+      prevBotContext && typeof prevBotContext === "object" ? ({ ...prevBotContext } as Record<string, any>) : {};
+    delete preservedContext.reuse_pending;
+    delete preservedContext.pending_reuse_slot;
+    delete preservedContext.pending_reuse_value;
     const quickReplyConfig = resolveSingleChoiceQuickReplyConfig({
       optionsCount: YES_NO_QUICK_REPLIES.length,
       criteria: "policy:known_info_reuse_prompt",
@@ -252,13 +257,13 @@ export async function runInputStageRuntime(input: {
       answer_text: reply,
       final_answer: reply,
       bot_context: {
+        ...preservedContext,
         intent_name: resolvedIntent,
         entity: policyContext.entity,
         selected_order_id: resolvedOrderId,
         reuse_pending: true,
         pending_reuse_slot: knownReuseCandidate.slotKey,
         pending_reuse_value: knownReuseCandidate.value,
-        expected_input: null,
         mcp_actions: mcpActions,
       },
     });

@@ -350,6 +350,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           pending_product_id: pendingProductId || null,
           pending_product_name: pendingProductName || null,
           pending_channel: pendingChannel || null,
+          expected_input: "confirm",
         },
       });
       return {
@@ -435,6 +436,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         pending_product_name: pendingProductName || null,
         pending_channel: pendingChannel,
         pending_lead_days: pendingLeadDays,
+        expected_input: "confirm",
       },
     });
     return {
@@ -552,6 +554,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
         pending_product_name: pendingProductName || null,
         pending_channel: pendingChannel,
         pending_lead_days: selectedLeadDays,
+        expected_input: "confirm",
       },
     });
     return {
@@ -670,6 +673,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           pending_product_name: pendingProductName || null,
           pending_channel: pendingChannel || null,
           pending_lead_days: pendingLeadDays,
+          expected_input: "confirm",
         },
       });
       return {
