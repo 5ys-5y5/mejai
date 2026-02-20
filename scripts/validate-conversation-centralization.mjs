@@ -161,15 +161,21 @@ function assertDesignSystemRegistryExports() {
 
 try {
   assertMatch(
-    "src/app/page.tsx",
-    /from\s+"@\/components\/design-system\/conversation\/ConversationUI"[\s\S]*HeroConversationSurface/m,
-    "home page uses ConversationUI surface"
+    "src/components/landing/conversation-hero.tsx",
+    /from\s+"@\/components\/design-system"/,
+    "landing hero uses design-system exports"
   );
 
   assertMatch(
     "src/app/app/laboratory/page.tsx",
-    /from\s+"@\/components\/design-system\/conversation\/ConversationUI"[\s\S]*ConversationSurface/m,
-    "laboratory page uses ConversationUI surface"
+    /from\s+"@\/components\/design-system"/,
+    "laboratory page uses design-system exports"
+  );
+
+  assertNotMatch(
+    "src/app/app/laboratory/page.tsx",
+    /from\s+"@\/components\/design-system\/conversation\/ConversationUI\.parts"/,
+    "laboratory page avoids direct ConversationUI.parts import"
   );
 
   assertMatch(
@@ -209,9 +215,21 @@ try {
   );
 
   assertMatch(
+    "src/app/api/widget/chat/route.ts",
+    /resolveConversationPageFeatures\(WIDGET_PAGE_KEY/,
+    "widget chat applies page_key policy"
+  );
+
+  assertMatch(
     "src/app/api/widget/stream/route.ts",
     /page_key:\s*WIDGET_PAGE_KEY/,
     "widget stream runtime request includes page_key"
+  );
+
+  assertMatch(
+    "src/app/api/widget/stream/route.ts",
+    /resolveConversationPageFeatures\(WIDGET_PAGE_KEY/,
+    "widget stream applies page_key policy"
   );
 
   assertNotMatch(
