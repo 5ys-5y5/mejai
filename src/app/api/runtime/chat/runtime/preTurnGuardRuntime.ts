@@ -132,10 +132,23 @@ export async function handlePreTurnGuards(params: PreTurnGuardParams): Promise<P
       pending_zipcode: null,
     };
     if (isYesText(message) && pendingValue) {
-      if (slotKey === "phone") nextDerivedPhone = normalizePhoneDigits(pendingValue);
-      if (slotKey === "order_id") nextDerivedOrderId = pendingValue;
-      if (slotKey === "address") nextDerivedAddress = pendingValue;
-      if (slotKey === "zipcode") nextDerivedZipcode = pendingValue;
+      if (slotKey === "phone") {
+        const normalized = normalizePhoneDigits(pendingValue);
+        nextDerivedPhone = normalized;
+        (prevEntity as Record<string, any>).phone = normalized;
+      }
+      if (slotKey === "order_id") {
+        nextDerivedOrderId = pendingValue;
+        (prevEntity as Record<string, any>).order_id = pendingValue;
+      }
+      if (slotKey === "address") {
+        nextDerivedAddress = pendingValue;
+        (prevEntity as Record<string, any>).address = pendingValue;
+      }
+      if (slotKey === "zipcode") {
+        nextDerivedZipcode = pendingValue;
+        (prevEntity as Record<string, any>).zipcode = pendingValue;
+      }
       if (!["phone", "order_id", "address", "zipcode"].includes(slotKey)) {
         (prevEntity as Record<string, any>)[slotKey] = pendingValue;
       }

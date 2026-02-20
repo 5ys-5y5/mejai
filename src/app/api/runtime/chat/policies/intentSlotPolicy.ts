@@ -15,9 +15,9 @@ export const ACTION_TOKENS = {
 } as const;
 
 const ACTION_TOKEN_MAP: Record<string, { action: string; label: string }> = {
-  [ACTION_TOKENS.restockSubscribe]: { action: "restock_subscribe", label: "?ъ엯怨??뚮┝ ?좎껌" },
-  [ACTION_TOKENS.endConversation]: { action: "end_conversation", label: "???醫낅즺" },
-  [ACTION_TOKENS.otherInquiry]: { action: "other_inquiry", label: "?ㅻⅨ 臾몄쓽" },
+  [ACTION_TOKENS.restockSubscribe]: { action: "restock_subscribe", label: "재입고 알림 신청" },
+  [ACTION_TOKENS.endConversation]: { action: "end_conversation", label: "대화 종료" },
+  [ACTION_TOKENS.otherInquiry]: { action: "other_inquiry", label: "다른 문의" },
 };
 
 export function parseActionToken(text: string) {
@@ -76,36 +76,36 @@ export function detectIntentCandidates(text: string) {
 export function intentLabel(intent: string) {
   switch (intent) {
     case "restock_inquiry":
-      return "?ъ엯怨?臾몄쓽";
+      return "재입고 문의";
     case "restock_subscribe":
-      return "?ъ엯怨??뚮┝ ?좎껌";
+      return "재입고 알림 신청";
     case "faq":
-      return "FAQ 臾몄쓽";
+      return "FAQ 문의";
     case "order_change":
-      return "諛곗넚吏 蹂寃?;
+      return "배송지 변경";
     case "refund_request":
-      return "?섎텋/諛섑뭹";
+      return "환불/반품";
     case "shipping_inquiry":
-      return "諛곗넚 臾몄쓽";
+      return "배송 문의";
     default:
-      return "?쇰컲 臾몄쓽";
+      return "일반 문의";
   }
 }
 
 export function intentSupportScope(intent: string) {
   switch (intent) {
     case "restock_inquiry":
-      return "?ъ엯怨??쇱젙 ?뺤씤";
+      return "재입고 일정 확인";
     case "restock_subscribe":
-      return "?ъ엯怨??뚮┝ ?좎껌";
+      return "재입고 알림 신청";
     case "faq":
-      return "?댁슜/?뺤콉/?쇰컲 臾몄쓽";
+      return "내용/정책/일반 문의";
     case "order_change":
       return "배송지/주문정보 변경";
     case "refund_request":
-      return "痍⑥냼/諛섑뭹/?섎텋";
+      return "취소/반품/환불";
     case "shipping_inquiry":
-      return "諛곗넚 ?곹깭/?≪옣 議고쉶";
+      return "배송 상태/송장 조회";
     default:
       return "";
   }
@@ -182,14 +182,14 @@ export function parseSatisfactionScore(text: string) {
 
 export function extractRestockChannel(text: string) {
   const v = String(text || "");
-  if (/(移댁뭅??移댄넚|kakao)/i.test(v)) return "kakao";
-  if (/(?대찓??email)/i.test(v)) return "email";
-  if (/(臾몄옄|sms)/i.test(v)) return "sms";
+  if (/(카카오톡|카카오|kakao)/i.test(v)) return "kakao";
+  if (/(이메일|email)/i.test(v)) return "email";
+  if (/(문자|sms)/i.test(v)) return "sms";
   return null;
 }
 
 export function parseIndexedChoice(text: string) {
-  const m = String(text || "").trim().match(/^(\d{1,2})\s*(?:踰?踰덉슂)?$/);
+  const m = String(text || "").trim().match(/^(\d{1,2})\s*(?:번|번이에요)?$/);
   if (!m) return null;
   const idx = Number(m[1]);
   return Number.isFinite(idx) && idx > 0 ? idx : null;
@@ -212,13 +212,13 @@ export function availableRestockLeadDays(diffDays: number) {
 export function parseLeadDaysSelection(text: string, available: number[]) {
   const raw = String(text || "").trim();
   if (!raw) return [];
-  if (/(紐⑤몢|?꾩껜|?꾨?|all)/i.test(raw)) return [...available];
+  if (/(모두|전체|전부|all)/i.test(raw)) return [...available];
   const picked = Array.from(new Set((raw.match(/\d{1,2}/g) || []).map((v) => Number(v)).filter(Number.isFinite)));
   return picked.filter((n) => available.includes(n)).sort((a, b) => a - b);
 }
 
 export function extractNumberedOptionIndicesFromText(text: string, max = 99) {
-  const values = Array.from(String(text || "").matchAll(/-\s*(\d{1,2})\s*(?:踰??\s*\|/g))
+  const values = Array.from(String(text || "").matchAll(/-\s*(\d{1,2})\s*(?:번)?\s*\|/g))
     .map((m) => Number(m[1]))
     .filter((n) => Number.isFinite(n) && n >= 1 && n <= max);
   return Array.from(new Set(values));
