@@ -94,6 +94,7 @@ export type ConversationPageFeatures = {
     productCards: boolean;
     /** 초기 안내 prefill 메시지 출력 */
     prefill: boolean;
+    prefillMessages: string[];
     /** 입력창/전송 버튼 활성화 */
     inputSubmit: boolean;
   };
@@ -211,6 +212,11 @@ const DEFAULT_SETUP_UI: ConversationSetupUi = {
   },
 };
 
+const DEFAULT_PREFILL_MESSAGES = [
+  "기록한대로 응대하는 AI 상담사를",
+  "압도적으로 저렴하게 사용해보세요",
+];
+
 function normalizeSetupOrder(order?: SetupFieldKey[]) {
   const seen = new Set<SetupFieldKey>();
   const normalized: SetupFieldKey[] = [];
@@ -289,6 +295,11 @@ function mergeIdGate(base: IdGate, override?: IdGate): IdGate {
   };
 }
 
+function normalizePrefillMessages(value: unknown, fallback: string[]) {
+  if (!Array.isArray(value)) return fallback;
+  return value.map((item) => String(item || "").trim()).filter(Boolean);
+}
+
 export function mergeConversationPageFeatures(
   base: ConversationPageFeatures,
   override?: ConversationPageFeaturesOverride
@@ -314,6 +325,10 @@ export function mergeConversationPageFeatures(
       quickReplies: override.interaction?.quickReplies ?? base.interaction.quickReplies,
       productCards: override.interaction?.productCards ?? base.interaction.productCards,
       prefill: override.interaction?.prefill ?? base.interaction.prefill,
+      prefillMessages: normalizePrefillMessages(
+        override.interaction?.prefillMessages,
+        base.interaction.prefillMessages
+      ),
       inputSubmit: override.interaction?.inputSubmit ?? base.interaction.inputSubmit,
     },
     setup: {
@@ -454,6 +469,7 @@ export function applyConversationFeatureVisibility(
         isAdminUser
       ),
       prefill: withVisibilityFlag(features.interaction.prefill, features.visibility.interaction.prefill, isAdminUser),
+      prefillMessages: features.interaction.prefillMessages,
       inputSubmit: withVisibilityFlag(features.interaction.inputSubmit, features.visibility.interaction.inputSubmit, isAdminUser),
     },
     setup: {
@@ -519,6 +535,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       quickReplies: true,
       productCards: true,
       prefill: true,
+      prefillMessages: DEFAULT_PREFILL_MESSAGES,
       inputSubmit: true,
     },
     setup: {
@@ -594,6 +611,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       quickReplies: true,
       productCards: true,
       prefill: true,
+      prefillMessages: DEFAULT_PREFILL_MESSAGES,
       inputSubmit: true,
     },
     setup: {
@@ -669,7 +687,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     interaction: {
       quickReplies: true,
       productCards: true,
-      prefill: true,
+      prefill: false,
+      prefillMessages: [],
       inputSubmit: true,
     },
     setup: {

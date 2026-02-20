@@ -687,6 +687,26 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     usedByPages: ["/", "/app/laboratory"],
   },
   {
+    key: "interaction.prefill",
+    label: "Interaction > Prefill",
+    files: [
+      "src/lib/conversation/pageFeaturePolicy.ts",
+      "src/components/design-system/conversation/ConversationUI.parts.tsx",
+    ],
+    notes: "ì´ˆê¸° ì•ˆë‚´ prefill ë©”ì‹œì§€ ì¶œë ¥ ì—¬ë¶€ë¥¼ ì œì–´í•©ë‹ˆë‹¤.",
+    usedByPages: ["/", "/app/laboratory", "/embed"],
+  },
+  {
+    key: "interaction.prefillMessages",
+    label: "Interaction > Prefill Messages",
+    files: [
+      "src/lib/conversation/pageFeaturePolicy.ts",
+      "src/components/design-system/conversation/ConversationUI.parts.tsx",
+    ],
+    notes: "ì´ˆê¸° ì•ˆë‚´ prefill ë©”ì‹œì§€ ë¬¸êµ¬ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.",
+    usedByPages: ["/", "/app/laboratory", "/embed"],
+  },
+  {
     key: "interaction.inputSubmit",
     label: "Interaction > 입력/전송",
     files: [
@@ -2171,6 +2191,47 @@ export function ChatSettingsPanel({ authToken }: Props) {
                         }))
                       }
                     />
+
+                    <ToggleField
+                      neutralStyle={isHeader}
+                      label={isHeader ? "interaction.prefill" : "Prefill"}
+                      checked={draft.interaction.prefill}
+                      visibility={draft.visibility.interaction.prefill}
+                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, prefill: v } }))}
+                      onChangeVisibility={(mode) =>
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: {
+                            ...prev.visibility,
+                            interaction: { ...prev.visibility.interaction, prefill: mode },
+                          },
+                        }))
+                      }
+                    />
+                    <label className="block">
+                      <div className="mb-1 text-[11px] font-semibold text-slate-600">
+                        {isHeader ? "interaction.prefillMessages" : "Prefill Messages (줄바꿈)"}
+                      </div>
+                      <textarea
+                        value={(draft.interaction.prefillMessages || []).join("\n")}
+                        disabled={isHeader}
+                        onChange={(e) =>
+                          updatePage(page, (prev) => ({
+                            ...prev,
+                            interaction: {
+                              ...prev.interaction,
+                              prefillMessages: e.target.value
+                                .split(/\r?\n/)
+                                .map((item) => item.trim())
+                                .filter(Boolean),
+                            },
+                          }))
+                        }
+                        className="config-input min-h-[70px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                        placeholder="예: 기록한대로 응대하는 AI 상담사를"
+                      />
+                      {!isHeader ? <div className="mt-1 text-[10px] text-slate-500">줄바꿈으로 여러 줄 입력</div> : null}
+                    </label>
                     <ToggleField
                       neutralStyle={isHeader}
                       label={isHeader ? "interaction.inputSubmit" : "입력/전송"}

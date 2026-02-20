@@ -1048,6 +1048,7 @@ export default function WidgetEmbedPage() {
       quickReplies: pageFeatures.interaction.quickReplies,
       productCards: pageFeatures.interaction.productCards,
       prefill: pageFeatures.interaction.prefill,
+      prefillMessages: pageFeatures.interaction.prefillMessages,
       inputSubmit: pageFeatures.interaction.inputSubmit,
     },
     onToggleAdminOpen: () => setAdminMenuOpen((prev) => !prev),

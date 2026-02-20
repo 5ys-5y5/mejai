@@ -19,7 +19,7 @@
 점검 불가: -
 
 
-TURN_ID: 230bc08b-632b-4534-8c33-eebb8d0369bd
+TURN_ID: e6f6a622-2ced-4427-b4f4-76820a468f2d
 
 [TOKEN_USED]
 
@@ -105,7 +105,7 @@ QUICK_REPLY_RULE: mode=multi, min=1, max=2, submit=csv, source=fallback, criteri
 
 [TOKEN_UNUSED]
 DEBUG 로그:
-- eaf2b201-ee93-44d2-951d-1b693c10c1b6 (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd) (2026-02-20T05:37:18.786+00:00)
+- 82d60432-66e6-4873-a9de-4fcc3770a029 (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d) (2026-02-20T05:59:31.25+00:00)
   prefix_json:
     {
       "kb": {
@@ -173,7 +173,7 @@ DEBUG 로그:
         "build_at": null,
         "build_id": null,
         "deploy_env": "production",
-        "runtime_started_at": "2026-02-20T05:36:44.478Z"
+        "runtime_started_at": "2026-02-20T05:58:50.291Z"
       },
       "policy": {
         "tool_rules": [
@@ -207,7 +207,7 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T05:37:18.525Z",
+        "recorded_at": "2026-02-20T05:59:30.979Z",
         "function_name": "insertTurnWithDebug"
       },
       "kb_admin": {
@@ -441,7 +441,7 @@ DEBUG 로그:
       }
     }
 MCP 로그:
-- 5e09fd6a-4afb-4111-9a36-c39cfbbe7f7f cafe24:read_product@1.0: success (2026-02-20T05:37:18.251+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 69c37af4-369c-46f3-baf3-e13ad45bdd3e cafe24:read_product@1.0: success (2026-02-20T05:59:30.649+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   request:
     {
       "path": "/products/{product_no}",
@@ -601,7 +601,7 @@ MCP 로그:
         "translated_additional_description": null
       }
     }
-- 65482a36-5489-4d51-9059-9f53f53f41c0 cafe24:resolve_product@1.0: success (2026-02-20T05:37:17.004+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 7ebc049b-4b1f-4445-ab06-384230d376ed cafe24:resolve_product@1.0: success (2026-02-20T05:59:29.386+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   request:
     {
       "path": "internal://resolve_product",
@@ -616,7 +616,7 @@ MCP 로그:
       "product_id": "19",
       "product_name": "아드헬린 린넨 롱 원피스 그레이"
     }
-- ea68915c-862e-4ee2-9286-d4efcbd4b426 cafe24:read_product@1.0: success (2026-02-20T05:37:15.463+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 96521429-a8b0-40bc-b2ca-429eb65acf10 cafe24:read_product@1.0: success (2026-02-20T05:59:27.83+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   request:
     {
       "path": "/products/{product_no}",
@@ -776,7 +776,7 @@ MCP 로그:
         "translated_additional_description": null
       }
     }
-- 8a87862c-c27f-4a66-bd50-9e4ca33ec551 cafe24:resolve_product@1.0: success (2026-02-20T05:37:14.182+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 1c7a6e96-81f6-4329-a538-8b2f866b49d6 cafe24:resolve_product@1.0: success (2026-02-20T05:59:26.552+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   request:
     {
       "path": "internal://resolve_product",
@@ -792,7 +792,7 @@ MCP 로그:
       "product_name": "아드헬린 린넨 플레어 원피스 그레이"
     }
 이벤트 로그:
-- eb30ebef-d086-441e-a9a4-000d2eb977bb QUICK_REPLY_RULE_DECISION (2026-02-20T05:37:25.942+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- b134da3a-ae50-4ac3-9d49-8217164e9412 QUICK_REPLY_RULE_DECISION (2026-02-20T05:59:38.48+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "quick_reply_count": 2,
@@ -812,7 +812,7 @@ MCP 로그:
         "source_function": "deriveQuickRepliesWithTrace"
       }
     }
-- a144c862-f7f9-42e1-8efb-07c2dfdc7c95 POLICY_DECISION (2026-02-20T05:37:25.674+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 5cc0fc29-82d6-4930-b69f-71760e1e362a POLICY_DECISION (2026-02-20T05:59:38.212+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "stage": "tool",
@@ -830,34 +830,34 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
-        "recorded_at": "2026-02-20T05:37:25.674Z",
+        "recorded_at": "2026-02-20T05:59:38.212Z",
         "function_name": "emit:POLICY_DECISION"
       },
       "candidate_count": 2
     }
-- 125ec7fc-4e79-4624-b164-94bb7c64020f RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T05:37:25.403+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 517573b4-42af-43ae-95a8-aa7dfe220c80 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T05:59:37.94+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "230bc08b-632b-4534-8c33-eebb8d0369bd",
-      "session_id": "41776475-c4d4-495a-8c17-5c26b8fcceb6",
+      "turn_id": "e6f6a622-2ced-4427-b4f4-76820a468f2d",
+      "session_id": "850cb4ad-9db4-4bd9-a9bf-7b1560683032",
       "violation_count": 0,
       "deduped_violation_count": 0
     }
-- 6edf931b-9ccc-4a25-872e-9175c635c307 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T05:37:24.86+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 47806c65-9924-4655-b075-df707ba4e977 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T05:59:36.918+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "230bc08b-632b-4534-8c33-eebb8d0369bd",
-      "session_id": "41776475-c4d4-495a-8c17-5c26b8fcceb6",
+      "turn_id": "e6f6a622-2ced-4427-b4f4-76820a468f2d",
+      "session_id": "850cb4ad-9db4-4bd9-a9bf-7b1560683032",
       "config_source": "principles_default"
     }
-- a3c69755-b654-4a90-801c-a2c38a7fed95 END_USER_WRITE_LATENCY (2026-02-20T05:37:23.553+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 89d5f214-0934-43f9-8a55-9fd38f48a419 END_USER_WRITE_LATENCY (2026-02-20T05:59:35.567+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
-      "duration_ms": 4496
+      "duration_ms": 4041
     }
-- 214be6c2-0076-4502-bb33-86eef1b67653 END_USER_CONTEXT_RESOLVED (2026-02-20T05:37:20.111+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- eb21db30-3c28-4e6d-a501-696ff4e629d2 END_USER_CONTEXT_RESOLVED (2026-02-20T05:59:32.587+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "match_hit": true,
@@ -869,7 +869,7 @@ MCP 로그:
       "match_attempted": true,
       "resolution_source": "identity_match"
     }
-- 27837b4d-65cc-4152-aabe-aae7f2e558b5 END_USER_MATCH_HIT (2026-02-20T05:37:19.849+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 520d750f-95a5-482e-a1f8-51748b5d190d END_USER_MATCH_HIT (2026-02-20T05:59:32.318+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "matched": true,
@@ -878,7 +878,7 @@ MCP 로그:
         "external"
       ]
     }
-- 242ad573-6880-4379-9b34-80bc8ae99644 PRE_MCP_DECISION (2026-02-20T05:37:12.302+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 7bd16cfd-b161-479c-b053-b635126be876 PRE_MCP_DECISION (2026-02-20T05:59:24.546+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "denied": [],
@@ -906,7 +906,7 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
-        "recorded_at": "2026-02-20T05:37:12.302Z",
+        "recorded_at": "2026-02-20T05:59:24.546Z",
         "function_name": "emit:PRE_MCP_DECISION"
       },
       "query_text": "원피스 재입고",
@@ -922,7 +922,7 @@ MCP 로그:
       "blocked_by_missing_slots": false,
       "allowed_tool_names_total": 15
     }
-- 2a257b04-5b63-4bf8-aeaf-6cd637f0cdbc INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-20T05:37:11.773+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 2aaec15e-509c-4a78-8d0a-0e49e3493a46 INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-20T05:59:24.002+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "intent": "restock_inquiry",
@@ -931,7 +931,7 @@ MCP 로그:
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T05:37:11.773Z",
+        "recorded_at": "2026-02-20T05:59:24.002Z",
         "function_name": "unknown"
       },
       "missing_slots": [],
@@ -942,7 +942,7 @@ MCP 로그:
         "product_query": "원피스 재입고"
       }
     }
-- 6f93ff2d-d1e5-45a4-9228-12737569c83d POLICY_DECISION (2026-02-20T05:37:11.513+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 21ecc412-efd1-4dd9-94d9-6dce960bd84f POLICY_DECISION (2026-02-20T05:59:23.745+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "stage": "input",
@@ -961,7 +961,7 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-        "recorded_at": "2026-02-20T05:37:11.513Z",
+        "recorded_at": "2026-02-20T05:59:23.745Z",
         "function_name": "emit:POLICY_DECISION"
       },
       "required_slots": [
@@ -971,7 +971,7 @@ MCP 로그:
         "product_query": "원피스 재입고"
       }
     }
-- 703d91d9-9e86-451e-ad98-87dbf98f7a95 INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-20T05:37:11.253+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 5503b34b-61cb-4ead-90f4-7688e65524f7 INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-20T05:59:23.489+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "intent": "restock_inquiry",
@@ -979,13 +979,13 @@ MCP 로그:
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T05:37:11.253Z",
+        "recorded_at": "2026-02-20T05:59:23.489Z",
         "function_name": "unknown"
       },
       "query_source": "current_message",
       "expected_input": null
     }
-- a1d1504c-c6cd-454c-a8d0-6cdd7f99ff2e SLOT_EXTRACTED (2026-02-20T05:37:10.987+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- a7570124-809e-41cf-b5ca-c8f0c30e253d SLOT_EXTRACTED (2026-02-20T05:59:23.221+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "derived": {
@@ -1016,7 +1016,7 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "recorded_at": "2026-02-20T05:37:10.987Z",
+        "recorded_at": "2026-02-20T05:59:23.221Z",
         "function_name": "emit:SLOT_EXTRACTED"
       },
       "query_source": "current_message",
@@ -1026,7 +1026,7 @@ MCP 로그:
         "product_query": "원피스 재입고"
       }
     }
-- 7b1986d5-476d-4c2d-b150-21c1fe912b67 INPUT_CONTRACT_REVIEW_COMPLETED (2026-02-20T05:37:10.703+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 2acba7b1-6398-41a1-b5d0-5a697f37816d INPUT_CONTRACT_REVIEW_COMPLETED (2026-02-20T05:59:22.938+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "source": "reset_by_restock_intent",
@@ -1034,7 +1034,7 @@ MCP 로그:
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T05:37:10.703Z",
+        "recorded_at": "2026-02-20T05:59:22.938Z",
         "function_name": "unknown"
       },
       "intent_name": "general",
@@ -1042,7 +1042,7 @@ MCP 로그:
       "expected_inputs": [],
       "expected_input_stage": null
     }
-- 2d2cfa96-81be-46ff-9c68-112e19c991bc INPUT_CONTRACT_REVIEW_STARTED (2026-02-20T05:37:10.442+00:00) (turn_id=230bc08b-632b-4534-8c33-eebb8d0369bd)
+- 99c7a649-4be0-4608-acf3-328df870062d INPUT_CONTRACT_REVIEW_STARTED (2026-02-20T05:59:22.66+00:00) (turn_id=e6f6a622-2ced-4427-b4f4-76820a468f2d)
   payload:
     {
       "source": null,
@@ -1050,7 +1050,7 @@ MCP 로그:
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T05:37:10.442Z",
+        "recorded_at": "2026-02-20T05:59:22.659Z",
         "function_name": "unknown"
       },
       "intent_name": "general",

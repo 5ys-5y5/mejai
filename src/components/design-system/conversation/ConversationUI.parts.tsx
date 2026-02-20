@@ -824,6 +824,37 @@ function extractIndexedSelections(rawText: string) {
   return Array.from(new Set(values));
 }
 
+type ChoiceBucket = "quick" | "cards";
+
+function resolveChoiceBucket({
+  renderPlan,
+  quickRepliesAvailable,
+  productCardsAvailable,
+}: {
+  renderPlan?: RenderPlan;
+  quickRepliesAvailable: boolean;
+  productCardsAvailable: boolean;
+}): ChoiceBucket | null {
+  const planView = renderPlan?.view;
+  const planAllowsQuick = quickRepliesAvailable && renderPlan?.enable_quick_replies !== false;
+  const planAllowsCards = productCardsAvailable && renderPlan?.enable_cards !== false;
+
+  if (planView === "cards") {
+    if (planAllowsCards) return "cards";
+    if (planAllowsQuick) return "quick";
+  } else if (planView === "choice") {
+    if (planAllowsQuick) return "quick";
+    if (planAllowsCards) return "cards";
+  } else {
+    if (planAllowsQuick) return "quick";
+    if (planAllowsCards) return "cards";
+  }
+
+  if (productCardsAvailable) return "cards";
+  if (quickRepliesAvailable) return "quick";
+  return null;
+}
+
 function resolveNumericChoiceInput(
   rawText: string,
   messages: Array<ReplyMessageShape>
@@ -839,11 +870,16 @@ function resolveNumericChoiceInput(
   const renderPlan = lastBotMessage.renderPlan;
   const selectionMode = renderPlan?.selection_mode || "single";
   const isMulti = selectionMode === "multi" || renderPlan?.submit_format === "csv";
-  const preferCards = renderPlan?.view === "cards";
   const hasCards = Boolean(lastBotMessage.productCards && lastBotMessage.productCards.length > 0);
   const hasQuickReplies = Boolean(lastBotMessage.quickReplies && lastBotMessage.quickReplies.length > 0);
 
-  const useCards = preferCards ? hasCards : !hasQuickReplies && hasCards;
+  const bucket = resolveChoiceBucket({
+    renderPlan,
+    quickRepliesAvailable: hasQuickReplies,
+    productCardsAvailable: hasCards,
+  });
+  if (!bucket) return null;
+  const useCards = bucket === "cards";
   const choices = useCards ? (lastBotMessage.productCards || []) : (lastBotMessage.quickReplies || []);
   if (choices.length === 0) return null;
 
@@ -886,7 +922,7 @@ export function ConversationReplySelectors<TMessage extends ReplyMessageShape>({
   const quickReplies = message.quickReplies || [];
   const productCards = message.productCards || [];
   const renderPlan = message.renderPlan;
-  if (!renderPlan) return null;
+  if (quickReplies.length === 0 && productCards.length === 0) return null;
 
   const quickValueToLabel = new Map<string, string>();
   quickReplies.forEach((item) => {
@@ -901,30 +937,17 @@ export function ConversationReplySelectors<TMessage extends ReplyMessageShape>({
 
   const selectionMode = renderPlan?.selection_mode || "single";
   const isMultiSelectPrompt = selectionMode === "multi";
-  const allowQuickReplies =
-    enableQuickReplies && quickReplies.length > 0 && Boolean(renderPlan.enable_quick_replies);
-  const allowProductCards =
-    enableProductCards && productCards.length > 0 && Boolean(renderPlan.enable_cards);
-  let shouldRenderQuickByType = false;
-  let shouldRenderCardsByType = false;
-  if (renderPlan.view === "choice") {
-    shouldRenderQuickByType = allowQuickReplies;
-    if (!shouldRenderQuickByType && allowProductCards) {
-      shouldRenderCardsByType = true;
-    }
-  } else if (renderPlan.view === "cards") {
-    shouldRenderCardsByType = allowProductCards;
-    if (!shouldRenderCardsByType && allowQuickReplies) {
-      shouldRenderQuickByType = true;
-    }
-  } else {
-    if (allowQuickReplies) {
-      shouldRenderQuickByType = true;
-    } else if (allowProductCards) {
-      shouldRenderCardsByType = true;
-    }
-  }
-  const canInteractWithMessage = renderPlan.interaction_scope === "any" ? true : isLatest;
+  const quickRepliesAvailable = enableQuickReplies && quickReplies.length > 0;
+  const productCardsAvailable = enableProductCards && productCards.length > 0;
+  const bucket = resolveChoiceBucket({
+    renderPlan,
+    quickRepliesAvailable,
+    productCardsAvailable,
+  });
+  const shouldRenderQuickByType = bucket === "quick";
+  const shouldRenderCardsByType = bucket === "cards";
+  if (!shouldRenderQuickByType && !shouldRenderCardsByType) return null;
+  const canInteractWithMessage = renderPlan?.interaction_scope === "any" ? true : isLatest;
 
   const quickDraftKey = `${modelId}:${message.id}:quick`;
   const quickSelected = quickReplyDrafts[quickDraftKey] || [];
@@ -1541,20 +1564,17 @@ function ConversationModelChatColumnCore({
   onInputChange,
   onSetChatScrollRef,
 }: ConversationModelChatColumnLegoProps) {
-  const shouldRenderPrefillMessages = interactionFeatures.prefill && visibleMessages.length === 0;
+  const prefillMessages = (interactionFeatures.prefillMessages || [])
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  const shouldRenderPrefillMessages =
+    interactionFeatures.prefill && visibleMessages.length === 0 && prefillMessages.length > 0;
   const effectiveVisibleMessages: ChatMessage[] = shouldRenderPrefillMessages
-    ? [
-      {
-        id: `${model.id}-prefill-line-1`,
-        role: "bot",
-        content: "기록한대로 응대하는 AI 상담사를",
-      },
-      {
-        id: `${model.id}-prefill-line-2`,
-        role: "bot",
-        content: "압도적으로 저렴하게 사용해보세요",
-      },
-    ]
+    ? prefillMessages.map((content, idx) => ({
+      id: `${model.id}-prefill-line-${idx + 1}`,
+      role: "bot",
+      content,
+    }))
     : visibleMessages;
 
   const chatScrollAreaRef = useRef<HTMLDivElement | null>(null);
@@ -2133,6 +2153,7 @@ export type ConversationModelChatColumnLegoProps = {
     quickReplies: boolean;
     productCards: boolean;
     prefill: boolean;
+    prefillMessages: string[];
     inputSubmit: boolean;
   };
   onToggleAdminOpen: () => void;
@@ -2433,6 +2454,7 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
     quickReplies: pageFeatures.interaction.quickReplies,
     productCards: pageFeatures.interaction.productCards,
     prefill: pageFeatures.interaction.prefill,
+    prefillMessages: pageFeatures.interaction.prefillMessages,
     inputSubmit: pageFeatures.interaction.inputSubmit,
   };
 
