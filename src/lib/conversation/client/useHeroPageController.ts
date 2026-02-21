@@ -81,13 +81,17 @@ export function useHeroPageController() {
       .filter((option) => effectiveProviderKeys.includes(option.group || ""))
       .map((option) => option.id);
   }, [actionOptions, effectiveProviderKeys, selectedMcpToolIds]);
+  const initialMessages = pageFeatures.interaction.prefill
+    ? []
+    : [
+      { role: "bot", content: "\uC548\uB155\uD558\uC138\uC694! \uBB54\uC744 \uB3C4\uC640\uB4DC\uB9B4\uAE4C\uC694?" },
+      { role: "bot", content: "\uBB38\uC758\uD558\uC2E4 \uB0B4\uC6A9\uC744 \uC785\uB825\uD574 \uC8FC\uC138\uC694." },
+    ];
+
   const convo = useConversationController({
     page: "/",
     traceIdPrefix: "hero",
-    initialMessages: [
-      { role: "bot", content: "기록한대로 응대하는 AI 상담사를" },
-      { role: "bot", content: "압도적으로 저렴하게 사용해보세요" },
-    ],
+    initialMessages,
     makeRunBody: ({ text, sessionId }) => ({
       page_key: "/",
       route: NEW_MODEL_CONFIG.route,
@@ -102,8 +106,8 @@ export function useHeroPageController() {
     }),
     mapErrorMessage: (error) =>
       error instanceof Error && error.message === "UNAUTHORIZED"
-        ? "로그인 후에 신규 모델을 체험할 수 있습니다."
-        : "요청에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        ? "\uB85C\uADF8\uC778\uC774 \uD544\uC694\uD569\uB2C8\uB2E4. \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694."
+        : "\uC77C\uC2DC\uC801\uC778 \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC5B4\uC694. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694.",
   });
   const { messages, sending, sessionId, selectedMessageIds } = convo;
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -142,7 +146,7 @@ export function useHeroPageController() {
     return effectiveProviderKeys.includes(option.group || "");
   });
 
-  const placeholder = "신규 대화 질문을 입력하세요";
+  const placeholder = "\uC2E0\uADDC \uB300\uD654 \uC9C8\uBB38\uC744 \uC785\uB825\uD558\uC138\uC694";
   const sampleContentById = useMemo(() => {
     const map = new Map<string, string>();
     inlineKbSamples.forEach((sample) => map.set(sample.id, sample.content));

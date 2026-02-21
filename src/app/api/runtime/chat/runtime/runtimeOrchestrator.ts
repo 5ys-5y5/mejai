@@ -6,6 +6,7 @@ import {
   validateToolArgs,
   type PolicyEvalContext,
 } from "@/lib/policyEngine";
+import { resolveConversationPageFeatures, type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
 import {
   CHAT_PRINCIPLES,
   getPolicyBundle,
@@ -322,7 +323,7 @@ export async function POST(req: NextRequest) {
       }
     }
     const resolvedTurnId = isUuidLike(runtimeTurnId) ? runtimeTurnId : crypto.randomUUID();
-    const fallback = "二꾩넚?⑸땲?? ?쇱떆?곸씤 ?ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄?댁＜?몄슂.";
+    const fallback = "\uC7A0\uC2DC \uC624\uB958\uAC00 \uBC1C\uC0DD\uD588\uC5B4\uC694. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574\uC8FC\uC138\uC694.";
     const failed = buildFailedPayload({
       code: "INTERNAL_ERROR",
       summary: errorMessage || "INTERNAL_ERROR",
@@ -486,6 +487,7 @@ export async function POST(req: NextRequest) {
       authContext,
       agent,
       message,
+      body,
       conversationMode,
       kb,
       adminKbs,
@@ -512,6 +514,13 @@ export async function POST(req: NextRequest) {
       prevBotContext,
     } = bootstrap.state;
     markStage("bootstrap.done");
+    const pageKey = typeof body?.page_key === "string" ? body.page_key : "/";
+    const chatPolicyProvider = (authSettings?.providers?.chat_policy || null) as ConversationFeaturesProviderShape | null;
+    const pageFeaturesForRuntime = resolveConversationPageFeatures(pageKey, chatPolicyProvider);
+    const threePhaseConfig = {
+      enabled: pageFeaturesForRuntime.interaction.threePhasePrompt,
+      labels: pageFeaturesForRuntime.interaction.threePhasePromptLabels,
+    };
     if (context && typeof context === "object") {
       const contextRecord = context as Record<string, any>;
       contextRecord.runtimeTraceId = runtimeTraceId;
@@ -830,6 +839,7 @@ export async function POST(req: NextRequest) {
         mergedText = `${OTP_ACK_TEXT}\n${baseText}`;
       }
       const threePhaseText = decorateWithThreePhasePrompt({
+        threePhaseConfig,
         message: mergedText,
         intent: resolvedIntent,
         expectedInput,
@@ -1227,6 +1237,7 @@ export async function POST(req: NextRequest) {
     markStage("pending_state.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/pendingStateRuntime.ts", "handleAddressChangeRefundPending");
     const pendingState = await handleAddressChangeRefundPending({
+      threePhaseConfig,
       context,
       prevBotContext: effectivePrevBotContext,
       resolvedIntent,

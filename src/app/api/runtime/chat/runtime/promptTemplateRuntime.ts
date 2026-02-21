@@ -74,6 +74,11 @@ type ThreePhaseLabels = {
   next: string;
 };
 
+type ThreePhaseConfig = {
+  enabled?: boolean;
+  labels?: ThreePhaseLabels | null;
+};
+
 type ThreePhaseContext = {
   confirmed?: string | null;
   next?: string | null;
@@ -92,6 +97,7 @@ type ThreePhasePromptContext = {
   lastUserMessage?: string | null;
   maskPhone?: (value?: string | null) => string;
   entityUpdates?: Array<{ field: string; prev: string; next: string }> | null;
+  threePhaseConfig?: ThreePhaseConfig | null;
 };
 
 const THREE_PHASE_FALLBACK_CONFIRMED = "\uC694\uCCAD \uC811\uC218";
@@ -102,6 +108,15 @@ const THREE_PHASE_PREFIXES = [
   "\uD655\uC778\uD560 \uAC83:",
   "\uADF8 \uB2E4\uC74C\uC73C\uB85C \uD655\uC778\uD560 \uAC83:",
 ];
+
+function resolveThreePhaseEnabled(config?: ThreePhaseConfig | null) {
+  if (typeof config?.enabled === "boolean") return config.enabled;
+  return shouldRequireThreePhasePrompt();
+}
+
+function resolveThreePhaseLabels(config?: ThreePhaseConfig | null) {
+  return config?.labels && typeof config.labels === "object" ? config.labels : getThreePhasePromptLabels();
+}
 
 function isThreePhasePrompt(text: string) {
   const normalized = String(text || "").trim();
@@ -318,7 +333,7 @@ function buildNextSummary(input: {
 
 export function decorateWithThreePhasePrompt(input: ThreePhasePromptContext) {
   const baseText = replaceActionTokens(String(input.message || "").trim());
-  if (!shouldRequireThreePhasePrompt()) {
+  if (!resolveThreePhaseEnabled(input.threePhaseConfig)) {
     const updates = Array.isArray(input.entityUpdates) ? input.entityUpdates : [];
     if (updates.length === 0) return baseText;
     const intent = String(input.intent || "").trim();
@@ -342,7 +357,7 @@ export function decorateWithThreePhasePrompt(input: ThreePhasePromptContext) {
   const prevBotContext = input.prevBotContext && typeof input.prevBotContext === "object" ? input.prevBotContext : {};
   const entity = input.policyEntity && typeof input.policyEntity === "object" ? input.policyEntity : {};
   const derivedSlots = input.derivedSlots && typeof input.derivedSlots === "object" ? input.derivedSlots : {};
-  const labels = getThreePhasePromptLabels();
+  const labels = resolveThreePhaseLabels(input.threePhaseConfig);
   const updateNotice = (() => {
     const updates = Array.isArray(input.entityUpdates) ? input.entityUpdates : [];
     if (updates.length === 0) return "";
@@ -439,7 +454,7 @@ function normalizePhaseValue(value: unknown) {
 }
 
 export function buildThreePhasePrompt(input: { confirmed?: string | null; confirming: string; next?: string | null; labels?: ThreePhaseLabels | null }) {
-  const labels = input.labels && typeof input.labels === "object" ? input.labels : getThreePhasePromptLabels();
+  const labels = input.labels && typeof input.labels === "object" ? input.labels : resolveThreePhaseLabels(input.threePhaseConfig);
   const confirmed = normalizePhaseValue(input.confirmed);
   const confirming = String(input.confirming || "").trim();
   const next = normalizePhaseValue(input.next);
@@ -464,7 +479,7 @@ export function buildYesNoConfirmationPrompt(
     entity: input?.entity || null,
   });
   const confirming = `${String(question || "").trim()}\n${suffix}`.trim();
-  if (!shouldRequireThreePhasePrompt()) return confirming;
+  if (!resolveThreePhaseEnabled(input.threePhaseConfig)) return confirming;
   const phase = input?.phase || null;
   const confirmed =
     phase?.confirmed ??
@@ -476,7 +491,7 @@ export function buildYesNoConfirmationPrompt(
     (input?.botContext && typeof input.botContext === "object"
       ? (input.botContext as Record<string, any>).three_phase_next
       : null);
-  const labels = phase?.labels || getThreePhasePromptLabels();
+  const labels = phase?.labels || resolveThreePhaseLabels(input.threePhaseConfig);
   return buildThreePhasePrompt({ confirmed, confirming, next, labels });
 }
 

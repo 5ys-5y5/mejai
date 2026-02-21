@@ -92,6 +92,18 @@ export type ConversationPageFeatures = {
     quickReplies: boolean;
     /** product card 선택 UI 활성화 */
     productCards: boolean;
+    /** 3-phase prompt (confirmed/confirming/next) */
+    threePhasePrompt: boolean;
+    threePhasePromptLabels: {
+      confirmed: string;
+      confirming: string;
+      next: string;
+    };
+    threePhasePromptShowConfirmed: boolean;
+    threePhasePromptShowConfirming: boolean;
+    threePhasePromptShowNext: boolean;
+    threePhasePromptHideLabels: boolean;
+    inputPlaceholder: string;
     /** 초기 안내 prefill 메시지 출력 */
     prefill: boolean;
     prefillMessages: string[];
@@ -217,6 +229,12 @@ const DEFAULT_PREFILL_MESSAGES = [
   "압도적으로 저렴하게 사용해보세요",
 ];
 
+const DEFAULT_THREE_PHASE_LABELS = {
+  confirmed: "확인한 것",
+  confirming: "확인할 것",
+  next: "그 다음으로 확인할 것",
+} as const;
+
 function normalizeSetupOrder(order?: SetupFieldKey[]) {
   const seen = new Set<SetupFieldKey>();
   const normalized: SetupFieldKey[] = [];
@@ -295,6 +313,17 @@ function mergeIdGate(base: IdGate, override?: IdGate): IdGate {
   };
 }
 
+function normalizeThreePhaseLabels(
+  override?: Partial<{ confirmed: string; confirming: string; next: string }>,
+  fallback?: { confirmed: string; confirming: string; next: string }
+) {
+  return {
+    confirmed: String(override?.confirmed || fallback?.confirmed || DEFAULT_THREE_PHASE_LABELS.confirmed).trim() || DEFAULT_THREE_PHASE_LABELS.confirmed,
+    confirming: String(override?.confirming || fallback?.confirming || DEFAULT_THREE_PHASE_LABELS.confirming).trim() || DEFAULT_THREE_PHASE_LABELS.confirming,
+    next: String(override?.next || fallback?.next || DEFAULT_THREE_PHASE_LABELS.next).trim() || DEFAULT_THREE_PHASE_LABELS.next,
+  };
+}
+
 function normalizePrefillMessages(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return fallback;
   return value.map((item) => String(item || "").trim()).filter(Boolean);
@@ -324,6 +353,16 @@ export function mergeConversationPageFeatures(
     interaction: {
       quickReplies: override.interaction?.quickReplies ?? base.interaction.quickReplies,
       productCards: override.interaction?.productCards ?? base.interaction.productCards,
+      threePhasePrompt: override.interaction?.threePhasePrompt ?? base.interaction.threePhasePrompt,
+      threePhasePromptLabels: normalizeThreePhaseLabels(
+        override.interaction?.threePhasePromptLabels,
+        base.interaction.threePhasePromptLabels
+      ),
+      threePhasePromptShowConfirmed: override.interaction?.threePhasePromptShowConfirmed ?? base.interaction.threePhasePromptShowConfirmed,
+      threePhasePromptShowConfirming: override.interaction?.threePhasePromptShowConfirming ?? base.interaction.threePhasePromptShowConfirming,
+      threePhasePromptShowNext: override.interaction?.threePhasePromptShowNext ?? base.interaction.threePhasePromptShowNext,
+      threePhasePromptHideLabels: override.interaction?.threePhasePromptHideLabels ?? base.interaction.threePhasePromptHideLabels,
+      inputPlaceholder: String((override.interaction?.inputPlaceholder ?? base.interaction.inputPlaceholder) || ""),
       prefill: override.interaction?.prefill ?? base.interaction.prefill,
       prefillMessages: normalizePrefillMessages(
         override.interaction?.prefillMessages,
@@ -367,6 +406,15 @@ export function mergeConversationPageFeatures(
       interaction: {
         quickReplies: override.visibility?.interaction?.quickReplies ?? base.visibility.interaction.quickReplies,
         productCards: override.visibility?.interaction?.productCards ?? base.visibility.interaction.productCards,
+        threePhasePrompt: override.visibility?.interaction?.threePhasePrompt ?? base.visibility.interaction.threePhasePrompt,
+        threePhasePromptShowConfirmed:
+          override.visibility?.interaction?.threePhasePromptShowConfirmed ?? base.visibility.interaction.threePhasePromptShowConfirmed,
+        threePhasePromptShowConfirming:
+          override.visibility?.interaction?.threePhasePromptShowConfirming ?? base.visibility.interaction.threePhasePromptShowConfirming,
+        threePhasePromptShowNext:
+          override.visibility?.interaction?.threePhasePromptShowNext ?? base.visibility.interaction.threePhasePromptShowNext,
+        threePhasePromptHideLabels:
+          override.visibility?.interaction?.threePhasePromptHideLabels ?? base.visibility.interaction.threePhasePromptHideLabels,
         prefill: override.visibility?.interaction?.prefill ?? base.visibility.interaction.prefill,
         inputSubmit: override.visibility?.interaction?.inputSubmit ?? base.visibility.interaction.inputSubmit,
       },
@@ -394,7 +442,17 @@ export function resolveConversationPageFeatures(
   const resolvedPage = resolveRegisteredPageKey(page, providerValue);
   const base = getDefaultConversationPageFeatures(resolvedPage);
   const override = providerValue?.pages?.[resolvedPage];
-  return mergeConversationPageFeatures(base, override);
+  let merged = mergeConversationPageFeatures(base, override);
+  if (merged.interaction.prefill && resolvedPage !== "/") {
+    const rootBase = getDefaultConversationPageFeatures("/");
+    const rootOverride = providerValue?.pages?.["/"];
+    const rootMerged = mergeConversationPageFeatures(rootBase, rootOverride);
+    merged = {
+      ...merged,
+      interaction: { ...merged.interaction, prefillMessages: rootMerged.interaction.prefillMessages },
+    };
+  }
+  return merged;
 }
 
 export function isProviderEnabledForPage(page: ConversationPageKey, providerKey: string) {
@@ -468,6 +526,33 @@ export function applyConversationFeatureVisibility(
         features.visibility.interaction.productCards,
         isAdminUser
       ),
+      threePhasePrompt: withVisibilityFlag(
+        features.interaction.threePhasePrompt,
+        features.visibility.interaction.threePhasePrompt,
+        isAdminUser
+      ),
+      threePhasePromptShowConfirmed: withVisibilityFlag(
+        features.interaction.threePhasePromptShowConfirmed,
+        features.visibility.interaction.threePhasePromptShowConfirmed,
+        isAdminUser
+      ),
+      threePhasePromptShowConfirming: withVisibilityFlag(
+        features.interaction.threePhasePromptShowConfirming,
+        features.visibility.interaction.threePhasePromptShowConfirming,
+        isAdminUser
+      ),
+      threePhasePromptShowNext: withVisibilityFlag(
+        features.interaction.threePhasePromptShowNext,
+        features.visibility.interaction.threePhasePromptShowNext,
+        isAdminUser
+      ),
+      threePhasePromptHideLabels: withVisibilityFlag(
+        features.interaction.threePhasePromptHideLabels,
+        features.visibility.interaction.threePhasePromptHideLabels,
+        isAdminUser
+      ),
+      threePhasePromptLabels: features.interaction.threePhasePromptLabels,
+      inputPlaceholder: features.interaction.inputPlaceholder,
       prefill: withVisibilityFlag(features.interaction.prefill, features.visibility.interaction.prefill, isAdminUser),
       prefillMessages: features.interaction.prefillMessages,
       inputSubmit: withVisibilityFlag(features.interaction.inputSubmit, features.visibility.interaction.inputSubmit, isAdminUser),
@@ -534,6 +619,13 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     interaction: {
       quickReplies: true,
       productCards: true,
+      threePhasePrompt: true,
+      threePhasePromptLabels: DEFAULT_THREE_PHASE_LABELS,
+      threePhasePromptShowConfirmed: true,
+      threePhasePromptShowConfirming: true,
+      threePhasePromptShowNext: true,
+      threePhasePromptHideLabels: false,
+      inputPlaceholder: "",
       prefill: true,
       prefillMessages: DEFAULT_PREFILL_MESSAGES,
       inputSubmit: true,
@@ -573,6 +665,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       interaction: {
         quickReplies: "user",
         productCards: "user",
+        threePhasePrompt: "user",
+        threePhasePromptShowConfirmed: "user",
+        threePhasePromptShowConfirming: "user",
+        threePhasePromptShowNext: "user",
+        threePhasePromptHideLabels: "user",
         prefill: "user",
         inputSubmit: "user",
       },
@@ -610,6 +707,13 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     interaction: {
       quickReplies: true,
       productCards: true,
+      threePhasePrompt: true,
+      threePhasePromptLabels: DEFAULT_THREE_PHASE_LABELS,
+      threePhasePromptShowConfirmed: true,
+      threePhasePromptShowConfirming: true,
+      threePhasePromptShowNext: true,
+      threePhasePromptHideLabels: false,
+      inputPlaceholder: "",
       prefill: true,
       prefillMessages: DEFAULT_PREFILL_MESSAGES,
       inputSubmit: true,
@@ -649,6 +753,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       interaction: {
         quickReplies: "user",
         productCards: "user",
+        threePhasePrompt: "user",
+        threePhasePromptShowConfirmed: "user",
+        threePhasePromptShowConfirming: "user",
+        threePhasePromptShowNext: "user",
+        threePhasePromptHideLabels: "user",
         prefill: "user",
         inputSubmit: "user",
       },
@@ -687,6 +796,13 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     interaction: {
       quickReplies: true,
       productCards: true,
+      threePhasePrompt: true,
+      threePhasePromptLabels: DEFAULT_THREE_PHASE_LABELS,
+      threePhasePromptShowConfirmed: true,
+      threePhasePromptShowConfirming: true,
+      threePhasePromptShowNext: true,
+      threePhasePromptHideLabels: false,
+      inputPlaceholder: "",
       prefill: false,
       prefillMessages: [],
       inputSubmit: true,
@@ -726,6 +842,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       interaction: {
         quickReplies: "user",
         productCards: "user",
+        threePhasePrompt: "user",
+        threePhasePromptShowConfirmed: "user",
+        threePhasePromptShowConfirming: "user",
+        threePhasePromptShowNext: "user",
+        threePhasePromptHideLabels: "user",
         prefill: "user",
         inputSubmit: "user",
       },

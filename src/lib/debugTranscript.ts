@@ -87,6 +87,7 @@ export type DebugTranscriptOptions = {
     };
     turn?: {
       enabled?: boolean;
+      messageText?: boolean;
       turnId?: boolean;
       tokenUsed?: boolean;
       tokenUnused?: boolean;
@@ -168,6 +169,7 @@ type NormalizedDebugTranscriptOptions = {
   };
   turn: {
     enabled: boolean;
+    messageText: boolean;
     turnId: boolean;
     tokenUsed: boolean;
     tokenUnused: boolean;
@@ -271,6 +273,7 @@ function normalizeDebugTranscriptOptions(options?: DebugTranscriptOptions): Norm
     },
     turn: {
       enabled: turnEnabled,
+      messageText: sectionTurn?.messageText ?? true,
       turnId: sectionTurn?.turnId ?? includeTurnId,
       tokenUsed: sectionTurn?.tokenUsed ?? true,
       tokenUnused: sectionTurn?.tokenUnused ?? includeTokenUnused,
@@ -1300,12 +1303,15 @@ export function buildDebugTranscript(input: {
 
   const formatBody = (msg: TranscriptMessage) => {
     const answerText = msg.content.includes("debug_prefix") ? extractDebugText(msg.content) : msg.content;
-    if (!normalized.turn.enabled) return answerText;
+    const includeMessageText = normalized.turn.messageText;
+    if (!normalized.turn.enabled) return includeMessageText ? answerText : "";
     const lines: string[] = [];
-    if (normalized.turn.tokenUsed) {
-      lines.push(answerText);
-    } else if (!msg.responseSchema && !msg.renderPlan) {
-      return answerText;
+    if (includeMessageText) {
+      if (normalized.turn.tokenUsed) {
+        lines.push(answerText);
+      } else if (!msg.responseSchema && !msg.renderPlan) {
+        return answerText;
+      }
     }
     const allowResponseSchemaDetail = normalized.outputMode !== "summary" && normalized.turn.responseSchemaDetail;
     if (msg.responseSchema && (normalized.turn.responseSchemaSummary || allowResponseSchemaDetail)) {
@@ -1345,7 +1351,7 @@ export function buildDebugTranscript(input: {
         `QUICK_REPLY_RULE: mode=${rule.selection_mode}, min=${rule.min_select ?? "-"}, max=${rule.max_select ?? "-"}, submit=${rule.submit_format ?? "-"}, source=${rule.quick_reply_source?.type || "-"}, criteria=${rule.quick_reply_source?.criteria || "-"}, module=${rule.quick_reply_source?.source_module || "-"}, function=${rule.quick_reply_source?.source_function || "-"}`
       );
     }
-    return lines.length > 0 ? lines.join("\n") : answerText;
+    return lines.length > 0 ? lines.join("\n") : includeMessageText ? answerText : "";
   };
 
   const prefixJsonDedupe: PrefixJsonDedupeState | undefined = normalized.logs.debug.dedupeGlobalPrefixJson

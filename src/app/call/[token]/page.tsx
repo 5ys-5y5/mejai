@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
+import { ConversationThread } from "@/components/design-system";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Send, Phone, User, Bot, Wifi, WifiOff } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Send, Phone, Wifi, WifiOff } from "lucide-react";
 import { getAccessToken } from "@/lib/apiClient";
+import { renderBotContent } from "@/lib/conversation/messageRenderUtils";
 
 type ChatMessage = {
   id: string;
@@ -38,6 +39,15 @@ export default function WebInputPage() {
         "음성 인식이 어려운 경우 텍스트로 입력해 주세요. 이 채팅은 통화와 동기화됩니다.",
     },
   ]);
+  const displayMessages = useMemo(
+    () =>
+      messages.map((msg) => ({
+        id: msg.id,
+        role: msg.role === "user" ? "user" : "bot",
+        content: msg.content,
+      })),
+    [messages]
+  );
   const [inputValue, setInputValue] = useState("");
   const [status, setStatus] = useState(WS_URL ? "연결 대기" : "실시간 서버 주소가 설정되지 않았습니다.");
   const [accessToken, setAccessToken] = useState("");
@@ -183,56 +193,13 @@ export default function WebInputPage() {
 
       <main className="flex-1 overflow-y-auto p-4 space-y-4">
         <div className="max-w-2xl mx-auto pb-20">
-          {messages.map((msg, index) => {
-            const prev = messages[index - 1];
-            const isGrouped = prev?.role === msg.role;
-            const rowGap = "gap-3";
-            const rowSpacing = index === 0 ? "" : isGrouped ? "mt-1" : "mt-3";
-            const showAvatar = !isGrouped;
-            return (
-              <div
-                key={msg.id}
-                className={cn(
-                  "flex max-w-[85%]",
-                  rowGap,
-                  rowSpacing,
-                  msg.role === "user" ? "ml-auto flex-row-reverse" : ""
-                )}
-              >
-                {showAvatar ? (
-                  <div
-                    className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-1",
-                      msg.role === "user"
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground"
-                    )}
-                  >
-                    {msg.role === "user" ? (
-                      <User className="w-4 h-4" />
-                    ) : (
-                      <Bot className="w-4 h-4" />
-                    )}
-                  </div>
-                ) : (
-                  <div
-                    className="w-8 h-8 shrink-0 mt-1 rounded-full opacity-0"
-                    aria-hidden="true"
-                  />
-                )}
-                <div
-                  className={cn(
-                    "p-3 rounded-2xl text-sm",
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-tr-none"
-                      : "bg-background rounded-tl-none border"
-                  )}
-                >
-                  {msg.content}
-                </div>
-              </div>
-            );
-          })}
+          <ConversationThread
+            messages={displayMessages}
+            selectedMessageIds={[]}
+            selectionEnabled={false}
+            onToggleSelection={() => undefined}
+            renderContent={(msg) => (msg.role === "bot" ? renderBotContent(msg.content) : msg.content)}
+          />
         </div>
       </main>
 

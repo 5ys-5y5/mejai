@@ -27,7 +27,7 @@ import {
   fetchWidgetSessionLogs,
   fetchWidgetTranscriptCopy,
 } from "@/lib/conversation/client/runtimeClient";
-import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
+import { buildRuntimeBotMessageFields } from "@/lib/conversation/client/runtimeMessageMapping";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
 import type { LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
@@ -48,6 +48,7 @@ type LogMap = Record<string, LogBundle>;
 type WidgetHistoryMessage = {
   role?: "user" | "bot";
   content?: string;
+  rich_html?: string | null;
   turn_id?: string | null;
 };
 
@@ -441,6 +442,7 @@ export default function WidgetEmbedPage() {
             id: buildId(),
             role,
             content,
+            richHtml: typeof item.rich_html === "string" ? item.rich_html : undefined,
             turnId: role === "bot" ? String(item.turn_id || "").trim() || null : null,
           } satisfies ChatMessage;
         })
@@ -518,13 +520,19 @@ export default function WidgetEmbedPage() {
         }
         setStatus("대화 불러오는 중");
         const history = await fetchHistory(nextToken);
+        const resolvedFeatures = resolveConversationPageFeatures(
+          WIDGET_PAGE_KEY,
+          data.widget_config?.chat_policy ? (data.widget_config.chat_policy as ConversationFeaturesProviderShape) : null
+        );
         const greeting =
           (data.widget_config?.theme && (data.widget_config.theme as Record<string, any>).greeting) ||
           "안녕하세요. 무엇을 도와드릴까요?";
         const nextMessages =
           history.length > 0
             ? history
-            : [{ id: buildId(), role: "bot" as const, content: String(greeting) }];
+            : resolvedFeatures.interaction.prefill
+              ? []
+              : [{ id: buildId(), role: "bot" as const, content: String(greeting) }];
         setMessages(nextMessages);
         setStatus("연결됨");
       } catch (error) {
@@ -753,16 +761,11 @@ export default function WidgetEmbedPage() {
           }));
           return;
         }
-        const mapped = mapRuntimeResponseToTranscriptFields(data || {});
-        const normalizedRenderPlan = normalizeChatRenderPlan(mapped.renderPlan);
+        const botFields = buildRuntimeBotMessageFields(data || {});
+        const normalizedRenderPlan = normalizeChatRenderPlan(botFields.renderPlan);
         const messageText =
-          String(
-            data.message ||
-              data.final_answer ||
-              data.answer ||
-              mapped.responseSchema?.message ||
-              ""
-          ).trim() || "응답을 받지 못했습니다. 잠시 후 다시 시도해 주세요.";
+          botFields.content ||
+          "응답을 생성하지 못했습니다. 다시 시도해 주세요.";
         const nextSessionId = String(data.session_id || sessionId || "");
         setSessionId(nextSessionId);
         setMessages((prev) =>
@@ -771,12 +774,13 @@ export default function WidgetEmbedPage() {
               ? {
                   ...msg,
                   content: messageText,
-                  turnId: mapped.turnId || null,
-                  responseSchema: mapped.responseSchema,
-                  responseSchemaIssues: mapped.responseSchemaIssues,
+                  richHtml: botFields.richHtml,
+                  turnId: botFields.turnId || null,
+                  responseSchema: botFields.responseSchema,
+                  responseSchemaIssues: botFields.responseSchemaIssues,
                   renderPlan: normalizedRenderPlan,
-                  quickReplies: mapped.quickReplies.length > 0 ? mapped.quickReplies : undefined,
-                  productCards: mapped.productCards.length > 0 ? mapped.productCards : undefined,
+                  quickReplies: botFields.quickReplies,
+                  productCards: botFields.productCards,
                   isLoading: false,
                 }
               : msg
@@ -1047,6 +1051,13 @@ export default function WidgetEmbedPage() {
     interactionFeatures: {
       quickReplies: pageFeatures.interaction.quickReplies,
       productCards: pageFeatures.interaction.productCards,
+      threePhasePrompt: pageFeatures.interaction.threePhasePrompt,
+      threePhasePromptLabels: pageFeatures.interaction.threePhasePromptLabels,
+      threePhasePromptShowConfirmed: pageFeatures.interaction.threePhasePromptShowConfirmed,
+      threePhasePromptShowConfirming: pageFeatures.interaction.threePhasePromptShowConfirming,
+      threePhasePromptShowNext: pageFeatures.interaction.threePhasePromptShowNext,
+      threePhasePromptHideLabels: pageFeatures.interaction.threePhasePromptHideLabels,
+      inputPlaceholder: pageFeatures.interaction.inputPlaceholder,
       prefill: pageFeatures.interaction.prefill,
       prefillMessages: pageFeatures.interaction.prefillMessages,
       inputSubmit: pageFeatures.interaction.inputSubmit,

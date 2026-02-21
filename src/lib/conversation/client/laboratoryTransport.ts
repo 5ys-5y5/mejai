@@ -32,7 +32,7 @@ export async function sendLaboratoryMessage(
 ): Promise<RuntimeRunResponse> {
   const traceId = makeTraceId("labc");
   const startedAt = performance.now();
-  hooks?.onProgress?.(`요청 시작 (trace=${traceId})`);
+  hooks?.onProgress?.(`\uC694\uCCAD \uC2DC\uC791 (trace=${traceId})`);
   console.info("[laboratory/client][timing]", {
     trace_id: traceId,
     phase: "request_start",
@@ -70,7 +70,7 @@ export async function sendLaboratoryMessage(
       turn_id: res.turn_id || null,
     });
     hooks?.onProgress?.(
-      `응답 수신 (${Number((performance.now() - startedAt).toFixed(1))}ms, session=${res.session_id || "-"})`
+      `\uC751\uB2F5 \uC644\uB8CC (${Number((performance.now() - startedAt).toFixed(1))}ms, session=${res.session_id || "-"})`
     );
     return res;
   } catch (error) {
@@ -80,7 +80,7 @@ export async function sendLaboratoryMessage(
       total_ms: Number((performance.now() - startedAt).toFixed(1)),
       error: error instanceof Error ? error.message : String(error),
     });
-    hooks?.onProgress?.(`요청 실패: ${error instanceof Error ? error.message : String(error)}`);
+    hooks?.onProgress?.(`\uC694\uCCAD \uC2E4\uD328: ${error instanceof Error ? error.message : String(error)}`);
     throw error;
   }
 }

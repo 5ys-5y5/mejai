@@ -1,19 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { ConversationThread } from "@/components/design-system";
 import { Button } from "@/components/ui/Button";
-import {
-  Phone,
-  RotateCcw,
-  ChevronRight,
-  ChevronLeft,
-  Bot,
-  User,
-  Database,
-  ArrowRight,
-} from "lucide-react";
+import { Phone, RotateCcw, ChevronRight, ChevronLeft, Database, ArrowRight } from "lucide-react";
+import { renderBotContent } from "@/lib/conversation/messageRenderUtils";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+
+type DemoMessage = {
+  id: string;
+  role: "user" | "bot";
+  title: string;
+  content: string;
+};
 
 const demoSteps = [
   {
@@ -66,6 +66,16 @@ const demoSteps = [
 
 export default function DemoPage() {
   const [currentStep, setCurrentStep] = useState(0);
+  const visibleMessages = useMemo<DemoMessage[]>(
+    () =>
+      demoSteps.slice(0, currentStep + 1).map((step) => ({
+        id: String(step.id),
+        role: step.role === "user" ? "user" : "bot",
+        title: step.title,
+        content: step.message,
+      })),
+    [currentStep]
+  );
 
   const nextStep = () => {
     if (currentStep < demoSteps.length - 1) {
@@ -114,57 +124,22 @@ export default function DemoPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-6 py-6">
-              {demoSteps.slice(0, currentStep + 1).map((step, index, list) => {
-                const prev = list[index - 1];
-                const isGrouped = prev?.role === step.role;
-                const rowGap = "gap-4";
-                const rowSpacing = index === 0 ? "" : isGrouped ? "mt-1" : "mt-3";
-                const showAvatar = !isGrouped;
-                return (
-                  <div
-                    key={step.id}
-                    className={cn(
-                      "flex animate-in fade-in slide-in-from-bottom-2 duration-500",
-                      rowGap,
-                      rowSpacing,
-                      step.role === "user" ? "flex-row" : "flex-row-reverse"
-                    )}
-                  >
-                    {showAvatar ? (
-                      <div
-                        className={cn(
-                          "mt-1 flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700",
-                          step.role === "user" ? "" : "bg-slate-900 text-white border-slate-900"
-                        )}
-                      >
-                        {step.role === "user" ? (
-                          <User className="h-4 w-4" />
-                        ) : (
-                          <Bot className="h-4 w-4" />
-                        )}
-                      </div>
-                    ) : (
-                      <div
-                        className="mt-1 h-8 w-8 shrink-0 rounded-xl border border-slate-200 bg-white opacity-0"
-                        aria-hidden="true"
-                      />
-                    )}
-                    <div
-                      className={cn(
-                        "max-w-[80%] rounded-2xl border px-4 py-3 text-sm leading-relaxed",
-                        step.role === "user"
-                          ? "bg-slate-50 border-slate-200"
-                          : "bg-white border-slate-200"
-                      )}
-                    >
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 mb-2">
-                        {step.title}
-                      </div>
-                      <p className="whitespace-pre-wrap text-slate-800">{step.message}</p>
+              <ConversationThread
+                messages={visibleMessages}
+                selectedMessageIds={[]}
+                selectionEnabled={false}
+                onToggleSelection={() => undefined}
+                renderContent={(msg) => (
+                  <div>
+                    <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">
+                      {msg.title}
+                    </div>
+                    <div className="text-slate-800 whitespace-pre-wrap">
+                      {msg.role === "bot" ? renderBotContent(msg.content) : msg.content}
                     </div>
                   </div>
-                );
-              })}
+                )}
+              />
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-4">

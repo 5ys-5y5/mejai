@@ -27,6 +27,11 @@ import {
 } from "../shared/addressCandidateUtils";
 import type { AddressSearchResult } from "../shared/runtimeTypes";
 
+type ThreePhaseConfig = {
+  enabled?: boolean;
+  labels?: { confirmed: string; confirming: string; next: string } | null;
+};
+
 type PendingStateParams = {
   context: any;
   prevBotContext: Record<string, any>;
@@ -73,6 +78,7 @@ type PendingStateParams = {
     botContext: Record<string, any>
   ) => Promise<unknown>;
   respond: (payload: Record<string, any>, init?: ResponseInit) => unknown;
+  threePhaseConfig?: ThreePhaseConfig | null;
 };
 
 type PendingStateResult = {
@@ -881,12 +887,12 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
                   ? `\uB2F5\uBCC0\uC744 \uC8FC\uC2DC\uBA74 \uC8FC\uC18C \uD6C4\uBCF4\uAC00 \uC5EC\uB7EC \uAC1C\uC778 \uACBD\uC6B0 \uC120\uD0DD\uC744 \uC548\uB0B4\uD558\uACA0\uC2B5\uB2C8\uB2E4.`
                   : `\uB2F5\uBCC0\uC744 \uC8FC\uC2DC\uBA74 \uB2E4\uC74C \uB2E8\uACC4\uB97C \uC548\uB0B4\uD558\uACA0\uC2B5\uB2C8\uB2E4.`;
               const reply = makeReply(
-                shouldRequireThreePhasePrompt()
+                (params.threePhaseConfig?.enabled ?? shouldRequireThreePhasePrompt())
                   ? buildThreePhasePrompt({
                       confirmed: confirmedSummary,
                       confirming: promptText,
                       next: nextHint,
-                      labels: getThreePhasePromptLabels(),
+                      labels: params.threePhaseConfig?.labels || getThreePhasePromptLabels(),
                     })
                   : promptText
               );

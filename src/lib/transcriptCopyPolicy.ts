@@ -52,6 +52,7 @@ export const DEFAULT_CONVERSATION_DEBUG_OPTIONS: DebugTranscriptOptions = {
     },
     turn: {
       enabled: true,
+      messageText: true,
       turnId: true,
       tokenUsed: true,
       tokenUnused: true,
@@ -149,10 +150,11 @@ function normalizeConversationDebugOptions(input?: Partial<DebugTranscriptOption
         runtimeModules: headerInput?.runtimeModules ?? defaultHeader?.runtimeModules,
         auditStatus: headerInput?.auditStatus ?? defaultHeader?.auditStatus,
       },
-      turn: {
-        enabled: turnInput?.enabled ?? defaultTurn?.enabled,
-        turnId: turnInput?.turnId ?? defaultTurn?.turnId,
-        tokenUsed: turnInput?.tokenUsed ?? defaultTurn?.tokenUsed,
+    turn: {
+      enabled: turnInput?.enabled ?? defaultTurn?.enabled,
+      messageText: turnInput?.messageText ?? defaultTurn?.messageText,
+      turnId: turnInput?.turnId ?? defaultTurn?.turnId,
+      tokenUsed: turnInput?.tokenUsed ?? defaultTurn?.tokenUsed,
         tokenUnused: turnInput?.tokenUnused ?? defaultTurn?.tokenUnused,
         responseSchemaSummary: turnInput?.responseSchemaSummary ?? defaultTurn?.responseSchemaSummary,
         responseSchemaDetail: turnInput?.responseSchemaDetail ?? defaultTurn?.responseSchemaDetail,

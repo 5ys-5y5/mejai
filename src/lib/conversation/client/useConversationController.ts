@@ -3,7 +3,7 @@
 import { useCallback, useMemo, useState } from "react";
 import type { CopyPageKey } from "@/lib/transcriptCopyPolicy";
 import type { DebugTranscriptOptions, LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
-import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
+import { buildRuntimeBotMessageFields } from "@/lib/conversation/client/runtimeMessageMapping";
 import {
   fetchConversationDebugOptions,
   fetchSessionLogs,
@@ -159,7 +159,7 @@ export function useConversationController(options: ControllerOptions) {
           finalBody,
           makeTraceId(traceIdPrefix)
         );
-        const mapped = mapRuntimeResponseToTranscriptFields(res);
+        const botFields = buildRuntimeBotMessageFields(res);
         const nextSessionId = res.session_id || sessionId;
         const inlineLogs = res.log_bundle && typeof res.log_bundle === "object" ? res.log_bundle : null;
         setSessionId(nextSessionId);
@@ -168,14 +168,10 @@ export function useConversationController(options: ControllerOptions) {
             msg.id === loadingId
               ? {
                   ...msg,
-                  content: res.message || "응답을 받지 못했습니다. 다시 시도해 주세요.",
-                  richHtml: res.rich_message_html || undefined,
-                  turnId: mapped.turnId,
-                  responseSchema: mapped.responseSchema,
-                  responseSchemaIssues: mapped.responseSchemaIssues,
-                  renderPlan: mapped.renderPlan,
-                  quickReplies: mapped.quickReplies.length > 0 ? mapped.quickReplies : undefined,
-                  productCards: mapped.productCards.length > 0 ? mapped.productCards : undefined,
+                  ...botFields,
+                  content:
+                    botFields.content ||
+                    "응답을 생성하지 못했습니다. 다시 시도해 주세요.",
                   isLoading: false,
                 }
               : msg
@@ -193,7 +189,7 @@ export function useConversationController(options: ControllerOptions) {
             },
           }));
         } else {
-          void loadTurnLogs(loadingId, nextSessionId, mapped.turnId);
+          void loadTurnLogs(loadingId, nextSessionId, botFields.turnId || null);
         }
       } catch (error) {
         const fallback = "요청에 실패했습니다. 잠시 후 다시 시도해 주세요.";

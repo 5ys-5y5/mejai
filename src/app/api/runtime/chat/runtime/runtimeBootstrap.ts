@@ -20,6 +20,7 @@ import { DEFAULT_TOOL_PROVIDER_MAP } from "./mcpToolRegistry";
 import type { CompiledPolicy, RuntimeContext } from "../shared/runtimeTypes";
 
 type Body = {
+  page_key?: string;
   agent_id?: string;
   message?: string;
   session_id?: string;

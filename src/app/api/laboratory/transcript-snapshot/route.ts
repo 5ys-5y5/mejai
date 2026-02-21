@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { appendFile, mkdir } from "node:fs/promises";
+import path from "node:path";
 import { getServerContext } from "@/lib/serverAuth";
 
 const SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
@@ -41,6 +43,20 @@ async function assertSessionAccess(
   if (error) return { error: NextResponse.json({ error: error.message }, { status: 400 }) };
   if (!sessionRow) return { error: NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 }) };
   return { error: null };
+}
+
+async function appendServicePageLog(input: {
+  turnId: string | null;
+  transcriptText: string;
+}) {
+  if (process.env.NODE_ENV === "production") return;
+  const logPath = path.join(process.cwd(), "docs", "servicePageLog.md");
+  await mkdir(path.dirname(logPath), { recursive: true });
+  const header = `TURN_ID: ${input.turnId || "-"}`;
+  const body = String(input.transcriptText || "").trim();
+  if (!body) return;
+  const entry = `\n\n${header}\n\n${body}\n`;
+  await appendFile(logPath, entry, { encoding: "utf-8" });
 }
 
 export async function GET(req: NextRequest) {
@@ -137,6 +153,12 @@ export async function POST(req: NextRequest) {
   });
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  try {
+    await appendServicePageLog({ turnId, transcriptText });
+  } catch {
+    // ignore local log errors
   }
 
   return NextResponse.json({ ok: true });

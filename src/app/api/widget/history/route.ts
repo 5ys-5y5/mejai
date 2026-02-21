@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { verifyWidgetToken } from "@/lib/widgetToken";
+import { buildIntentDisambiguationTableHtmlFromText } from "@/components/design-system/conversation/runtimeUiCatalog";
 
 type WidgetMessage = {
   role: "user" | "bot";
   content: string;
+  rich_html?: string | null;
   created_at?: string | null;
   turn_id?: string | null;
 };
@@ -93,9 +95,11 @@ export async function GET(req: NextRequest) {
     }
     const botText = normalizeText((row as Record<string, any>).final_answer || (row as Record<string, any>).answer_text);
     if (botText) {
+      const richHtml = buildIntentDisambiguationTableHtmlFromText(botText);
       messages.push({
         role: "bot",
         content: botText,
+        rich_html: richHtml,
         created_at: (row as Record<string, any>).created_at ?? null,
         turn_id: String((row as Record<string, any>).id || "").trim() || null,
       });

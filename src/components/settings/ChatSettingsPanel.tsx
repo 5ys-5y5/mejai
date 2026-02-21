@@ -390,6 +390,8 @@ type GroupToggleFieldProps = {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  visibility?: FeatureVisibilityMode;
+  onChangeVisibility?: (mode: FeatureVisibilityMode) => void;
   expandable?: boolean;
   expanded?: boolean;
   onToggleExpanded?: () => void;
@@ -401,6 +403,8 @@ function GroupToggleField({
   label,
   checked,
   onChange,
+  visibility,
+  onChangeVisibility,
   expandable = false,
   expanded = false,
   onToggleExpanded,
@@ -451,6 +455,19 @@ function GroupToggleField({
           >
             {checked ? "ON" : "OFF"}
           </button>
+          {visibility ? (
+            <button
+              type="button"
+              onClick={() => onChangeVisibility?.(visibility === "user" ? "admin" : "user")}
+              className={
+                visibility === "admin"
+                  ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-amber-600 px-2 py-1 text-[11px] font-bold text-white"
+                  : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white"
+              }
+            >
+              {visibility === "admin" ? "ADMIN" : "USER"}
+            </button>
+          ) : null}
         </span>
       ) : null}
     </div>
@@ -707,6 +724,77 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     usedByPages: ["/", "/app/laboratory", "/embed"],
   },
   {
+    key: "interaction.inputPlaceholder",
+    label: "Interaction > Input Placeholder",
+    files: [
+      "src/lib/conversation/pageFeaturePolicy.ts",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+    ],
+    notes: "입력 안내 문구를 설정합니다.",
+    usedByPages: ["/", "/app/laboratory", "/embed"],
+  },
+  {
+    key: "interaction.threePhasePrompt",
+    label: "Interaction > 3-Phase Prompt",
+    files: [
+      "src/lib/conversation/pageFeaturePolicy.ts",
+      "src/components/design-system/conversation/ConversationUI.tsx",
+      "src/components/design-system/conversation/ConversationUI.parts.tsx",
+    ],
+    notes: "3단계 요약 메시지(Confirmed/Confirming/Next) 출력 여부를 제어합니다.",
+    usedByPages: ["/", "/app/laboratory", "/embed"],
+  },
+  {
+    key: "interaction.threePhasePromptLabels",
+    label: "Interaction > 3-Phase Labels",
+    files: [
+      "src/lib/conversation/pageFeaturePolicy.ts",
+      "src/components/design-system/conversation/ConversationUI.parts.tsx",
+    ],
+    notes: "3단계 라벨 텍스트(Confirmed/Confirming/Next)를 설정합니다.",
+    usedByPages: ["/", "/app/laboratory", "/embed"],
+  },
+  {
+    key: "interaction.threePhasePromptShowConfirmed",
+    label: "Interaction > 3-Phase Show Confirmed",
+    files: [
+      "src/lib/conversation/pageFeaturePolicy.ts",
+      "src/components/design-system/conversation/ConversationUI.parts.tsx",
+    ],
+    notes: "Confirmed 구간 표시 여부를 제어합니다.",
+    usedByPages: ["/", "/app/laboratory", "/embed"],
+  },
+  {
+    key: "interaction.threePhasePromptShowConfirming",
+    label: "Interaction > 3-Phase Show Confirming",
+    files: [
+      "src/lib/conversation/pageFeaturePolicy.ts",
+      "src/components/design-system/conversation/ConversationUI.parts.tsx",
+    ],
+    notes: "Confirming 구간 표시 여부를 제어합니다.",
+    usedByPages: ["/", "/app/laboratory", "/embed"],
+  },
+  {
+    key: "interaction.threePhasePromptShowNext",
+    label: "Interaction > 3-Phase Show Next",
+    files: [
+      "src/lib/conversation/pageFeaturePolicy.ts",
+      "src/components/design-system/conversation/ConversationUI.parts.tsx",
+    ],
+    notes: "Next 구간 표시 여부를 제어합니다.",
+    usedByPages: ["/", "/app/laboratory", "/embed"],
+  },
+  {
+    key: "interaction.threePhasePromptHideLabels",
+    label: "Interaction > 3-Phase Hide Labels",
+    files: [
+      "src/lib/conversation/pageFeaturePolicy.ts",
+      "src/components/design-system/conversation/ConversationUI.parts.tsx",
+    ],
+    notes: "라벨 텍스트 자체를 숨길지 여부를 제어합니다.",
+    usedByPages: ["/", "/app/laboratory", "/embed"],
+  },
+  {
     key: "interaction.inputSubmit",
     label: "Interaction > 입력/전송",
     files: [
@@ -802,6 +890,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
   const [debugTurnDetailsOpenByPage, setDebugTurnDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
   const [debugLogsDetailsOpenByPage, setDebugLogsDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
   const [debugEventDetailsOpenByPage, setDebugEventDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
+  const [threePhaseDetailsOpenByPage, setThreePhaseDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
   const [debugDetailTreeCollapsedByPage, setDebugDetailTreeCollapsedByPage] = useState<Record<ConversationPageKey, Record<string, boolean>>>(() =>
     initialPages.reduce<Record<ConversationPageKey, Record<string, boolean>>>((acc, page) => {
       acc[page] = {};
@@ -905,15 +994,16 @@ export function ChatSettingsPanel({ authToken }: Props) {
     setSetupUiByPage(nextSetupUi);
     setSetupExistingDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
     setSetupNewDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
-      setDebugHeaderDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
-      setDebugTurnDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
-      setDebugLogsDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
-      setDebugEventDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
-      setDebugDetailTreeCollapsedByPage(
-        discoveredPages.reduce<Record<ConversationPageKey, Record<string, boolean>>>((acc, page) => {
-          acc[page] = {};
-          return acc;
-        }, {} as Record<ConversationPageKey, Record<string, boolean>>)
+    setDebugHeaderDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+    setDebugTurnDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+    setDebugLogsDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+    setDebugEventDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+    setThreePhaseDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
+    setDebugDetailTreeCollapsedByPage(
+      discoveredPages.reduce<Record<ConversationPageKey, Record<string, boolean>>>((acc, page) => {
+        acc[page] = {};
+        return acc;
+      }, {} as Record<ConversationPageKey, Record<string, boolean>>)
       );
     }, [buildOpenStateByPage]);
 
@@ -1158,6 +1248,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
     setDebugTurnDetailsOpenByPage(buildOpenStateByPage(pages));
     setDebugLogsDetailsOpenByPage(buildOpenStateByPage(pages));
     setDebugEventDetailsOpenByPage(buildOpenStateByPage(pages));
+    setThreePhaseDetailsOpenByPage(buildOpenStateByPage(pages));
     setDebugDetailTreeCollapsedByPage(
       pages.reduce<Record<ConversationPageKey, Record<string, boolean>>>((acc, page) => {
         acc[page] = {};
@@ -1309,6 +1400,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
             const showDebugTurnDetails = Boolean(debugTurnDetailsOpenByPage[page]);
             const showDebugLogsDetails = Boolean(debugLogsDetailsOpenByPage[page]);
             const showDebugEventDetails = Boolean(debugEventDetailsOpenByPage[page]);
+            const showThreePhaseDetails = Boolean(threePhaseDetailsOpenByPage[page]);
             return (
               <Card
                 key={column}
@@ -2232,6 +2324,197 @@ export function ChatSettingsPanel({ authToken }: Props) {
                       />
                       {!isHeader ? <div className="mt-1 text-[10px] text-slate-500">줄바꿈으로 여러 줄 입력</div> : null}
                     </label>
+                    <label className="block">
+                      <div className="mb-1 text-[11px] font-semibold text-slate-600">
+                        {isHeader ? "interaction.inputPlaceholder" : "Input Placeholder"}
+                      </div>
+                      <input
+                        value={draft.interaction.inputPlaceholder || ""}
+                        disabled={isHeader}
+                        onChange={(e) =>
+                          updatePage(page, (prev) => ({
+                            ...prev,
+                            interaction: { ...prev.interaction, inputPlaceholder: e.target.value },
+                          }))
+                        }
+                        className="config-input h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                        placeholder="예: 문의 내용을 입력해주세요"
+                      />
+                    </label>
+                    <div className="rounded-lg border border-slate-200 bg-white p-2">
+                      <GroupToggleField
+                        neutralStyle={isHeader}
+                        label={isHeader ? "interaction.threePhasePrompt" : "3-Phase Prompt"}
+                        checked={draft.interaction.threePhasePrompt}
+                        visibility={draft.visibility.interaction.threePhasePrompt}
+                        onChange={(v) =>
+                          updatePage(page, (prev) => ({
+                            ...prev,
+                            interaction: { ...prev.interaction, threePhasePrompt: v },
+                          }))
+                        }
+                        onChangeVisibility={(mode) =>
+                          updatePage(page, (prev) => ({
+                            ...prev,
+                            visibility: {
+                              ...prev.visibility,
+                              interaction: { ...prev.visibility.interaction, threePhasePrompt: mode },
+                            },
+                          }))
+                        }
+                        expandable={isHeader}
+                        expanded={showThreePhaseDetails}
+                        onToggleExpanded={() => {
+                          if (!isHeader) return;
+                          setExpandAll(setThreePhaseDetailsOpenByPage, !threePhaseDetailsOpenByPage["/"]);
+                        }}
+                        hideToggle={isHeader}
+                      />
+                      {showThreePhaseDetails ? (
+                        <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                          <div className="space-y-2">
+                            <div className="text-[11px] font-semibold text-slate-600">
+                              {isHeader ? "interaction.threePhasePromptDisplay" : "3-Phase Display"}
+                            </div>
+                            <ToggleField
+                              neutralStyle={isHeader}
+                              label={
+                                isHeader
+                                  ? "interaction.threePhasePromptShowConfirmed"
+                                  : draft.interaction.threePhasePromptLabels?.confirmed || "Show Confirmed"
+                              }
+                              checked={draft.interaction.threePhasePromptShowConfirmed}
+                              visibility={draft.visibility.interaction.threePhasePromptShowConfirmed}
+                              editableLabel={!isHeader}
+                              onLabelChange={(value) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  interaction: {
+                                    ...prev.interaction,
+                                    threePhasePromptLabels: {
+                                      ...prev.interaction.threePhasePromptLabels,
+                                      confirmed: value,
+                                    },
+                                  },
+                                }))
+                              }
+                              onChange={(v) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  interaction: { ...prev.interaction, threePhasePromptShowConfirmed: v },
+                                }))
+                              }
+                              onChangeVisibility={(mode) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  visibility: {
+                                    ...prev.visibility,
+                                    interaction: { ...prev.visibility.interaction, threePhasePromptShowConfirmed: mode },
+                                  },
+                                }))
+                              }
+                            />
+                            <ToggleField
+                              neutralStyle={isHeader}
+                              label={
+                                isHeader
+                                  ? "interaction.threePhasePromptShowConfirming"
+                                  : draft.interaction.threePhasePromptLabels?.confirming || "Show Confirming"
+                              }
+                              checked={draft.interaction.threePhasePromptShowConfirming}
+                              visibility={draft.visibility.interaction.threePhasePromptShowConfirming}
+                              editableLabel={!isHeader}
+                              onLabelChange={(value) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  interaction: {
+                                    ...prev.interaction,
+                                    threePhasePromptLabels: {
+                                      ...prev.interaction.threePhasePromptLabels,
+                                      confirming: value,
+                                    },
+                                  },
+                                }))
+                              }
+                              onChange={(v) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  interaction: { ...prev.interaction, threePhasePromptShowConfirming: v },
+                                }))
+                              }
+                              onChangeVisibility={(mode) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  visibility: {
+                                    ...prev.visibility,
+                                    interaction: { ...prev.visibility.interaction, threePhasePromptShowConfirming: mode },
+                                  },
+                                }))
+                              }
+                            />
+                            <ToggleField
+                              neutralStyle={isHeader}
+                              label={
+                                isHeader
+                                  ? "interaction.threePhasePromptShowNext"
+                                  : draft.interaction.threePhasePromptLabels?.next || "Show Next"
+                              }
+                              checked={draft.interaction.threePhasePromptShowNext}
+                              visibility={draft.visibility.interaction.threePhasePromptShowNext}
+                              editableLabel={!isHeader}
+                              onLabelChange={(value) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  interaction: {
+                                    ...prev.interaction,
+                                    threePhasePromptLabels: {
+                                      ...prev.interaction.threePhasePromptLabels,
+                                      next: value,
+                                    },
+                                  },
+                                }))
+                              }
+                              onChange={(v) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  interaction: { ...prev.interaction, threePhasePromptShowNext: v },
+                                }))
+                              }
+                              onChangeVisibility={(mode) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  visibility: {
+                                    ...prev.visibility,
+                                    interaction: { ...prev.visibility.interaction, threePhasePromptShowNext: mode },
+                                  },
+                                }))
+                              }
+                            />
+                            <ToggleField
+                              neutralStyle={isHeader}
+                              label={isHeader ? "interaction.threePhasePromptHideLabels" : "Hide Labels"}
+                              checked={draft.interaction.threePhasePromptHideLabels}
+                              visibility={draft.visibility.interaction.threePhasePromptHideLabels}
+                              onChange={(v) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  interaction: { ...prev.interaction, threePhasePromptHideLabels: v },
+                                }))
+                              }
+                              onChangeVisibility={(mode) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  visibility: {
+                                    ...prev.visibility,
+                                    interaction: { ...prev.visibility.interaction, threePhasePromptHideLabels: mode },
+                                  },
+                                }))
+                              }
+                            />
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
                     <ToggleField
                       neutralStyle={isHeader}
                       label={isHeader ? "interaction.inputSubmit" : "입력/전송"}

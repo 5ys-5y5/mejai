@@ -358,7 +358,7 @@ export function ConversationAdminMenu({
   );
 }
 
-type BaseMessage = { id: string; role: "user" | "bot" };
+type BaseMessage = { id: string; role: "user" | "bot"; selectionId?: string; forceLatest?: boolean };
 
 type AvatarSelectionStyle = "none" | "bot" | "both";
 
@@ -404,8 +404,9 @@ export function ConversationThread<T extends BaseMessage>({
         const isGrouped = prev?.role === msg.role;
         const rowSpacing = index === 0 ? "" : isGrouped ? "mt-1" : "mt-3";
         const showAvatar = !isGrouped;
-        const isLatest = msg.id === latestVisibleMessageId;
-        const isSelected = selectedMessageIdSet.has(msg.id);
+        const selectionKey = msg.selectionId || msg.id;
+        const isLatest = msg.id === latestVisibleMessageId || Boolean(msg.forceLatest);
+        const isSelected = selectedMessageIdSet.has(selectionKey);
         return (
           <div
             key={msg.id}
@@ -428,7 +429,7 @@ export function ConversationThread<T extends BaseMessage>({
             <div className="relative max-w-[75%]">
               <div
                 onClick={() => {
-                  if (selectionEnabled) onToggleSelection(msg.id);
+                  if (selectionEnabled) onToggleSelection(selectionKey);
                 }}
                 className={cn(
                   bubbleBaseClassName,
@@ -454,6 +455,139 @@ export function ConversationThread<T extends BaseMessage>({
       })}
     </>
   );
+}
+
+
+type ThreePhaseSections = {
+  confirmed: string;
+  confirming: string;
+  next: string;
+};
+
+type ThreePhaseLabelSet = {
+  confirmed: string;
+  confirming: string;
+  next: string;
+};
+
+function normalizeThreePhaseLabel(label: string) {
+  return String(label || "").trim().replace(/:\s*$/, "");
+}
+
+function extractThreePhaseSections(text: string, labels: ThreePhaseLabelSet): ThreePhaseSections | null {
+  const confirmedLabel = normalizeThreePhaseLabel(labels.confirmed);
+  const confirmingLabel = normalizeThreePhaseLabel(labels.confirming);
+  const nextLabel = normalizeThreePhaseLabel(labels.next);
+  const confirmedPrefix = `${confirmedLabel}:`;
+  const confirmingPrefix = `${confirmingLabel}:`;
+  const nextPrefix = `${nextLabel}:`;
+  const normalized = String(text || "").trim();
+  if (!normalized) return null;
+  if (!normalized.includes(confirmedPrefix) || !normalized.includes(confirmingPrefix) || !normalized.includes(nextPrefix)) return null;
+  const sections: ThreePhaseSections = { confirmed: "", confirming: "", next: "" };
+  let current: keyof ThreePhaseSections | null = null;
+  String(text || "")
+    .split(/\r?\n/)
+    .forEach((raw) => {
+      const line = String(raw || "");
+      if (line.startsWith(confirmedPrefix)) {
+        current = "confirmed";
+        sections.confirmed = line.slice(confirmedPrefix.length).trim();
+        return;
+      }
+      if (line.startsWith(confirmingPrefix)) {
+        current = "confirming";
+        sections.confirming = line.slice(confirmingPrefix.length).trim();
+        return;
+      }
+      if (line.startsWith(nextPrefix)) {
+        current = "next";
+        sections.next = line.slice(nextPrefix.length).trim();
+        return;
+      }
+      if (!current) return;
+      const currentValue = sections[current];
+      sections[current] = currentValue ? `${currentValue}\n${line}` : line;
+    });
+  return sections;
+}
+
+type ThreePhaseUiConfig = {
+  enabled: boolean;
+  labels: ThreePhaseLabelSet;
+  showConfirmed: boolean;
+  showConfirming: boolean;
+  showNext: boolean;
+  hideLabels: boolean;
+};
+
+type ThreePhasePhase = "confirmed" | "confirming" | "next";
+
+type UiMessagePhase = {
+  phase: ThreePhasePhase;
+  content: string;
+};
+
+type UiChatMessage = ChatMessage & {
+  selectionId?: string;
+  forceLatest?: boolean;
+  phase?: ThreePhasePhase;
+  sourceMessageId?: string;
+};
+
+function formatThreePhaseContent(phase: ThreePhasePhase, content: string, config: ThreePhaseUiConfig): string {
+  const trimmed = String(content || "").trim();
+  if (!trimmed) return "";
+  if (config.hideLabels) return trimmed;
+  const label = normalizeThreePhaseLabel(config.labels[phase]);
+  return label ? `${label}: ${trimmed}` : trimmed;
+}
+
+function buildUiMessages(messages: ChatMessage[], config: ThreePhaseUiConfig): UiChatMessage[] {
+  if (!config.enabled) return messages as UiChatMessage[];
+  return messages.flatMap((msg) => {
+    if (msg.role !== "bot") return [msg];
+    if (msg.isLoading || msg.richHtml) return [msg];
+    const sections = extractThreePhaseSections(msg.content, config.labels);
+    if (!sections) return [msg];
+    const phases: UiMessagePhase[] = [];
+    if (config.showConfirmed) {
+      const content = formatThreePhaseContent("confirmed", sections.confirmed, config);
+      if (content) phases.push({ phase: "confirmed", content });
+    }
+    if (config.showConfirming) {
+      const content = formatThreePhaseContent("confirming", sections.confirming, config);
+      if (content) phases.push({ phase: "confirming", content });
+    }
+    if (config.showNext) {
+      const content = formatThreePhaseContent("next", sections.next, config);
+      if (content) phases.push({ phase: "next", content });
+    }
+    if (phases.length === 0) return [];
+
+    const replyPhase =
+      phases.find((item) => item.phase === "confirming")?.phase ?? phases[0]?.phase ?? "confirming";
+    const replyIsLast = phases[phases.length - 1]?.phase === replyPhase;
+
+    return phases.map((item) => {
+      const isReplyPhase = item.phase === replyPhase;
+      return {
+        ...msg,
+        id: `${msg.id}__${item.phase}`,
+        selectionId: msg.id,
+        forceLatest: isReplyPhase && !replyIsLast ? true : undefined,
+        phase: item.phase,
+        sourceMessageId: msg.id,
+        content: item.content,
+        quickReplies: isReplyPhase ? msg.quickReplies : undefined,
+        productCards: isReplyPhase ? msg.productCards : undefined,
+        renderPlan: isReplyPhase ? msg.renderPlan : undefined,
+        responseSchema: isReplyPhase ? msg.responseSchema : undefined,
+        responseSchemaIssues: isReplyPhase ? msg.responseSchemaIssues : undefined,
+        loadingLogs: isReplyPhase ? msg.loadingLogs : undefined,
+      };
+    });
+  });
 }
 
 const END_USER_CONTEXT_EVENT = "END_USER_CONTEXT_RESOLVED";
@@ -1577,6 +1711,26 @@ function ConversationModelChatColumnCore({
       content,
     }))
     : visibleMessages;
+  const displayMessages = useMemo(
+    () =>
+      buildUiMessages(effectiveVisibleMessages, {
+        enabled: interactionFeatures.threePhasePrompt,
+        labels: interactionFeatures.threePhasePromptLabels,
+        showConfirmed: interactionFeatures.threePhasePromptShowConfirmed,
+        showConfirming: interactionFeatures.threePhasePromptShowConfirming,
+        showNext: interactionFeatures.threePhasePromptShowNext,
+        hideLabels: interactionFeatures.threePhasePromptHideLabels,
+      }),
+    [
+      effectiveVisibleMessages,
+      interactionFeatures.threePhasePrompt,
+      interactionFeatures.threePhasePromptLabels,
+      interactionFeatures.threePhasePromptShowConfirmed,
+      interactionFeatures.threePhasePromptShowConfirming,
+      interactionFeatures.threePhasePromptShowNext,
+      interactionFeatures.threePhasePromptHideLabels,
+    ]
+  );
 
   const chatScrollAreaRef = useRef<HTMLDivElement | null>(null);
   const handleSetChatScrollRef = (el: HTMLDivElement | null) => {
@@ -1601,6 +1755,14 @@ function ConversationModelChatColumnCore({
     model.sending ||
     (model.setupMode === "existing" && !model.config.kbId) ||
     (model.setupMode === "existing" && (!model.selectedAgentId || (model.conversationMode !== "new" && !model.selectedSessionId)));
+  const defaultInputPlaceholder = "문의 내용을 입력해주세요.";
+  const configuredInputPlaceholder = String(interactionFeatures.inputPlaceholder || "").trim();
+  const inputPlaceholder =
+    model.setupMode === "existing" && model.conversationMode === "history"
+      ? "대화 기록을 확인 중입니다. 새 대화를 시작하려면 새 대화를 눌러주세요."
+      : model.setupMode === "existing" && model.conversationMode === "edit"
+        ? "선택한 대화를 수정 중입니다. (수정 내용을 저장하려면 저장 버튼을 눌러주세요)"
+        : configuredInputPlaceholder || defaultInputPlaceholder;
 
   return (
     <div panel-lego="ConversationModelChatColumnLego.Panel" className="relative h-full min-h-0 flex flex-col overflow-hidden bg-white p-4" style={{ height: "100%" }} onWheel={handlePaneWheel}>
@@ -1635,8 +1797,8 @@ function ConversationModelChatColumnCore({
           ref={handleSetChatScrollRef}
           className={`relative z-0 h-full overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-xl ${isAdminUser ? "pt-10" : "pt-2"}`}
         >
-          <ConversationThread
-            messages={effectiveVisibleMessages}
+          <ConversationThread<UiChatMessage>
+            messages={displayMessages}
             selectedMessageIds={model.selectedMessageIds}
             selectionEnabled={adminFeatures.messageSelection && model.chatSelectionEnabled}
             onToggleSelection={(messageId) => {
@@ -1647,9 +1809,10 @@ function ConversationModelChatColumnCore({
             renderContent={(msg) => {
               const hasDebug = msg.role === "bot" && msg.content.includes("debug_prefix");
               const debugParts = hasDebug ? getDebugParts(msg.content) : null;
+              const messageLogKey = msg.sourceMessageId || msg.id;
               const endUserSummary =
                 msg.role === "bot" && isAdminUser && adminFeatures.logsToggle && model.showAdminLogs
-                  ? resolveEndUserContextSummary(model.messageLogs?.[msg.id])
+                  ? resolveEndUserContextSummary(model.messageLogs?.[messageLogKey])
                   : null;
               return (
                 <>
@@ -1765,13 +1928,7 @@ function ConversationModelChatColumnCore({
           <Input
             value={model.input}
             onChange={(e) => onInputChange(e.target.value)}
-            placeholder={
-              model.setupMode === "existing" && model.conversationMode === "history"
-                ? "히스토리 모드에서는 전송할 수 없습니다."
-                : model.setupMode === "existing" && model.conversationMode === "edit"
-                  ? "수정할 내용을 입력하세요 (새 메시지로 복제되어 이어집니다.)"
-                  : "새로운 대화 질문을 입력하세요."
-            }
+            placeholder={inputPlaceholder}
             className="flex-1"
           />
           <Button type="submit" disabled={submitDisabled} aria-label={model.sending ? "전송 중" : "전송"}>
@@ -2153,6 +2310,13 @@ export type ConversationModelChatColumnLegoProps = {
   interactionFeatures: {
     quickReplies: boolean;
     productCards: boolean;
+    threePhasePrompt: boolean;
+    threePhasePromptLabels: { confirmed: string; confirming: string; next: string };
+    threePhasePromptShowConfirmed: boolean;
+    threePhasePromptShowConfirming: boolean;
+    threePhasePromptShowNext: boolean;
+    threePhasePromptHideLabels: boolean;
+    inputPlaceholder: string;
     prefill: boolean;
     prefillMessages: string[];
     inputSubmit: boolean;
@@ -2454,6 +2618,13 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
   const interactionFeaturesForPane = {
     quickReplies: pageFeatures.interaction.quickReplies,
     productCards: pageFeatures.interaction.productCards,
+    threePhasePrompt: pageFeatures.interaction.threePhasePrompt,
+    threePhasePromptLabels: pageFeatures.interaction.threePhasePromptLabels,
+    threePhasePromptShowConfirmed: pageFeatures.interaction.threePhasePromptShowConfirmed,
+    threePhasePromptShowConfirming: pageFeatures.interaction.threePhasePromptShowConfirming,
+    threePhasePromptShowNext: pageFeatures.interaction.threePhasePromptShowNext,
+    threePhasePromptHideLabels: pageFeatures.interaction.threePhasePromptHideLabels,
+    inputPlaceholder: pageFeatures.interaction.inputPlaceholder,
     prefill: pageFeatures.interaction.prefill,
     prefillMessages: pageFeatures.interaction.prefillMessages,
     inputSubmit: pageFeatures.interaction.inputSubmit,
@@ -2725,4 +2896,3 @@ export function ConversationProductCard({
     </button>
   );
 }
-

@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
+import { buildRuntimeBotMessageFields } from "@/lib/conversation/client/runtimeMessageMapping";
 import { loadLaboratoryLogs, sendLaboratoryMessage, type LaboratoryRunConfig } from "@/lib/conversation/client/laboratoryTransport";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 import {
@@ -147,7 +147,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           lastLogAt: loaded.newestIso || model.lastLogAt,
         }));
       } catch (err) {
-        const message = err instanceof Error ? err.message : "로그를 불러오지 못했습니다.";
+        const message = err instanceof Error ? err.message : "\uB85C\uADF8\uB97C \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.";
         updateModel(id, (model) => ({
           ...model,
           messageLogs: {
@@ -217,7 +217,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
             role: "bot",
             content: "답변 생성 중...",
             isLoading: true,
-            loadingLogs: isAdminUser ? ["요청 준비 중..."] : undefined,
+            loadingLogs: isAdminUser ? ["\uC694\uCCAD \uC900\uBE44 \uC911..."] : undefined,
           } as unknown as TMessage,
         ],
       }));
@@ -233,7 +233,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
       let succeeded = false;
       try {
         const activeSessionId = target.conversationMode === "new" ? target.sessionId : await ensureEditableSession(target);
-        appendLoadingLog(activeSessionId ? `기존 세션 사용: ${activeSessionId}` : "신규 세션으로 요청");
+        appendLoadingLog(activeSessionId ? `\uAE30\uC874 \uC138\uC158 \uC0AC\uC6A9: ${activeSessionId}` : "\uC2E0\uADDC \uC138\uC158\uC73C\uB85C \uC694\uCCAD");
 
         const result = await sendLaboratoryMessage(target.config, activeSessionId, text, target.selectedAgentId, {
           onProgress: appendLoadingLog,
@@ -244,21 +244,16 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
 
         if (result.status === "fulfilled") {
           const res = result.value;
-          const botMessageId = res.message ? loadingMessageId : null;
-          const transcriptFields = mapRuntimeResponseToTranscriptFields(res);
+          const botFields = buildRuntimeBotMessageFields(res);
+          const botMessageId = botFields.content ? loadingMessageId : null;
           const inlineLogs = res.log_bundle && typeof res.log_bundle === "object" ? res.log_bundle : null;
-          const quickReplies = transcriptFields.quickReplies;
-          const productCards = transcriptFields.productCards;
-          const responseSchema = transcriptFields.responseSchema;
-          const responseSchemaIssues = transcriptFields.responseSchemaIssues;
-          const renderPlan = transcriptFields.renderPlan;
           updateModel(modelId, (model) => ({
             ...model,
             sessionId: res.session_id || model.sessionId,
             messages: model.messages
               .map((msg): TMessage => {
                 if (msg.id !== loadingMessageId || msg.role !== "bot") return msg;
-                if (!res.message) {
+                if (!botFields.content) {
                   return { ...msg, role: "bot", isLoading: false, content: "" };
                 }
                 const persistedLogs = isAdminUser
@@ -267,17 +262,16 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
                 return {
                   id: loadingMessageId,
                   role: "bot",
-                  content: res.message || "",
-                  richHtml: typeof res.rich_message_html === "string" ? res.rich_message_html : undefined,
-                  turnId: transcriptFields.turnId,
+                  content: botFields.content || "",
+                  richHtml: botFields.richHtml,
+                  turnId: botFields.turnId,
                   isLoading: false,
                   loadingLogs: persistedLogs,
-                  quickReplies: quickReplies.length > 0 ? quickReplies : undefined,
-                  productCards: productCards.length > 0 ? productCards : undefined,
-                  responseSchema,
-                  responseSchemaIssues:
-                    responseSchemaIssues && responseSchemaIssues.length > 0 ? responseSchemaIssues : undefined,
-                  renderPlan,
+                  quickReplies: botFields.quickReplies,
+                  productCards: botFields.productCards,
+                  responseSchema: botFields.responseSchema,
+                  responseSchemaIssues: botFields.responseSchemaIssues,
+                  renderPlan: botFields.renderPlan,
                 } as unknown as TMessage;
               })
               .filter((msg) => !(msg.id === loadingMessageId && msg.role === "bot" && !msg.content)),
@@ -299,7 +293,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
             }));
           }
           if (botMessageId && !inlineLogs) {
-            await loadLogs(modelId, botMessageId, res.session_id || target.sessionId, transcriptFields.turnId);
+            await loadLogs(modelId, botMessageId, res.session_id || target.sessionId, botFields.turnId || null);
           }
           succeeded = true;
         } else {
