@@ -70,6 +70,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { RENDER_POLICY } from "@/app/api/runtime/chat/policies/uiPolicy";
+import { buildIntentDisambiguationTableHtmlFromText } from "@/components/design-system/conversation/runtimeUiCatalog";
 import { getDefaultConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
 import { DEFAULT_CONVERSATION_DEBUG_OPTIONS } from "@/lib/transcriptCopyPolicy";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
@@ -972,6 +973,13 @@ function formatDemoKstDateTime(value?: string | null) {
 
 function createDemoModelState(): ModelState {
   const base = createDefaultModel();
+  const disambiguationText = [
+    "확인할 것: 다음 중 어떤 상품의 재입고 알림을 원하시나요?",
+    "- 1번 | 아드헬린 린넨 플레어 원피스 그레이 | 03/21 (D-28)",
+    "- 2번 | 아드헬린 린넨 롱 원피스 그레이 | 02/28 (D-7)",
+    "예) 1,2",
+  ].join("\n");
+  const disambiguationHtml = buildIntentDisambiguationTableHtmlFromText(disambiguationText) ?? "";
   const historyMessages: ChatMessage[] = [
     {
       id: "h1",
@@ -1003,6 +1011,18 @@ function createDemoModelState(): ModelState {
   ];
   const messages: ChatMessage[] = [
     {
+      id: "n0",
+      role: "bot",
+      content: [
+        "확인한 것: 배송지 변경",
+        "확인할 것: 원하시는 문의 유형을 선택해주세요. (번호로 답변)",
+        "- 1번 | 배송지 변경 | 배송지/주문정보 변경",
+        "- 2번 | 배송 문의 | 배송 상태/송장 조회",
+        "예) 1,2",
+        "그 다음으로 확인할 것: 다음 단계로 이어서 안내해 드리겠습니다.",
+      ].join("\n"),
+    },
+    {
       id: "n1",
       role: "bot",
       content: "추천 상품입니다.",
@@ -1022,6 +1042,36 @@ function createDemoModelState(): ModelState {
         submit_format: "single",
         grid_columns: { quick_replies: 2, cards: 2 },
         prompt_kind: "restock_product_choice",
+      },
+    },
+    {
+      id: "n2",
+      role: "bot",
+      content: disambiguationText,
+      richHtml: disambiguationHtml || undefined,
+    },
+    {
+      id: "n3",
+      role: "bot",
+      content: "원하시는 조건을 선택해주세요.",
+      quickReplies: [
+        { label: "오늘 주문", value: "today" },
+        { label: "일주일 내", value: "7days" },
+        { label: "이번 달", value: "month" },
+        { label: "상관없음", value: "anytime" },
+      ],
+      renderPlan: {
+        view: "choice",
+        enable_quick_replies: true,
+        enable_cards: false,
+        interaction_scope: "any",
+        quick_reply_source: { type: "explicit" },
+        selection_mode: "multi",
+        min_select: 1,
+        max_select: 2,
+        submit_format: "multi",
+        grid_columns: { quick_replies: 2, cards: 2 },
+        prompt_kind: "intent_disambiguation",
       },
     },
   ];
@@ -1809,7 +1859,6 @@ export function DesignSystemContent() {
               showNewConversation
               onClose={() => undefined}
               showClose
-              onClose={() => undefined}
               chatLegoProps={demoAssembly.chatLegoProps}
               setupLegoProps={demoAssembly.setupLegoProps}
               fill={false}

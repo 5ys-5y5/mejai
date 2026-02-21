@@ -43,6 +43,24 @@ export type WidgetLauncherContainerProps = {
   style?: CSSProperties;
 };
 
+export type WidgetShellProps = {
+  children?: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+};
+
+export function WidgetShell({ children, className, style }: WidgetShellProps) {
+  return (
+    <div
+      className={cn("rounded-2xl border border-slate-200 bg-white shadow-sm", className)}
+      style={style}
+      parts-lego="WidgetShell"
+    >
+      {children}
+    </div>
+  );
+}
+
 export function WidgetLauncherContainer({
   children,
   position = "bottom-right",

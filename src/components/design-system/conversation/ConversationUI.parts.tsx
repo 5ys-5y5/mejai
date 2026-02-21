@@ -1749,6 +1749,22 @@ function ConversationModelChatColumnCore({
     event.preventDefault();
     el.scrollTop += event.deltaY;
   }, []);
+  const updateScrollIndicators = useCallback(() => {
+    const pane = chatScrollAreaRef.current;
+    if (!pane) return;
+    const tables = Array.from(pane.querySelectorAll<HTMLElement>("[data-mejai-scroll-table]"));
+    tables.forEach((table) => {
+      const scroller = table.querySelector<HTMLElement>("[data-mejai-scroll-area]");
+      const left = table.querySelector<HTMLElement>("[data-mejai-scroll-left]");
+      const right = table.querySelector<HTMLElement>("[data-mejai-scroll-right]");
+      if (!scroller || !left || !right) return;
+      const maxScroll = scroller.scrollWidth - scroller.clientWidth;
+      const atLeft = scroller.scrollLeft <= 1;
+      const atRight = scroller.scrollLeft >= maxScroll - 1;
+      left.style.opacity = atLeft ? "0" : "1";
+      right.style.opacity = maxScroll <= 0 || atRight ? "0" : "1";
+    });
+  }, []);
 
   useEffect(() => {
     const pane = chatPaneRef.current;
@@ -1756,6 +1772,99 @@ function ConversationModelChatColumnCore({
     pane.addEventListener("wheel", handlePaneWheelNative, { passive: false });
     return () => pane.removeEventListener("wheel", handlePaneWheelNative);
   }, [handlePaneWheelNative]);
+  useEffect(() => {
+    const pane = chatScrollAreaRef.current;
+    if (!pane) return;
+    const scrollers = Array.from(pane.querySelectorAll<HTMLElement>("[data-mejai-scroll-area]"));
+    const cleanups: Array<() => void> = [];
+    scrollers.forEach((scroller) => {
+      scroller.style.cursor = "grab";
+      const onScroll = () => updateScrollIndicators();
+      scroller.addEventListener("scroll", onScroll, { passive: true });
+      cleanups.push(() => scroller.removeEventListener("scroll", onScroll));
+
+      let dragging = false;
+      let startX = 0;
+      let startScrollLeft = 0;
+      let lastX = 0;
+      let lastTs = 0;
+      let velocity = 0;
+      let momentumId: number | null = null;
+      const stopMomentum = () => {
+        if (momentumId !== null) {
+          cancelAnimationFrame(momentumId);
+          momentumId = null;
+        }
+      };
+      const startMomentum = () => {
+        stopMomentum();
+        const step = () => {
+          velocity *= 0.92;
+          if (Math.abs(velocity) < 0.2) {
+            stopMomentum();
+            return;
+          }
+          scroller.scrollLeft -= velocity;
+          updateScrollIndicators();
+          momentumId = requestAnimationFrame(step);
+        };
+        momentumId = requestAnimationFrame(step);
+      };
+      const onPointerDown = (event: PointerEvent) => {
+        if (event.button !== 0) return;
+        stopMomentum();
+        dragging = true;
+        startX = event.clientX;
+        lastX = event.clientX;
+        lastTs = event.timeStamp;
+        startScrollLeft = scroller.scrollLeft;
+        scroller.style.cursor = "grabbing";
+        scroller.style.userSelect = "none";
+        scroller.setPointerCapture(event.pointerId);
+      };
+      const onPointerMove = (event: PointerEvent) => {
+        if (!dragging) return;
+        event.preventDefault();
+        const delta = event.clientX - startX;
+        scroller.scrollLeft = startScrollLeft - delta;
+        const dt = event.timeStamp - lastTs;
+        if (dt > 0) {
+          velocity = (event.clientX - lastX) / dt;
+          lastX = event.clientX;
+          lastTs = event.timeStamp;
+        }
+        updateScrollIndicators();
+      };
+      const endDrag = () => {
+        if (!dragging) return;
+        dragging = false;
+        scroller.style.cursor = "grab";
+        scroller.style.userSelect = "";
+        if (Math.abs(velocity) > 0.3) startMomentum();
+      };
+      scroller.addEventListener("pointerdown", onPointerDown);
+      scroller.addEventListener("pointermove", onPointerMove);
+      scroller.addEventListener("pointerup", endDrag);
+      scroller.addEventListener("pointercancel", endDrag);
+      scroller.addEventListener("pointerleave", endDrag);
+      cleanups.push(() => scroller.removeEventListener("pointerdown", onPointerDown));
+      cleanups.push(() => scroller.removeEventListener("pointermove", onPointerMove));
+      cleanups.push(() => scroller.removeEventListener("pointerup", endDrag));
+      cleanups.push(() => scroller.removeEventListener("pointercancel", endDrag));
+      cleanups.push(() => scroller.removeEventListener("pointerleave", endDrag));
+      cleanups.push(() => stopMomentum());
+    });
+    const onResize = () => updateScrollIndicators();
+    window.addEventListener("resize", onResize);
+    updateScrollIndicators();
+    const observer = new MutationObserver(() => updateScrollIndicators());
+    observer.observe(pane, { childList: true, subtree: true });
+    return () => {
+      cleanups.forEach((fn) => fn());
+      window.removeEventListener("resize", onResize);
+      observer.disconnect();
+    };
+  }, [displayMessages, updateScrollIndicators]);
 
   const submitDisabled =
     (model.setupMode === "existing" && model.conversationMode === "history") ||
@@ -1942,7 +2051,7 @@ function ConversationModelChatColumnCore({
             value={model.input}
             onChange={(e) => onInputChange(e.target.value)}
             placeholder={inputPlaceholder}
-            className="flex-1"
+            className="flex-1 text-[16px] sm:text-sm"
           />
           <Button type="submit" disabled={submitDisabled} aria-label={model.sending ? "전송 중" : "전송"}>
             {model.sending ? <Loader className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

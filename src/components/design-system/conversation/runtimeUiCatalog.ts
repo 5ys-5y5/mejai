@@ -87,14 +87,25 @@ export function buildIntentDisambiguationTableHtmlFromText(message: unknown): st
   const hasDetailColumn = itemRows.some((row) => row.cols.length > 1);
   const headerPrimary = "\uBB38\uC758 \uC720\uD615";
   const headerDetail = hasDetailColumn ? "\uC9C0\uC6D0 \uBC94\uC704" : "";
+  const clampStyle = "display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;";
+  const cellBaseStyle = "padding:4px 6px;border-bottom:1px solid #e2e8f0;line-height:1.35;";
+  const dataCellStyle = `${cellBaseStyle}color:inherit;font-size:12px;max-width:50%;`;
+  const detailCellStyle = `${cellBaseStyle}color:#475569;font-size:11px;max-width:50%;`;
+  const shouldForceScroll = hasDetailColumn && itemRows.length > 0;
   const rowsHtml = itemRows
     .map((row) => {
       const name = row.cols[0] || "-";
       const detail = row.cols.slice(1).join(" | ") || "-";
       if (!hasDetailColumn) {
-        return `<tr><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#0f172a;font-size:11px;font-weight:700;white-space:nowrap;">${escapeHtml(row.index)}</td><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:inherit;font-size:12px;line-height:1.35;">${escapeHtml(name)}</td></tr>`;
+        return `<tr><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#0f172a;font-size:11px;font-weight:700;white-space:nowrap;">${escapeHtml(
+          row.index
+        )}</td><td style="${dataCellStyle}"><div style="${clampStyle}">${escapeHtml(name)}</div></td></tr>`;
       }
-      return `<tr><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#0f172a;font-size:11px;font-weight:700;white-space:nowrap;">${escapeHtml(row.index)}</td><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:inherit;font-size:12px;line-height:1.35;">${escapeHtml(name)}</td><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;color:#475569;font-size:11px;line-height:1.35;white-space:nowrap;">${escapeHtml(detail)}</td></tr>`;
+      return `<tr><td style="padding:4px 6px;border-bottom:1px solid #e2e8f0;text-align:center;color:#0f172a;font-size:11px;font-weight:700;white-space:nowrap;">${escapeHtml(
+        row.index
+      )}</td><td style="${dataCellStyle}"><div style="${clampStyle}">${escapeHtml(name)}</div></td><td style="${detailCellStyle}"><div style="${clampStyle}">${escapeHtml(
+        detail
+      )}</div></td></tr>`;
     })
     .join("");
 
@@ -114,7 +125,7 @@ export function buildIntentDisambiguationTableHtmlFromText(message: unknown): st
         headerPrimary
       )}</th></tr>`;
 
-  return `<div style="display:block;margin:0;padding:0;color:inherit;font:inherit;line-height:inherit;"><div style="margin:0;padding:0;color:inherit;font:inherit;line-height:inherit;">${escapeHtml(
+  return `<div style="display:block;margin:0;padding:0;color:inherit;font:inherit;line-height:inherit;"><style>[data-mejai-scroll-area]{scrollbar-width:none;-ms-overflow-style:none;}[data-mejai-scroll-area]::-webkit-scrollbar{display:none;}</style><div style="margin:0;padding:0;color:inherit;font:inherit;line-height:inherit;">${escapeHtml(
     title
-  )}</div><div style="margin-top:4px;overflow:hidden;border:1px solid #e2e8f0;border-radius:8px;background:rgba(255,255,255,0.55);"><table style="width:100%;border-collapse:collapse;table-layout:fixed;color:inherit;font:inherit;margin:0;"><thead>${headerColumns}</thead><tbody>${rowsHtml}</tbody></table></div>${exampleHtml}</div>`;
+  )}</div><div data-mejai-scroll-table="1" style="margin-top:4px;position:relative;overflow:hidden;border:1px solid #e2e8f0;border-radius:8px;background:rgba(255,255,255,0.55);"><div data-mejai-scroll-left="1" style="position:absolute;left:0;top:0;bottom:0;display:flex;align-items:center;opacity:0;transition:opacity .2s ease;pointer-events:none;padding-left:4px;padding-right:6px;background:linear-gradient(90deg,rgba(255,255,255,0.92),rgba(255,255,255,0));"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div><div data-mejai-scroll-right="1" style="position:absolute;right:0;top:0;bottom:0;display:flex;align-items:center;opacity:0;transition:opacity .2s ease;pointer-events:none;padding-right:4px;padding-left:6px;background:linear-gradient(270deg,rgba(255,255,255,0.92),rgba(255,255,255,0));"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></div><div data-mejai-scroll-area="1" style="overflow-x:auto;overflow-y:hidden;padding:0;scrollbar-width:none;"><table style="width:max-content;min-width:${shouldForceScroll ? "calc(100% + 64px)" : "100%"};border-collapse:collapse;table-layout:auto;color:inherit;font:inherit;margin:0;"><thead>${headerColumns}</thead><tbody>${rowsHtml}</tbody></table></div></div>${exampleHtml}</div>`;
 }

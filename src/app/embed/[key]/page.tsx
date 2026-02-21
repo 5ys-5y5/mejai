@@ -5,6 +5,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
   WidgetConversationLayout,
+  Button,
   type WidgetConversationSession,
   type WidgetConversationTab,
   type ConversationModelChatColumnLegoProps,
