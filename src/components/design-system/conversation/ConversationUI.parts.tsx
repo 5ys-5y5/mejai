@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
 import { isToolEnabled } from "@/lib/conversation/pageFeaturePolicy";
 import type { SetupFieldKey } from "@/lib/conversation/pageFeaturePolicy";
-import { type RuntimeUiTypeId } from "@/components/design-system/conversation/runtimeUiCatalog";
+import { buildIntentDisambiguationTableHtmlFromText, type RuntimeUiTypeId } from "@/components/design-system/conversation/runtimeUiCatalog";
 // (ConversationSetupPanel/ConversationSplitLayout + ConversationGrid/QuickReply/Confirm/ProductCard merged below)
 import { getDebugParts, renderBotContent } from "@/lib/conversation/messageRenderUtils";
 import type { ConversationPageFeatures, ConversationSetupUi, ExistingSetupFieldKey, ExistingSetupLabelKey } from "@/lib/conversation/pageFeaturePolicy";
@@ -543,13 +543,57 @@ function formatThreePhaseContent(phase: ThreePhasePhase, content: string, config
   return label ? `${label}: ${trimmed}` : trimmed;
 }
 
+function shouldStripChoiceText(msg: ChatMessage) {
+  const hasQuickReplies = Array.isArray(msg.quickReplies) && msg.quickReplies.length > 0;
+  const hasCards = Array.isArray(msg.productCards) && msg.productCards.length > 0;
+  return hasQuickReplies || hasCards;
+}
+
+function stripChoiceText(content: string, msg: ChatMessage) {
+  if (!shouldStripChoiceText(msg)) return content;
+  const raw = String(content || "");
+  const lines = raw.split(/\r?\n/);
+  const filtered = lines.filter((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    if (/^\uC608\s*:/.test(trimmed)) return false; // "예:"
+    if (/^(다음|아래)/.test(trimmed) && /선택/.test(trimmed)) return false;
+    if (/선택\s*가능\s*:/.test(trimmed)) return false;
+    if (/^(네|예)\/(아니오|아니요)/.test(trimmed)) return false;
+    if (/네\s*\/\s*아니오/.test(trimmed)) return false;
+    if (/번호/.test(trimmed) && /답변|선택/.test(trimmed)) return false;
+    return true;
+  });
+  const hasList = lines.some((line) => /^\s*-\s*\d+/.test(line.trim()));
+  if (hasList) {
+    const kept = lines.filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return false;
+      if (/^\uC608\s*:/.test(trimmed)) return false;
+      if (/^(다음|아래)/.test(trimmed) && /선택/.test(trimmed)) return false;
+      if (/선택\s*가능\s*:/.test(trimmed)) return false;
+      if (/^(네|예)\/(아니오|아니요)/.test(trimmed)) return false;
+      if (/네\s*\/\s*아니오/.test(trimmed)) return false;
+      if (/번호/.test(trimmed) && /답변|선택/.test(trimmed)) return false;
+      return true;
+    });
+    return kept.join("\n").trim() || raw.trim();
+  }
+  return filtered.join("\n").trim() || raw.trim();
+}
+
 function buildUiMessages(messages: ChatMessage[], config: ThreePhaseUiConfig): UiChatMessage[] {
-  if (!config.enabled) return messages as UiChatMessage[];
+  if (!config.enabled) return messages.map((msg) => ({ ...msg, content: stripChoiceText(msg.content, msg) })) as UiChatMessage[];
   return messages.flatMap((msg) => {
     if (msg.role !== "bot") return [msg];
-    if (msg.isLoading || msg.richHtml) return [msg];
-    const sections = extractThreePhaseSections(msg.content, config.labels);
-    if (!sections) return [msg];
+    if (msg.isLoading) return [msg];
+    const cleanedContent = stripChoiceText(msg.content, msg);
+    const sections = extractThreePhaseSections(cleanedContent, config.labels);
+    if (!sections) {
+      const rebuilt = buildIntentDisambiguationTableHtmlFromText(cleanedContent) || undefined;
+      const fallbackRich = rebuilt || (shouldStripChoiceText(msg) ? undefined : msg.richHtml);
+      return [{ ...msg, content: cleanedContent, richHtml: fallbackRich }];
+    }
     const phases: UiMessagePhase[] = [];
     if (config.showConfirmed) {
       const content = formatThreePhaseContent("confirmed", sections.confirmed, config);
@@ -571,6 +615,7 @@ function buildUiMessages(messages: ChatMessage[], config: ThreePhaseUiConfig): U
 
     return phases.map((item) => {
       const isReplyPhase = item.phase === replyPhase;
+      const phaseRichHtml = buildIntentDisambiguationTableHtmlFromText(item.content) || undefined;
       return {
         ...msg,
         id: `${msg.id}__${item.phase}`,
@@ -579,6 +624,7 @@ function buildUiMessages(messages: ChatMessage[], config: ThreePhaseUiConfig): U
         phase: item.phase,
         sourceMessageId: msg.id,
         content: item.content,
+        richHtml: phaseRichHtml,
         quickReplies: isReplyPhase ? msg.quickReplies : undefined,
         productCards: isReplyPhase ? msg.productCards : undefined,
         renderPlan: isReplyPhase ? msg.renderPlan : undefined,

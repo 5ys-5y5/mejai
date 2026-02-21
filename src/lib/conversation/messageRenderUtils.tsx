@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
+import { renderLabeledContent } from "@/components/design-system/conversation/messageFormatters";
 
 export function renderBotContent(content: string): ReactNode {
-  if (!content.includes("debug_prefix")) return content;
+  if (!content.includes("debug_prefix")) return renderLabeledContent(content);
   const html = content.replace(/\n/g, "<br/>");
   return <span dangerouslySetInnerHTML={{ __html: html }} />;
 }

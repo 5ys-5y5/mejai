@@ -5,7 +5,7 @@
 - 실패 지점의 직전/직후 로그를 반드시 기록한다.
 
 기대 목록(MCP): cafe24:read_product, cafe24:resolve_product
-기대 목록(Event): QUICK_REPLY_RULE_DECISION, POLICY_DECISION, RUNTIME_SELF_UPDATE_REVIEW_COMPLETED, RUNTIME_SELF_UPDATE_REVIEW_STARTED, END_USER_WRITE_LATENCY, END_USER_CONTEXT_RESOLVED, END_USER_MATCH_HIT, PRE_MCP_DECISION, INTENT_SCOPE_GATE_REVIEW_COMPLETED, INTENT_SCOPE_GATE_REVIEW_STARTED, SLOT_EXTRACTED, INPUT_CONTRACT_REVIEW_COMPLETED, INPUT_CONTRACT_REVIEW_STARTED, FINAL_ANSWER_READY, CONFIRMED_ENTITY_DELTA_APPLIED, END_USER_CONFIRMED_ENTITY_SAVED, RUNTIME_PATCH_PROPOSAL_CREATED, PRINCIPLE_VIOLATION_DETECTED
+기대 목록(Event): QUICK_REPLY_RULE_DECISION, POLICY_DECISION, RUNTIME_SELF_UPDATE_REVIEW_COMPLETED, RUNTIME_SELF_UPDATE_REVIEW_STARTED, END_USER_WRITE_LATENCY, END_USER_CONTEXT_RESOLVED, END_USER_MATCH_HIT, PRE_MCP_DECISION, INTENT_SCOPE_GATE_REVIEW_COMPLETED, INTENT_SCOPE_GATE_REVIEW_STARTED, SLOT_EXTRACTED, INPUT_CONTRACT_REVIEW_COMPLETED, INPUT_CONTRACT_REVIEW_STARTED, FINAL_ANSWER_READY, CONFIRMED_ENTITY_DELTA_APPLIED, END_USER_CONFIRMED_ENTITY_SAVED
 기대 목록(Debug): read_product, NO_TOOL_CALLED
 
 사용 모듈(Runtime): src/app/api/runtime/chat/runtime/runtimeTurnIo.ts
@@ -14,28 +14,28 @@
 사용 모듈(Policies): -
 사용 모듈(Shared): -
 
-점검 완료 항목: mcp.cafe24:read_product, mcp.cafe24:resolve_product, event.QUICK_REPLY_RULE_DECISION, event.POLICY_DECISION, event.RUNTIME_SELF_UPDATE_REVIEW_COMPLETED, event.RUNTIME_SELF_UPDATE_REVIEW_STARTED, event.END_USER_WRITE_LATENCY, event.END_USER_CONTEXT_RESOLVED, event.END_USER_MATCH_HIT, event.PRE_MCP_DECISION, event.INTENT_SCOPE_GATE_REVIEW_COMPLETED, event.INTENT_SCOPE_GATE_REVIEW_STARTED, event.SLOT_EXTRACTED, event.INPUT_CONTRACT_REVIEW_COMPLETED, event.INPUT_CONTRACT_REVIEW_STARTED, event.FINAL_ANSWER_READY, event.CONFIRMED_ENTITY_DELTA_APPLIED, event.END_USER_CONFIRMED_ENTITY_SAVED, event.RUNTIME_PATCH_PROPOSAL_CREATED, event.PRINCIPLE_VIOLATION_DETECTED, debug.read_product, debug.NO_TOOL_CALLED, response_schema.present, response_schema.valid
+점검 완료 항목: mcp.cafe24:read_product, mcp.cafe24:resolve_product, event.QUICK_REPLY_RULE_DECISION, event.POLICY_DECISION, event.RUNTIME_SELF_UPDATE_REVIEW_COMPLETED, event.RUNTIME_SELF_UPDATE_REVIEW_STARTED, event.END_USER_WRITE_LATENCY, event.END_USER_CONTEXT_RESOLVED, event.END_USER_MATCH_HIT, event.PRE_MCP_DECISION, event.INTENT_SCOPE_GATE_REVIEW_COMPLETED, event.INTENT_SCOPE_GATE_REVIEW_STARTED, event.SLOT_EXTRACTED, event.INPUT_CONTRACT_REVIEW_COMPLETED, event.INPUT_CONTRACT_REVIEW_STARTED, event.FINAL_ANSWER_READY, event.CONFIRMED_ENTITY_DELTA_APPLIED, event.END_USER_CONFIRMED_ENTITY_SAVED, debug.read_product, debug.NO_TOOL_CALLED, response_schema.present, response_schema.valid
 점검 미완료: -
 점검 불가: -
 
 
-TURN_ID: 1111ac82-019a-4c4c-9bcf-d165ba40d4f6
+TURN_ID: 0168e7fd-ac63-4207-89b0-9cf2fdc1fae7
 
 [TOKEN_USED]
 
 USER:
-원피스 재입고
+원피스 재입고 일정을 알고
 
 BOT:
-확인한 것: 원피스 재입고
+확인한 것: 원피스 재입고 일정을 알고
 확인할 것: 다음 중 어떤 상품의 재입고 알림을 원하시나요?
-- 1번 | 아드헬린 린넨 플레어 원피스 그레이 | 03/21 (D-29)
-- 2번 | 아드헬린 린넨 롱 원피스 그레이 | 02/28 (D-8)
+- 1번 | 아드헬린 린넨 플레어 원피스 그레이 | 03/21 (D-28)
+- 2번 | 아드헬린 린넨 롱 원피스 그레이 | 02/28 (D-7)
 그 다음으로 확인할 것: 다음 단계로 이어서 안내해 드리겠습니다.
 RESPONSE_SCHEMA: view=cards, choice_mode=multi, quick_replies=2, cards=2
 RESPONSE_SCHEMA_DETAIL:
   {
-    "message": "확인한 것: 원피스 재입고\n확인할 것: 다음 중 어떤 상품의 재입고 알림을 원하시나요?\n- 1번 | 아드헬린 린넨 플레어 원피스 그레이 | 03/21 (D-29)\n- 2번 | 아드헬린 린넨 롱 원피스 그레이 | 02/28 (D-8)\n그 다음으로 확인할 것: 다음 단계로 이어서 안내해 드리겠습니다.",
+    "message": "확인한 것: 원피스 재입고 일정을 알고\n확인할 것: 다음 중 어떤 상품의 재입고 알림을 원하시나요?\n- 1번 | 아드헬린 린넨 플레어 원피스 그레이 | 03/21 (D-28)\n- 2번 | 아드헬린 린넨 롱 원피스 그레이 | 02/28 (D-7)\n그 다음으로 확인할 것: 다음 단계로 이어서 안내해 드리겠습니다.",
     "ui_hints": {
       "view": "cards",
       "choice_mode": "multi"
@@ -57,7 +57,7 @@ RESPONSE_SCHEMA_DETAIL:
         "value": "1",
         "subtitle": "03/21 입고 예정",
         "image_url": "https://sungjy2020.cafe24.com/web/product/tiny/202509/6eb884b4e0fc90d8c8135d93eb8e7fda.jpg",
-        "description": "D-29"
+        "description": "D-28"
       },
       {
         "id": "restock-2",
@@ -65,7 +65,7 @@ RESPONSE_SCHEMA_DETAIL:
         "value": "2",
         "subtitle": "02/28 입고 예정",
         "image_url": "https://sungjy2020.cafe24.com/web/product/tiny/202509/025624c6ca8efcbd5487d14795bf601c.jpg",
-        "description": "D-8"
+        "description": "D-7"
       }
     ]
   }
@@ -105,7 +105,7 @@ QUICK_REPLY_RULE: mode=multi, min=1, max=2, submit=csv, source=fallback, criteri
 
 [TOKEN_UNUSED]
 DEBUG 로그:
-- ac7ac119-9235-439e-9dcb-805dd84e5001 (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6) (2026-02-20T11:07:49.921+00:00)
+- 0c446510-5101-438f-93ae-aedd8660539b (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7) (2026-02-21T14:13:36.632+00:00)
   prefix_json:
     {
       "kb": {
@@ -173,7 +173,7 @@ DEBUG 로그:
         "build_at": null,
         "build_id": null,
         "deploy_env": "production",
-        "runtime_started_at": "2026-02-20T11:05:26.099Z"
+        "runtime_started_at": "2026-02-21T14:08:34.566Z"
       },
       "policy": {
         "tool_rules": [
@@ -207,7 +207,7 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T11:07:49.656Z",
+        "recorded_at": "2026-02-21T14:13:36.349Z",
         "function_name": "insertTurnWithDebug"
       },
       "kb_admin": {
@@ -270,6 +270,10 @@ DEBUG 로그:
           {
             "module_path": "src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts",
             "function_name": "createRuntimeMcpOps"
+          },
+          {
+            "module_path": "src/app/api/runtime/chat/runtime/intentCapabilityRuntime.ts",
+            "function_name": "evaluateIntentCapabilityGate"
           },
           {
             "module_path": "src/app/api/runtime/chat/runtime/otpRuntime.ts",
@@ -431,7 +435,7 @@ DEBUG 로그:
         "missing_tools_expected_by_intent": []
       },
       "model_resolution": {
-        "input_length": 7,
+        "input_length": 14,
         "length_rule_hit": null,
         "keyword_rule_hit": null,
         "selection_reason": "deterministic_or_skipped"
@@ -441,7 +445,7 @@ DEBUG 로그:
       }
     }
 MCP 로그:
-- a0e4041b-4240-4401-8ef0-dd9c816bea85 cafe24:read_product@1.0: success (2026-02-20T11:07:49.384+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 83298e5e-189d-4854-a4be-d5c1f3bf724f cafe24:read_product@1.0: success (2026-02-21T14:13:36.073+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   request:
     {
       "path": "/products/{product_no}",
@@ -601,7 +605,7 @@ MCP 로그:
         "translated_additional_description": null
       }
     }
-- 1e67d546-2644-4859-8e6c-fbbc21fb4e6a cafe24:resolve_product@1.0: success (2026-02-20T11:07:48.158+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 18a2fe01-fe48-4c17-ac22-b55e80a804c3 cafe24:resolve_product@1.0: success (2026-02-21T14:13:34.809+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   request:
     {
       "path": "internal://resolve_product",
@@ -616,7 +620,7 @@ MCP 로그:
       "product_id": "19",
       "product_name": "아드헬린 린넨 롱 원피스 그레이"
     }
-- c1d44fe5-c547-42af-b717-7b4cf84827de cafe24:read_product@1.0: success (2026-02-20T11:07:46.626+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 6219b62d-bdc0-4d06-8d8c-5e28f940bbdf cafe24:read_product@1.0: success (2026-02-21T14:13:33.256+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   request:
     {
       "path": "/products/{product_no}",
@@ -776,7 +780,7 @@ MCP 로그:
         "translated_additional_description": null
       }
     }
-- 910bab85-44c2-4d6c-88e2-219f77850774 cafe24:resolve_product@1.0: success (2026-02-20T11:07:45.387+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 02865471-1cdf-4d54-8abc-e8b112b91b22 cafe24:resolve_product@1.0: success (2026-02-21T14:13:31.972+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   request:
     {
       "path": "internal://resolve_product",
@@ -792,7 +796,7 @@ MCP 로그:
       "product_name": "아드헬린 린넨 플레어 원피스 그레이"
     }
 이벤트 로그:
-- 8eb1f934-0d64-48e4-ba6d-39d2e1283944 QUICK_REPLY_RULE_DECISION (2026-02-20T11:07:56.635+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 3c430482-5584-4283-8346-7c4e0c8cf17e QUICK_REPLY_RULE_DECISION (2026-02-21T14:13:43.09+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "quick_reply_count": 2,
@@ -812,7 +816,7 @@ MCP 로그:
         "source_function": "deriveQuickRepliesWithTrace"
       }
     }
-- 7b4399b4-596e-4c6b-a43d-86394e6d5707 POLICY_DECISION (2026-02-20T11:07:56.37+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 3a43dba4-a789-409e-bd9e-f7b1df9b37b0 POLICY_DECISION (2026-02-21T14:13:42.812+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "stage": "tool",
@@ -830,34 +834,34 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
-        "recorded_at": "2026-02-20T11:07:56.369Z",
+        "recorded_at": "2026-02-21T14:13:42.812Z",
         "function_name": "emit:POLICY_DECISION"
       },
       "candidate_count": 2
     }
-- 982c7454-9ba3-4a64-83fc-3b85c3bb084a RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T11:07:56.12+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- ba299e20-98de-48cf-aaa8-75374aa55757 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-21T14:13:42.548+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "1111ac82-019a-4c4c-9bcf-d165ba40d4f6",
-      "session_id": "e0ba9bb7-10e6-4c4b-a77d-021446f5918e",
+      "turn_id": "0168e7fd-ac63-4207-89b0-9cf2fdc1fae7",
+      "session_id": "d97aaf5f-35dc-4d1a-a55e-def5a7cf46d7",
       "violation_count": 0,
       "deduped_violation_count": 0
     }
-- 2ff22a87-6c69-446c-9a19-b66a32b3cbf7 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T11:07:55.094+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 7d03ab1a-b22b-4ec8-b2b7-62b31da7dfba RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-21T14:13:41.996+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "1111ac82-019a-4c4c-9bcf-d165ba40d4f6",
-      "session_id": "e0ba9bb7-10e6-4c4b-a77d-021446f5918e",
+      "turn_id": "0168e7fd-ac63-4207-89b0-9cf2fdc1fae7",
+      "session_id": "d97aaf5f-35dc-4d1a-a55e-def5a7cf46d7",
       "config_source": "principles_default"
     }
-- f9ff0131-53f0-4425-9a36-0ba63ef1d693 END_USER_WRITE_LATENCY (2026-02-20T11:07:54.061+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- ce0a9a48-dde4-4f5f-b6d6-d66d6d65b0e7 END_USER_WRITE_LATENCY (2026-02-21T14:13:40.928+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
-      "duration_ms": 3866
+      "duration_ms": 4017
     }
-- 60716420-1acf-4a0c-b9bb-4cad57abc18b END_USER_CONTEXT_RESOLVED (2026-02-20T11:07:51.221+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 3c4644bd-65b6-4ac3-9892-cf8d4225ca6d END_USER_CONTEXT_RESOLVED (2026-02-21T14:13:37.977+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "match_hit": true,
@@ -869,7 +873,7 @@ MCP 로그:
       "match_attempted": true,
       "resolution_source": "identity_match"
     }
-- d558ae02-d231-45d2-a313-b68024d8d6b2 END_USER_MATCH_HIT (2026-02-20T11:07:50.971+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 040e574a-1bdf-4487-8e10-f9fef3afddba END_USER_MATCH_HIT (2026-02-21T14:13:37.715+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "matched": true,
@@ -878,7 +882,7 @@ MCP 로그:
         "external"
       ]
     }
-- 4c1efb11-1789-4b12-a30a-ec9513d95725 PRE_MCP_DECISION (2026-02-20T11:07:43.365+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- b51610c4-9cf8-4589-a30a-c79743cb4d75 PRE_MCP_DECISION (2026-02-21T14:13:29.953+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "denied": [],
@@ -906,23 +910,23 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
-        "recorded_at": "2026-02-20T11:07:43.364Z",
+        "recorded_at": "2026-02-21T14:13:29.953Z",
         "function_name": "emit:PRE_MCP_DECISION"
       },
-      "query_text": "원피스 재입고",
+      "query_text": "원피스 재입고 일정을 알고",
       "final_calls": [],
       "forced_calls": [],
       "query_source": "current_message",
       "missing_slots": [],
       "resolved_slots": {
-        "product_query": "원피스 재입고"
+        "product_query": "원피스 재입고 일정을 알고"
       },
       "policy_conflicts": [],
       "allowed_tool_names": [],
       "blocked_by_missing_slots": false,
       "allowed_tool_names_total": 15
     }
-- 9142c5ce-9dc4-450d-89e9-4fccdda34ab7 INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-20T11:07:42.362+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 626b8d5c-2c65-4432-95e1-6b3e166310e3 INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-21T14:13:29.412+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "intent": "restock_inquiry",
@@ -931,7 +935,7 @@ MCP 로그:
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:07:42.362Z",
+        "recorded_at": "2026-02-21T14:13:29.412Z",
         "function_name": "unknown"
       },
       "missing_slots": [],
@@ -939,10 +943,10 @@ MCP 로그:
         "product_query"
       ],
       "resolved_slots": {
-        "product_query": "원피스 재입고"
+        "product_query": "원피스 재입고 일정을 알고"
       }
     }
-- d2b1a938-467b-4633-ad04-19a4a3bef444 POLICY_DECISION (2026-02-20T11:07:42.11+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- f77a6c28-0416-404e-a727-5c860b9a255b POLICY_DECISION (2026-02-21T14:13:29.149+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "stage": "input",
@@ -961,17 +965,17 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-        "recorded_at": "2026-02-20T11:07:42.110Z",
+        "recorded_at": "2026-02-21T14:13:29.149Z",
         "function_name": "emit:POLICY_DECISION"
       },
       "required_slots": [
         "product_query"
       ],
       "resolved_slots": {
-        "product_query": "원피스 재입고"
+        "product_query": "원피스 재입고 일정을 알고"
       }
     }
-- dc8d45cb-89c9-4faf-856d-8878813953c2 INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-20T11:07:41.846+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- eb136762-a7be-4513-a7a0-b330ac58ef9e INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-21T14:13:28.88+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "intent": "restock_inquiry",
@@ -979,13 +983,13 @@ MCP 로그:
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:07:41.846Z",
+        "recorded_at": "2026-02-21T14:13:28.880Z",
         "function_name": "unknown"
       },
       "query_source": "current_message",
       "expected_input": null
     }
-- 1a0bfac8-ff9a-464f-aa42-74293b9309f9 SLOT_EXTRACTED (2026-02-20T11:07:41.593+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- cd3f932e-66c6-4945-9ea9-9d635c0ddd9e SLOT_EXTRACTED (2026-02-21T14:13:28.615+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "derived": {
@@ -1016,17 +1020,17 @@ MCP 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "recorded_at": "2026-02-20T11:07:41.593Z",
+        "recorded_at": "2026-02-21T14:13:28.615Z",
         "function_name": "emit:SLOT_EXTRACTED"
       },
       "query_source": "current_message",
       "missing_slots": [],
       "expected_input": null,
       "resolved_slots": {
-        "product_query": "원피스 재입고"
+        "product_query": "원피스 재입고 일정을 알고"
       }
     }
-- ca22295a-db97-4756-97d6-5cfe1d43718f INPUT_CONTRACT_REVIEW_COMPLETED (2026-02-20T11:07:41.312+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 84afd954-56d2-454e-bb79-b495ab05ad7d INPUT_CONTRACT_REVIEW_COMPLETED (2026-02-21T14:13:27.446+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "source": "reset_by_restock_intent",
@@ -1034,7 +1038,7 @@ MCP 로그:
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:07:41.312Z",
+        "recorded_at": "2026-02-21T14:13:27.446Z",
         "function_name": "unknown"
       },
       "intent_name": "general",
@@ -1042,7 +1046,7 @@ MCP 로그:
       "expected_inputs": [],
       "expected_input_stage": null
     }
-- b9c14813-b39e-4e16-bfac-608c1cd74a91 INPUT_CONTRACT_REVIEW_STARTED (2026-02-20T11:07:41.059+00:00) (turn_id=1111ac82-019a-4c4c-9bcf-d165ba40d4f6)
+- 710d8913-c079-4ab6-9bee-f7b721e6c87f INPUT_CONTRACT_REVIEW_STARTED (2026-02-21T14:13:27.176+00:00) (turn_id=0168e7fd-ac63-4207-89b0-9cf2fdc1fae7)
   payload:
     {
       "source": null,
@@ -1050,7 +1054,7 @@ MCP 로그:
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:07:41.059Z",
+        "recorded_at": "2026-02-21T14:13:27.176Z",
         "function_name": "unknown"
       },
       "intent_name": "general",
@@ -1060,7 +1064,7 @@ MCP 로그:
     }
 
 
-TURN_ID: e03e0cdf-f929-48af-9eb4-41aa453cbde3
+TURN_ID: 3af55cf9-b28a-49a1-b640-161c5df8d0c2
 
 [TOKEN_USED]
 
@@ -1070,13 +1074,13 @@ USER:
 BOT:
 확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이
 확인할 것: 요약: 아드헬린 린넨 롱 원피스 그레이 입고 예정일 02/28입니다.
-상세: 예정일 2026-02-28 (D-8)
+상세: 예정일 2026-02-28 (D-7)
 다음 선택: 재입고 알림 신청 / 대화 종료
 그 다음으로 확인할 것: 입고 일정 안내 및 알림 신청 여부 확인
 RESPONSE_SCHEMA: view=choice, choice_mode=single, quick_replies=2, cards=0
 RESPONSE_SCHEMA_DETAIL:
   {
-    "message": "확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이\n확인할 것: 요약: 아드헬린 린넨 롱 원피스 그레이 입고 예정일 02/28입니다.\n상세: 예정일 2026-02-28 (D-8)\n다음 선택: 재입고 알림 신청 / 대화 종료\n그 다음으로 확인할 것: 입고 일정 안내 및 알림 신청 여부 확인",
+    "message": "확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이\n확인할 것: 요약: 아드헬린 린넨 롱 원피스 그레이 입고 예정일 02/28입니다.\n상세: 예정일 2026-02-28 (D-7)\n다음 선택: 재입고 알림 신청 / 대화 종료\n그 다음으로 확인할 것: 입고 일정 안내 및 알림 신청 여부 확인",
     "ui_hints": {
       "view": "choice",
       "choice_mode": "single"
@@ -1127,7 +1131,7 @@ QUICK_REPLY_RULE: mode=single, min=1, max=1, submit=single, source=explicit, cri
 
 [TOKEN_UNUSED]
 DEBUG 로그:
-- 48a19cb6-355d-45c7-8044-33e72fbfe07c (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3) (2026-02-20T11:10:39.438+00:00)
+- 5386f34f-8aeb-4aad-a611-9c7511891a67 (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2) (2026-02-21T14:14:02.326+00:00)
   prefix_json:
     {
       "mcp": {
@@ -1160,7 +1164,7 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T11:10:39.152Z",
+        "recorded_at": "2026-02-21T14:14:02.026Z",
         "function_name": "insertTurnWithDebug"
       },
       "kb_admin": {
@@ -1171,74 +1175,6 @@ DEBUG 로그:
         "kb_admin_ids": [
           "878b3ffe-2e18-4820-bda6-ffeccaa4212b",
           "0da02c01-aad4-4286-a445-4db7a89f8ebe"
-        ]
-      },
-      "execution": {
-        "call_chain": [
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts",
-            "function_name": "POST"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeBootstrap.ts",
-            "function_name": "bootstrapRuntime"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts",
-            "function_name": "initializeRuntimeState"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-            "function_name": "resolveIntentDisambiguation"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
-            "function_name": "handlePreTurnGuards"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts",
-            "function_name": "deriveSlotsForTurn"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
-            "function_name": "handleAddressChangeRefundPending"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/restockPendingRuntime.ts",
-            "function_name": "handleRestockPendingStage"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/postActionRuntime.ts",
-            "function_name": "handlePostActionStage"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
-            "function_name": "resolveIntentAndPolicyContext"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-            "function_name": "runInputStageRuntime"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts",
-            "function_name": "createRuntimeMcpOps"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/otpRuntime.ts",
-            "function_name": "handleOtpLifecycleAndOrderGate"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/services/dataAccess.ts",
-            "function_name": "resolveProductDecision"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts",
-            "function_name": "runToolStagePipeline"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
-            "function_name": "handleRestockIntent"
-          }
         ]
       },
       "slot_flow": {
@@ -1256,7 +1192,7 @@ DEBUG 로그:
       }
     }
 이벤트 로그:
-- b07b9193-a0bc-4a37-bf56-684128a00e77 QUICK_REPLY_RULE_DECISION (2026-02-20T11:10:47.723+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 622fe5f7-5b51-4a62-bd54-a2653411a564 QUICK_REPLY_RULE_DECISION (2026-02-21T14:14:11.926+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "quick_reply_count": 2,
@@ -1274,11 +1210,11 @@ DEBUG 로그:
         "criteria": "payload:quick_replies"
       }
     }
-- 15e7f47a-4943-4444-bf39-e456c391c4b1 FINAL_ANSWER_READY (2026-02-20T11:10:47.46+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 23b11d06-1548-4c2d-af2c-881a384e88c5 FINAL_ANSWER_READY (2026-02-21T14:14:11.656+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "model": "deterministic_restock_kb",
-      "answer": "확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이\n확인할 것: 요약: 아드헬린 린넨 롱 원피스 그레이 입고 예정일 02/28입니다.\n상세: 예정일 2026-02-28 (D-8)\n다음 선택: 재입고 알림 신청 / 대화 종료\n그 다음으로 확인할 것: 입고 일정 안내 및 알림 신청 여부 확인",
+      "answer": "확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이\n확인할 것: 요약: 아드헬린 린넨 롱 원피스 그레이 입고 예정일 02/28입니다.\n상세: 예정일 2026-02-28 (D-7)\n다음 선택: 재입고 알림 신청 / 대화 종료\n그 다음으로 확인할 것: 입고 일정 안내 및 알림 신청 여부 확인",
       "_decision": {
         "line": 248,
         "phase": "after",
@@ -1292,11 +1228,11 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
-        "recorded_at": "2026-02-20T11:10:47.460Z",
+        "recorded_at": "2026-02-21T14:14:11.656Z",
         "function_name": "emit:FINAL_ANSWER_READY"
       }
     }
-- cd596e9c-728b-4b77-8900-19152f4f5c89 POLICY_DECISION (2026-02-20T11:10:47.196+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 5670950b-8084-4b2d-9725-bf3529ceb060 POLICY_DECISION (2026-02-21T14:14:11.378+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "stage": "tool",
@@ -1314,12 +1250,12 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/handlers/restockHandler.ts",
-        "recorded_at": "2026-02-20T11:10:47.196Z",
+        "recorded_at": "2026-02-21T14:14:11.378Z",
         "function_name": "emit:POLICY_DECISION"
       },
       "product_name": "아드헬린 린넨 롱 원피스 그레이"
     }
-- 64215566-2a10-4986-bd5e-c2e052b63531 CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T11:10:46.925+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 2e68f584-6017-4829-a396-cf06ff45fe84 CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-21T14:14:11.107+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "keys": [
@@ -1336,39 +1272,39 @@ DEBUG 로그:
         "product_id": "19",
         "product_name": "아드헬린 린넨 롱 원피스 그레이"
       },
-      "flow_id": "adfa10ea-8ee1-45f6-a056-bf71f4a3f761",
+      "flow_id": "55c112c6-7231-4515-862d-9acb1997120c",
       "_decision": {
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:10:46.925Z",
+        "recorded_at": "2026-02-21T14:14:11.107Z",
         "function_name": "unknown"
       },
       "key_count": 5
     }
-- 91cbda46-7217-4769-9dc7-8e34e2c39620 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T11:10:46.664+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- def65a86-10f2-4181-a39c-64a73a766699 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-21T14:14:10.833+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "e03e0cdf-f929-48af-9eb4-41aa453cbde3",
-      "session_id": "e0ba9bb7-10e6-4c4b-a77d-021446f5918e",
+      "turn_id": "3af55cf9-b28a-49a1-b640-161c5df8d0c2",
+      "session_id": "d97aaf5f-35dc-4d1a-a55e-def5a7cf46d7",
       "violation_count": 0,
       "deduped_violation_count": 0
     }
-- 1bf32315-2020-4ff4-9980-4ac2fef0085a RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T11:10:46.107+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 90f5f513-5da8-4874-ad4d-b9cdddff6be0 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-21T14:14:09.803+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "e03e0cdf-f929-48af-9eb4-41aa453cbde3",
-      "session_id": "e0ba9bb7-10e6-4c4b-a77d-021446f5918e",
+      "turn_id": "3af55cf9-b28a-49a1-b640-161c5df8d0c2",
+      "session_id": "d97aaf5f-35dc-4d1a-a55e-def5a7cf46d7",
       "config_source": "principles_default"
     }
-- 1da4d6c2-5f2a-4ea3-85eb-5efc375cf60e END_USER_WRITE_LATENCY (2026-02-20T11:10:45.034+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 536d574e-892b-4939-a182-70029409d2c1 END_USER_WRITE_LATENCY (2026-02-21T14:14:08.193+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
-      "duration_ms": 5326
+      "duration_ms": 5567
     }
-- 07e94986-27af-4496-ab4b-9762eb90e41e END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T11:10:44.77+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 5153591b-c603-45e3-88ad-1410ecae3bf9 END_USER_CONFIRMED_ENTITY_SAVED (2026-02-21T14:14:07.905+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "keys": [
@@ -1378,11 +1314,11 @@ DEBUG 로그:
         "product_id",
         "product_name"
       ],
-      "flow_id": "adfa10ea-8ee1-45f6-a056-bf71f4a3f761",
+      "flow_id": "55c112c6-7231-4515-862d-9acb1997120c",
       "key_count": 5,
       "keys_truncated": false
     }
-- 19693de1-15b1-4a82-8b52-5b4b60979f9e END_USER_CONTEXT_RESOLVED (2026-02-20T11:10:40.774+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 5d3132b3-3885-46c6-8be0-ace7f6fb7ba1 END_USER_CONTEXT_RESOLVED (2026-02-21T14:14:03.773+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "match_hit": true,
@@ -1394,7 +1330,7 @@ DEBUG 로그:
       "match_attempted": true,
       "resolution_source": "session"
     }
-- 04d77f5d-90be-4b9b-962a-791abcc50d4a END_USER_MATCH_HIT (2026-02-20T11:10:40.513+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 97bd21d1-c829-4c6c-824f-f8c65dfd7a6d END_USER_MATCH_HIT (2026-02-21T14:14:03.455+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "matched": true,
@@ -1403,7 +1339,7 @@ DEBUG 로그:
         "external"
       ]
     }
-- 847776c6-5f19-4bcc-a3eb-d2dcfa21e707 PRE_MCP_DECISION (2026-02-20T11:10:38.889+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 01b528e0-0745-4098-af28-41068342a5bd PRE_MCP_DECISION (2026-02-21T14:14:01.746+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "denied": [],
@@ -1431,7 +1367,7 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/toolRuntime.ts",
-        "recorded_at": "2026-02-20T11:10:38.889Z",
+        "recorded_at": "2026-02-21T14:14:01.746Z",
         "function_name": "emit:PRE_MCP_DECISION"
       },
       "query_text": "2",
@@ -1447,7 +1383,7 @@ DEBUG 로그:
       "blocked_by_missing_slots": false,
       "allowed_tool_names_total": 15
     }
-- 03c7d57c-c231-4675-b6e0-3abf22b4b760 INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-20T11:10:38.087+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 92c86f1b-501b-47da-b0b0-5a135ecafe83 INTENT_SCOPE_GATE_REVIEW_COMPLETED (2026-02-21T14:14:00.932+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "intent": "restock_inquiry",
@@ -1456,7 +1392,7 @@ DEBUG 로그:
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:10:38.087Z",
+        "recorded_at": "2026-02-21T14:14:00.932Z",
         "function_name": "unknown"
       },
       "missing_slots": [],
@@ -1467,7 +1403,7 @@ DEBUG 로그:
         "product_query": "아드헬린 린넨 롱 원피스 그레이"
       }
     }
-- 555be292-f0bb-46c3-a977-c921a826466e POLICY_DECISION (2026-02-20T11:10:37.825+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- e29c4c34-36d9-45b6-a4c4-58d034549fa2 POLICY_DECISION (2026-02-21T14:14:00.656+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "stage": "input",
@@ -1486,7 +1422,7 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-        "recorded_at": "2026-02-20T11:10:37.825Z",
+        "recorded_at": "2026-02-21T14:14:00.656Z",
         "function_name": "emit:POLICY_DECISION"
       },
       "required_slots": [
@@ -1496,7 +1432,7 @@ DEBUG 로그:
         "product_query": "아드헬린 린넨 롱 원피스 그레이"
       }
     }
-- 2bec55b6-6251-4dc0-95c6-d171b1fe3e47 INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-20T11:10:37.047+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 018134d1-9c63-4197-b913-3147b6a89d09 INTENT_SCOPE_GATE_REVIEW_STARTED (2026-02-21T14:14:00.375+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "intent": "restock_inquiry",
@@ -1504,13 +1440,13 @@ DEBUG 로그:
         "phase": "runtime",
         "call_chain": [],
         "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:10:37.047Z",
+        "recorded_at": "2026-02-21T14:14:00.375Z",
         "function_name": "unknown"
       },
       "query_source": "current_message",
       "expected_input": "product_query"
     }
-- c937f920-d4ee-4335-ba62-31fdc68422aa SLOT_EXTRACTED (2026-02-20T11:10:36.786+00:00) (turn_id=e03e0cdf-f929-48af-9eb4-41aa453cbde3)
+- 8c4267ad-ec2a-4666-b7b7-7810de8a06d8 SLOT_EXTRACTED (2026-02-21T14:14:00.086+00:00) (turn_id=3af55cf9-b28a-49a1-b640-161c5df8d0c2)
   payload:
     {
       "derived": {
@@ -1541,7 +1477,7 @@ DEBUG 로그:
           }
         ],
         "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "recorded_at": "2026-02-20T11:10:36.786Z",
+        "recorded_at": "2026-02-21T14:14:00.086Z",
         "function_name": "emit:SLOT_EXTRACTED"
       },
       "query_source": "current_message",
@@ -1550,782 +1486,4 @@ DEBUG 로그:
       "resolved_slots": {
         "product_query": "아드헬린 린넨 롱 원피스 그레이"
       }
-    }
-
-
-TURN_ID: 0bfeac4a-60a5-427d-83e7-5556b4691912
-
-[TOKEN_USED]
-
-USER:
-재입고 알림 신청
-
-BOT:
-확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이, 연락 채널 sms
-확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요?
-네/아니오로 답해주세요.
-그 다음으로 확인할 것: 알림 시작일 선택
-RESPONSE_SCHEMA: view=choice, choice_mode=single, quick_replies=2, cards=0
-RESPONSE_SCHEMA_DETAIL:
-  {
-    "message": "확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이, 연락 채널 sms\n확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요?\n네/아니오로 답해주세요.\n그 다음으로 확인할 것: 알림 시작일 선택",
-    "ui_hints": {
-      "view": "choice",
-      "choice_mode": "single"
-    },
-    "quick_replies": [
-      {
-        "label": "네",
-        "value": "네"
-      },
-      {
-        "label": "아니오",
-        "value": "아니오"
-      }
-    ],
-    "cards": []
-  }
-RENDER_PLAN: view=choice, quick_replies=true, cards=false, mode=single, min=1, max=1, submit=single, prompt=-
-RENDER_PLAN_DETAIL:
-  {
-    "view": "choice",
-    "enable_quick_replies": true,
-    "enable_cards": false,
-    "interaction_scope": "latest_only",
-    "quick_reply_source": {
-      "type": "explicit",
-      "criteria": "payload:quick_replies"
-    },
-    "selection_mode": "single",
-    "min_select": 1,
-    "max_select": 1,
-    "submit_format": "single",
-    "grid_columns": {
-      "quick_replies": 2,
-      "cards": 1
-    },
-    "prompt_kind": null,
-    "debug": {
-      "policy_version": "v1",
-      "quick_replies_count": 2,
-      "cards_count": 0,
-      "selection_mode_source": "config",
-      "min_select_source": "config",
-      "max_select_source": "config",
-      "submit_format_source": "config"
-    }
-  }
-QUICK_REPLY_RULE: mode=single, min=1, max=1, submit=single, source=explicit, criteria=payload:quick_replies, module=-, function=-
-
-[TOKEN_UNUSED]
-DEBUG 로그:
-- 2e945900-637e-42cc-8baf-3209b04ddfe0 (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912) (2026-02-20T11:52:40.389+00:00)
-  prefix_json:
-    {
-      "mcp": {
-        "last": {
-          "error": null,
-          "status": "none",
-          "function": "NO_TOOL_CALLED",
-          "result_count": null
-        }
-      },
-      "slot": {
-        "phone_masked": "-"
-      },
-      "decision": {
-        "line": 152,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 152,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-            "function_name": "insertTurnWithDebug"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T11:52:39.641Z",
-        "function_name": "insertTurnWithDebug"
-      },
-      "kb_admin": {
-        "kb_user_id": "f29567ba-275a-4cd9-add8-fa7b3d6e54c2",
-        "kb_admin_ids": [
-          "878b3ffe-2e18-4820-bda6-ffeccaa4212b",
-          "0da02c01-aad4-4286-a445-4db7a89f8ebe"
-        ]
-      },
-      "execution": {
-        "call_chain": [
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts",
-            "function_name": "POST"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeBootstrap.ts",
-            "function_name": "bootstrapRuntime"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts",
-            "function_name": "initializeRuntimeState"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-            "function_name": "resolveIntentDisambiguation"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
-            "function_name": "handlePreTurnGuards"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts",
-            "function_name": "deriveSlotsForTurn"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
-            "function_name": "handleAddressChangeRefundPending"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/restockPendingRuntime.ts",
-            "function_name": "handleRestockPendingStage"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/postActionRuntime.ts",
-            "function_name": "handlePostActionStage"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
-            "function_name": "resolveIntentAndPolicyContext"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-            "function_name": "runInputStageRuntime"
-          }
-        ]
-      },
-      "slot_flow": {
-        "expected_inputs": [],
-        "expected_input_stage": "restock.awaiting_confirm",
-        "expected_input_source": "reset_by_restock_intent"
-      },
-      "model_resolution": {
-        "input_length": 24,
-        "length_rule_hit": null,
-        "keyword_rule_hit": null,
-        "selection_reason": "deterministic_or_skipped"
-      }
-    }
-이벤트 로그:
-- 1d5618af-980c-47f4-826e-fee12df3b97a QUICK_REPLY_RULE_DECISION (2026-02-20T11:52:48.621+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "quick_reply_count": 2,
-      "quick_reply_config": {
-        "preset": null,
-        "criteria": "policy:known_info_reuse_prompt",
-        "max_select": 1,
-        "min_select": 1,
-        "source_module": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "submit_format": "single",
-        "selection_mode": "single",
-        "source_function": "runInputStageRuntime"
-      },
-      "quick_reply_source": {
-        "criteria": "payload:quick_replies"
-      }
-    }
-- 43b3d6f1-7d5b-478f-b575-f3d5bf8ed653 CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T11:52:48.357+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "keys": [
-        "channel",
-        "product_id",
-        "product_name",
-        "reuse_slot",
-        "reuse_value"
-      ],
-      "delta": {
-        "channel": "sms",
-        "product_id": "19",
-        "reuse_slot": "phone",
-        "reuse_value": "01093107159",
-        "product_name": "아드헬린 린넨 롱 원피스 그레이"
-      },
-      "flow_id": "adfa10ea-8ee1-45f6-a056-bf71f4a3f761",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:52:48.357Z",
-        "function_name": "unknown"
-      },
-      "key_count": 5
-    }
-- d2d650de-8d95-4c3a-a232-a58826648d42 RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T11:52:48.099+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "0bfeac4a-60a5-427d-83e7-5556b4691912",
-      "session_id": "e0ba9bb7-10e6-4c4b-a77d-021446f5918e",
-      "violation_count": 0,
-      "deduped_violation_count": 0
-    }
-- 8705fd07-22e2-4941-989d-fd1854ef54db RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T11:52:47.058+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "0bfeac4a-60a5-427d-83e7-5556b4691912",
-      "session_id": "e0ba9bb7-10e6-4c4b-a77d-021446f5918e",
-      "config_source": "principles_default"
-    }
-- 66a5daba-4909-4a36-b3eb-9e5e5ce17a2b END_USER_WRITE_LATENCY (2026-02-20T11:52:46.001+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "duration_ms": 5332
-    }
-- 50353485-3997-4582-96d5-0785d7808a7e END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T11:52:45.743+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "keys": [
-        "channel",
-        "product_id",
-        "reuse_slot",
-        "reuse_value",
-        "product_name"
-      ],
-      "flow_id": "adfa10ea-8ee1-45f6-a056-bf71f4a3f761",
-      "key_count": 5,
-      "keys_truncated": false
-    }
-- 6bc9c828-d0d1-4a9e-83e9-a8bd89dbc3aa END_USER_CONTEXT_RESOLVED (2026-02-20T11:52:41.725+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "match_hit": true,
-      "end_user_id": "a7fbcce5-f82a-4165-b95e-9d9e2f5c6f06",
-      "identity_count": 1,
-      "identity_types": [
-        "external"
-      ],
-      "match_attempted": true,
-      "resolution_source": "session"
-    }
-- 1e133cf7-0cd6-4c2d-8309-0774e5aa80f5 END_USER_MATCH_HIT (2026-02-20T11:52:41.467+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "matched": true,
-      "identity_count": 1,
-      "identity_types": [
-        "external"
-      ]
-    }
-- 8a461651-0459-4a54-984e-46d6e9bb34ca SLOT_EXTRACTED (2026-02-20T11:52:39.379+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "derived": {
-        "phone": null,
-        "address": null,
-        "zipcode": null,
-        "order_id": null,
-        "phone_masked": "-"
-      },
-      "resolved": {
-        "phone": null,
-        "intent": "restock_subscribe",
-        "address": null,
-        "zipcode": null,
-        "order_id": null,
-        "phone_masked": "-"
-      },
-      "_decision": {
-        "line": 145,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 145,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-            "function_name": "emit:SLOT_EXTRACTED"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "recorded_at": "2026-02-20T11:52:39.379Z",
-        "function_name": "emit:SLOT_EXTRACTED"
-      },
-      "query_source": "current_message",
-      "missing_slots": [],
-      "expected_input": null,
-      "resolved_slots": {}
-    }
-- 29875afd-bf0e-42c6-aeeb-a52006ddebbd INPUT_CONTRACT_REVIEW_COMPLETED (2026-02-20T11:52:36.377+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "source": "reset_by_restock_intent",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:52:36.377Z",
-        "function_name": "unknown"
-      },
-      "intent_name": "restock_inquiry",
-      "expected_input": null,
-      "expected_inputs": [],
-      "expected_input_stage": "restock.awaiting_confirm"
-    }
-- 54e818a9-5dff-4fe8-9338-ee3a595beda6 INPUT_CONTRACT_REVIEW_STARTED (2026-02-20T11:52:36.119+00:00) (turn_id=0bfeac4a-60a5-427d-83e7-5556b4691912)
-  payload:
-    {
-      "source": "contract_stage",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:52:36.119Z",
-        "function_name": "unknown"
-      },
-      "intent_name": "restock_inquiry",
-      "expected_input": "confirm",
-      "expected_inputs": [
-        "confirm"
-      ],
-      "expected_input_stage": "restock.awaiting_confirm"
-    }
-
-
-TURN_ID: 532a7fda-435a-4ab0-b557-976123efa8d9
-
-[TOKEN_USED]
-
-USER:
-네
-
-BOT:
-확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이, 연락 채널 sms
-확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요?
-네/아니오로 답해주세요.
-그 다음으로 확인할 것: 알림 시작일 선택
-RESPONSE_SCHEMA: view=choice, choice_mode=single, quick_replies=2, cards=0
-RESPONSE_SCHEMA_DETAIL:
-  {
-    "message": "확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이, 연락 채널 sms\n확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요?\n네/아니오로 답해주세요.\n그 다음으로 확인할 것: 알림 시작일 선택",
-    "ui_hints": {
-      "view": "choice",
-      "choice_mode": "single"
-    },
-    "quick_replies": [
-      {
-        "label": "네",
-        "value": "네"
-      },
-      {
-        "label": "아니오",
-        "value": "아니오"
-      }
-    ],
-    "cards": []
-  }
-RENDER_PLAN: view=choice, quick_replies=true, cards=false, mode=single, min=1, max=1, submit=single, prompt=-
-RENDER_PLAN_DETAIL:
-  {
-    "view": "choice",
-    "enable_quick_replies": true,
-    "enable_cards": false,
-    "interaction_scope": "latest_only",
-    "quick_reply_source": {
-      "type": "explicit",
-      "criteria": "payload:quick_replies"
-    },
-    "selection_mode": "single",
-    "min_select": 1,
-    "max_select": 1,
-    "submit_format": "single",
-    "grid_columns": {
-      "quick_replies": 2,
-      "cards": 1
-    },
-    "prompt_kind": null,
-    "debug": {
-      "policy_version": "v1",
-      "quick_replies_count": 2,
-      "cards_count": 0,
-      "selection_mode_source": "config",
-      "min_select_source": "config",
-      "max_select_source": "config",
-      "submit_format_source": "config"
-    }
-  }
-QUICK_REPLY_RULE: mode=single, min=1, max=1, submit=single, source=explicit, criteria=payload:quick_replies, module=-, function=-
-
-[TOKEN_UNUSED]
-DEBUG 로그:
-- 67c6ea66-4d41-40db-8ec3-16594f80d0f9 (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9) (2026-02-20T11:54:30.897+00:00)
-  prefix_json:
-    {
-      "mcp": {
-        "last": {
-          "error": null,
-          "status": "none",
-          "function": "NO_TOOL_CALLED",
-          "result_count": null
-        }
-      },
-      "slot": {
-        "phone_masked": "-",
-        "expected_input": "confirm"
-      },
-      "decision": {
-        "line": 152,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 152,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-            "function_name": "insertTurnWithDebug"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/runtimeTurnIo.ts",
-        "recorded_at": "2026-02-20T11:54:30.538Z",
-        "function_name": "insertTurnWithDebug"
-      },
-      "kb_admin": {
-        "kb_user_id": "f29567ba-275a-4cd9-add8-fa7b3d6e54c2",
-        "kb_admin_ids": [
-          "878b3ffe-2e18-4820-bda6-ffeccaa4212b",
-          "0da02c01-aad4-4286-a445-4db7a89f8ebe"
-        ]
-      },
-      "execution": {
-        "call_chain": [
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts",
-            "function_name": "POST"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeBootstrap.ts",
-            "function_name": "bootstrapRuntime"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts",
-            "function_name": "initializeRuntimeState"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts",
-            "function_name": "resolveIntentDisambiguation"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts",
-            "function_name": "handlePreTurnGuards"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts",
-            "function_name": "deriveSlotsForTurn"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/pendingStateRuntime.ts",
-            "function_name": "handleAddressChangeRefundPending"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/restockPendingRuntime.ts",
-            "function_name": "handleRestockPendingStage"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/postActionRuntime.ts",
-            "function_name": "handlePostActionStage"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts",
-            "function_name": "resolveIntentAndPolicyContext"
-          },
-          {
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-            "function_name": "runInputStageRuntime"
-          }
-        ]
-      },
-      "slot_flow": {
-        "expected_inputs": [
-          "confirm"
-        ],
-        "expected_input_stage": "restock.awaiting_confirm",
-        "expected_input_source": "pre_turn_guard"
-      },
-      "model_resolution": {
-        "input_length": 1,
-        "length_rule_hit": null,
-        "keyword_rule_hit": null,
-        "selection_reason": "deterministic_or_skipped"
-      }
-    }
-이벤트 로그:
-- 32e1d1ed-1d12-4458-9407-2f237d7bdc02 QUICK_REPLY_RULE_DECISION (2026-02-20T11:54:46.404+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "quick_reply_count": 2,
-      "quick_reply_config": {
-        "preset": null,
-        "criteria": "policy:known_info_reuse_prompt",
-        "max_select": 1,
-        "min_select": 1,
-        "source_module": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "submit_format": "single",
-        "selection_mode": "single",
-        "source_function": "runInputStageRuntime"
-      },
-      "quick_reply_source": {
-        "criteria": "payload:quick_replies"
-      }
-    }
-- 8c4e4657-0149-4fc9-9053-b87b00ab9210 CONFIRMED_ENTITY_DELTA_APPLIED (2026-02-20T11:54:46.145+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "keys": [
-        "channel",
-        "product_id",
-        "product_name",
-        "reuse_slot",
-        "reuse_value"
-      ],
-      "delta": {
-        "channel": "sms",
-        "product_id": "19",
-        "reuse_slot": "phone",
-        "reuse_value": "01093107159",
-        "product_name": "아드헬린 린넨 롱 원피스 그레이"
-      },
-      "flow_id": "adfa10ea-8ee1-45f6-a056-bf71f4a3f761",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:54:46.145Z",
-        "function_name": "unknown"
-      },
-      "key_count": 5
-    }
-- 5b8f662c-6060-41f4-a013-2b0138124f9b RUNTIME_SELF_UPDATE_REVIEW_COMPLETED (2026-02-20T11:54:45.888+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "532a7fda-435a-4ab0-b557-976123efa8d9",
-      "session_id": "e0ba9bb7-10e6-4c4b-a77d-021446f5918e",
-      "proposal_count": 1,
-      "violation_count": 1,
-      "deduped_violation_count": 0
-    }
-- 95afe474-35f2-49a1-8151-c45d74b38a6b RUNTIME_PATCH_PROPOSAL_CREATED (2026-02-20T11:54:45.614+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "title": "Principle violation patch proposal",
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "status": "pending",
-      "trigger": "runtime_turn_write",
-      "turn_id": "532a7fda-435a-4ab0-b557-976123efa8d9",
-      "rationale": "Prefer runtime decision-path fix over principle text changes (force_template_misapplied=false, expected_input=-, policy_reason=-)",
-      "confidence": 0.7,
-      "created_at": "2026-02-20T11:54:44.870Z",
-      "session_id": "e0ba9bb7-10e6-4c4b-a77d-021446f5918e",
-      "why_failed": "Address slot was already resolved, but final response selection re-asked address.",
-      "change_plan": [
-        "At final response stage, if expected_input=address and resolved address exists, forbid address prompt template.",
-        "If policy decision is DEFER_FORCE_RESPONSE_TEMPLATE with ORDER_AND_ADDRESS_ALREADY_AVAILABLE, preserve decision through finalization.",
-        "Emit explicit debug evidence (resolved_address / policy_decision_reason / final_template) around failure boundary."
-      ],
-      "proposal_id": "rp_1771588479077_kbj8ac",
-      "target_files": [
-        "src/app/api/runtime/chat/runtime/finalizeRuntime.ts",
-        "src/app/api/runtime/chat/handlers/restockHandler.ts",
-        "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts"
-      ],
-      "violation_id": "pv_e0ba9bb7-10e6-4c4b-a77d-021446f5918e_532a7fda-435a-4ab0-b557-976123efa8d9_duplicate_answer",
-      "principle_key": "memory.enforceNoRepeatQuestions",
-      "runtime_scope": "chat",
-      "how_to_improve": "Use finalized slot/policy decision evidence to block address re-ask in final response path; add guard in runtime finalize/handler path.",
-      "self_heal_gate": {
-        "track": "contract",
-        "gate_version": "v1",
-        "exception_stats": {
-          "repeat_count_7d": 4,
-          "repeat_count_30d": 4
-        },
-        "promotion_reason": "-",
-        "contract_fields_ok": false,
-        "promotion_required": false,
-        "exception_fields_ok": false,
-        "evidence_contract_ok": false,
-        "case_specific_signals": [],
-        "exception_fingerprint": "ex:memory.enforcenorepeatquestions:duplicate_answer:-:-",
-        "missing_contract_fields": [
-          "contract_scope",
-          "generalization_scope",
-          "slot_request_mapping_strategy",
-          "response_projection_strategy",
-          "pre_post_invariant_strategy",
-          "contract_expectation"
-        ],
-        "missing_evidence_fields": [
-          "known_address_count",
-          "user_provided_address_count",
-          "slot_resolved_address",
-          "policy_decision_reason",
-          "final_response_forced_template_applied"
-        ],
-        "missing_exception_fields": [
-          "exception_reason",
-          "exception_scope",
-          "exception_expiry",
-          "promotion_plan",
-          "promotion_trigger",
-          "blast_radius"
-        ]
-      },
-      "suggested_diff": null,
-      "issue_fingerprint": "memory.enforcenorepeatquestions|chat|확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이, 연락 채널 sms 확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요? 네/아니오로 답해주세요. 그 다음으로 확인할 것: 알림 시작일 선택|bot repeated the same final answer on consecutive turns.||||"
-    }
-- 25c6ea94-b05a-4e66-b8f6-9535295c60b0 PRINCIPLE_VIOLATION_DETECTED (2026-02-20T11:54:44.871+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "summary": "Bot repeated the same final answer on consecutive turns.",
-      "trigger": "runtime_turn_write",
-      "evidence": {
-        "previous_answer": "확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이, 연락 채널 sms 확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요? 네/아니오로 답해주세요. 그 다음으로 확인할 것: 알림 시작일 선택",
-        "repeated_answer": "확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이, 연락 채널 sms 확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요? 네/아니오로 답해주세요. 그 다음으로 확인할 것: 알림 시작일 선택",
-        "previous_turn_id": "0bfeac4a-60a5-427d-83e7-5556b4691912",
-        "current_user_text": "네",
-        "asking_address_again": false,
-        "address_like_user_input": false
-      },
-      "severity": "medium",
-      "violation_id": "pv_e0ba9bb7-10e6-4c4b-a77d-021446f5918e_532a7fda-435a-4ab0-b557-976123efa8d9_duplicate_answer",
-      "principle_key": "memory.enforceNoRepeatQuestions",
-      "runtime_scope": "chat",
-      "baseline_source": "src/app/api/runtime/chat/policies/principles.ts",
-      "issue_fingerprint": "memory.enforcenorepeatquestions|chat|확인한 것: 상품 아드헬린 린넨 롱 원피스 그레이, 연락 채널 sms 확인할 것: 이전에 알려주신 연락처(01093107159)로 진행할까요? 네/아니오로 답해주세요. 그 다음으로 확인할 것: 알림 시작일 선택|bot repeated the same final answer on consecutive turns.||||"
-    }
-- ed4e6dbd-fff7-4db7-8a87-2c732a438d91 RUNTIME_SELF_UPDATE_REVIEW_STARTED (2026-02-20T11:54:37.515+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "org_id": "8ad81b6b-3210-40dd-8e00-9a43a4395923",
-      "turn_id": "532a7fda-435a-4ab0-b557-976123efa8d9",
-      "session_id": "e0ba9bb7-10e6-4c4b-a77d-021446f5918e",
-      "config_source": "principles_default"
-    }
-- 1bd0962d-de04-48fc-8e75-5b9652be7c39 END_USER_WRITE_LATENCY (2026-02-20T11:54:36.472+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "duration_ms": 5299
-    }
-- 6649e337-c242-4d95-9e57-40cc4052f9c8 END_USER_CONFIRMED_ENTITY_SAVED (2026-02-20T11:54:36.214+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "keys": [
-        "channel",
-        "product_id",
-        "reuse_slot",
-        "reuse_value",
-        "product_name"
-      ],
-      "flow_id": "adfa10ea-8ee1-45f6-a056-bf71f4a3f761",
-      "key_count": 5,
-      "keys_truncated": false
-    }
-- 21f44089-7dae-4676-9626-bded2bf9a2f4 END_USER_CONTEXT_RESOLVED (2026-02-20T11:54:32.234+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "match_hit": true,
-      "end_user_id": "a7fbcce5-f82a-4165-b95e-9d9e2f5c6f06",
-      "identity_count": 1,
-      "identity_types": [
-        "external"
-      ],
-      "match_attempted": true,
-      "resolution_source": "session"
-    }
-- 4c32036b-294a-4d5b-a777-193f360e0e1a END_USER_MATCH_HIT (2026-02-20T11:54:31.959+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "matched": true,
-      "identity_count": 1,
-      "identity_types": [
-        "external"
-      ]
-    }
-- f7edfbee-5d88-45f1-a78a-426dbdca3c9a SLOT_EXTRACTED (2026-02-20T11:54:30.272+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "derived": {
-        "phone": null,
-        "address": null,
-        "zipcode": null,
-        "order_id": null,
-        "phone_masked": "-"
-      },
-      "resolved": {
-        "phone": null,
-        "intent": "restock_subscribe",
-        "address": null,
-        "zipcode": null,
-        "order_id": null,
-        "phone_masked": "-"
-      },
-      "_decision": {
-        "line": 145,
-        "phase": "runtime",
-        "column": 0,
-        "call_chain": [
-          {
-            "line": 145,
-            "column": 0,
-            "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-            "function_name": "emit:SLOT_EXTRACTED"
-          }
-        ],
-        "module_path": "src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts",
-        "recorded_at": "2026-02-20T11:54:30.272Z",
-        "function_name": "emit:SLOT_EXTRACTED"
-      },
-      "query_source": "current_message",
-      "missing_slots": [],
-      "expected_input": null,
-      "resolved_slots": {}
-    }
-- 12b341c5-e54f-4938-a18f-dca288ff1427 INPUT_CONTRACT_REVIEW_COMPLETED (2026-02-20T11:54:29.987+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "source": "pre_turn_guard",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:54:29.987Z",
-        "function_name": "unknown"
-      },
-      "intent_name": "restock_subscribe",
-      "expected_input": null,
-      "expected_inputs": [
-        "confirm"
-      ],
-      "expected_input_stage": "restock.awaiting_confirm"
-    }
-- 8ec7b2fc-a845-4c3a-81da-5a893a42aaa0 INPUT_CONTRACT_REVIEW_STARTED (2026-02-20T11:54:29.722+00:00) (turn_id=532a7fda-435a-4ab0-b557-976123efa8d9)
-  payload:
-    {
-      "source": "contract_stage",
-      "_decision": {
-        "phase": "runtime",
-        "call_chain": [],
-        "module_path": "unknown",
-        "recorded_at": "2026-02-20T11:54:29.722Z",
-        "function_name": "unknown"
-      },
-      "intent_name": "restock_subscribe",
-      "expected_input": "confirm",
-      "expected_inputs": [
-        "confirm"
-      ],
-      "expected_input_stage": "restock.awaiting_confirm"
     }
