@@ -693,7 +693,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/lib/conversation/pageFeaturePolicy.ts",
       "src/components/design-system/conversation/ConversationUI.parts.tsx",
     ],
-    notes: "ì´ˆê¸° ì•ˆë‚´ prefill ë©”ì‹œì§€ ì¶œë ¥ ì—¬ë¶€ë¥¼ ì œì–´í•©ë‹ˆë‹¤.",
+    notes: "초기 안내 prefill 메시지 출력 여부를 제어합니다.",
     usedByPages: ["/", "/app/laboratory", "/embed"],
   },
   {
@@ -703,7 +703,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/lib/conversation/pageFeaturePolicy.ts",
       "src/components/design-system/conversation/ConversationUI.parts.tsx",
     ],
-    notes: "ì´ˆê¸° ì•ˆë‚´ prefill ë©”ì‹œì§€ ë¬¸êµ¬ë¥¼ ì„¤ì •í•©ë‹ˆë‹¤.",
+    notes: "초기 안내 prefill 메시지 문구를 설정합니다.",
     usedByPages: ["/", "/app/laboratory", "/embed"],
   },
   {
@@ -2766,8 +2766,6 @@ export function ChatSettingsPanel({ authToken }: Props) {
     </div>
   );
 }
-
-
 
 
 
