@@ -405,6 +405,7 @@ function WidgetLauncherRuntime({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const sessionIdRef = useRef(sessionId);
   const [isOpen, setIsOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [themeConfig, setThemeConfig] = useState<Record<string, any>>({});
   const [resolvedName, setResolvedName] = useState(brandName);
 
@@ -478,6 +479,19 @@ function WidgetLauncherRuntime({
   };
 
   useEffect(() => {
+    if (typeof window === "undefined" || !("matchMedia" in window)) return;
+    const media = window.matchMedia("(max-width: 640px)");
+    const handleChange = () => setIsMobile(media.matches);
+    handleChange();
+    if (typeof media.addEventListener === "function") {
+      media.addEventListener("change", handleChange);
+      return () => media.removeEventListener("change", handleChange);
+    }
+    media.addListener(handleChange);
+    return () => media.removeListener(handleChange);
+  }, []);
+
+  useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== baseUrl) return;
       if (event.source !== iframeRef.current?.contentWindow) return;
@@ -530,6 +544,14 @@ function WidgetLauncherRuntime({
       />
       <WidgetLauncherIframe
         position={position}
+        layout={isMobile ? "fixed" : "absolute"}
+        bottomOffset={isMobile ? "0" : undefined}
+        sideOffset={isMobile ? "0" : undefined}
+        width={isMobile ? "100vw" : undefined}
+        height={isMobile ? "100vh" : undefined}
+        borderRadius={isMobile ? "0" : undefined}
+        boxShadow={isMobile ? "none" : undefined}
+        style={isMobile ? { top: "0", left: "0", right: "0" } : undefined}
         isOpen={isOpen}
         src={iframeSrc}
         iframeRef={iframeRef}
