@@ -134,6 +134,7 @@ import {
   resolveCompletionState,
   shouldAppendPostActionChoices,
 } from "./intentCompletionRuntime";
+import { evaluateIntentCapabilityGate } from "./intentCapabilityRuntime";
 import type { RuntimeContext } from "../shared/runtimeTypes";
 import type {
   DisambiguationStepInput,
@@ -1469,6 +1470,65 @@ export async function POST(req: NextRequest) {
     });
     auditIntent = resolvedIntent;
     auditEntity = (policyContext.entity || {}) as Record<string, any>;
+
+    markStage("intent_capability_gate.start");
+    pushRuntimeCall("src/app/api/runtime/chat/runtime/intentCapabilityRuntime.ts", "evaluateIntentCapabilityGate");
+    const capabilityGate = evaluateIntentCapabilityGate({
+      intent: resolvedIntent,
+      hasAllowedToolName,
+    });
+    if (capabilityGate.blocked) {
+      const reply = makeReply(capabilityGate.message);
+      await insertTurn({
+        session_id: sessionId,
+        seq: nextSeq,
+        transcript_text: message,
+        answer_text: reply,
+        final_answer: reply,
+        bot_context: {
+          intent_name: resolvedIntent,
+          entity: policyContext.entity,
+          intent_unsupported: true,
+          intent_unsupported_reason: capabilityGate.reason,
+          intent_unsupported_feature: capabilityGate.unsupportedFeatureLabel,
+          intent_unsupported_missing_tools: capabilityGate.missingTools,
+          intent_unsupported_missing_capabilities: capabilityGate.missingCapabilities,
+          intent_unsupported_missing_providers: capabilityGate.missingProviders,
+        },
+      });
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "POLICY_DECISION",
+        {
+          stage: "intent_capability_gate",
+          action: "INTENT_UNSUPPORTED_MISSING_TOOLS",
+          intent: resolvedIntent,
+          missing_tools: capabilityGate.missingTools,
+          missing_providers: capabilityGate.missingProviders,
+          missing_capabilities: capabilityGate.missingCapabilities,
+          unsupported_feature_label: capabilityGate.unsupportedFeatureLabel,
+          reason: capabilityGate.reason,
+          answer_mode: capabilityGate.answerMode,
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
+      );
+      await insertEvent(
+        context,
+        sessionId,
+        latestTurnId,
+        "FINAL_ANSWER_READY",
+        {
+          model: "deterministic_intent_unsupported",
+          answer: reply,
+          missing_tools: capabilityGate.missingTools,
+          missing_providers: capabilityGate.missingProviders,
+        },
+        { intent_name: resolvedIntent, entity: policyContext.entity as Record<string, any> }
+      );
+      return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+    }
 
     markStage("otp_gate.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/otpRuntime.ts", "handleOtpLifecycleAndOrderGate");
