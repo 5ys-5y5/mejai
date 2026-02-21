@@ -426,6 +426,7 @@ function WidgetLauncherRuntime({
   const [isMobile, setIsMobile] = useState(false);
   const [themeConfig, setThemeConfig] = useState<Record<string, any>>({});
   const [resolvedName, setResolvedName] = useState(brandName);
+  const viewportRafRef = useRef<number | null>(null);
 
   const resolvedIconUrl = useMemo(
     () => resolveLauncherIcon(cfgRef.current, themeConfig, baseUrl),
@@ -510,6 +511,44 @@ function WidgetLauncherRuntime({
   }, []);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const root = document.documentElement;
+    const vv = window.visualViewport;
+    const applyViewportVars = () => {
+      const height = vv?.height || window.innerHeight;
+      const width = vv?.width || window.innerWidth;
+      const offsetTop = vv?.offsetTop || 0;
+      const apply = (el: HTMLElement | null) => {
+        if (!el) return;
+        el.style.setProperty("--mejai-vh", `${height}px`);
+        el.style.setProperty("--mejai-vw", `${width}px`);
+        el.style.setProperty("--mejai-vv-offset-top", `${offsetTop}px`);
+      };
+      apply(root);
+      apply(mountNode);
+    };
+    const schedule = () => {
+      if (viewportRafRef.current !== null) cancelAnimationFrame(viewportRafRef.current);
+      viewportRafRef.current = requestAnimationFrame(() => {
+        viewportRafRef.current = null;
+        applyViewportVars();
+      });
+    };
+    applyViewportVars();
+    vv?.addEventListener("resize", schedule);
+    vv?.addEventListener("scroll", schedule);
+    window.addEventListener("resize", schedule);
+    window.addEventListener("orientationchange", schedule);
+    return () => {
+      if (viewportRafRef.current !== null) cancelAnimationFrame(viewportRafRef.current);
+      vv?.removeEventListener("resize", schedule);
+      vv?.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("orientationchange", schedule);
+    };
+  }, [mountNode]);
+
+  useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== baseUrl) return;
       if (event.source !== iframeRef.current?.contentWindow) return;
@@ -555,8 +594,19 @@ function WidgetLauncherRuntime({
     }
   }, [baseUrl, publicKey]);
 
+  const launcherBottom = isMobile ? "calc(16px + env(safe-area-inset-bottom))" : "24px";
+  const launcherRight = isMobile ? "calc(16px + env(safe-area-inset-right))" : "24px";
+  const launcherLeft = isMobile ? "calc(16px + env(safe-area-inset-left))" : "24px";
+
   return (
-    <WidgetLauncherContainer mountTo={mountNode} position={position} stack>
+    <WidgetLauncherContainer
+      mountTo={mountNode}
+      position={position}
+      stack
+      bottom={launcherBottom}
+      right={launcherRight}
+      left={launcherLeft}
+    >
       <WidgetLauncherButton
         brandName={resolvedName}
         iconUrl={resolvedIconUrl}
@@ -570,10 +620,18 @@ function WidgetLauncherRuntime({
         bottomOffset={isMobile ? "0" : undefined}
         sideOffset={isMobile ? "0" : undefined}
         width={isMobile ? "100vw" : undefined}
-        height={isMobile ? "100vh" : undefined}
+        height={isMobile ? "var(--mejai-vh, 100vh)" : undefined}
         borderRadius={isMobile ? "0" : undefined}
         boxShadow={isMobile ? "none" : undefined}
-        style={isMobile ? { top: "0", left: "0", right: "0" } : undefined}
+        style={
+          isMobile
+            ? {
+              top: "var(--mejai-vv-offset-top, 0px)",
+              left: "0",
+              right: "0",
+            }
+            : undefined
+        }
         isOpen={isOpen}
         src={iframeSrc}
         iframeRef={iframeRef}

@@ -270,6 +270,39 @@ export default function WidgetEmbedPage() {
     llm: "chatgpt",
     inlineKb: "",
   });
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const root = document.documentElement;
+    const vv = window.visualViewport;
+    let rafId: number | null = null;
+    const applyViewportVars = () => {
+      const height = vv?.height || window.innerHeight;
+      const width = vv?.width || window.innerWidth;
+      const offsetTop = vv?.offsetTop || 0;
+      root.style.setProperty("--mejai-vh", `${height}px`);
+      root.style.setProperty("--mejai-vw", `${width}px`);
+      root.style.setProperty("--mejai-vv-offset-top", `${offsetTop}px`);
+    };
+    const schedule = () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        applyViewportVars();
+      });
+    };
+    applyViewportVars();
+    vv?.addEventListener("resize", schedule);
+    vv?.addEventListener("scroll", schedule);
+    window.addEventListener("resize", schedule);
+    window.addEventListener("orientationchange", schedule);
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      vv?.removeEventListener("resize", schedule);
+      vv?.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("orientationchange", schedule);
+    };
+  }, []);
 
   const [sessions, setSessions] = useState<WidgetConversationSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
@@ -1152,7 +1185,14 @@ export default function WidgetEmbedPage() {
   };
 
   return (
-    <div className="h-full min-h-0">
+    <div
+      className="h-full min-h-0"
+      style={{
+        minHeight: "var(--mejai-vh, 100vh)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+        paddingTop: "env(safe-area-inset-top)",
+      }}
+    >
       <WidgetConversationLayout
         brandName={brandName}
         status={statusLabel}

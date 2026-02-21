@@ -1069,7 +1069,7 @@ function createDemoModelState(): ModelState {
         selection_mode: "multi",
         min_select: 1,
         max_select: 2,
-        submit_format: "multi",
+        submit_format: "csv",
         grid_columns: { quick_replies: 2, cards: 2 },
         prompt_kind: "intent_disambiguation",
       },
