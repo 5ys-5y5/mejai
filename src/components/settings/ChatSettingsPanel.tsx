@@ -24,12 +24,8 @@ import {
   resolvePageConversationDebugOptions,
 } from "@/lib/transcriptCopyPolicy";
 
-const BASE_PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory", "/embed"];
-const SETTINGS_CARD_WIDTH_BY_PAGE: Record<ConversationPageKey, number> = {
-  "/": 360,
-  "/app/laboratory": 380,
-  "/embed": 360,
-};
+const BASE_PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory", "/embed", "/demo", "/call"];
+const SETTINGS_CARD_WIDTH = 300;
 function normalizePages(pages: ConversationPageKey[]) {
   return Array.from(new Set([...BASE_PAGE_KEYS, ...pages.filter(Boolean)])).sort((a, b) => a.localeCompare(b));
 }
@@ -1004,8 +1000,8 @@ export function ChatSettingsPanel({ authToken }: Props) {
         acc[page] = {};
         return acc;
       }, {} as Record<ConversationPageKey, Record<string, boolean>>)
-      );
-    }, [buildOpenStateByPage]);
+    );
+  }, [buildOpenStateByPage]);
 
   const updatePage = useCallback(
     (page: ConversationPageKey, updater: (prev: ConversationPageFeatures) => ConversationPageFeatures) => {
@@ -1409,7 +1405,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
                     ? "shrink-0 p-4 [&_.state-controls]:hidden [&_.config-input]:pointer-events-none [&_.config-input]:opacity-70"
                     : "shrink-0 p-4"
                 }
-                style={{ width: `${isHeader ? SETTINGS_CARD_WIDTH_BY_PAGE["/"] : SETTINGS_CARD_WIDTH_BY_PAGE[page] || 380}px` }}
+                style={{ width: `${SETTINGS_CARD_WIDTH}px` }}
               >
                 <div className="text-sm font-semibold text-slate-900">{isHeader ? "헤더" : pageLabel}</div>
                 <div className="mt-1 text-xs text-slate-500">{isHeader ? "코드 정의명/펼침 제어" : "해당 페이지에서 실제 적용될 대화 기능 설정"}</div>
@@ -1555,7 +1551,6 @@ export function ChatSettingsPanel({ authToken }: Props) {
                         buttonClassName="h-9 text-xs"
                       />
                     </label>
-
                     <div className="rounded-lg border border-slate-200 bg-white p-2">
                       <GroupToggleField
                         neutralStyle={isHeader}
@@ -1580,100 +1575,100 @@ export function ChatSettingsPanel({ authToken }: Props) {
                       />
                       {showDebugHeaderDetails ? (
                         <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>대원칙</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugHeader?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  header: { ...prev.sections?.header, principle: !(debugHeader?.principle ?? true) },
-                                },
-                              }))
-                            }
-                            className={(debugHeader?.enabled ?? true) && (debugHeader?.principle ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugHeader?.enabled ?? true) ? ((debugHeader?.principle ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>기대 목록</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugHeader?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  header: { ...prev.sections?.header, expectedLists: !(debugHeader?.expectedLists ?? true) },
-                                },
-                              }))
-                            }
-                            className={(debugHeader?.enabled ?? true) && (debugHeader?.expectedLists ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugHeader?.enabled ?? true) ? ((debugHeader?.expectedLists ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span className="inline-flex items-center">
-                          사용 모듈
-                          <InlineHelpPopup className="ml-[10px]" ariaLabel="사용 모듈 예시">
-                            debug.prefix_json.execution.call_chain[0].module_path: {pickExample(["debug.prefix_json.execution.call_chain[0].module_path"]) || "-"}
-                          </InlineHelpPopup>
-                        </span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugHeader?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  header: { ...prev.sections?.header, runtimeModules: !(debugHeader?.runtimeModules ?? true) },
-                                },
-                              }))
-                            }
-                            className={(debugHeader?.enabled ?? true) && (debugHeader?.runtimeModules ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugHeader?.enabled ?? true) ? ((debugHeader?.runtimeModules ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span className="inline-flex items-center">
-                          점검 상태
-                          <InlineHelpPopup className="ml-[10px]" ariaLabel="점검 상태 예시">
-                            MCP: {debugFieldMcpTools[0] || "-"} / Event: {debugFieldEventTypes[0] || "-"}
-                          </InlineHelpPopup>
-                        </span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugHeader?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  header: { ...prev.sections?.header, auditStatus: !(debugHeader?.auditStatus ?? true) },
-                                },
-                              }))
-                            }
-                            className={(debugHeader?.enabled ?? true) && (debugHeader?.auditStatus ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugHeader?.enabled ?? true) ? ((debugHeader?.auditStatus ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>대원칙</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugHeader?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      header: { ...prev.sections?.header, principle: !(debugHeader?.principle ?? true) },
+                                    },
+                                  }))
+                                }
+                                className={(debugHeader?.enabled ?? true) && (debugHeader?.principle ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugHeader?.enabled ?? true) ? ((debugHeader?.principle ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>기대 목록</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugHeader?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      header: { ...prev.sections?.header, expectedLists: !(debugHeader?.expectedLists ?? true) },
+                                    },
+                                  }))
+                                }
+                                className={(debugHeader?.enabled ?? true) && (debugHeader?.expectedLists ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugHeader?.enabled ?? true) ? ((debugHeader?.expectedLists ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span className="inline-flex items-center">
+                              사용 모듈
+                              <InlineHelpPopup className="ml-[10px]" ariaLabel="사용 모듈 예시">
+                                debug.prefix_json.execution.call_chain[0].module_path: {pickExample(["debug.prefix_json.execution.call_chain[0].module_path"]) || "-"}
+                              </InlineHelpPopup>
+                            </span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugHeader?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      header: { ...prev.sections?.header, runtimeModules: !(debugHeader?.runtimeModules ?? true) },
+                                    },
+                                  }))
+                                }
+                                className={(debugHeader?.enabled ?? true) && (debugHeader?.runtimeModules ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugHeader?.enabled ?? true) ? ((debugHeader?.runtimeModules ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span className="inline-flex items-center">
+                              점검 상태
+                              <InlineHelpPopup className="ml-[10px]" ariaLabel="점검 상태 예시">
+                                MCP: {debugFieldMcpTools[0] || "-"} / Event: {debugFieldEventTypes[0] || "-"}
+                              </InlineHelpPopup>
+                            </span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugHeader?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      header: { ...prev.sections?.header, auditStatus: !(debugHeader?.auditStatus ?? true) },
+                                    },
+                                  }))
+                                }
+                                className={(debugHeader?.enabled ?? true) && (debugHeader?.auditStatus ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugHeader?.enabled ?? true) ? ((debugHeader?.auditStatus ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       ) : null}
                     </div>
@@ -1699,218 +1694,218 @@ export function ChatSettingsPanel({ authToken }: Props) {
                       />
                       {showDebugTurnDetails ? (
                         <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>TURN_ID</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugTurn?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, turnId: !(debugTurn?.turnId ?? true) } },
-                              }))
-                            }
-                            className={(debugTurn?.enabled ?? true) && (debugTurn?.turnId ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.turnId ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>TOKEN_USED</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugTurn?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, tokenUsed: !(debugTurn?.tokenUsed ?? true) } },
-                              }))
-                            }
-                            className={(debugTurn?.enabled ?? true) && (debugTurn?.tokenUsed ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.tokenUsed ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>TOKEN_UNUSED</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugTurn?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, tokenUnused: !(debugTurn?.tokenUnused ?? true) } },
-                              }))
-                            }
-                            className={(debugTurn?.enabled ?? true) && (debugTurn?.tokenUnused ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.tokenUnused ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>RESPONSE_SCHEMA(요약)</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugTurn?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  turn: { ...prev.sections?.turn, responseSchemaSummary: !(debugTurn?.responseSchemaSummary ?? true) },
-                                },
-                              }))
-                            }
-                            className={(debugTurn?.enabled ?? true) && (debugTurn?.responseSchemaSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.responseSchemaSummary ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>RESPONSE_SCHEMA(상세)</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugTurn?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  turn: { ...prev.sections?.turn, responseSchemaDetail: !(debugTurn?.responseSchemaDetail ?? true) },
-                                },
-                              }))
-                            }
-                            className={(debugTurn?.enabled ?? true) && (debugTurn?.responseSchemaDetail ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.responseSchemaDetail ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className="mt-2">
-                        <DebugFieldTreeRenderer
-                          tree={RESPONSE_SCHEMA_DETAIL_TREE}
-                          isHeader={isHeader}
-                          disabled={!(debugTurn?.enabled ?? true) || !(debugTurn?.responseSchemaDetail ?? true)}
-                          stateMap={responseSchemaDetailFields as Record<string, boolean> | undefined}
-                          collapsedMap={debugTreeCollapsed}
-                          onToggleCollapse={(key, next) =>
-                            setDebugDetailTreeCollapsedByPage((prev) => ({
-                              ...prev,
-                              [page]: { ...(prev[page] || {}), [key]: next },
-                            }))
-                          }
-                          onToggle={(node, next) => {
-                            const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
-                            updateDebugCopyOptions(page, (prev) => {
-                              const nextMap = updateBooleanMap(prev.sections?.turn?.responseSchemaDetailFields, keysToUpdate, next);
-                              return {
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  turn: {
-                                    ...prev.sections?.turn,
-                                    responseSchemaDetailFields: nextMap,
-                                  },
-                                },
-                              };
-                            });
-                          }}
-                        />
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>RENDER_PLAN(요약)</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugTurn?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, renderPlanSummary: !(debugTurn?.renderPlanSummary ?? true) } },
-                              }))
-                            }
-                            className={(debugTurn?.enabled ?? true) && (debugTurn?.renderPlanSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanSummary ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>RENDER_PLAN(상세)</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugTurn?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, renderPlanDetail: !(debugTurn?.renderPlanDetail ?? true) } },
-                              }))
-                            }
-                            className={(debugTurn?.enabled ?? true) && (debugTurn?.renderPlanDetail ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanDetail ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className="mt-2">
-                        <DebugFieldTreeRenderer
-                          tree={RENDER_PLAN_DETAIL_TREE}
-                          isHeader={isHeader}
-                          disabled={!(debugTurn?.enabled ?? true) || !(debugTurn?.renderPlanDetail ?? true)}
-                          stateMap={renderPlanDetailFields as Record<string, boolean> | undefined}
-                          collapsedMap={debugTreeCollapsed}
-                          onToggleCollapse={(key, next) =>
-                            setDebugDetailTreeCollapsedByPage((prev) => ({
-                              ...prev,
-                              [page]: { ...(prev[page] || {}), [key]: next },
-                            }))
-                          }
-                          onToggle={(node, next) => {
-                            const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
-                            updateDebugCopyOptions(page, (prev) => {
-                              const nextMap = updateBooleanMap(prev.sections?.turn?.renderPlanDetailFields, keysToUpdate, next);
-                              return {
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  turn: {
-                                    ...prev.sections?.turn,
-                                    renderPlanDetailFields: nextMap,
-                                  },
-                                },
-                              };
-                            });
-                          }}
-                        />
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>QUICK_REPLY_RULE</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugTurn?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, turn: { ...prev.sections?.turn, quickReplyRule: !(debugTurn?.quickReplyRule ?? true) } },
-                              }))
-                            }
-                            className={(debugTurn?.enabled ?? true) && (debugTurn?.quickReplyRule ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugTurn?.enabled ?? true) ? ((debugTurn?.quickReplyRule ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>TURN_ID</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugTurn?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, turn: { ...prev.sections?.turn, turnId: !(debugTurn?.turnId ?? true) } },
+                                  }))
+                                }
+                                className={(debugTurn?.enabled ?? true) && (debugTurn?.turnId ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugTurn?.enabled ?? true) ? ((debugTurn?.turnId ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>TOKEN_USED</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugTurn?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, turn: { ...prev.sections?.turn, tokenUsed: !(debugTurn?.tokenUsed ?? true) } },
+                                  }))
+                                }
+                                className={(debugTurn?.enabled ?? true) && (debugTurn?.tokenUsed ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugTurn?.enabled ?? true) ? ((debugTurn?.tokenUsed ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>TOKEN_UNUSED</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugTurn?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, turn: { ...prev.sections?.turn, tokenUnused: !(debugTurn?.tokenUnused ?? true) } },
+                                  }))
+                                }
+                                className={(debugTurn?.enabled ?? true) && (debugTurn?.tokenUnused ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugTurn?.enabled ?? true) ? ((debugTurn?.tokenUnused ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>RESPONSE_SCHEMA(요약)</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugTurn?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      turn: { ...prev.sections?.turn, responseSchemaSummary: !(debugTurn?.responseSchemaSummary ?? true) },
+                                    },
+                                  }))
+                                }
+                                className={(debugTurn?.enabled ?? true) && (debugTurn?.responseSchemaSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugTurn?.enabled ?? true) ? ((debugTurn?.responseSchemaSummary ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>RESPONSE_SCHEMA(상세)</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugTurn?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      turn: { ...prev.sections?.turn, responseSchemaDetail: !(debugTurn?.responseSchemaDetail ?? true) },
+                                    },
+                                  }))
+                                }
+                                className={(debugTurn?.enabled ?? true) && (debugTurn?.responseSchemaDetail ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugTurn?.enabled ?? true) ? ((debugTurn?.responseSchemaDetail ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="mt-2">
+                            <DebugFieldTreeRenderer
+                              tree={RESPONSE_SCHEMA_DETAIL_TREE}
+                              isHeader={isHeader}
+                              disabled={!(debugTurn?.enabled ?? true) || !(debugTurn?.responseSchemaDetail ?? true)}
+                              stateMap={responseSchemaDetailFields as Record<string, boolean> | undefined}
+                              collapsedMap={debugTreeCollapsed}
+                              onToggleCollapse={(key, next) =>
+                                setDebugDetailTreeCollapsedByPage((prev) => ({
+                                  ...prev,
+                                  [page]: { ...(prev[page] || {}), [key]: next },
+                                }))
+                              }
+                              onToggle={(node, next) => {
+                                const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
+                                updateDebugCopyOptions(page, (prev) => {
+                                  const nextMap = updateBooleanMap(prev.sections?.turn?.responseSchemaDetailFields, keysToUpdate, next);
+                                  return {
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      turn: {
+                                        ...prev.sections?.turn,
+                                        responseSchemaDetailFields: nextMap,
+                                      },
+                                    },
+                                  };
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>RENDER_PLAN(요약)</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugTurn?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, turn: { ...prev.sections?.turn, renderPlanSummary: !(debugTurn?.renderPlanSummary ?? true) } },
+                                  }))
+                                }
+                                className={(debugTurn?.enabled ?? true) && (debugTurn?.renderPlanSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanSummary ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>RENDER_PLAN(상세)</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugTurn?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, turn: { ...prev.sections?.turn, renderPlanDetail: !(debugTurn?.renderPlanDetail ?? true) } },
+                                  }))
+                                }
+                                className={(debugTurn?.enabled ?? true) && (debugTurn?.renderPlanDetail ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugTurn?.enabled ?? true) ? ((debugTurn?.renderPlanDetail ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="mt-2">
+                            <DebugFieldTreeRenderer
+                              tree={RENDER_PLAN_DETAIL_TREE}
+                              isHeader={isHeader}
+                              disabled={!(debugTurn?.enabled ?? true) || !(debugTurn?.renderPlanDetail ?? true)}
+                              stateMap={renderPlanDetailFields as Record<string, boolean> | undefined}
+                              collapsedMap={debugTreeCollapsed}
+                              onToggleCollapse={(key, next) =>
+                                setDebugDetailTreeCollapsedByPage((prev) => ({
+                                  ...prev,
+                                  [page]: { ...(prev[page] || {}), [key]: next },
+                                }))
+                              }
+                              onToggle={(node, next) => {
+                                const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
+                                updateDebugCopyOptions(page, (prev) => {
+                                  const nextMap = updateBooleanMap(prev.sections?.turn?.renderPlanDetailFields, keysToUpdate, next);
+                                  return {
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      turn: {
+                                        ...prev.sections?.turn,
+                                        renderPlanDetailFields: nextMap,
+                                      },
+                                    },
+                                  };
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>QUICK_REPLY_RULE</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugTurn?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, turn: { ...prev.sections?.turn, quickReplyRule: !(debugTurn?.quickReplyRule ?? true) } },
+                                  }))
+                                }
+                                className={(debugTurn?.enabled ?? true) && (debugTurn?.quickReplyRule ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugTurn?.enabled ?? true) ? ((debugTurn?.quickReplyRule ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                       ) : null}
                     </div>
@@ -1936,242 +1931,242 @@ export function ChatSettingsPanel({ authToken }: Props) {
                       />
                       {showDebugLogsDetails ? (
                         <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>문제 요약</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugLogs?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, issueSummary: !(debugLogs?.issueSummary ?? true) } },
-                              }))
-                            }
-                            className={(debugLogs?.enabled ?? true) && (debugLogs?.issueSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugLogs?.enabled ?? true) ? ((debugLogs?.issueSummary ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className="mt-2">
-                        <DebugFieldTreeRenderer
-                          tree={PREFIX_JSON_SECTIONS_TREE}
-                          isHeader={isHeader}
-                          disabled={!(debugLogs?.enabled ?? true) || !(debugLogDebug?.enabled ?? true) || !(debugLogDebug?.prefixJson ?? true)}
-                          stateMap={debugPrefixSections as Record<string, boolean> | undefined}
-                          collapsedMap={debugTreeCollapsed}
-                          onToggleCollapse={(key, next) =>
-                            setDebugDetailTreeCollapsedByPage((prev) => ({
-                              ...prev,
-                              [page]: { ...(prev[page] || {}), [key]: next },
-                            }))
-                          }
-                          onToggle={(node, next) => {
-                            const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
-                            updateDebugCopyOptions(page, (prev) => {
-                              const current = prev.sections?.logs?.debug?.prefixJsonSections as BooleanMap | undefined;
-                              const nextMap = updateBooleanMap(current, keysToUpdate, next);
-                              return {
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  logs: {
-                                    ...prev.sections?.logs,
-                                    debug: {
-                                      ...prev.sections?.logs?.debug,
-                                      prefixJsonSections: nextMap,
-                                    },
-                                  },
-                                },
-                              };
-                            });
-                          }}
-                        />
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>DEBUG 로그</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugLogs?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, debug: { ...prev.sections?.logs?.debug, enabled: !(debugLogDebug?.enabled ?? true) } } },
-                              }))
-                            }
-                            className={(debugLogs?.enabled ?? true) && (debugLogDebug?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugLogs?.enabled ?? true) ? ((debugLogDebug?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span className="inline-flex items-center">
-                          DEBUG prefix_json
-                          <InlineHelpPopup className="ml-[10px]" ariaLabel="DEBUG prefix_json 예시">
-                            {pickExample(["debug.prefix_json.mcp.last.function", "debug.prefix_json.decision.function_name"]) || "-"}
-                          </InlineHelpPopup>
-                        </span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugLogs?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, debug: { ...prev.sections?.logs?.debug, prefixJson: !(debugLogDebug?.prefixJson ?? true) } } },
-                              }))
-                            }
-                            className={(debugLogs?.enabled ?? true) && (debugLogDebug?.prefixJson ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugLogs?.enabled ?? true) ? ((debugLogDebug?.prefixJson ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>MCP 로그</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugLogs?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, enabled: !(debugLogMcp?.enabled ?? true) } } },
-                              }))
-                            }
-                            className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugLogs?.enabled ?? true) ? ((debugLogMcp?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span className="inline-flex items-center">
-                          MCP request
-                          <InlineHelpPopup className="ml-[10px]" ariaLabel="MCP request 예시">
-                            {pickExample(["mcp.request_payload.path", "mcp.request_payload.method"]) || "-"}
-                          </InlineHelpPopup>
-                        </span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, request: !(debugLogMcp?.request ?? true) } },
-                                },
-                              }))
-                            }
-                            className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.request ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.request ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span className="inline-flex items-center">
-                          MCP response
-                          <InlineHelpPopup className="ml-[10px]" ariaLabel="MCP response 예시">
-                            {pickExample(["mcp.response_payload.error.code", "mcp.response_payload.verified"]) || "-"}
-                          </InlineHelpPopup>
-                        </span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: {
-                                  ...prev.sections,
-                                  logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, response: !(debugLogMcp?.response ?? true) } },
-                                },
-                              }))
-                            }
-                            className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.response ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.response ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>MCP success 포함</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, includeSuccess: !(debugLogMcp?.includeSuccess ?? true) } } },
-                              }))
-                            }
-                            className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.includeSuccess ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.includeSuccess ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>MCP error 포함</span>
-                        {!isHeader ? (
-                          <button
-                            type="button"
-                            disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
-                            onClick={() =>
-                              updateDebugCopyOptions(page, (prev) => ({
-                                ...prev,
-                                sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, includeError: !(debugLogMcp?.includeError ?? true) } } },
-                              }))
-                            }
-                            className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.includeError ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                          >
-                            {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.includeError ?? true) ? "ON" : "OFF") : "OFF"}
-                          </button>
-                        ) : null}
-                      </div>
-                      <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
-                        <span>Event 로그</span>
-                        <span className="flex items-center gap-1">
-                          {!isHeader ? (
-                            <span className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700">
-                              {showDebugEventDetails ? "▼" : "▶"}
-                            </span>
-                          ) : null}
-                          {isHeader ? (
-                            <button
-                              type="button"
-                              onClick={() => setExpandAll(setDebugEventDetailsOpenByPage, !debugEventDetailsOpenByPage["/"])}
-                              className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700"
-                              aria-label="debug.sections.logs.event 하위 토글"
-                            >
-                              {showDebugEventDetails ? "▼" : "▶"}
-                            </button>
-                          ) : null}
-                          {!isHeader ? (
-                            <button
-                              type="button"
-                              disabled={!(debugLogs?.enabled ?? true)}
-                              onClick={() =>
-                                updateDebugCopyOptions(page, (prev) => ({
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>문제 요약</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugLogs?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, logs: { ...prev.sections?.logs, issueSummary: !(debugLogs?.issueSummary ?? true) } },
+                                  }))
+                                }
+                                className={(debugLogs?.enabled ?? true) && (debugLogs?.issueSummary ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugLogs?.enabled ?? true) ? ((debugLogs?.issueSummary ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="mt-2">
+                            <DebugFieldTreeRenderer
+                              tree={PREFIX_JSON_SECTIONS_TREE}
+                              isHeader={isHeader}
+                              disabled={!(debugLogs?.enabled ?? true) || !(debugLogDebug?.enabled ?? true) || !(debugLogDebug?.prefixJson ?? true)}
+                              stateMap={debugPrefixSections as Record<string, boolean> | undefined}
+                              collapsedMap={debugTreeCollapsed}
+                              onToggleCollapse={(key, next) =>
+                                setDebugDetailTreeCollapsedByPage((prev) => ({
                                   ...prev,
-                                  sections: { ...prev.sections, logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, enabled: !(debugLogEvent?.enabled ?? true) } } },
+                                  [page]: { ...(prev[page] || {}), [key]: next },
                                 }))
                               }
-                              className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
-                            >
-                              {(debugLogs?.enabled ?? true) ? ((debugLogEvent?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
-                            </button>
-                          ) : null}
-                        </span>
-                      </div>
-                      {showDebugEventDetails ? (
+                              onToggle={(node, next) => {
+                                const keysToUpdate = next ? [node.key] : collectTreeKeys(node);
+                                updateDebugCopyOptions(page, (prev) => {
+                                  const current = prev.sections?.logs?.debug?.prefixJsonSections as BooleanMap | undefined;
+                                  const nextMap = updateBooleanMap(current, keysToUpdate, next);
+                                  return {
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      logs: {
+                                        ...prev.sections?.logs,
+                                        debug: {
+                                          ...prev.sections?.logs?.debug,
+                                          prefixJsonSections: nextMap,
+                                        },
+                                      },
+                                    },
+                                  };
+                                });
+                              }}
+                            />
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>DEBUG 로그</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugLogs?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, logs: { ...prev.sections?.logs, debug: { ...prev.sections?.logs?.debug, enabled: !(debugLogDebug?.enabled ?? true) } } },
+                                  }))
+                                }
+                                className={(debugLogs?.enabled ?? true) && (debugLogDebug?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugLogs?.enabled ?? true) ? ((debugLogDebug?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span className="inline-flex items-center">
+                              DEBUG prefix_json
+                              <InlineHelpPopup className="ml-[10px]" ariaLabel="DEBUG prefix_json 예시">
+                                {pickExample(["debug.prefix_json.mcp.last.function", "debug.prefix_json.decision.function_name"]) || "-"}
+                              </InlineHelpPopup>
+                            </span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugLogs?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, logs: { ...prev.sections?.logs, debug: { ...prev.sections?.logs?.debug, prefixJson: !(debugLogDebug?.prefixJson ?? true) } } },
+                                  }))
+                                }
+                                className={(debugLogs?.enabled ?? true) && (debugLogDebug?.prefixJson ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugLogs?.enabled ?? true) ? ((debugLogDebug?.prefixJson ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>MCP 로그</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugLogs?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, enabled: !(debugLogMcp?.enabled ?? true) } } },
+                                  }))
+                                }
+                                className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugLogs?.enabled ?? true) ? ((debugLogMcp?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span className="inline-flex items-center">
+                              MCP request
+                              <InlineHelpPopup className="ml-[10px]" ariaLabel="MCP request 예시">
+                                {pickExample(["mcp.request_payload.path", "mcp.request_payload.method"]) || "-"}
+                              </InlineHelpPopup>
+                            </span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, request: !(debugLogMcp?.request ?? true) } },
+                                    },
+                                  }))
+                                }
+                                className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.request ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.request ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span className="inline-flex items-center">
+                              MCP response
+                              <InlineHelpPopup className="ml-[10px]" ariaLabel="MCP response 예시">
+                                {pickExample(["mcp.response_payload.error.code", "mcp.response_payload.verified"]) || "-"}
+                              </InlineHelpPopup>
+                            </span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: {
+                                      ...prev.sections,
+                                      logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, response: !(debugLogMcp?.response ?? true) } },
+                                    },
+                                  }))
+                                }
+                                className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.response ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.response ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>MCP success 포함</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, includeSuccess: !(debugLogMcp?.includeSuccess ?? true) } } },
+                                  }))
+                                }
+                                className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.includeSuccess ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.includeSuccess ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>MCP error 포함</span>
+                            {!isHeader ? (
+                              <button
+                                type="button"
+                                disabled={!(debugLogs?.enabled ?? true) || !(debugLogMcp?.enabled ?? true)}
+                                onClick={() =>
+                                  updateDebugCopyOptions(page, (prev) => ({
+                                    ...prev,
+                                    sections: { ...prev.sections, logs: { ...prev.sections?.logs, mcp: { ...prev.sections?.logs?.mcp, includeError: !(debugLogMcp?.includeError ?? true) } } },
+                                  }))
+                                }
+                                className={(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) && (debugLogMcp?.includeError ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                              >
+                                {(debugLogs?.enabled ?? true) && (debugLogMcp?.enabled ?? true) ? ((debugLogMcp?.includeError ?? true) ? "ON" : "OFF") : "OFF"}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
+                            <span>Event 로그</span>
+                            <span className="flex items-center gap-1">
+                              {!isHeader ? (
+                                <span className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700">
+                                  {showDebugEventDetails ? "▼" : "▶"}
+                                </span>
+                              ) : null}
+                              {isHeader ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setExpandAll(setDebugEventDetailsOpenByPage, !debugEventDetailsOpenByPage["/"])}
+                                  className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700"
+                                  aria-label="debug.sections.logs.event 하위 토글"
+                                >
+                                  {showDebugEventDetails ? "▼" : "▶"}
+                                </button>
+                              ) : null}
+                              {!isHeader ? (
+                                <button
+                                  type="button"
+                                  disabled={!(debugLogs?.enabled ?? true)}
+                                  onClick={() =>
+                                    updateDebugCopyOptions(page, (prev) => ({
+                                      ...prev,
+                                      sections: { ...prev.sections, logs: { ...prev.sections?.logs, event: { ...prev.sections?.logs?.event, enabled: !(debugLogEvent?.enabled ?? true) } } },
+                                    }))
+                                  }
+                                  className={(debugLogs?.enabled ?? true) && (debugLogEvent?.enabled ?? true) ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 text-[11px] font-bold text-white" : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 text-[11px] font-bold text-white disabled:bg-slate-300"}
+                                >
+                                  {(debugLogs?.enabled ?? true) ? ((debugLogEvent?.enabled ?? true) ? "ON" : "OFF") : "OFF"}
+                                </button>
+                              ) : null}
+                            </span>
+                          </div>
+                          {showDebugEventDetails ? (
                             <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
                               <div className={isHeader ? "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs" : "mt-2 flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs [&:has(button.bg-emerald-700)]:border-emerald-500 [&:has(button.bg-emerald-700)]:bg-emerald-100 [&:has(button.bg-rose-700)]:border-rose-400 [&:has(button.bg-rose-700)]:bg-rose-100"}>
                                 <span className="inline-flex items-center">
@@ -2322,7 +2317,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
                         className="config-input min-h-[70px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
                         placeholder="예: 기록한대로 응대하는 AI 상담사를"
                       />
-                      {!isHeader ? <div className="mt-1 text-[10px] text-slate-500">줄바꿈으로 여러 줄 입력</div> : null}
+                      {/* {!isHeader ? <div className="mt-1 text-[10px] text-slate-500">줄바꿈으로 여러 줄 입력</div> : null} */}
                     </label>
                     <label className="block">
                       <div className="mb-1 text-[11px] font-semibold text-slate-600">
@@ -2341,6 +2336,76 @@ export function ChatSettingsPanel({ authToken }: Props) {
                         placeholder="예: 문의 내용을 입력해주세요"
                       />
                     </label>
+                    <div className="rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="text-[11px] font-semibold text-slate-600">
+                        {isHeader ? "interaction.widgetHeader" : "Widget Header"}
+                      </div>
+                      <div className="mt-2 space-y-2">
+                        <ToggleField
+                          neutralStyle={isHeader}
+                          label={isHeader ? "interaction.widgetHeaderAgentAction" : "Agent Action"}
+                          checked={draft.interaction.widgetHeaderAgentAction}
+                          visibility={draft.visibility.interaction.widgetHeaderAgentAction}
+                          onChange={(v) =>
+                            updatePage(page, (prev) => ({
+                              ...prev,
+                              interaction: { ...prev.interaction, widgetHeaderAgentAction: v },
+                            }))
+                          }
+                          onChangeVisibility={(mode) =>
+                            updatePage(page, (prev) => ({
+                              ...prev,
+                              visibility: {
+                                ...prev.visibility,
+                                interaction: { ...prev.visibility.interaction, widgetHeaderAgentAction: mode },
+                              },
+                            }))
+                          }
+                        />
+                        <ToggleField
+                          neutralStyle={isHeader}
+                          label={isHeader ? "interaction.widgetHeaderNewConversation" : "New Conversation"}
+                          checked={draft.interaction.widgetHeaderNewConversation}
+                          visibility={draft.visibility.interaction.widgetHeaderNewConversation}
+                          onChange={(v) =>
+                            updatePage(page, (prev) => ({
+                              ...prev,
+                              interaction: { ...prev.interaction, widgetHeaderNewConversation: v },
+                            }))
+                          }
+                          onChangeVisibility={(mode) =>
+                            updatePage(page, (prev) => ({
+                              ...prev,
+                              visibility: {
+                                ...prev.visibility,
+                                interaction: { ...prev.visibility.interaction, widgetHeaderNewConversation: mode },
+                              },
+                            }))
+                          }
+                        />
+                        <ToggleField
+                          neutralStyle={isHeader}
+                          label={isHeader ? "interaction.widgetHeaderClose" : "Close Button"}
+                          checked={draft.interaction.widgetHeaderClose}
+                          visibility={draft.visibility.interaction.widgetHeaderClose}
+                          onChange={(v) =>
+                            updatePage(page, (prev) => ({
+                              ...prev,
+                              interaction: { ...prev.interaction, widgetHeaderClose: v },
+                            }))
+                          }
+                          onChangeVisibility={(mode) =>
+                            updatePage(page, (prev) => ({
+                              ...prev,
+                              visibility: {
+                                ...prev.visibility,
+                                interaction: { ...prev.visibility.interaction, widgetHeaderClose: mode },
+                              },
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
                     <div className="rounded-lg border border-slate-200 bg-white p-2">
                       <GroupToggleField
                         neutralStyle={isHeader}
@@ -2585,8 +2650,8 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           <div className="space-y-2">
                             <div className="rounded-lg border border-slate-200 bg-white p-2">
                               <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "setup.modeExisting" : (setupUiByPage[page].existingLabels.modeExisting || "기존 모델")}
+                                neutralStyle={isHeader}
+                                label={isHeader ? "setup.modeExisting" : (setupUiByPage[page].existingLabels.modeExisting || "기존 모델")}
                                 editableLabel={!isHeader}
                                 onLabelChange={(value) =>
                                   setSetupUiByPage((prev) => ({
@@ -2614,119 +2679,119 @@ export function ChatSettingsPanel({ authToken }: Props) {
                                 }}
                               />
                               {showSetupExistingDetails ? (
-                                  <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
-                                    {setupUiDraft.existingOrder.map((existingKey) => {
-                                      const meta = EXISTING_SETUP_FIELDS.find((item) => item.key === existingKey);
-                                      const codeLabel = meta?.codeLabel || `setup.${existingKey}`;
-                                      const defaultLabel = meta?.defaultLabel || existingKey;
-                                      const customLabel = (setupUiByPage[page].existingLabels[existingKey] || "").trim();
-                                      const label = isHeader ? codeLabel : customLabel || defaultLabel;
-                                      const onLabelChange = (value: string) =>
-                                        setSetupUiByPage((prev) => ({
-                                          ...prev,
-                                          [page]: {
-                                            ...prev[page],
-                                            existingLabels: { ...prev[page].existingLabels, [existingKey]: value },
-                                          },
-                                        }));
-                                      const keyProps = {
-                                        neutralStyle: isHeader,
-                                        label,
-                                        showDragHandle: isHeader,
-                                        editableLabel: !isHeader,
-                                        onLabelChange,
-                                      };
-                                      const node =
-                                        existingKey === "sessionIdSearch" ? (
-                                          <ToggleField
-                                            {...keyProps}
-                                            checked={draft.setup.sessionIdSearch}
-                                            visibility={draft.visibility.setup.sessionIdSearch}
-                                            onChange={(v) =>
-                                              updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, sessionIdSearch: v } }))
-                                            }
-                                            onChangeVisibility={(mode) =>
-                                              updatePage(page, (prev) => ({
-                                                ...prev,
-                                                visibility: {
-                                                  ...prev.visibility,
-                                                  setup: { ...prev.visibility.setup, sessionIdSearch: mode },
-                                                },
-                                              }))
-                                            }
-                                          />
-                                        ) : existingKey === "agentSelector" ? (
-                                          <ToggleField
-                                            {...keyProps}
-                                            checked={draft.setup.agentSelector}
-                                            visibility={draft.visibility.setup.agentSelector}
-                                            onChange={(v) =>
-                                              updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, agentSelector: v } }))
-                                            }
-                                            onChangeVisibility={(mode) =>
-                                              updatePage(page, (prev) => ({
-                                                ...prev,
-                                                visibility: {
-                                                  ...prev.visibility,
-                                                  setup: { ...prev.visibility.setup, agentSelector: mode },
-                                                },
-                                              }))
-                                            }
-                                          />
-                                        ) : (
-                                          <div className="flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs">
-                                            <button type="button" className="inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-slate-800">
-                                              <span
-                                                contentEditable={!isHeader}
-                                                suppressContentEditableWarning={!isHeader}
-                                                onBlur={(e) => {
-                                                  if (isHeader) return;
-                                                  onLabelChange((e.currentTarget.textContent || "").trim());
-                                                }}
-                                                onKeyDown={(e) => {
-                                                  if (isHeader) return;
-                                                  if (e.key === "Enter") {
-                                                    e.preventDefault();
-                                                    (e.currentTarget as HTMLSpanElement).blur();
-                                                  }
-                                                }}
-                                                onClick={(e) => {
-                                                  if (isHeader) return;
-                                                  e.stopPropagation();
-                                                }}
-                                                className={!isHeader ? "rounded px-1 outline-none focus:ring-1 focus:ring-slate-300" : undefined}
-                                              >
-                                                {label}
-                                              </span>
-                                            </button>
-                                            {isHeader ? (
-                                              <span className="inline-flex h-7 items-center justify-center px-1 text-slate-500">
-                                                <GripVertical className="h-4 w-4" />
-                                              </span>
-                                            ) : null}
-                                          </div>
-                                        );
-                                      return (
-                                        <div
-                                          key={`${column}-existing-${existingKey}`}
-                                          draggable={isHeader}
-                                          onDragStart={isHeader ? handleExistingSetupDragStart("/", existingKey) : undefined}
-                                          onDragOver={isHeader ? handleSetupDragOver : undefined}
-                                          onDrop={isHeader ? handleExistingSetupDrop("/", existingKey) : undefined}
-                                          onDragEnd={isHeader ? handleExistingSetupDragEnd("/") : undefined}
-                                          className="space-y-1"
-                                        >
-                                          {node}
+                                <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                                  {setupUiDraft.existingOrder.map((existingKey) => {
+                                    const meta = EXISTING_SETUP_FIELDS.find((item) => item.key === existingKey);
+                                    const codeLabel = meta?.codeLabel || `setup.${existingKey}`;
+                                    const defaultLabel = meta?.defaultLabel || existingKey;
+                                    const customLabel = (setupUiByPage[page].existingLabels[existingKey] || "").trim();
+                                    const label = isHeader ? codeLabel : customLabel || defaultLabel;
+                                    const onLabelChange = (value: string) =>
+                                      setSetupUiByPage((prev) => ({
+                                        ...prev,
+                                        [page]: {
+                                          ...prev[page],
+                                          existingLabels: { ...prev[page].existingLabels, [existingKey]: value },
+                                        },
+                                      }));
+                                    const keyProps = {
+                                      neutralStyle: isHeader,
+                                      label,
+                                      showDragHandle: isHeader,
+                                      editableLabel: !isHeader,
+                                      onLabelChange,
+                                    };
+                                    const node =
+                                      existingKey === "sessionIdSearch" ? (
+                                        <ToggleField
+                                          {...keyProps}
+                                          checked={draft.setup.sessionIdSearch}
+                                          visibility={draft.visibility.setup.sessionIdSearch}
+                                          onChange={(v) =>
+                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, sessionIdSearch: v } }))
+                                          }
+                                          onChangeVisibility={(mode) =>
+                                            updatePage(page, (prev) => ({
+                                              ...prev,
+                                              visibility: {
+                                                ...prev.visibility,
+                                                setup: { ...prev.visibility.setup, sessionIdSearch: mode },
+                                              },
+                                            }))
+                                          }
+                                        />
+                                      ) : existingKey === "agentSelector" ? (
+                                        <ToggleField
+                                          {...keyProps}
+                                          checked={draft.setup.agentSelector}
+                                          visibility={draft.visibility.setup.agentSelector}
+                                          onChange={(v) =>
+                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, agentSelector: v } }))
+                                          }
+                                          onChangeVisibility={(mode) =>
+                                            updatePage(page, (prev) => ({
+                                              ...prev,
+                                              visibility: {
+                                                ...prev.visibility,
+                                                setup: { ...prev.visibility.setup, agentSelector: mode },
+                                              },
+                                            }))
+                                          }
+                                        />
+                                      ) : (
+                                        <div className="flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs">
+                                          <button type="button" className="inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-slate-800">
+                                            <span
+                                              contentEditable={!isHeader}
+                                              suppressContentEditableWarning={!isHeader}
+                                              onBlur={(e) => {
+                                                if (isHeader) return;
+                                                onLabelChange((e.currentTarget.textContent || "").trim());
+                                              }}
+                                              onKeyDown={(e) => {
+                                                if (isHeader) return;
+                                                if (e.key === "Enter") {
+                                                  e.preventDefault();
+                                                  (e.currentTarget as HTMLSpanElement).blur();
+                                                }
+                                              }}
+                                              onClick={(e) => {
+                                                if (isHeader) return;
+                                                e.stopPropagation();
+                                              }}
+                                              className={!isHeader ? "rounded px-1 outline-none focus:ring-1 focus:ring-slate-300" : undefined}
+                                            >
+                                              {label}
+                                            </span>
+                                          </button>
+                                          {isHeader ? (
+                                            <span className="inline-flex h-7 items-center justify-center px-1 text-slate-500">
+                                              <GripVertical className="h-4 w-4" />
+                                            </span>
+                                          ) : null}
                                         </div>
                                       );
-                                    })}
-                                  </div>
-                                ) : null}
+                                    return (
+                                      <div
+                                        key={`${column}-existing-${existingKey}`}
+                                        draggable={isHeader}
+                                        onDragStart={isHeader ? handleExistingSetupDragStart("/", existingKey) : undefined}
+                                        onDragOver={isHeader ? handleSetupDragOver : undefined}
+                                        onDrop={isHeader ? handleExistingSetupDrop("/", existingKey) : undefined}
+                                        onDragEnd={isHeader ? handleExistingSetupDragEnd("/") : undefined}
+                                        className="space-y-1"
+                                      >
+                                        {node}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : null}
                             </div>
                             <div className="rounded-lg border border-slate-200 bg-white p-2">
                               <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "setup.modeNew" : (setupUiByPage[page].existingLabels.modeNew || "신규 모델")}
+                                neutralStyle={isHeader}
+                                label={isHeader ? "setup.modeNew" : (setupUiByPage[page].existingLabels.modeNew || "신규 모델")}
                                 editableLabel={!isHeader}
                                 onLabelChange={(value) =>
                                   setSetupUiByPage((prev) => ({
@@ -2754,214 +2819,16 @@ export function ChatSettingsPanel({ authToken }: Props) {
                                 }}
                               />
                               {showSetupNewDetails ? (
-                                    <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
-                                      {setupUiDraft.order.filter(isSetupUiConfigurableKey).map((setupKey) => {
-                                        const codeLabel = (SETUP_CODE_LABELS[setupKey] || `setup.${setupKey}`).trim();
-                                        const customLabel = (setupUiByPage[page].labels[setupKey] || "").trim();
-                                        const defaultLabel = (SETUP_FIELD_OPTIONS.find((item) => item.key === setupKey)?.defaultLabel || setupKey).trim();
-                                        const label = isHeader ? codeLabel : customLabel || defaultLabel;
-                                        const makeToggle = () => {
-                                          if (setupKey === "llmSelector") {
-                                            return (
-                                              <>
-                                                <ToggleField
-                                                  neutralStyle={isHeader}
-                                                  label={label}
-                                                  showDragHandle={isHeader}
-                                                  editableLabel={!isHeader}
-                                                  onLabelChange={(value) =>
-                                                    setSetupUiByPage((prev) => ({
-                                                      ...prev,
-                                                      [page]: {
-                                                        ...prev[page],
-                                                        labels: { ...prev[page].labels, llmSelector: value },
-                                                      },
-                                                    }))
-                                                  }
-                                                  checked={draft.setup.llmSelector}
-                                                  visibility={draft.visibility.setup.llmSelector}
-                                                  onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, llmSelector: v } }))}
-                                                  onChangeVisibility={(mode) =>
-                                                    updatePage(page, (prev) => ({
-                                                      ...prev,
-                                                      visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, llmSelector: mode } },
-                                                    }))
-                                                  }
-                                                />
-                                                <div className="border-l-2 border-slate-200 pl-3">
-                                                  <label className="block">
-                                                    <div className="mb-1 text-[11px] font-semibold text-slate-600">기본 LLM</div>
-                                                    <SelectPopover
-                                                      value={draft.setup.defaultLlm}
-                                                      disabled={isHeader}
-                                                      options={DEFAULT_LLM_OPTIONS}
-                                                      onChange={(value) =>
-                                                        updatePage(page, (prev) => ({
-                                                          ...prev,
-                                                          setup: { ...prev.setup, defaultLlm: value as "chatgpt" | "gemini" },
-                                                        }))
-                                                      }
-                                                      className="w-full"
-                                                      buttonClassName="h-9 text-xs"
-                                                    />
-                                                  </label>
-                                                </div>
-                                              </>
-                                            );
-                                          }
-                                          if (setupKey === "kbSelector") {
-                                            return (
-                                              <ToggleField
-                                                neutralStyle={isHeader}
-                                                label={label}
-                                                showDragHandle={isHeader}
-                                                editableLabel={!isHeader}
-                                                onLabelChange={(value) =>
-                                                  setSetupUiByPage((prev) => ({
-                                                    ...prev,
-                                                    [page]: {
-                                                      ...prev[page],
-                                                      labels: { ...prev[page].labels, kbSelector: value },
-                                                    },
-                                                  }))
-                                                }
-                                                checked={draft.setup.kbSelector}
-                                                visibility={draft.visibility.setup.kbSelector}
-                                                onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, kbSelector: v } }))}
-                                                onChangeVisibility={(mode) =>
-                                                  updatePage(page, (prev) => ({
-                                                    ...prev,
-                                                    visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, kbSelector: mode } },
-                                                  }))
-                                                }
-                                              />
-                                            );
-                                          }
-                                          if (setupKey === "adminKbSelector") {
-                                            return (
-                                              <ToggleField
-                                                neutralStyle={isHeader}
-                                                label={label}
-                                                showDragHandle={isHeader}
-                                                editableLabel={!isHeader}
-                                                onLabelChange={(value) =>
-                                                  setSetupUiByPage((prev) => ({
-                                                    ...prev,
-                                                    [page]: {
-                                                      ...prev[page],
-                                                      labels: { ...prev[page].labels, adminKbSelector: value },
-                                                    },
-                                                  }))
-                                                }
-                                                checked={draft.setup.adminKbSelector}
-                                                visibility={draft.visibility.setup.adminKbSelector}
-                                                onChange={(v) =>
-                                                  updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, adminKbSelector: v } }))
-                                                }
-                                                onChangeVisibility={(mode) =>
-                                                  updatePage(page, (prev) => ({
-                                                    ...prev,
-                                                    visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, adminKbSelector: mode } },
-                                                  }))
-                                                }
-                                              />
-                                            );
-                                          }
-                                          if (setupKey === "routeSelector") {
-                                            return (
-                                              <ToggleField
-                                                neutralStyle={isHeader}
-                                                label={label}
-                                                showDragHandle={isHeader}
-                                                editableLabel={!isHeader}
-                                                onLabelChange={(value) =>
-                                                  setSetupUiByPage((prev) => ({
-                                                    ...prev,
-                                                    [page]: {
-                                                      ...prev[page],
-                                                      labels: { ...prev[page].labels, routeSelector: value },
-                                                    },
-                                                  }))
-                                                }
-                                                checked={draft.setup.routeSelector}
-                                                visibility={draft.visibility.setup.routeSelector}
-                                                onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, routeSelector: v } }))}
-                                                onChangeVisibility={(mode) =>
-                                                  updatePage(page, (prev) => ({
-                                                    ...prev,
-                                                    visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, routeSelector: mode } },
-                                                  }))
-                                                }
-                                              />
-                                            );
-                                          }
-                                          if (setupKey === "mcpProviderSelector") {
-                                            return (
-                                              <ToggleField
-                                                neutralStyle={isHeader}
-                                                label={label}
-                                                showDragHandle={isHeader}
-                                                editableLabel={!isHeader}
-                                                onLabelChange={(value) =>
-                                                  setSetupUiByPage((prev) => ({
-                                                    ...prev,
-                                                    [page]: {
-                                                      ...prev[page],
-                                                      labels: { ...prev[page].labels, mcpProviderSelector: value },
-                                                    },
-                                                  }))
-                                                }
-                                                checked={draft.mcp.providerSelector}
-                                                visibility={draft.visibility.mcp.providerSelector}
-                                                onChange={(v) =>
-                                                  updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, providerSelector: v } }))
-                                                }
-                                                onChangeVisibility={(mode) =>
-                                                  updatePage(page, (prev) => ({
-                                                    ...prev,
-                                                    visibility: {
-                                                      ...prev.visibility,
-                                                      mcp: { ...prev.visibility.mcp, providerSelector: mode },
-                                                    },
-                                                  }))
-                                                }
-                                              />
-                                            );
-                                          }
-                                          if (setupKey === "mcpActionSelector") {
-                                            return (
-                                              <ToggleField
-                                                neutralStyle={isHeader}
-                                                label={label}
-                                                showDragHandle={isHeader}
-                                                editableLabel={!isHeader}
-                                                onLabelChange={(value) =>
-                                                  setSetupUiByPage((prev) => ({
-                                                    ...prev,
-                                                    [page]: {
-                                                      ...prev[page],
-                                                      labels: { ...prev[page].labels, mcpActionSelector: value },
-                                                    },
-                                                  }))
-                                                }
-                                                checked={draft.mcp.actionSelector}
-                                                visibility={draft.visibility.mcp.actionSelector}
-                                                onChange={(v) =>
-                                                  updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, actionSelector: v } }))
-                                                }
-                                                onChangeVisibility={(mode) =>
-                                                  updatePage(page, (prev) => ({
-                                                    ...prev,
-                                                    visibility: {
-                                                      ...prev.visibility,
-                                                      mcp: { ...prev.visibility.mcp, actionSelector: mode },
-                                                    },
-                                                  }))
-                                                }
-                                              />
-                                            );
-                                          }
-                                          return (
+                                <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                                  {setupUiDraft.order.filter(isSetupUiConfigurableKey).map((setupKey) => {
+                                    const codeLabel = (SETUP_CODE_LABELS[setupKey] || `setup.${setupKey}`).trim();
+                                    const customLabel = (setupUiByPage[page].labels[setupKey] || "").trim();
+                                    const defaultLabel = (SETUP_FIELD_OPTIONS.find((item) => item.key === setupKey)?.defaultLabel || setupKey).trim();
+                                    const label = isHeader ? codeLabel : customLabel || defaultLabel;
+                                    const makeToggle = () => {
+                                      if (setupKey === "llmSelector") {
+                                        return (
+                                          <>
                                             <ToggleField
                                               neutralStyle={isHeader}
                                               label={label}
@@ -2972,43 +2839,241 @@ export function ChatSettingsPanel({ authToken }: Props) {
                                                   ...prev,
                                                   [page]: {
                                                     ...prev[page],
-                                                    labels: { ...prev[page].labels, inlineUserKbInput: value },
+                                                    labels: { ...prev[page].labels, llmSelector: value },
                                                   },
                                                 }))
                                               }
-                                              checked={draft.setup.inlineUserKbInput}
-                                              visibility={draft.visibility.setup.inlineUserKbInput}
-                                              onChange={(v) =>
-                                                updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, inlineUserKbInput: v } }))
-                                              }
+                                              checked={draft.setup.llmSelector}
+                                              visibility={draft.visibility.setup.llmSelector}
+                                              onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, llmSelector: v } }))}
                                               onChangeVisibility={(mode) =>
                                                 updatePage(page, (prev) => ({
                                                   ...prev,
-                                                  visibility: {
-                                                    ...prev.visibility,
-                                                    setup: { ...prev.visibility.setup, inlineUserKbInput: mode },
-                                                  },
+                                                  visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, llmSelector: mode } },
                                                 }))
                                               }
                                             />
-                                          );
-                                        };
-                                        return (
-                                          <div
-                                            key={`${column}-${setupKey}`}
-                                            draggable={isHeader}
-                                            onDragStart={isHeader ? handleSetupDragStart("/", setupKey) : undefined}
-                                            onDragOver={isHeader ? handleSetupDragOver : undefined}
-                                            onDrop={isHeader ? handleSetupDrop("/", setupKey) : undefined}
-                                            onDragEnd={isHeader ? handleSetupDragEnd("/") : undefined}
-                                            className="space-y-1"
-                                          >
-                                            {makeToggle()}
-                                          </div>
+                                            <div className="border-l-2 border-slate-200 pl-3">
+                                              <label className="block">
+                                                <div className="mb-1 text-[11px] font-semibold text-slate-600">기본 LLM</div>
+                                                <SelectPopover
+                                                  value={draft.setup.defaultLlm}
+                                                  disabled={isHeader}
+                                                  options={DEFAULT_LLM_OPTIONS}
+                                                  onChange={(value) =>
+                                                    updatePage(page, (prev) => ({
+                                                      ...prev,
+                                                      setup: { ...prev.setup, defaultLlm: value as "chatgpt" | "gemini" },
+                                                    }))
+                                                  }
+                                                  className="w-full"
+                                                  buttonClassName="h-9 text-xs"
+                                                />
+                                              </label>
+                                            </div>
+                                          </>
                                         );
-                                      })}
-                                    </div>
-                                  ) : null}
+                                      }
+                                      if (setupKey === "kbSelector") {
+                                        return (
+                                          <ToggleField
+                                            neutralStyle={isHeader}
+                                            label={label}
+                                            showDragHandle={isHeader}
+                                            editableLabel={!isHeader}
+                                            onLabelChange={(value) =>
+                                              setSetupUiByPage((prev) => ({
+                                                ...prev,
+                                                [page]: {
+                                                  ...prev[page],
+                                                  labels: { ...prev[page].labels, kbSelector: value },
+                                                },
+                                              }))
+                                            }
+                                            checked={draft.setup.kbSelector}
+                                            visibility={draft.visibility.setup.kbSelector}
+                                            onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, kbSelector: v } }))}
+                                            onChangeVisibility={(mode) =>
+                                              updatePage(page, (prev) => ({
+                                                ...prev,
+                                                visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, kbSelector: mode } },
+                                              }))
+                                            }
+                                          />
+                                        );
+                                      }
+                                      if (setupKey === "adminKbSelector") {
+                                        return (
+                                          <ToggleField
+                                            neutralStyle={isHeader}
+                                            label={label}
+                                            showDragHandle={isHeader}
+                                            editableLabel={!isHeader}
+                                            onLabelChange={(value) =>
+                                              setSetupUiByPage((prev) => ({
+                                                ...prev,
+                                                [page]: {
+                                                  ...prev[page],
+                                                  labels: { ...prev[page].labels, adminKbSelector: value },
+                                                },
+                                              }))
+                                            }
+                                            checked={draft.setup.adminKbSelector}
+                                            visibility={draft.visibility.setup.adminKbSelector}
+                                            onChange={(v) =>
+                                              updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, adminKbSelector: v } }))
+                                            }
+                                            onChangeVisibility={(mode) =>
+                                              updatePage(page, (prev) => ({
+                                                ...prev,
+                                                visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, adminKbSelector: mode } },
+                                              }))
+                                            }
+                                          />
+                                        );
+                                      }
+                                      if (setupKey === "routeSelector") {
+                                        return (
+                                          <ToggleField
+                                            neutralStyle={isHeader}
+                                            label={label}
+                                            showDragHandle={isHeader}
+                                            editableLabel={!isHeader}
+                                            onLabelChange={(value) =>
+                                              setSetupUiByPage((prev) => ({
+                                                ...prev,
+                                                [page]: {
+                                                  ...prev[page],
+                                                  labels: { ...prev[page].labels, routeSelector: value },
+                                                },
+                                              }))
+                                            }
+                                            checked={draft.setup.routeSelector}
+                                            visibility={draft.visibility.setup.routeSelector}
+                                            onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, routeSelector: v } }))}
+                                            onChangeVisibility={(mode) =>
+                                              updatePage(page, (prev) => ({
+                                                ...prev,
+                                                visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, routeSelector: mode } },
+                                              }))
+                                            }
+                                          />
+                                        );
+                                      }
+                                      if (setupKey === "mcpProviderSelector") {
+                                        return (
+                                          <ToggleField
+                                            neutralStyle={isHeader}
+                                            label={label}
+                                            showDragHandle={isHeader}
+                                            editableLabel={!isHeader}
+                                            onLabelChange={(value) =>
+                                              setSetupUiByPage((prev) => ({
+                                                ...prev,
+                                                [page]: {
+                                                  ...prev[page],
+                                                  labels: { ...prev[page].labels, mcpProviderSelector: value },
+                                                },
+                                              }))
+                                            }
+                                            checked={draft.mcp.providerSelector}
+                                            visibility={draft.visibility.mcp.providerSelector}
+                                            onChange={(v) =>
+                                              updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, providerSelector: v } }))
+                                            }
+                                            onChangeVisibility={(mode) =>
+                                              updatePage(page, (prev) => ({
+                                                ...prev,
+                                                visibility: {
+                                                  ...prev.visibility,
+                                                  mcp: { ...prev.visibility.mcp, providerSelector: mode },
+                                                },
+                                              }))
+                                            }
+                                          />
+                                        );
+                                      }
+                                      if (setupKey === "mcpActionSelector") {
+                                        return (
+                                          <ToggleField
+                                            neutralStyle={isHeader}
+                                            label={label}
+                                            showDragHandle={isHeader}
+                                            editableLabel={!isHeader}
+                                            onLabelChange={(value) =>
+                                              setSetupUiByPage((prev) => ({
+                                                ...prev,
+                                                [page]: {
+                                                  ...prev[page],
+                                                  labels: { ...prev[page].labels, mcpActionSelector: value },
+                                                },
+                                              }))
+                                            }
+                                            checked={draft.mcp.actionSelector}
+                                            visibility={draft.visibility.mcp.actionSelector}
+                                            onChange={(v) =>
+                                              updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, actionSelector: v } }))
+                                            }
+                                            onChangeVisibility={(mode) =>
+                                              updatePage(page, (prev) => ({
+                                                ...prev,
+                                                visibility: {
+                                                  ...prev.visibility,
+                                                  mcp: { ...prev.visibility.mcp, actionSelector: mode },
+                                                },
+                                              }))
+                                            }
+                                          />
+                                        );
+                                      }
+                                      return (
+                                        <ToggleField
+                                          neutralStyle={isHeader}
+                                          label={label}
+                                          showDragHandle={isHeader}
+                                          editableLabel={!isHeader}
+                                          onLabelChange={(value) =>
+                                            setSetupUiByPage((prev) => ({
+                                              ...prev,
+                                              [page]: {
+                                                ...prev[page],
+                                                labels: { ...prev[page].labels, inlineUserKbInput: value },
+                                              },
+                                            }))
+                                          }
+                                          checked={draft.setup.inlineUserKbInput}
+                                          visibility={draft.visibility.setup.inlineUserKbInput}
+                                          onChange={(v) =>
+                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, inlineUserKbInput: v } }))
+                                          }
+                                          onChangeVisibility={(mode) =>
+                                            updatePage(page, (prev) => ({
+                                              ...prev,
+                                              visibility: {
+                                                ...prev.visibility,
+                                                setup: { ...prev.visibility.setup, inlineUserKbInput: mode },
+                                              },
+                                            }))
+                                          }
+                                        />
+                                      );
+                                    };
+                                    return (
+                                      <div
+                                        key={`${column}-${setupKey}`}
+                                        draggable={isHeader}
+                                        onDragStart={isHeader ? handleSetupDragStart("/", setupKey) : undefined}
+                                        onDragOver={isHeader ? handleSetupDragOver : undefined}
+                                        onDrop={isHeader ? handleSetupDrop("/", setupKey) : undefined}
+                                        onDragEnd={isHeader ? handleSetupDragEnd("/") : undefined}
+                                        className="space-y-1"
+                                      >
+                                        {makeToggle()}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                         ) : null}
@@ -3049,9 +3114,6 @@ export function ChatSettingsPanel({ authToken }: Props) {
     </div>
   );
 }
-
-
-
 
 
 

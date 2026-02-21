@@ -1,7 +1,7 @@
 "use client";
 
-import type { CSSProperties, Dispatch, ReactNode, SetStateAction, WheelEvent } from "react";
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { AlertTriangle, Bot, Check, Copy, CornerDownRight, ExternalLink, Info, Loader, Loader2, Minus, Plus, RefreshCw, Send, Settings2, Trash2, User, X } from "lucide-react";
 import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
@@ -1733,11 +1733,12 @@ function ConversationModelChatColumnCore({
   );
 
   const chatScrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const chatPaneRef = useRef<HTMLDivElement | null>(null);
   const handleSetChatScrollRef = (el: HTMLDivElement | null) => {
     chatScrollAreaRef.current = el;
     onSetChatScrollRef(el);
   };
-  const handlePaneWheel = (event: WheelEvent<HTMLDivElement>) => {
+  const handlePaneWheelNative = useCallback((event: WheelEvent) => {
     const el = chatScrollAreaRef.current;
     if (!el) return;
     if (el.scrollHeight <= el.clientHeight) return;
@@ -1747,7 +1748,14 @@ function ConversationModelChatColumnCore({
     if ((goingDown && atBottom) || (!goingDown && atTop)) return;
     event.preventDefault();
     el.scrollTop += event.deltaY;
-  };
+  }, []);
+
+  useEffect(() => {
+    const pane = chatPaneRef.current;
+    if (!pane) return;
+    pane.addEventListener("wheel", handlePaneWheelNative, { passive: false });
+    return () => pane.removeEventListener("wheel", handlePaneWheelNative);
+  }, [handlePaneWheelNative]);
 
   const submitDisabled =
     (model.setupMode === "existing" && model.conversationMode === "history") ||
@@ -1765,7 +1773,12 @@ function ConversationModelChatColumnCore({
         : configuredInputPlaceholder || defaultInputPlaceholder;
 
   return (
-    <div panel-lego="ConversationModelChatColumnLego.Panel" className="relative h-full min-h-0 flex flex-col overflow-hidden bg-white p-4" style={{ height: "100%" }} onWheel={handlePaneWheel}>
+      <div
+        ref={chatPaneRef}
+        panel-lego="ConversationModelChatColumnLego.Panel"
+        className="relative h-full min-h-0 flex flex-col overflow-hidden bg-white p-4"
+        style={{ height: "100%" }}
+      >
       {isAdminUser && adminFeatures.enabled ? (
         <ConversationAdminMenu
           className="absolute right-6 top-6"

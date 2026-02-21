@@ -15,6 +15,12 @@ type ChatMessage = {
   content: string;
 };
 
+type DisplayMessage = {
+  id: string;
+  role: "user" | "bot";
+  content: string;
+};
+
 const WS_URL = process.env.NEXT_PUBLIC_CALL_WS_URL || "";
 
 export default function WebInputPage() {
@@ -39,13 +45,16 @@ export default function WebInputPage() {
         "음성 인식이 어려운 경우 텍스트로 입력해 주세요. 이 채팅은 통화와 동기화됩니다.",
     },
   ]);
-  const displayMessages = useMemo(
+  const displayMessages = useMemo<DisplayMessage[]>(
     () =>
-      messages.map((msg) => ({
-        id: msg.id,
-        role: msg.role === "user" ? "user" : "bot",
-        content: msg.content,
-      })),
+      messages.map((msg) => {
+        const role: DisplayMessage["role"] = msg.role === "user" ? "user" : "bot";
+        return {
+          id: msg.id,
+          role,
+          content: msg.content,
+        };
+      }),
     [messages]
   );
   const [inputValue, setInputValue] = useState("");

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, Ref } from "react";
 import { createRoot } from "react-dom/client";
-import { List, MessageCircle, Shield } from "lucide-react";
+import { List, MessageCircle, Shield, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   ConversationModelChatColumnLego,
@@ -505,6 +505,10 @@ function WidgetLauncherRuntime({
           setResolvedName(data.name.trim());
         }
       }
+      if (data.type === "mejai_widget_request_close") {
+        setIsOpen(false);
+        notify("close");
+      }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
@@ -643,6 +647,9 @@ export type WidgetHeaderLegoProps = {
   headerActions?: ReactNode;
   onNewConversation?: () => void;
   showNewConversation?: boolean;
+  onClose?: () => void;
+  showClose?: boolean;
+  closeLabel?: string;
 };
 
 export function WidgetHeaderLego({
@@ -652,10 +659,14 @@ export function WidgetHeaderLego({
   headerActions,
   onNewConversation,
   showNewConversation,
+  onClose,
+  showClose = true,
+  closeLabel = "\uB2EB\uAE30",
 }: WidgetHeaderLegoProps) {
   const resolvedIcon = iconUrl || "/brand/logo.png";
   const showStatus = Boolean(status && status.trim().length > 0);
   const canStartNew = Boolean(onNewConversation && showNewConversation);
+  const canClose = Boolean(onClose && showClose);
 
   return (
     <header
@@ -684,6 +695,16 @@ export function WidgetHeaderLego({
           >
             새 대화
           </Button>
+        ) : null}
+        {canClose ? (
+          <button
+            type="button"
+            aria-label={closeLabel}
+            onClick={onClose}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900 sm:hidden"
+          >
+            <X className="h-4 w-4" />
+          </button>
         ) : null}
       </div>
     </header>
@@ -885,46 +906,6 @@ export function WidgetHistoryPanelLego({
   );
 }
 
-export type WidgetShellProps = {
-  brandName: string;
-  status: string;
-  iconUrl?: string | null;
-  headerActions?: ReactNode;
-  onNewConversation?: () => void;
-  showNewConversation?: boolean;
-  chatLegoProps: ConversationModelChatColumnLegoProps;
-  className?: string;
-};
-
-export function WidgetShell({
-  brandName,
-  status,
-  iconUrl,
-  headerActions,
-  onNewConversation,
-  showNewConversation,
-  chatLegoProps,
-  className,
-}: WidgetShellProps) {
-  const canStartNew = typeof showNewConversation === "boolean" ? showNewConversation : Boolean(onNewConversation);
-
-  return (
-    <div className={cn("flex h-full min-h-0 flex-col", className)} parts-lego="WidgetShell">
-      <WidgetHeaderLego
-        brandName={brandName}
-        status={status}
-        iconUrl={iconUrl}
-        headerActions={headerActions}
-        onNewConversation={onNewConversation}
-        showNewConversation={canStartNew}
-      />
-      <div className="flex-1 min-h-0 overflow-hidden">
-        <ConversationModelChatColumnLego {...chatLegoProps} />
-      </div>
-    </div>
-  );
-}
-
 export type WidgetConversationLayoutProps = {
   brandName: string;
   status: string;
@@ -932,6 +913,9 @@ export type WidgetConversationLayoutProps = {
   headerActions?: ReactNode;
   onNewConversation?: () => void;
   showNewConversation?: boolean;
+  onClose?: () => void;
+  showClose?: boolean;
+  closeLabel?: string;
   chatLegoProps: ConversationModelChatColumnLegoProps;
   setupLegoProps: ConversationModelSetupColumnLegoProps;
   activeTab: WidgetConversationTab;
@@ -956,6 +940,9 @@ export function WidgetConversationLayout({
   headerActions,
   onNewConversation,
   showNewConversation,
+  onClose,
+  showClose,
+  closeLabel,
   chatLegoProps,
   setupLegoProps,
   activeTab,
@@ -997,6 +984,9 @@ export function WidgetConversationLayout({
         headerActions={headerActions}
         onNewConversation={onNewConversation}
         showNewConversation={canStartNew}
+        onClose={onClose}
+        showClose={showClose}
+        closeLabel={closeLabel}
       />
       <div className="flex-1 min-h-0 overflow-hidden" panel-lego="WidgetConversationLayout.Panel">
         {activeTab === "chat" ? <ConversationModelChatColumnLego {...chatLegoProps} /> : null}
@@ -1017,4 +1007,3 @@ export function WidgetConversationLayout({
     </div>
   );
 }
-

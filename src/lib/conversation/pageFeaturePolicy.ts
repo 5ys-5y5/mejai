@@ -109,6 +109,12 @@ export type ConversationPageFeatures = {
     prefillMessages: string[];
     /** 입력창/전송 버튼 활성화 */
     inputSubmit: boolean;
+    /** Widget header: agent connect button */
+    widgetHeaderAgentAction: boolean;
+    /** Widget header: new conversation button */
+    widgetHeaderNewConversation: boolean;
+    /** Widget header: close button */
+    widgetHeaderClose: boolean;
   };
   setup: {
     /** 모델(기존/신규) 선택 UI 노출 */
@@ -369,6 +375,9 @@ export function mergeConversationPageFeatures(
         base.interaction.prefillMessages
       ),
       inputSubmit: override.interaction?.inputSubmit ?? base.interaction.inputSubmit,
+      widgetHeaderAgentAction: override.interaction?.widgetHeaderAgentAction ?? base.interaction.widgetHeaderAgentAction,
+      widgetHeaderNewConversation: override.interaction?.widgetHeaderNewConversation ?? base.interaction.widgetHeaderNewConversation,
+      widgetHeaderClose: override.interaction?.widgetHeaderClose ?? base.interaction.widgetHeaderClose,
     },
     setup: {
       modelSelector: override.setup?.modelSelector ?? base.setup.modelSelector,
@@ -417,6 +426,9 @@ export function mergeConversationPageFeatures(
           override.visibility?.interaction?.threePhasePromptHideLabels ?? base.visibility.interaction.threePhasePromptHideLabels,
         prefill: override.visibility?.interaction?.prefill ?? base.visibility.interaction.prefill,
         inputSubmit: override.visibility?.interaction?.inputSubmit ?? base.visibility.interaction.inputSubmit,
+        widgetHeaderAgentAction: override.visibility?.interaction?.widgetHeaderAgentAction ?? base.visibility.interaction.widgetHeaderAgentAction,
+        widgetHeaderNewConversation: override.visibility?.interaction?.widgetHeaderNewConversation ?? base.visibility.interaction.widgetHeaderNewConversation,
+        widgetHeaderClose: override.visibility?.interaction?.widgetHeaderClose ?? base.visibility.interaction.widgetHeaderClose,
       },
       setup: {
         modelSelector: override.visibility?.setup?.modelSelector ?? base.visibility.setup.modelSelector,
@@ -556,6 +568,21 @@ export function applyConversationFeatureVisibility(
       prefill: withVisibilityFlag(features.interaction.prefill, features.visibility.interaction.prefill, isAdminUser),
       prefillMessages: features.interaction.prefillMessages,
       inputSubmit: withVisibilityFlag(features.interaction.inputSubmit, features.visibility.interaction.inputSubmit, isAdminUser),
+      widgetHeaderAgentAction: withVisibilityFlag(
+        features.interaction.widgetHeaderAgentAction,
+        features.visibility.interaction.widgetHeaderAgentAction,
+        isAdminUser
+      ),
+      widgetHeaderNewConversation: withVisibilityFlag(
+        features.interaction.widgetHeaderNewConversation,
+        features.visibility.interaction.widgetHeaderNewConversation,
+        isAdminUser
+      ),
+      widgetHeaderClose: withVisibilityFlag(
+        features.interaction.widgetHeaderClose,
+        features.visibility.interaction.widgetHeaderClose,
+        isAdminUser
+      ),
     },
     setup: {
       ...features.setup,
@@ -629,6 +656,9 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       prefill: true,
       prefillMessages: DEFAULT_PREFILL_MESSAGES,
       inputSubmit: true,
+      widgetHeaderAgentAction: false,
+      widgetHeaderNewConversation: true,
+      widgetHeaderClose: true,
     },
     setup: {
       modelSelector: false,
@@ -672,6 +702,9 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         threePhasePromptHideLabels: "user",
         prefill: "user",
         inputSubmit: "user",
+        widgetHeaderAgentAction: "user",
+        widgetHeaderNewConversation: "user",
+        widgetHeaderClose: "user",
       },
       setup: {
         modelSelector: "user",
@@ -717,6 +750,9 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       prefill: true,
       prefillMessages: DEFAULT_PREFILL_MESSAGES,
       inputSubmit: true,
+      widgetHeaderAgentAction: false,
+      widgetHeaderNewConversation: true,
+      widgetHeaderClose: true,
     },
     setup: {
       modelSelector: true,
@@ -760,6 +796,9 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         threePhasePromptHideLabels: "user",
         prefill: "user",
         inputSubmit: "user",
+        widgetHeaderAgentAction: "user",
+        widgetHeaderNewConversation: "user",
+        widgetHeaderClose: "user",
       },
       setup: {
         modelSelector: "user",
@@ -806,6 +845,9 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       prefill: false,
       prefillMessages: [],
       inputSubmit: true,
+      widgetHeaderAgentAction: false,
+      widgetHeaderNewConversation: true,
+      widgetHeaderClose: true,
     },
     setup: {
       modelSelector: false,
@@ -849,6 +891,199 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         threePhasePromptHideLabels: "user",
         prefill: "user",
         inputSubmit: "user",
+        widgetHeaderAgentAction: "user",
+        widgetHeaderNewConversation: "user",
+        widgetHeaderClose: "user",
+      },
+      setup: {
+        modelSelector: "user",
+        agentSelector: "user",
+        llmSelector: "user",
+        kbSelector: "user",
+        adminKbSelector: "admin",
+        modeExisting: "user",
+        sessionIdSearch: "user",
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
+      },
+    },
+  },
+  "/demo": {
+    mcp: {
+      providerSelector: true,
+      actionSelector: true,
+      providers: {
+        denylist: ["cafe24"],
+      },
+      tools: {},
+    },
+    adminPanel: {
+      enabled: true,
+      selectionToggle: true,
+      logsToggle: true,
+      messageSelection: true,
+      messageMeta: true,
+      copyConversation: true,
+      copyIssue: true,
+    },
+    interaction: {
+      quickReplies: true,
+      productCards: true,
+      threePhasePrompt: true,
+      threePhasePromptLabels: DEFAULT_THREE_PHASE_LABELS,
+      threePhasePromptShowConfirmed: true,
+      threePhasePromptShowConfirming: true,
+      threePhasePromptShowNext: true,
+      threePhasePromptHideLabels: false,
+      inputPlaceholder: "",
+      prefill: true,
+      prefillMessages: DEFAULT_PREFILL_MESSAGES,
+      inputSubmit: true,
+      widgetHeaderAgentAction: false,
+      widgetHeaderNewConversation: true,
+      widgetHeaderClose: true,
+    },
+    setup: {
+      modelSelector: false,
+      agentSelector: false,
+      llmSelector: true,
+      llms: {},
+      kbSelector: false,
+      kbIds: {},
+      adminKbSelector: false,
+      adminKbIds: {},
+      modeExisting: false,
+      sessionIdSearch: false,
+      modeNew: true,
+      routeSelector: false,
+      routes: {},
+      inlineUserKbInput: true,
+      defaultSetupMode: "new",
+      defaultLlm: "chatgpt",
+    },
+    visibility: {
+      mcp: {
+        providerSelector: "user",
+        actionSelector: "user",
+      },
+      adminPanel: {
+        enabled: "user",
+        selectionToggle: "user",
+        logsToggle: "user",
+        messageSelection: "user",
+        messageMeta: "user",
+        copyConversation: "user",
+        copyIssue: "user",
+      },
+      interaction: {
+        quickReplies: "user",
+        productCards: "user",
+        threePhasePrompt: "user",
+        threePhasePromptShowConfirmed: "user",
+        threePhasePromptShowConfirming: "user",
+        threePhasePromptShowNext: "user",
+        threePhasePromptHideLabels: "user",
+        prefill: "user",
+        inputSubmit: "user",
+        widgetHeaderAgentAction: "user",
+        widgetHeaderNewConversation: "user",
+        widgetHeaderClose: "user",
+      },
+      setup: {
+        modelSelector: "user",
+        agentSelector: "user",
+        llmSelector: "user",
+        kbSelector: "user",
+        adminKbSelector: "admin",
+        modeExisting: "user",
+        sessionIdSearch: "user",
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
+      },
+    },
+  },
+  "/call": {
+    mcp: {
+      providerSelector: true,
+      actionSelector: true,
+      providers: {
+        denylist: ["cafe24"],
+      },
+      tools: {},
+    },
+    adminPanel: {
+      enabled: true,
+      selectionToggle: true,
+      logsToggle: true,
+      messageSelection: true,
+      messageMeta: true,
+      copyConversation: true,
+      copyIssue: true,
+    },
+    interaction: {
+      quickReplies: true,
+      productCards: true,
+      threePhasePrompt: true,
+      threePhasePromptLabels: DEFAULT_THREE_PHASE_LABELS,
+      threePhasePromptShowConfirmed: true,
+      threePhasePromptShowConfirming: true,
+      threePhasePromptShowNext: true,
+      threePhasePromptHideLabels: false,
+      inputPlaceholder: "",
+      prefill: true,
+      prefillMessages: DEFAULT_PREFILL_MESSAGES,
+      inputSubmit: true,
+      widgetHeaderAgentAction: false,
+      widgetHeaderNewConversation: true,
+      widgetHeaderClose: true,
+    },
+    setup: {
+      modelSelector: false,
+      agentSelector: false,
+      llmSelector: true,
+      llms: {},
+      kbSelector: false,
+      kbIds: {},
+      adminKbSelector: false,
+      adminKbIds: {},
+      modeExisting: false,
+      sessionIdSearch: false,
+      modeNew: true,
+      routeSelector: false,
+      routes: {},
+      inlineUserKbInput: true,
+      defaultSetupMode: "new",
+      defaultLlm: "chatgpt",
+    },
+    visibility: {
+      mcp: {
+        providerSelector: "user",
+        actionSelector: "user",
+      },
+      adminPanel: {
+        enabled: "user",
+        selectionToggle: "user",
+        logsToggle: "user",
+        messageSelection: "user",
+        messageMeta: "user",
+        copyConversation: "user",
+        copyIssue: "user",
+      },
+      interaction: {
+        quickReplies: "user",
+        productCards: "user",
+        threePhasePrompt: "user",
+        threePhasePromptShowConfirmed: "user",
+        threePhasePromptShowConfirming: "user",
+        threePhasePromptShowNext: "user",
+        threePhasePromptHideLabels: "user",
+        prefill: "user",
+        inputSubmit: "user",
+        widgetHeaderAgentAction: "user",
+        widgetHeaderNewConversation: "user",
+        widgetHeaderClose: "user",
       },
       setup: {
         modelSelector: "user",
@@ -866,10 +1101,12 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
   },
 };
 
-export function getConversationPageBaseKey(page: ConversationPageKey): "/" | "/app/laboratory" | typeof WIDGET_PAGE_KEY {
+export function getConversationPageBaseKey(page: ConversationPageKey): "/" | "/app/laboratory" | typeof WIDGET_PAGE_KEY | "/demo" | "/call" {
   const normalized = String(page || "").trim();
   if (normalized === "/") return "/";
   if (normalized === "/app/laboratory") return "/app/laboratory";
+  if (normalized === "/demo") return "/demo";
+  if (normalized === "/call" || normalized.startsWith("/call/")) return "/call";
   if (normalized === WIDGET_PAGE_KEY || normalized.startsWith(`${WIDGET_PAGE_KEY}/`)) return WIDGET_PAGE_KEY;
   return "/";
 }

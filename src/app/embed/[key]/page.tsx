@@ -692,6 +692,14 @@ export default function WidgetEmbedPage() {
     void callInit(pendingUser, { forceNew: true });
   }, [callInit, pendingUser]);
 
+  const handleCloseWidget = useCallback(() => {
+    try {
+      window.parent?.postMessage?.({ type: "mejai_widget_request_close" }, "*");
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const handleSendText = useCallback(
     async (rawText: string, displayText?: string) => {
       const text = String(rawText || "").trim();
@@ -1032,6 +1040,12 @@ export default function WidgetEmbedPage() {
     ]
   );
 
+  const headerActions = pageFeatures.interaction.widgetHeaderAgentAction ? (
+    <Button variant="outline" size="sm" className="h-8 px-3 text-[11px]">
+      상담원 연결
+    </Button>
+  ) : null;
+
   const chatLegoProps: ConversationModelChatColumnLegoProps = {
     model,
     visibleMessages: messages,
@@ -1143,6 +1157,10 @@ export default function WidgetEmbedPage() {
         status={statusLabel}
         iconUrl={headerIcon}
         onNewConversation={handleNewConversation}
+        showNewConversation={pageFeatures.interaction.widgetHeaderNewConversation}
+        onClose={handleCloseWidget}
+        showClose={pageFeatures.interaction.widgetHeaderClose}
+        headerActions={pageFeatures.interaction.widgetHeaderAgentAction ? headerActions : null}
         fill={false}
         className="h-full"
         activeTab={activeTab}

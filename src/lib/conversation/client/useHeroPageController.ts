@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { type SelectOption } from "@/components/SelectPopover";
 import { apiFetch } from "@/lib/apiClient";
 import { useConversationMcpCatalog } from "@/lib/conversation/client/useConversationMcpCatalog";
-import { useConversationController } from "@/lib/conversation/client/useConversationController";
+import { useConversationController, type InitialMessage } from "@/lib/conversation/client/useConversationController";
 import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
 import { isEnabledByGate } from "@/lib/conversation/pageFeaturePolicy";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
@@ -81,7 +81,7 @@ export function useHeroPageController() {
       .filter((option) => effectiveProviderKeys.includes(option.group || ""))
       .map((option) => option.id);
   }, [actionOptions, effectiveProviderKeys, selectedMcpToolIds]);
-  const initialMessages = pageFeatures.interaction.prefill
+  const initialMessages: InitialMessage[] = pageFeatures.interaction.prefill
     ? []
     : [
       { role: "bot", content: "\uC548\uB155\uD558\uC138\uC694! \uBB54\uC744 \uB3C4\uC640\uB4DC\uB9B4\uAE4C\uC694?" },

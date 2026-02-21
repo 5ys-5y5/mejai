@@ -50,7 +50,6 @@ import {
   WidgetConversationLayout,
   WidgetHeaderLego,
   WidgetHistoryPanelLego,
-  WidgetShell,
   WidgetTabBarLego,
   type TabItem,
   type WidgetConversationTab,
@@ -409,13 +408,6 @@ const widgetDefinitionGroups: Array<{ label: string; items: WidgetDefinitionItem
         definedAt: `${WIDGET_PARTS_FILE}:242`,
       },
       {
-        name: "WidgetShellProps",
-        type: "Type Alias",
-        depends: "WidgetShell, WidgetHeaderLegoProps, ConversationModelChatColumnLegoProps",
-        role: "채팅 셸 props 계약",
-        definedAt: `${WIDGET_SHELL_FILE}:836`,
-      },
-      {
         name: "WidgetHeaderLegoProps",
         type: "Type Alias",
         depends: "WidgetHeaderLego",
@@ -518,13 +510,6 @@ const widgetDefinitionGroups: Array<{ label: string; items: WidgetDefinitionItem
         depends: "WidgetHistoryPanelLegoProps, ConversationThread",
         role: "리스트 탭 패널(세션 선택 → ConversationThread)",
         definedAt: `${WIDGET_PARTS_FILE}:755`,
-      },
-      {
-        name: "WidgetShell",
-        type: "UI Component",
-        depends: "WidgetHeaderLego, ConversationModelChatColumnLego, WidgetShellProps",
-        role: "채팅 셸(헤더 + 대화 패널)",
-        definedAt: `${WIDGET_SHELL_FILE}:847`,
       },
       {
         name: "WidgetConversationLayout",
@@ -1766,7 +1751,9 @@ export function DesignSystemContent() {
                 </Button>
               )}
               onNewConversation={() => undefined}
+              onClose={() => undefined}
               showNewConversation
+              showClose
             />
           </div>
         </div>
@@ -1804,25 +1791,6 @@ export function DesignSystemContent() {
       ),
     },
     {
-      name: "WidgetShell",
-      node: (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {renderWidgetDefinitionMetaByName("WidgetShell", highlightName, handleCopyLink, copiedName)}
-          <div className="h-[420px] overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
-            <WidgetShell
-              brandName={WIDGET_DEMO_BRAND_NAME}
-              status={WIDGET_DEMO_STATUS}
-              iconUrl={WIDGET_DEMO_ICON_URL}
-              chatLegoProps={demoAssembly.chatLegoProps}
-              onNewConversation={() => undefined}
-              showNewConversation={false}
-              className="h-full"
-            />
-          </div>
-        </div>
-      ),
-    },
-    {
       name: "WidgetConversationLayout",
       node: (
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -1832,6 +1800,16 @@ export function DesignSystemContent() {
               brandName={WIDGET_DEMO_BRAND_NAME}
               status={WIDGET_DEMO_STATUS}
               iconUrl={WIDGET_DEMO_ICON_URL}
+              headerActions={(
+                <Button variant="outline" size="sm" className="h-8 px-3 text-[11px]">
+                  상담원 연결
+                </Button>
+              )}
+              onNewConversation={() => undefined}
+              showNewConversation
+              onClose={() => undefined}
+              showClose
+              onClose={() => undefined}
               chatLegoProps={demoAssembly.chatLegoProps}
               setupLegoProps={demoAssembly.setupLegoProps}
               fill={false}
@@ -2496,5 +2474,3 @@ export default function DesignSystemPage() {
     </div>
   );
 }
-
-

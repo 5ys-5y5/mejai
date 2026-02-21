@@ -453,7 +453,13 @@ function normalizePhaseValue(value: unknown) {
   return text || "-";
 }
 
-export function buildThreePhasePrompt(input: { confirmed?: string | null; confirming: string; next?: string | null; labels?: ThreePhaseLabels | null }) {
+export function buildThreePhasePrompt(input: {
+  confirmed?: string | null;
+  confirming: string;
+  next?: string | null;
+  labels?: ThreePhaseLabels | null;
+  threePhaseConfig?: ThreePhaseConfig | null;
+}) {
   const labels = input.labels && typeof input.labels === "object" ? input.labels : resolveThreePhaseLabels(input.threePhaseConfig);
   const confirmed = normalizePhaseValue(input.confirmed);
   const confirming = String(input.confirming || "").trim();
@@ -471,6 +477,7 @@ export function buildYesNoConfirmationPrompt(
     botContext?: Record<string, any> | null;
     entity?: Record<string, any> | null;
     phase?: ThreePhaseContext | null;
+    threePhaseConfig?: ThreePhaseConfig | null;
   }
 ) {
   const suffix = resolveRuntimeTemplate({
@@ -479,7 +486,7 @@ export function buildYesNoConfirmationPrompt(
     entity: input?.entity || null,
   });
   const confirming = `${String(question || "").trim()}\n${suffix}`.trim();
-  if (!resolveThreePhaseEnabled(input.threePhaseConfig)) return confirming;
+  if (!resolveThreePhaseEnabled(input?.threePhaseConfig)) return confirming;
   const phase = input?.phase || null;
   const confirmed =
     phase?.confirmed ??
@@ -491,7 +498,7 @@ export function buildYesNoConfirmationPrompt(
     (input?.botContext && typeof input.botContext === "object"
       ? (input.botContext as Record<string, any>).three_phase_next
       : null);
-  const labels = phase?.labels || resolveThreePhaseLabels(input.threePhaseConfig);
+  const labels = phase?.labels || resolveThreePhaseLabels(input?.threePhaseConfig);
   return buildThreePhasePrompt({ confirmed, confirming, next, labels });
 }
 

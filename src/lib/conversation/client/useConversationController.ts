@@ -34,7 +34,7 @@ type LogBundleWithState = LogBundle & {
   logsLoading: boolean;
 };
 
-type InitialMessage = {
+export type InitialMessage = {
   role: "user" | "bot";
   content: string;
   richHtml?: string;
