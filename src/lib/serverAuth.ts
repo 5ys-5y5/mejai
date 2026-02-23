@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import { applyManagedEnvOverrides } from "@/lib/managedEnv";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 type ServerUserError = { error: "UNAUTHORIZED" };
@@ -152,6 +153,12 @@ export async function getServerContext(
       console.error("[serverAuth] invalid org_id", { org_id: access.org_id, user_id: user.id });
     }
     return { error: "ORG_NOT_FOUND" as const };
+  }
+
+  try {
+    await applyManagedEnvOverrides(access.org_id);
+  } catch {
+    // Ignore managed env failures; fall back to process.env.
   }
 
   return {

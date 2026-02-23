@@ -42,6 +42,7 @@ type WidgetConfig = {
   public_key?: string | null;
   chat_policy?: ConversationFeaturesProviderShape | null;
   allowed_domains?: string[] | null;
+  debug_origins?: string | null;
 };
 
 type LogMap = Record<string, LogBundle>;
@@ -341,8 +342,8 @@ export default function WidgetEmbedPage() {
     [pendingMeta, fallbackAncestor, fallbackReferrer]
   );
   const debugOrigins = useMemo(
-    () => normalizeOriginList(process.env.NEXT_PUBLIC_WIDGET_DEBUG_ORIGINS || ""),
-    []
+    () => normalizeOriginList(config?.debug_origins || process.env.NEXT_PUBLIC_WIDGET_DEBUG_ORIGINS || ""),
+    [config?.debug_origins]
   );
   const debugDomainAllowed = useMemo(
     () => (originHost ? matchAllowedDomain(originHost, debugOrigins) : false),

@@ -5,6 +5,7 @@ import { issueWidgetToken } from "@/lib/widgetToken";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
 import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
 import { WIDGET_PAGE_KEY, type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
+import { applyManagedEnvOverrides } from "@/lib/managedEnv";
 
 function nowIso() {
   return new Date().toISOString();
@@ -91,6 +92,12 @@ export async function POST(req: NextRequest) {
   }
   if (!widget) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+  }
+
+  try {
+    await applyManagedEnvOverrides(String(widget.org_id));
+  } catch {
+    // Ignore managed env failures; fall back to process.env.
   }
 
   const origin = readOrigin(body);
@@ -224,6 +231,7 @@ export async function POST(req: NextRequest) {
       theme: widget.theme || {},
       public_key: widget.public_key,
       chat_policy: chatPolicy,
+      debug_origins: String(process.env.NEXT_PUBLIC_WIDGET_DEBUG_ORIGINS || "").trim(),
     },
   });
 }

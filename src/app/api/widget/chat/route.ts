@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { verifyWidgetToken } from "@/lib/widgetToken";
 import { resolveRuntimeFlags } from "@/lib/runtimeFlags";
+import { applyManagedEnvOverrides } from "@/lib/managedEnv";
 import {
   applyConversationFeatureVisibility,
   isProviderEnabled,
@@ -135,6 +136,12 @@ export async function POST(req: NextRequest) {
     .maybeSingle();
   if (!widget || !widget.is_active) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+  }
+
+  try {
+    await applyManagedEnvOverrides(String(widget.org_id));
+  } catch {
+    // Ignore managed env failures; fall back to process.env.
   }
 
   let providerValue: ConversationFeaturesProviderShape | null = null;
