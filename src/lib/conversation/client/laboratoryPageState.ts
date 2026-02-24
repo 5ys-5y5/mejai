@@ -1,11 +1,11 @@
-import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
+﻿import { mapRuntimeResponseToTranscriptFields } from "@/lib/runtimeResponseTranscript";
 
 export type KbItem = {
   id: string;
   title: string;
   content?: string | null;
   is_admin?: boolean | string | null;
-  is_sample?: boolean | null;
+  is_public?: boolean | null;
   apply_groups?: Array<{ path: string; values: string[] }> | null;
   apply_groups_mode?: "all" | "any" | null;
   applies_to_user?: boolean | null;

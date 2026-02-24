@@ -20,7 +20,8 @@ import {
   WIDGET_PAGE_KEY,
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
-import { useConversationAdminStatus } from "@/lib/conversation/client/useConversationAdminStatus";
+import { useConversationAdminProfile } from "@/lib/conversation/client/useConversationAdminProfile";
+import { useConversationAdminVisibility } from "@/lib/conversation/client/useConversationAdminVisibility";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 import {
   fetchConversationDebugOptions,
@@ -255,7 +256,8 @@ export default function WidgetEmbedPage() {
   const [pendingUser, setPendingUser] = useState<Record<string, any> | null>(null);
   const [pendingMeta, setPendingMeta] = useState<Record<string, any> | null>(null);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
-  const [showAdminLogs, setShowAdminLogs] = useState(false);
+const [showAdminLogs, setShowAdminLogs] = useState(false);
+const [showMessageMeta, setShowMessageMeta] = useState(false);
   const [chatSelectionEnabled, setChatSelectionEnabled] = useState(false);
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
@@ -317,7 +319,8 @@ export default function WidgetEmbedPage() {
   const sessionSeedRef = useRef(sessionSeed);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
-  const isAdminUser = useConversationAdminStatus();
+  const { isAdminUser, userId: adminUserId } = useConversationAdminProfile();
+  const adminVisibility = useConversationAdminVisibility({ sessionId, widgetToken });
   const fallbackReferrer = useMemo(
     () => (typeof document !== "undefined" ? document.referrer : ""),
     []
@@ -359,9 +362,10 @@ export default function WidgetEmbedPage() {
     () => resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerPolicy),
     [providerPolicy]
   );
+  const adminVisible = adminVisibility.isAdminVisible;
   const pageFeatures = useMemo(
-    () => applyConversationFeatureVisibility(baseFeatures, isAdminUser || debugBypass),
-    [baseFeatures, debugBypass, isAdminUser]
+    () => applyConversationFeatureVisibility(baseFeatures, adminVisible || debugBypass),
+    [baseFeatures, debugBypass, adminVisible]
   );
   const setupUi = useMemo(() => resolveConversationSetupUi(WIDGET_PAGE_KEY, providerPolicy), [providerPolicy]);
   const debugOptions = useMemo(
@@ -395,26 +399,10 @@ export default function WidgetEmbedPage() {
     theme.launcher_icon_url || theme.launcherIconUrl || theme.icon_url || theme.iconUrl || ""
   );
   const headerIcon = launcherIconUrl || "/brand/logo.png";
-  const isAdminOrDebug = isAdminUser || debugBypass;
-  const statusLabel = isAdminOrDebug ? status : "";
-  const allowedAccounts = useMemo(
-    () => normalizeThemeList(theme.allowed_accounts || theme.allowedAccounts),
-    [theme]
-  );
-  const allowedAccountSet = useMemo(
-    () => new Set(allowedAccounts.map(normalizeAccountValue).filter(Boolean)),
-    [allowedAccounts]
-  );
-  const userIdentifiers = useMemo(() => collectUserIdentifiers(pendingUser), [pendingUser]);
-  const accountAllowed = allowedAccountSet.size > 0 && userIdentifiers.some((value) => allowedAccountSet.has(value));
-
-  const allowedDomains = Array.isArray(config?.allowed_domains) ? config.allowed_domains : [];
-  const domainAllowed = allowedDomains.length === 0 ? true : matchAllowedDomain(originHost, allowedDomains);
-  const showPolicyTab = debugBypass || (domainAllowed && accountAllowed);
-  const policyFeatures = useMemo(
-    () => applyConversationFeatureVisibility(baseFeatures, isAdminOrDebug || showPolicyTab),
-    [baseFeatures, isAdminOrDebug, showPolicyTab]
-  );
+  const isAdminOrDebug = adminVisible || debugBypass;
+  const statusLabel = status;
+  const showPolicyTab = pageFeatures.widget.tabBar.policy;
+  const policyFeatures = pageFeatures;
 
   useEffect(() => {
     if (!showPolicyTab && activeTab === "policy") {
@@ -502,6 +490,7 @@ export default function WidgetEmbedPage() {
         page_url: meta.page_url || referrer || "",
         referrer: meta.referrer || referrer || "",
         session_id: seedSession || undefined,
+        admin_user_id: isAdminUser && adminUserId ? adminUserId : undefined,
         visitor: {
           id: meta.visitor_id || visitorId || undefined,
           ...user,
@@ -907,15 +896,13 @@ export default function WidgetEmbedPage() {
   );
 
   const copyByKind = useCallback(
-    async (kind: "conversation" | "issue") => {
+    async () => {
       if (!sessionId) {
         toast.error("\ub300\ud654 \uae30\ub85d\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.");
         return false;
       }
       const latestDebugOptions =
-        !widgetToken && kind === "conversation"
-          ? await fetchConversationDebugOptions(WIDGET_PAGE_KEY).catch(() => null)
-          : null;
+        !widgetToken ? await fetchConversationDebugOptions(WIDGET_PAGE_KEY).catch(() => null) : null;
       const effectiveDebugOptions = latestDebugOptions || debugOptions;
       let mergedLogs = messageLogs;
       let prebuiltTextOverride: string | null = null;
@@ -925,7 +912,7 @@ export default function WidgetEmbedPage() {
             sessionId,
             widgetToken,
             page: "/app/laboratory",
-            kind,
+            kind: "conversation",
             limit: 500,
           });
           if (typeof serverCopy?.transcript_text === "string") {
@@ -946,12 +933,11 @@ export default function WidgetEmbedPage() {
       }
       return executeTranscriptCopy({
         page: WIDGET_PAGE_KEY,
-        kind,
+        kind: "conversation",
         messages: copyMessages,
         messageLogs: mergedLogs,
-        enabledOverride:
-          kind === "conversation" ? pageFeatures.adminPanel.copyConversation : pageFeatures.adminPanel.copyIssue,
-        conversationDebugOptionsOverride: kind === "conversation" ? effectiveDebugOptions : undefined,
+        enabledOverride: pageFeatures.adminPanel.copyConversation,
+        conversationDebugOptionsOverride: effectiveDebugOptions,
         prebuiltTextOverride,
       });
     },
@@ -1075,7 +1061,7 @@ export default function WidgetEmbedPage() {
     ]
   );
 
-  const headerActions = pageFeatures.interaction.widgetHeaderAgentAction ? (
+  const headerActions = pageFeatures.widget.header.agentAction ? (
     <Button variant="outline" size="sm" className="h-8 px-3 text-[11px]">
       상담원 연결
     </Button>
@@ -1093,9 +1079,8 @@ export default function WidgetEmbedPage() {
       enabled: pageFeatures.adminPanel.enabled,
       selectionToggle: pageFeatures.adminPanel.selectionToggle,
       logsToggle: pageFeatures.adminPanel.logsToggle,
-      messageSelection: pageFeatures.adminPanel.messageSelection,
+      messageMeta: pageFeatures.adminPanel.messageMeta,
       copyConversation: pageFeatures.adminPanel.copyConversation,
-      copyIssue: pageFeatures.adminPanel.copyIssue,
     },
     interactionFeatures: {
       quickReplies: pageFeatures.interaction.quickReplies,
@@ -1118,8 +1103,9 @@ export default function WidgetEmbedPage() {
         return !prev;
       }),
     onToggleLogs: () => setShowAdminLogs((prev) => !prev),
+    onToggleMeta: () => setShowMessageMeta((prev) => !prev),
+    metaEnabled: showMessageMeta,
     onCopyConversation: () => copyByKind("conversation"),
-    onCopyIssue: () => copyByKind("issue"),
     onToggleMessageSelection: handleToggleMessageSelection,
     onSubmitMessage: handleSendText,
     onExpand: () => undefined,
@@ -1199,10 +1185,20 @@ export default function WidgetEmbedPage() {
         status={statusLabel}
         iconUrl={headerIcon}
         onNewConversation={handleNewConversation}
-        showNewConversation={pageFeatures.interaction.widgetHeaderNewConversation}
+        showNewConversation={pageFeatures.widget.header.newConversation}
         onClose={handleCloseWidget}
-        showClose={pageFeatures.interaction.widgetHeaderClose}
-        headerActions={pageFeatures.interaction.widgetHeaderAgentAction ? headerActions : null}
+        showClose={pageFeatures.widget.header.close}
+        showHeader={pageFeatures.widget.header.enabled}
+        showHeaderLogo={pageFeatures.widget.header.logo}
+        showHeaderStatus={pageFeatures.widget.header.status}
+        showHeaderAgentAction={pageFeatures.widget.header.agentAction}
+        headerActions={headerActions}
+        showChatPanel={pageFeatures.widget.chatPanel}
+        showSetupPanel={pageFeatures.widget.setupPanel}
+        showHistoryPanel={pageFeatures.widget.historyPanel}
+        showTabBar={pageFeatures.widget.tabBar.enabled}
+        showChatTab={pageFeatures.widget.tabBar.chat}
+        showListTab={pageFeatures.widget.tabBar.list}
         fill={false}
         className="h-full"
         activeTab={activeTab}

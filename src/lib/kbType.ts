@@ -11,7 +11,7 @@ export function isAdminKbValue(value: unknown): boolean {
   return normalized === "true" || normalized === "admin";
 }
 
-export function isSampleKbRow(row: { is_sample?: unknown } | null | undefined): boolean {
+export function isSampleKbRow(row: { is_public?: unknown } | null | undefined): boolean {
   if (!row) return false;
-  return row.is_sample === true;
+  return row.is_public === true;
 }

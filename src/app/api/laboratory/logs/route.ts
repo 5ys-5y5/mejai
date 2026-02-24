@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
+import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
+import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const TRANSCRIPT_SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
 
@@ -25,9 +28,20 @@ async function fetchAllRows<T>(
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
-  const context = await getServerContext(authHeader, cookieHeader);
-  if ("error" in context) {
-    return NextResponse.json({ error: context.error }, { status: 401 });
+  const contextRes = await getServerContext(authHeader, cookieHeader);
+  let supabase: SupabaseClient;
+  let orgId: string | null = null;
+  let publicOnly = false;
+  if ("error" in contextRes) {
+    publicOnly = true;
+    try {
+      supabase = createAdminSupabaseClient();
+    } catch {
+      supabase = createServerSupabaseClient();
+    }
+  } else {
+    supabase = contextRes.supabase;
+    orgId = contextRes.orgId;
   }
 
   const url = new URL(req.url);
@@ -39,37 +53,42 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "INVALID_SESSION_ID" }, { status: 400 });
   }
 
-  const { data: sessionRow, error: sessionError } = await context.supabase
+  let sessionQuery = supabase
     .from("D_conv_sessions")
     .select("id, org_id")
-    .eq("id", sessionId)
-    .eq("org_id", context.orgId)
-    .maybeSingle();
+    .eq("id", sessionId);
+  if (publicOnly) {
+    sessionQuery = sessionQuery.is("org_id", null);
+  } else {
+    sessionQuery = sessionQuery.eq("org_id", orgId);
+  }
+  const { data: sessionRow, error: sessionError } = await sessionQuery.maybeSingle();
 
   if (sessionError) {
     return NextResponse.json({ error: sessionError.message }, { status: 400 });
   }
   if (!sessionRow) {
-    return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 });
+    return NextResponse.json({ error: publicOnly ? "UNAUTHORIZED" : "SESSION_NOT_FOUND" }, { status: publicOnly ? 401 : 404 });
   }
+
+  const applyOrgFilter = (query: any) => (publicOnly ? query.is("org_id", null) : query.eq("org_id", orgId));
 
   const [mcpRes, eventRes, debugRes] = await Promise.all([
     fetchAllRows(
       async (from, to) =>
-        await context.supabase
+        await applyOrgFilter(supabase
           .from("F_audit_mcp_tools")
           .select(
             "id, tool_name, tool_version, status, request_payload, response_payload, policy_decision, latency_ms, created_at, session_id, turn_id"
           )
-          .eq("org_id", context.orgId)
           .eq("session_id", sessionId)
           .order("created_at", { ascending: false })
-          .range(from, to),
+          .range(from, to)),
       limit
     ),
     fetchAllRows(
       async (from, to) =>
-        await context.supabase
+        await supabase
           .from("F_audit_events")
           .select("id, event_type, payload, created_at, session_id, turn_id")
           .eq("session_id", sessionId)
@@ -80,7 +99,7 @@ export async function GET(req: NextRequest) {
     ),
     fetchAllRows(
       async (from, to) =>
-        await context.supabase
+        await supabase
           .from("F_audit_turn_specs_view")
           .select("id, session_id, turn_id, seq, prefix_json, prefix_tree, created_at")
           .eq("session_id", sessionId)

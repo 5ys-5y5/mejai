@@ -54,7 +54,6 @@ type BaseModel<TMessage extends BaseMessage> = {
   setupMode: SetupMode;
   historyMessages: TMessage[];
   conversationSnapshotText?: string | null;
-  issueSnapshotText?: string | null;
 };
 
 function makeId() {
@@ -396,58 +395,10 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
     [models, pageKey, updateModel]
   );
 
-  const copyIssue = useCallback(
-    async (id: string, enabledOverride?: boolean) => {
-      const target = models.find((model) => model.id === id);
-      if (!target) return false;
-      const activeSessionId = resolveActiveSessionId(target);
-      const viewMessages = visibleMessages(target);
-      let prebuiltTextOverride: string | null = null;
-      if (activeSessionId) {
-        try {
-          const serverCopy = await fetchTranscriptCopy({
-            sessionId: activeSessionId,
-            page: pageKey,
-            kind: "issue",
-            limit: 500,
-          });
-          if (typeof serverCopy?.transcript_text === "string") {
-            prebuiltTextOverride = serverCopy.transcript_text;
-          }
-        } catch {
-          // ignore; fall back to local builder
-        }
-      }
-      return executeTranscriptCopy({
-        page: pageKey,
-        kind: "issue",
-        messages: viewMessages,
-        selectedMessageIds: target.selectedMessageIds || [],
-        messageLogs: target.messageLogs || {},
-        enabledOverride,
-        prebuiltTextOverride,
-        blockedMessage: "이 페이지에서는 문제 로그 복사를 지원하지 않습니다.",
-        onCopiedText: async (text) => {
-          const turnId = resolveSnapshotTurnId(viewMessages, target.selectedMessageIds || []);
-          updateModel(id, (model) => ({ ...model, issueSnapshotText: text }));
-          if (!activeSessionId) return;
-          await saveTranscriptSnapshot({
-            sessionId: activeSessionId,
-            page: pageKey,
-            kind: "issue",
-            transcriptText: text,
-            turnId,
-          }).catch(() => null);
-        },
-      });
-    },
-    [models, pageKey, updateModel]
-  );
 
   return {
     submitMessage,
     copyConversation,
-    copyIssue,
     loadLogs,
   };
 }

@@ -39,7 +39,7 @@ type KbItem = {
   category: string | null;
   is_active: boolean | null;
   is_admin?: boolean | string | null;
-  is_sample?: boolean | null;
+  is_public?: boolean | null;
   created_at?: string | null;
   content?: string | null;
 };

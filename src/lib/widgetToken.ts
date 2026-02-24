@@ -6,6 +6,7 @@ type WidgetTokenPayload = {
   session_id: string;
   visitor_id: string | null;
   origin: string | null;
+  admin_user_id?: string | null;
   exp: number;
 };
 

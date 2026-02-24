@@ -3,6 +3,8 @@ import { getServerContext } from "@/lib/serverAuth";
 import crypto from "crypto";
 import { createEmbedding } from "@/lib/embeddings";
 import { isAdminKbValue, isSampleKbRow, isSampleKbValue } from "@/lib/kbType";
+import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
+import { createServerSupabaseClient } from "@/lib/supabaseServer";
 
 function parseOrder(orderParam: string | null) {
   if (!orderParam) return { field: "created_at", ascending: false };
@@ -50,9 +52,22 @@ function toApplyGroups(value: unknown): Array<{ path: string; values: string[] }
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
-  const context = await getServerContext(authHeader, cookieHeader);
-  if ("error" in context) {
-    return NextResponse.json({ error: context.error }, { status: 401 });
+  const contextRes = await getServerContext(authHeader, cookieHeader);
+  let supabase = null as unknown as ReturnType<typeof createServerSupabaseClient>;
+  let orgId: string | null = null;
+  let userId: string | null = null;
+  let publicOnly = false;
+  if ("error" in contextRes) {
+    publicOnly = true;
+    try {
+      supabase = createAdminSupabaseClient();
+    } catch {
+      supabase = createServerSupabaseClient();
+    }
+  } else {
+    supabase = contextRes.supabase as ReturnType<typeof createServerSupabaseClient>;
+    orgId = contextRes.orgId;
+    userId = contextRes.user.id;
   }
   const url = new URL(req.url);
   const limit = Math.min(Number(url.searchParams.get("limit") || 50), 100);
@@ -63,12 +78,16 @@ export async function GET(req: NextRequest) {
   const orderParam = url.searchParams.get("order");
   const { field, ascending } = parseOrder(orderParam);
 
-  let query = context.supabase
+  let query = supabase
     .from("B_bot_knowledge_bases")
     .select("*", { count: "exact" })
     .order(field, { ascending })
-    .range(offset, offset + limit - 1)
-    .or(`org_id.eq.${context.orgId},org_id.is.null`);
+    .range(offset, offset + limit - 1);
+  if (publicOnly) {
+    query = query.eq("is_public", true);
+  } else {
+    query = query.or(`org_id.eq.${orgId},org_id.is.null`);
+  }
 
   if (category) {
     query = query.eq("category", category);
@@ -80,15 +99,18 @@ export async function GET(req: NextRequest) {
   }
 
   if (isAdmin === "sample") {
-    query = query.eq("is_sample", true);
+    query = query.eq("is_public", true);
   }
 
-  const { data: accessRow } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("group")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  const userGroup = (accessRow?.group as Record<string, unknown> | null) ?? null;
+  let userGroup: Record<string, unknown> | null = null;
+  if (!publicOnly && userId) {
+    const { data: accessRow } = await supabase
+      .from("A_iam_user_access_maps")
+      .select("group")
+      .eq("user_id", userId)
+      .maybeSingle();
+    userGroup = (accessRow?.group as Record<string, unknown> | null) ?? null;
+  }
 
   const { data, error, count } = await query;
 
@@ -123,7 +145,7 @@ export async function POST(req: NextRequest) {
   }
 
   const newId = crypto.randomUUID();
-  const wantsSample = body.is_sample === true || isSampleKbValue(body.is_admin);
+  const wantsSample = body.is_public === true || body.is_sample === true || isSampleKbValue(body.is_admin);
   const wantsAdmin = isAdminKbValue(body.is_admin) && !wantsSample;
   let applyGroups = Array.isArray(body.apply_groups) ? body.apply_groups : null;
   let applyGroupsMode =
@@ -157,7 +179,7 @@ export async function POST(req: NextRequest) {
     org_id: context.orgId,
     embedding: null as number[] | null,
     is_admin: isAdmin,
-    is_sample: wantsSample,
+    is_public: wantsSample,
     apply_groups: applyGroups,
     apply_groups_mode: applyGroupsMode,
     content_json: isAdmin ? (body.content_json ?? null) : null,

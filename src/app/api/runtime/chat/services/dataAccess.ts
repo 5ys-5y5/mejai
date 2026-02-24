@@ -24,12 +24,28 @@ function readGroupValue(group: Record<string, any> | null, path: string) {
   }, group as unknown);
 }
 
+function applyOrgFilter(query: any, orgId: string | null | undefined) {
+  if (orgId) {
+    return query.or(`org_id.eq.${orgId},org_id.is.null`);
+  }
+  return query.is("org_id", null);
+}
+
+function applyKbScopeFilter(query: any, orgId: string | null | undefined) {
+  if (orgId) {
+    return query.or(`org_id.eq.${orgId},org_id.is.null`);
+  }
+  return query.or("org_id.is.null,is_public.eq.true");
+}
+
 async function fetchBestProductRule(context: RuntimeContext, productId: string) {
-  const ruleRes = await context.supabase
-    .from("G_com_product_rules")
-    .select("org_id, product_id, answerability, restock_policy, restock_at, updated_at, source")
-    .eq("product_id", productId)
-    .or(`org_id.eq.${context.orgId},org_id.is.null`);
+  const ruleRes = await applyOrgFilter(
+    context.supabase
+      .from("G_com_product_rules")
+      .select("org_id, product_id, answerability, restock_policy, restock_at, updated_at, source")
+      .eq("product_id", productId),
+    context.orgId
+  );
   if (ruleRes.error) {
     return { rule: null as ProductRuleRow | null, error: ruleRes.error.message };
   }
@@ -53,11 +69,13 @@ function buildProductDecision(productId: string, rule: ProductRuleRow | null): P
 }
 
 export async function resolveProductDecision(context: RuntimeContext, text: string, productId?: string | null) {
-  const aliasRes = await context.supabase
-    .from("G_com_product_aliases")
-    .select("org_id, alias, product_id, match_type, priority, is_active")
-    .eq("is_active", true)
-    .or(`org_id.eq.${context.orgId},org_id.is.null`);
+  const aliasRes = await applyOrgFilter(
+    context.supabase
+      .from("G_com_product_aliases")
+      .select("org_id, alias, product_id, match_type, priority, is_active")
+      .eq("is_active", true),
+    context.orgId
+  );
   if (aliasRes.error) {
     return { decision: null as ProductDecision | null, alias: null as ProductAliasRow | null, error: aliasRes.error.message };
   }
@@ -93,58 +111,94 @@ export async function resolveProductDecision(context: RuntimeContext, text: stri
 }
 
 export async function fetchAgent(context: RuntimeContext, agentId: string) {
-  const { data, error } = await context.supabase
-    .from("B_bot_agents")
-    .select("*")
-    .eq("id", agentId)
-    .or(`org_id.eq.${context.orgId},org_id.is.null`)
-    .maybeSingle();
+  const { data, error } = await applyOrgFilter(
+    context.supabase.from("B_bot_agents").select("*").eq("id", agentId),
+    context.orgId
+  ).maybeSingle();
   if (error) return { error: error.message };
   if (data) return { data: data as AgentRow };
 
-  const { data: parent, error: parentError } = await context.supabase
-    .from("B_bot_agents")
-    .select("*")
-    .eq("parent_id", agentId)
-    .eq("is_active", true)
-    .or(`org_id.eq.${context.orgId},org_id.is.null`)
-    .maybeSingle();
+  const { data: parent, error: parentError } = await applyOrgFilter(
+    context.supabase
+      .from("B_bot_agents")
+      .select("*")
+      .eq("parent_id", agentId)
+      .eq("is_active", true),
+    context.orgId
+  ).maybeSingle();
   if (parentError) return { error: parentError.message };
   return { data: parent as AgentRow | null };
 }
 
 export async function fetchActiveAgentByParent(context: RuntimeContext, parentId: string) {
-  const { data, error } = await context.supabase
-    .from("B_bot_agents")
-    .select("*")
-    .eq("parent_id", parentId)
-    .eq("is_active", true)
-    .or(`org_id.eq.${context.orgId},org_id.is.null`)
-    .maybeSingle();
+  const { data, error } = await applyOrgFilter(
+    context.supabase
+      .from("B_bot_agents")
+      .select("*")
+      .eq("parent_id", parentId)
+      .eq("is_active", true),
+    context.orgId
+  ).maybeSingle();
   if (error) return { error: error.message };
   return { data: data as AgentRow | null };
 }
 
 export async function fetchKb(context: RuntimeContext, kbId: string) {
-  const result = await context.supabase
-    .from("B_bot_knowledge_bases")
-    .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
-    .eq("id", kbId)
-    .or(`org_id.eq.${context.orgId},org_id.is.null`)
-    .maybeSingle();
+  const result = await applyKbScopeFilter(
+    context.supabase
+      .from("B_bot_knowledge_bases")
+      .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
+      .eq("id", kbId),
+    context.orgId
+  ).maybeSingle();
   if (result.error) return { error: result.error.message };
   return { data: result.data as KbRow | null };
 }
 
 export async function fetchAdminKbs(context: RuntimeContext) {
+  const result = await applyKbScopeFilter(
+    context.supabase
+      .from("B_bot_knowledge_bases")
+      .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
+      .eq("is_admin", true)
+      .eq("is_active", true),
+    context.orgId
+  );
+  if (result.error) return { error: result.error.message };
+  return { data: (result.data || []) as KbRow[] };
+}
+
+export async function fetchDefaultUserKb(context: RuntimeContext) {
+  if (!context.orgId) {
+    return { data: null as KbRow | null };
+  }
   const result = await context.supabase
     .from("B_bot_knowledge_bases")
     .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
-    .eq("is_admin", true)
+    .eq("is_admin", false)
     .eq("is_active", true)
-    .or(`org_id.eq.${context.orgId},org_id.is.null`);
+    .eq("org_id", context.orgId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   if (result.error) return { error: result.error.message };
-  return { data: (result.data || []) as KbRow[] };
+  return { data: result.data as KbRow | null };
+}
+
+export async function fetchLatestSampleKb(context: RuntimeContext) {
+  const result = await context.supabase
+    .from("B_bot_knowledge_bases")
+    .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
+    .eq("is_public", true)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (result.error) return { error: result.error.message };
+  if (result.data && String((result.data as Record<string, any>).content || "").trim().length === 0) {
+    return { data: null as KbRow | null };
+  }
+  return { data: result.data as KbRow | null };
 }
 
 export async function createSession(
@@ -154,7 +208,7 @@ export async function createSession(
 ) {
   const sessionCode = `p_${Math.random().toString(36).slice(2, 8)}`;
   const payload = {
-    org_id: context.orgId,
+    org_id: context.orgId || null,
     session_code: sessionCode,
     started_at: new Date().toISOString(),
     channel: "runtime",

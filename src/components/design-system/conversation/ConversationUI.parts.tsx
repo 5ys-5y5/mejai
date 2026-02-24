@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -1934,7 +1934,7 @@ function ConversationModelChatColumnCore({
         className="relative h-full min-h-0 flex flex-col overflow-hidden bg-white p-4"
         style={{ height: "100%" }}
       >
-      {isAdminUser && adminFeatures.enabled ? (
+      {adminFeatures.enabled ? (
         <ConversationAdminMenu
           className="absolute right-6 top-6"
           open={model.adminLogControlsOpen}
@@ -1963,7 +1963,7 @@ function ConversationModelChatColumnCore({
       <div className="relative flex-1 min-h-0 overflow-hidden">
         <div
           ref={handleSetChatScrollRef}
-          className={`relative z-0 h-full overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-xl ${isAdminUser ? "pt-10" : "pt-2"}`}
+          className={`relative z-0 h-full overflow-auto pr-2 pl-2 pb-4 scrollbar-hide bg-slate-50 rounded-xl ${adminFeatures.enabled ? "pt-10" : "pt-2"}`}
         >
           <ConversationThread<UiChatMessage>
             messages={displayMessages}
@@ -1979,7 +1979,7 @@ function ConversationModelChatColumnCore({
               const debugParts = hasDebug ? getDebugParts(msg.content) : null;
               const messageLogKey = msg.sourceMessageId || msg.id;
               const endUserSummary =
-                msg.role === "bot" && isAdminUser && adminFeatures.logsToggle && model.showAdminLogs
+                msg.role === "bot" && adminFeatures.logsToggle && model.showAdminLogs
                   ? resolveEndUserContextSummary(model.messageLogs?.[messageLogKey])
                   : null;
               return (
@@ -2007,7 +2007,6 @@ function ConversationModelChatColumnCore({
                     msg.content
                   )}
                   {msg.role === "bot" &&
-                    isAdminUser &&
                     adminFeatures.logsToggle &&
                     model.showAdminLogs &&
                     msg.loadingLogs &&
@@ -2410,7 +2409,7 @@ export function ConversationModelSetupColumnLego({
                     kbInfoOpen={model.detailsOpen.kb}
                     onToggleKbInfo={onToggleKbInfo}
                     kbInfoText={kbInfoText}
-                    showAdminKbSelector={isAdminUser && pageFeatures.setup.adminKbSelector}
+                    showAdminKbSelector={pageFeatures.setup.adminKbSelector}
                     adminKbLabel={setupUi.labels.adminKbSelector}
                     adminKbAdminOnly={pageFeatures.visibility.setup.adminKbSelector === "admin"}
                     adminKbValues={model.config.adminKbIds}
@@ -2734,7 +2733,7 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
       sessionId: null,
       config: {
         ...m.config,
-        adminKbIds: isAdminUser && latestAdminKbId ? [latestAdminKbId] : [],
+        adminKbIds: pageFeatures.setup.adminKbSelector && latestAdminKbId ? [latestAdminKbId] : [],
       },
     }));
   const handleApplyInlineKbSamples = (sampleIds: string[]) =>
@@ -2762,9 +2761,6 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
         .filter((tool) => (tool.provider ? values.includes(tool.provider) : false))
         .map((tool) => tool.id)
     );
-    if (values.includes("runtime") && isToolEnabled("restock_lite", pageFeatures)) {
-      allowedToolIds.add("restock_lite");
-    }
     updateModel((m) => ({
       ...m,
       config: {

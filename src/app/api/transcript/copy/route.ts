@@ -4,9 +4,9 @@ import { getServerContext } from "@/lib/serverAuth";
 import { verifyWidgetToken } from "@/lib/widgetToken";
 import type { ConversationFeaturesProviderShape, ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
+import { fetchChatPolicy } from "@/lib/chatPolicyStore";
 import {
   buildDebugTranscript,
-  buildIssueTranscript,
   type LogBundle,
   type TranscriptMessage,
 } from "@/lib/debugTranscript";
@@ -17,7 +17,7 @@ const WIDGET_PROXY_EVENT_PREFIX = "WIDGET_RUNTIME_PROXY_";
 
 type CopyRequestBody = {
   session_id?: string;
-  kind?: "conversation" | "issue";
+  kind?: "conversation";
   page?: string;
   limit?: number;
 };
@@ -40,9 +40,19 @@ function parsePageKey(value: unknown): ConversationPageKey {
   return pageKey;
 }
 
-function normalizeKind(value: unknown): "conversation" | "issue" {
-  return value === "issue" ? "issue" : "conversation";
+async function loadOrgChatPolicy(orgId: string) {
+  try {
+    const supabaseAdmin = createAdminSupabaseClient();
+    return await fetchChatPolicy(supabaseAdmin, orgId);
+  } catch {
+    return null;
+  }
 }
+
+function normalizeKind(value: unknown): "conversation" {
+  return "conversation";
+}
+
 
 function normalizeLimit(value: unknown) {
   const parsed = Number(value);
@@ -236,14 +246,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "SESSION_VISITOR_MISMATCH" }, { status: 403 });
     }
     sessionId = sessionOverride;
-    const { data: settings } = await supabaseAdmin
-      .from("A_iam_auth_settings")
-      .select("providers")
-      .eq("org_id", orgId)
-      .is("user_id", null)
-      .maybeSingle();
-    const providers = (settings?.providers || {}) as Record<string, ConversationFeaturesProviderShape | undefined>;
-    providerValue = providers.chat_policy || null;
+    providerValue = await loadOrgChatPolicy(orgId);
     filterWidgetProxyEvents = true;
   } else {
     const cookieHeader = req.headers.get("cookie") || "";
@@ -266,14 +269,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 });
     }
     sessionId = sessionRow.id;
-    const { data: settings } = await context.supabase
-      .from("A_iam_auth_settings")
-      .select("providers")
-      .eq("org_id", orgId)
-      .is("user_id", null)
-      .maybeSingle();
-    const providers = (settings?.providers || {}) as Record<string, ConversationFeaturesProviderShape | undefined>;
-    providerValue = providers.chat_policy || null;
+    providerValue = await loadOrgChatPolicy(orgId);
   }
 
   if (!supabase || !orgId) {
@@ -365,10 +361,7 @@ export async function POST(req: NextRequest) {
   const { messages, messageLogs } = buildMessages((turns || []) as TurnRow[], logsByTurn);
 
   const debugOptions = resolvePageConversationDebugOptions(page, providerValue || null);
-  const transcriptText =
-    kind === "issue"
-      ? buildIssueTranscript({ messages, messageLogs })
-      : buildDebugTranscript({ messages, messageLogs, options: debugOptions });
+  const transcriptText = buildDebugTranscript({ messages, messageLogs, options: debugOptions });
 
   return NextResponse.json({
     ok: true,

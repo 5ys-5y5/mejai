@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import { callAdapter } from "@/lib/mcpAdapters";
 import { applyMasking, checkPolicyConditions, validateToolParams } from "@/lib/mcpPolicy";
+import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
+import { createServerSupabaseClient } from "@/lib/supabaseServer";
+import type { SupabaseClient, User } from "@supabase/supabase-js";
 
 type ToolCallBody = {
   tool?: string;
@@ -19,9 +22,21 @@ function nowIso() {
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
-  const context = await getServerContext(authHeader, cookieHeader);
-  if ("error" in context) {
-    return NextResponse.json({ error: context.error }, { status: 401 });
+  const contextRes = await getServerContext(authHeader, cookieHeader);
+  let context: { supabase: SupabaseClient; orgId: string | null; user: User };
+  let publicOnly = false;
+  if ("error" in contextRes) {
+    publicOnly = true;
+    let supabase: SupabaseClient;
+    try {
+      supabase = createAdminSupabaseClient();
+    } catch {
+      supabase = createServerSupabaseClient();
+    }
+    const user = { id: "00000000-0000-0000-0000-000000000000" } as User;
+    context = { supabase, orgId: null, user };
+  } else {
+    context = contextRes;
   }
 
   const body = (await req.json().catch(() => null)) as ToolCallBody | null;
@@ -61,13 +76,16 @@ export async function POST(req: NextRequest) {
     conditions?: unknown;
   } | null = null;
 
-  const dbToolQuery = context.supabase
+  let dbToolQuery = context.supabase
     .from("C_mcp_tools")
     .select(
       "id, name, provider_key, scope_key, endpoint_path, http_method, schema_json, version, is_active, rate_limit_per_min, masking_rules, conditions"
     )
     .eq("name", toolName)
     .eq("is_active", true);
+  if (publicOnly) {
+    dbToolQuery = dbToolQuery.eq("is_public", true);
+  }
   if (providerKey) {
     dbToolQuery.eq("provider_key", providerKey);
   }
@@ -108,14 +126,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: conditionCheck.error }, { status: 403 });
   }
 
+  const applyOrgRateLimitFilter = (query: any) =>
+    context.orgId ? query.eq("org_id", context.orgId) : query.is("org_id", null);
   if (tool.rate_limit_per_min && tool.rate_limit_per_min > 0) {
     const since = new Date(Date.now() - 60_000).toISOString();
-    const { count } = await context.supabase
+    const { count } = await applyOrgRateLimitFilter(
+      context.supabase
       .from("F_audit_mcp_tools")
       .select("id", { count: "exact", head: true })
-      .eq("org_id", context.orgId)
       .eq("tool_id", tool.id)
-      .gte("created_at", since);
+      .gte("created_at", since)
+    );
     if ((count || 0) >= tool.rate_limit_per_min) {
       await context.supabase.from("F_audit_mcp_tools").insert({
         org_id: context.orgId,

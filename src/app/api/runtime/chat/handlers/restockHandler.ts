@@ -1405,6 +1405,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: mcpActions });
       }
 
+      let subscribeFallbackReason: string | null = null;
+      let subscribeFallbackDetail: Record<string, any> | null = null;
       if (restockProductId && canUseTool("subscribe_restock") && hasAllowedToolName("subscribe_restock")) {
         const subscribeRes = await callMcpTool(
           context,
@@ -1414,7 +1416,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             channel: restockChannel,
             phone: subscribePhone || undefined,
             session_id: sessionId,
-            mall_id: providerConfig.mall_id || undefined,
+            cafe24_mall_id: providerConfig.cafe24_mall_id || undefined,
             restock_at: scheduleDue?.targetText || undefined,
             lead_days: pendingLeadDaysFromContext,
           },
@@ -1431,6 +1433,18 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         });
         mcpActions.push("subscribe_restock");
         if (subscribeRes.ok) {
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "RESTOCK_SUBSCRIBE_MCP",
+            {
+              tool: "subscribe_restock",
+              product_id: restockProductId,
+              channel: restockChannel,
+            },
+            { intent_name: resolvedIntent }
+          );
           const reply = makeReply(
             `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${restockDisplayName || restockProductId} / 채널 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}\n다음 선택: 대화 종료 / 다른 문의`
           );
@@ -1478,34 +1492,21 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           { tool: "subscribe_restock", error: subscribeRes.error },
           { intent_name: resolvedIntent }
         );
-        const reply = makeReply(
-          "재입고 알림 신청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요. 문제가 반복되면 관리자에게 문의해 주세요."
-        );
-        await insertTurn({
-          session_id: sessionId,
-          seq: nextSeq,
-          transcript_text: message,
-          answer_text: reply,
-          final_answer: reply,
-          bot_context: {
-            intent_name: resolvedIntent,
-            entity: policyContext.entity,
-            customer_verification_token: customerVerificationToken || null,
-            mcp_actions: mcpActions,
-          },
-        });
-        await insertEvent(
-          context,
-          sessionId,
-          latestTurnId,
-          "FINAL_ANSWER_READY",
-          { answer: reply, model: "deterministic_restock_subscribe_error" },
-          { intent_name: resolvedIntent }
-        );
-        return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
+        subscribeFallbackReason = "tool_failed";
+        subscribeFallbackDetail = { error: subscribeRes.error };
+      } else {
+        if (!restockProductId) {
+          subscribeFallbackReason = "missing_product_id";
+        } else if (!hasAllowedToolName("subscribe_restock")) {
+          subscribeFallbackReason = "tool_not_allowed";
+        } else if (!canUseTool("subscribe_restock")) {
+          subscribeFallbackReason = "policy_blocked";
+        } else {
+          subscribeFallbackReason = "tool_unavailable";
+        }
       }
 
-      if ((allowRestockLite || !restockProductId) && restockDisplayName) {
+      if ((allowRestockLite || subscribeFallbackReason || !restockProductId) && restockDisplayName) {
         const liteRes = await saveRestockSubscriptionLite(context, {
           orgId: context.orgId,
           sessionId,
@@ -1516,15 +1517,29 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           restockAt: scheduleDue?.targetText || null,
           leadDays: pendingLeadDaysFromContext,
           intentName: resolvedIntent,
-          mallId: providerConfig.mall_id || null,
+          cafe24MallId: providerConfig.cafe24_mall_id || null,
           topicKey: restockProductId || restockDisplayName,
           topicLabel: restockDisplayName,
           metadata: {
             source: "lite",
             flow: "restock_subscribe",
+            fallback_reason: subscribeFallbackReason,
+            fallback_detail: subscribeFallbackDetail,
           },
         });
         if (liteRes.ok) {
+          await insertEvent(
+            context,
+            sessionId,
+            latestTurnId,
+            "RESTOCK_SUBSCRIBE_LITE_FALLBACK",
+            {
+              reason: subscribeFallbackReason || "lite_enabled",
+              detail: subscribeFallbackDetail,
+              notification_ids: liteRes.data.notification_ids || [],
+            },
+            { intent_name: resolvedIntent }
+          );
           const reply = makeReply(
             `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${restockDisplayName} / 채널 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}\n다음 선택: 대화 종료 / 다른 문의`
           );

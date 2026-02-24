@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -210,8 +210,10 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
           loadPlan.loadAgents
             ? apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200").catch(() => ({ items: [] }))
             : Promise.resolve({ items: [] as AgentItem[] }),
-          loadPlan.loadInlineKbSamples
-            ? apiFetch<{ items?: InlineKbSampleItem[] }>("/api/kb/samples").catch(() => ({ items: [] }))
+          (pageKey === "/" || loadPlan.loadInlineKbSamples)
+            ? fetch("/api/kb/public-samples", { cache: "no-store" })
+                .then(async (res) => (res.ok ? ((await res.json()) as { items?: InlineKbSampleItem[] }) : { items: [] }))
+                .catch(() => ({ items: [] }))
             : Promise.resolve({ items: [] as InlineKbSampleItem[] }),
         ]);
         if (!mounted) return;
@@ -293,10 +295,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
       return;
     }
     if (!tools.length) return;
-    const allToolIds = [
-      ...tools.map((tool) => tool.id),
-      ...(isToolEnabled("restock_lite", pageFeatures) ? ["restock_lite"] : []),
-    ];
+    const allToolIds = tools.map((tool) => tool.id);
     setModels((prev) =>
       prev.map((model) => ({
         ...model,
@@ -319,10 +318,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
       return;
     }
     if (!mcpProviders.length) return;
-    const allProviderKeys = [
-      ...mcpProviders.map((provider) => provider.key),
-      ...(isProviderEnabled("runtime", pageFeatures) ? ["runtime"] : []),
-    ];
+    const allProviderKeys = mcpProviders.map((provider) => provider.key);
     setModels((prev) =>
       prev.map((model) => ({
         ...model,
@@ -428,13 +424,6 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
       label: provider.title,
       description: provider.description || `${provider.action_count || 0} actions`,
     }));
-    if (isProviderEnabled("runtime", pageFeatures)) {
-      options.push({
-        id: "runtime",
-        label: "Runtime",
-        description: "로컬 런타임 기능 (restock_lite)",
-      });
-    }
     return options;
   }, [mcpProviders, pageFeatures]);
 
@@ -449,14 +438,6 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
       description: tool.description || undefined,
       group: tool.provider ? providerTitleByKey.get(tool.provider) || tool.provider : "기타",
     }));
-    if (isToolEnabled("restock_lite", pageFeatures)) {
-      options.push({
-        id: "restock_lite",
-        label: "restock_lite",
-        description: "MCP 없이 재입고 알림 신청 저장",
-        group: "Runtime",
-      });
-    }
     return options;
   }, [mcpProviders, pageFeatures, tools]);
 

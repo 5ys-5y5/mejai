@@ -32,6 +32,7 @@ export function useHeroPageController() {
   const [adminLogControlsOpen, setAdminLogControlsOpen] = useState(false);
   const [chatSelectionEnabled, setChatSelectionEnabled] = useState(false);
   const [showAdminLogs, setShowAdminLogs] = useState(false);
+  const [showMessageMeta, setShowMessageMeta] = useState(false);
   const [conversationDebugOptions, setConversationDebugOptions] = useState<DebugTranscriptOptions>(() =>
     resolvePageConversationDebugOptions("/", providerValue)
   );
@@ -127,10 +128,15 @@ export function useHeroPageController() {
       return;
     }
     let active = true;
-    apiFetch<{ items?: InlineKbSampleItem[] }>("/api/kb/samples")
-      .then((res) => {
+    fetch("/api/kb/public-samples", { cache: "no-store" })
+      .then(async (res) => {
         if (!active) return;
-        setInlineKbSamples((res.items || []).filter((item) => item.content?.trim().length > 0));
+        if (!res.ok) {
+          setInlineKbSamples([]);
+          return;
+        }
+        const payload = (await res.json()) as { items?: InlineKbSampleItem[] };
+        setInlineKbSamples((payload.items || []).filter((item) => item.content?.trim().length > 0));
       })
       .catch(() => {
         if (!active) return;
@@ -186,12 +192,8 @@ export function useHeroPageController() {
     await convo.copyConversation(pageFeatures.adminPanel.copyConversation, conversationDebugOptions);
   };
 
-  const handleCopyIssueTranscript = async () => {
-    await convo.copyIssue(pageFeatures.adminPanel.copyIssue);
-  };
-
   const toggleMessageSelection = (id: string) => {
-    if (!pageFeatures.adminPanel.messageSelection || !chatSelectionEnabled) return;
+    if (!pageFeatures.adminPanel.selectionToggle || !chatSelectionEnabled) return;
     convo.toggleMessageSelection(id);
   };
 
@@ -247,8 +249,9 @@ export function useHeroPageController() {
     setChatSelectionEnabled,
     showAdminLogs,
     setShowAdminLogs,
+    showMessageMeta,
+    setShowMessageMeta,
     handleCopyTranscript,
-    handleCopyIssueTranscript,
     conversationDebugOptions,
     updateConversationDebugOptions,
     messages,

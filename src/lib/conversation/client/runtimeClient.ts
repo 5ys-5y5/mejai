@@ -15,22 +15,56 @@ export async function runConversation(
   body: Record<string, unknown>,
   traceId?: string
 ) {
-  return apiFetch<RuntimeRunResponse>(endpoint, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(traceId ? { "x-runtime-trace-id": traceId } : {}),
-    },
-    body: JSON.stringify(body),
-  });
+  try {
+    return await apiFetch<RuntimeRunResponse>(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(traceId ? { "x-runtime-trace-id": traceId } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (message !== "UNAUTHORIZED") throw err;
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(traceId ? { "x-runtime-trace-id": traceId } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(text || res.statusText || "REQUEST_FAILED");
+    }
+    return res.json() as Promise<RuntimeRunResponse>;
+  }
 }
 
 export async function fetchSessionLogs(sessionId: string, limit = 30) {
-  return apiFetch<{
-    mcp_logs: NonNullable<LogBundle["mcp_logs"]>;
-    event_logs: NonNullable<LogBundle["event_logs"]>;
-    debug_logs: NonNullable<LogBundle["debug_logs"]>;
-  }>(`/api/laboratory/logs?session_id=${encodeURIComponent(sessionId)}&limit=${Math.max(1, limit)}`);
+  const path = `/api/laboratory/logs?session_id=${encodeURIComponent(sessionId)}&limit=${Math.max(1, limit)}`;
+  try {
+    return await apiFetch<{
+      mcp_logs: NonNullable<LogBundle["mcp_logs"]>;
+      event_logs: NonNullable<LogBundle["event_logs"]>;
+      debug_logs: NonNullable<LogBundle["debug_logs"]>;
+    }>(path);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (message !== "UNAUTHORIZED") throw err;
+    const res = await fetch(path, { cache: "no-store" });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(text || res.statusText || "REQUEST_FAILED");
+    }
+    return res.json() as Promise<{
+      mcp_logs: NonNullable<LogBundle["mcp_logs"]>;
+      event_logs: NonNullable<LogBundle["event_logs"]>;
+      debug_logs: NonNullable<LogBundle["debug_logs"]>;
+    }>;
+  }
 }
 
 export async function fetchWidgetSessionLogs(sessionId: string, widgetToken: string, limit = 30) {

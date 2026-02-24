@@ -81,13 +81,16 @@ export async function callMcpTool(
     return { ok: false, error: "TOOL_NOT_ALLOWED_FOR_AGENT" };
   }
   const [providerKey, toolName] = resolvedToolKey.split(":");
-  const { data: toolRow } = await context.supabase
+  let toolQuery = context.supabase
     .from("C_mcp_tools")
     .select("id, name, provider_key, scope_key, endpoint_path, http_method, version, schema_json, masking_rules, conditions")
     .eq("provider_key", providerKey)
     .eq("name", toolName)
-    .eq("is_active", true)
-    .maybeSingle();
+    .eq("is_active", true);
+  if (!context.orgId) {
+    toolQuery = toolQuery.eq("is_public", true);
+  }
+  const { data: toolRow } = await toolQuery.maybeSingle();
   if (!toolRow) {
     await auditBlocked("blocked", "TOOL_NOT_FOUND");
     return { ok: false, error: "TOOL_NOT_FOUND" };

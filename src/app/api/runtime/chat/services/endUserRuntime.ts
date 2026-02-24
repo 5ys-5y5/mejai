@@ -86,6 +86,16 @@ function readString(value: unknown) {
   return text ? text : null;
 }
 
+function readUuid(value: unknown) {
+  const text = readString(value);
+  if (!text) return null;
+  return isUuidLike(text) ? text : null;
+}
+
+function isZeroUuid(value: string | null) {
+  return value === "00000000-0000-0000-0000-000000000000";
+}
+
 function readStringArray(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const items = value.map((item) => String(item ?? "").trim()).filter(Boolean);
@@ -144,6 +154,23 @@ function buildRuntimeSummary(value: Record<string, any> | null) {
 
 function hashIdentity(value: string) {
   return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function appendIdentityCandidate(
+  identities: IdentityCandidate[],
+  input: { type: string; value: string | null | undefined; isPrimary?: boolean }
+) {
+  const rawValue = String(input.value || "").trim();
+  if (!rawValue) return;
+  const hash = hashIdentity(rawValue);
+  const exists = identities.some((item) => item.identity_hash === hash && item.identity_type === input.type);
+  if (exists) return;
+  identities.push({
+    identity_type: input.type,
+    identity_value: rawValue,
+    identity_hash: hash,
+    is_primary: input.isPrimary ?? identities.length === 0,
+  });
 }
 
 function mergeProfiles(base: EndUserProfile, override: EndUserProfile): EndUserProfile {
@@ -369,6 +396,74 @@ function buildConfirmedEntityFromRows(rows: Array<Record<string, any>>) {
     next[key] = value;
   });
   return next;
+}
+
+async function resolveVerifiedPhoneByToken(input: {
+  context: EndUserSyncContext;
+  orgId: string;
+  token: string | null;
+}) {
+  const { context, orgId, token } = input;
+  if (!token) return null;
+  const { data } = await context.supabase
+    .from("H_auth_otp_verifications")
+    .select("destination, verified_at")
+    .eq("org_id", orgId)
+    .eq("verification_token", token)
+    .maybeSingle();
+  if (!data || !data.verified_at) return null;
+  const destination = readString((data as Record<string, any>).destination);
+  return normalizePhone(destination || null);
+}
+
+async function linkAdminUserToEndUser(input: {
+  context: EndUserSyncContext;
+  orgId: string;
+  adminUserId: string | null;
+  endUserId: string;
+  adminEmail?: string | null;
+}) {
+  const { context, orgId, adminUserId, endUserId, adminEmail } = input;
+  if (!adminUserId || !endUserId) return;
+  const { data: accessRow } = await context.supabase
+    .from("A_iam_user_access_maps")
+    .select("is_admin, end_user_id")
+    .eq("org_id", orgId)
+    .eq("user_id", adminUserId)
+    .maybeSingle();
+  if (!accessRow?.is_admin) return;
+  const currentEndUserId = readString((accessRow as Record<string, any>).end_user_id);
+  if (currentEndUserId && currentEndUserId === endUserId) return;
+  await context.supabase
+    .from("A_iam_user_access_maps")
+    .update({ end_user_id: endUserId })
+    .eq("org_id", orgId)
+    .eq("user_id", adminUserId);
+
+  const { data: endUserRow } = await context.supabase
+    .from("A_end_users")
+    .select("email")
+    .eq("org_id", orgId)
+    .eq("id", endUserId)
+    .maybeSingle();
+  const endUserEmail = readString((endUserRow as Record<string, any> | null)?.email);
+  if (endUserEmail) return;
+
+  let resolvedAdminEmail = readString(adminEmail);
+  if (!resolvedAdminEmail && (context.supabase as any)?.auth?.admin?.getUserById) {
+    try {
+      const res = await (context.supabase as any).auth.admin.getUserById(adminUserId);
+      resolvedAdminEmail = readString(res?.data?.user?.email || null);
+    } catch {
+      resolvedAdminEmail = null;
+    }
+  }
+  if (!resolvedAdminEmail) return;
+  await context.supabase
+    .from("A_end_users")
+    .update({ email: normalizeEmail(resolvedAdminEmail), updated_at: nowIso() })
+    .eq("org_id", orgId)
+    .eq("id", endUserId);
 }
 
 export async function fetchEndUserMemoryEntity(input: {
@@ -630,11 +725,18 @@ export async function syncEndUserFromTurn(input: {
 
     const metadata = readRecord(sessionRow.metadata) || null;
     const metadataProfile = extractProfileFromMetadata(metadata);
+    const metadataAdminUserId = readUuid(metadata?.admin_user_id ?? metadata?.iam_user_id ?? metadata?.widget_user_id);
+    const contextUserId = readUuid((context as Record<string, any>)?.user?.id || null);
+    const adminUserId =
+      metadataAdminUserId ||
+      (contextUserId && !isZeroUuid(contextUserId) ? contextUserId : null);
     const runtimeEndUser = readRecord((context as Record<string, any>).runtimeEndUser) || null;
     const runtimeProfile = extractProfileFromObject(runtimeEndUser);
     const runtimeSummary = buildRuntimeSummary(runtimeEndUser);
     const entity = readRecord((turnPayload.bot_context || {})?.entity) || null;
     const entityProfile = extractProfileFromEntity(entity);
+    const botContext = readRecord(turnPayload.bot_context) || {};
+    const verificationToken = readString(botContext.customer_verification_token);
 
     const mergedProfile = mergeProfiles(mergeProfiles(entityProfile, metadataProfile), runtimeProfile);
     const confirmedEntity = normalizeConfirmedEntity((turnPayload.bot_context || {})?.confirmed_entity);
@@ -649,7 +751,17 @@ export async function syncEndUserFromTurn(input: {
       confirmedProfile.member_id = String(confirmedEntity.member_id).trim();
     }
     const mergedProfileFinal = mergeProfiles(mergedProfile, confirmedProfile);
-    const identities = buildIdentityCandidates(mergedProfileFinal);
+    const verifiedPhone = await resolveVerifiedPhoneByToken({ context, orgId, token: verificationToken });
+    if (verifiedPhone && !mergedProfileFinal.phone) {
+      mergedProfileFinal.phone = verifiedPhone;
+    }
+    const identities = verifiedPhone
+      ? (() => {
+          const next: IdentityCandidate[] = [];
+          appendIdentityCandidate(next, { type: "phone", value: verifiedPhone, isPrimary: true });
+          return next;
+        })()
+      : [];
 
     const { data: existingSessionRow } = await context.supabase
       .from("A_end_user_sessions")
@@ -683,6 +795,23 @@ export async function syncEndUserFromTurn(input: {
         if (!endUserId) {
           endUserId = matchedIdentity.end_user_id;
         }
+      }
+    }
+
+    if (!endUserId && verifiedPhone) {
+      matchAttempted = true;
+      const { data: phoneMatch } = await context.supabase
+        .from("A_end_users")
+        .select("id")
+        .eq("org_id", orgId)
+        .eq("phone", verifiedPhone)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (phoneMatch?.id) {
+        endUserId = String(phoneMatch.id);
+        matchHit = true;
       }
     }
 
@@ -749,6 +878,11 @@ export async function syncEndUserFromTurn(input: {
     }
 
     if (!endUserId) return;
+
+    if (adminUserId && verifiedPhone) {
+      const adminEmail = readString((context as Record<string, any>)?.user?.email || null);
+      await linkAdminUserToEndUser({ context, orgId, adminUserId, endUserId, adminEmail });
+    }
 
     const identityTypes = identities.map((item) => item.identity_type);
 

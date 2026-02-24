@@ -14,9 +14,7 @@ export async function executeTranscriptCopy(input: {
   conversationDebugOptionsOverride?: DebugTranscriptOptions;
   blockedMessage?: string;
   emptyConversationMessage?: string;
-  emptyIssueMessage?: string;
   successConversationMessage?: string;
-  successIssueMessage?: string;
   failedMessage?: string;
   prebuiltTextOverride?: string | null;
   onCopiedText?: (text: string) => Promise<void> | void;
@@ -42,11 +40,7 @@ export async function executeTranscriptCopy(input: {
     return false;
   }
   if (!payload.text.trim()) {
-    toast.error(
-      input.kind === "conversation"
-        ? input.emptyConversationMessage || "복사할 대화가 없습니다."
-        : input.emptyIssueMessage || "복사할 오류 로그가 없습니다."
-    );
+    toast.error(input.emptyConversationMessage || "\uBCF5\uC0AC\uD560 \uB300\uD654\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.");
     return false;
   }
   try {
@@ -54,11 +48,7 @@ export async function executeTranscriptCopy(input: {
     if (input.onCopiedText) {
       await input.onCopiedText(payload.text);
     }
-    toast.success(
-      input.kind === "conversation"
-        ? input.successConversationMessage || "대화를 복사했습니다."
-        : input.successIssueMessage || "문제 로그를 복사했습니다."
-    );
+    toast.success(input.successConversationMessage || "\uB300\uD654\uB97C \uBCF5\uC0AC\uD588\uC2B5\uB2C8\uB2E4.");
     return true;
   } catch {
     toast.error(input.failedMessage || "복사에 실패했습니다.");

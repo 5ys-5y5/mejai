@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
   if (!payload) {
     return NextResponse.json({ error: "INVALID_WIDGET_TOKEN" }, { status: 401 });
   }
+  const adminUserId = String(payload.admin_user_id || "").trim();
 
   const body = await req.json().catch(() => null);
   if (!body || !body.message) {
@@ -231,6 +232,7 @@ export async function POST(req: NextRequest) {
         "x-widget-agent-id": String(widget.agent_id || ""),
         "x-widget-allowed-domains": encodeHeaderJson(widget.allowed_domains || []),
         "x-widget-allowed-paths": encodeHeaderJson(widget.allowed_paths || []),
+        ...(adminUserId ? { "x-widget-user-id": adminUserId } : {}),
       },
       body: JSON.stringify({
         message,

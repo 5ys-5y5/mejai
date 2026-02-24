@@ -123,14 +123,22 @@ function buildToolKey(provider: McpProviderKey, name: string) {
   return `${provider}:${name}`;
 }
 
-export async function loadMcpToolsForOrg(supabase: SupabaseClient, orgId: string): Promise<McpToolItem[]> {
+export async function loadMcpToolsForOrg(
+  supabase: SupabaseClient,
+  orgId: string,
+  options?: { publicOnly?: boolean }
+): Promise<McpToolItem[]> {
   void orgId;
-  const dbResult = await supabase
+  let query = supabase
     .from("C_mcp_tools")
     .select(
       "id, name, scope_key, endpoint_path, http_method, usage_count, description, schema_json, version, provider_key, visibility, access, is_destructive, rate_limit_per_min, masking_rules, conditions, is_active"
     )
     .eq("is_active", true);
+  if (options?.publicOnly) {
+    query = query.eq("is_public", true);
+  }
+  const dbResult = await query;
 
   if (dbResult.error) {
     throw new Error(dbResult.error.message);

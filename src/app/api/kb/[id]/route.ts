@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import { createEmbedding } from "@/lib/embeddings";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
+import { createServerSupabaseClient } from "@/lib/supabaseServer";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -48,18 +50,27 @@ function bumpVersion(value?: string | null) {
   return `${raw}-rev1`;
 }
 
-function buildScopedQuery(client: SupabaseClient, id: string, orgId: string) {
-  return client.from("B_bot_knowledge_bases").select("*").eq("id", id).or(`org_id.eq.${orgId},org_id.is.null`);
+function buildScopedQuery(client: SupabaseClient, id: string, orgId: string | null, publicOnly: boolean) {
+  let query = client.from("B_bot_knowledge_bases").select("*").eq("id", id);
+  if (publicOnly) {
+    return query.eq("is_public", true);
+  }
+  if (orgId) {
+    return query.or(`org_id.eq.${orgId},org_id.is.null`);
+  }
+  return query.is("org_id", null);
 }
 
-function buildParentQuery(client: SupabaseClient, parentId: string, orgId: string) {
-  return client
-    .from("B_bot_knowledge_bases")
-    .select("*")
-    .eq("parent_id", parentId)
-    .or(`org_id.eq.${orgId},org_id.is.null`)
-    .order("is_active", { ascending: false })
-    .order("created_at", { ascending: false });
+function buildParentQuery(client: SupabaseClient, parentId: string, orgId: string | null, publicOnly: boolean) {
+  let query = client.from("B_bot_knowledge_bases").select("*").eq("parent_id", parentId);
+  if (publicOnly) {
+    query = query.eq("is_public", true);
+  } else if (orgId) {
+    query = query.or(`org_id.eq.${orgId},org_id.is.null`);
+  } else {
+    query = query.is("org_id", null);
+  }
+  return query.order("is_active", { ascending: false }).order("created_at", { ascending: false });
 }
 
 export async function GET(req: NextRequest, context: RouteContext) {
@@ -74,11 +85,22 @@ export async function GET(req: NextRequest, context: RouteContext) {
     });
   }
   const serverContext = await getServerContext(authHeader, cookieHeader);
+  let supabase: SupabaseClient;
+  let orgId: string | null = null;
+  let publicOnly = false;
   if ("error" in serverContext) {
     if (process.env.NODE_ENV !== "production") {
       console.debug("[api/kb/[id]] GET auth error", { error: serverContext.error });
     }
-    return NextResponse.json({ error: serverContext.error }, { status: 401 });
+    publicOnly = true;
+    try {
+      supabase = createAdminSupabaseClient();
+    } catch {
+      supabase = createServerSupabaseClient();
+    }
+  } else {
+    supabase = serverContext.supabase;
+    orgId = serverContext.orgId;
   }
 
   const rawId = routeId;
@@ -91,11 +113,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     }
     return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
   }
-  const { data: scopedData, error } = await buildScopedQuery(
-    serverContext.supabase,
-    id,
-    serverContext.orgId
-  ).maybeSingle();
+  const { data: scopedData, error } = await buildScopedQuery(supabase, id, orgId, publicOnly).maybeSingle();
   let data = scopedData;
 
   if (error) {
@@ -106,7 +124,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   }
 
   if (!data) {
-    const parentResult = await buildParentQuery(serverContext.supabase, id, serverContext.orgId).limit(1).maybeSingle();
+    const parentResult = await buildParentQuery(supabase, id, orgId, publicOnly).limit(1).maybeSingle();
     if (parentResult.error) {
       return NextResponse.json({ error: parentResult.error.message }, { status: 400 });
     }
@@ -115,13 +133,13 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
   if (!data) {
     if (process.env.NODE_ENV !== "production") {
-      console.debug("[api/kb/[id]] GET not found", { id, orgId: serverContext.orgId });
+      console.debug("[api/kb/[id]] GET not found", { id, orgId });
     }
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
   if (process.env.NODE_ENV !== "production") {
-    console.debug("[api/kb/[id]] GET ok", { id, orgId: serverContext.orgId });
+    console.debug("[api/kb/[id]] GET ok", { id, orgId });
   }
   return NextResponse.json(data);
 }

@@ -4,21 +4,28 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { getSupabaseClient } from "@/lib/supabaseClient";
-import { ChatSettingsPanel } from "@/components/settings/ChatSettingsPanel";
 import { ProposalSettingsPanel } from "@/components/settings/ProposalSettingsPanel";
+import { ChatSettingsPanelCore } from "@/components/settings/ChatSettingsPanelCore";
+import { ChatSettingsPanelEnv } from "@/components/settings/ChatSettingsPanelEnv";
+import { ChatSettingsPanelMapping } from "@/components/settings/ChatSettingsPanelMapping";
 import { PerformanceSettingsPanel } from "@/components/settings/PerformanceSettingsPanel";
 import { PolicySettingsPanel } from "@/components/settings/PolicySettingsPanel";
 import { DesignSystemContent } from "@/app/app/design-system/page";
 import { UnderlineTabs, type TabItem } from "@/components/design-system";
 
-type TabKey = "chat" | "proposal" | "performance" | "design-system" | "policies";
+type TabKey = "chat" | "env" | "mapping" | "proposal" | "performance" | "design-system" | "policies";
 
 export default function AdminPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const rawTab = (searchParams.get("tab") || "chat").toLowerCase();
   const tab: TabKey =
-    rawTab === "proposal" || rawTab === "performance" || rawTab === "design-system" || rawTab === "policies"
+    rawTab === "proposal" ||
+    rawTab === "performance" ||
+    rawTab === "design-system" ||
+    rawTab === "policies" ||
+    rawTab === "env" ||
+    rawTab === "mapping"
       ? (rawTab as TabKey)
       : "chat";
 
@@ -63,11 +70,13 @@ export default function AdminPage() {
 
   const tabs = useMemo<TabItem<TabKey>[]>(
     () => [
-      { key: "chat", label: "대화 설정" },
-      { key: "proposal", label: "제안" },
-      { key: "performance", label: "성능" },
+      { key: "chat", label: "\ub300\ud654 \uc124\uc815" },
+      { key: "env", label: "\ub7f0\ud0c0\uc784 \ud658\uacbd \ubcc0\uc218" },
+      { key: "mapping", label: "\uc124\uc815-\ud30c\uc77c \ub9e4\ud551" },
+      { key: "proposal", label: "\uc81c\uc548" },
+      { key: "performance", label: "\uc131\ub2a5" },
       { key: "policies", label: "Policies" },
-      { key: "design-system", label: "디자인 시스템" },
+      { key: "design-system", label: "\ub514\uc790\uc778 \uc2dc\uc2a4\ud15c" },
     ],
     []
   );
@@ -83,9 +92,13 @@ export default function AdminPage() {
 
         <div className="mt-6">
           {adminReady && !isAdmin ? (
-            <Card className="p-4 text-sm text-slate-600">관리자 권한이 필요합니다.</Card>
+            <Card className="p-4 text-sm text-slate-600">{"\uad00\ub9ac\uc790 \uc804\uc6a9 \ud654\uba74\uc785\ub2c8\ub2e4."}</Card>
           ) : tab === "chat" ? (
-            <ChatSettingsPanel authToken={authToken} />
+            <ChatSettingsPanelCore authToken={authToken} />
+          ) : tab === "env" ? (
+            <ChatSettingsPanelEnv authToken={authToken} />
+          ) : tab === "mapping" ? (
+            <ChatSettingsPanelMapping authToken={authToken} />
           ) : tab === "proposal" ? (
             <ProposalSettingsPanel authToken={authToken} />
           ) : tab === "design-system" ? (

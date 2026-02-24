@@ -1,6 +1,7 @@
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { MANAGED_ENV_KEYS, type ManagedEnvKey } from "@/lib/managedEnvKeys";
 import { decryptManagedEnv } from "@/lib/managedEnvCrypto";
+import { fetchRuntimeEnvCiphertext } from "@/lib/chatPolicyStore";
 
 type ManagedEnvValues = Partial<Record<ManagedEnvKey, string>>;
 type ManagedEnvBundle = {
@@ -16,6 +17,7 @@ type CacheEntry = {
 
 const cache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 30_000;
+const EMPTY_BUNDLE: ManagedEnvBundle = { deploy: {}, local: {} };
 
 function normalizeValue(value: unknown) {
   if (value === null || value === undefined) return "";
@@ -39,13 +41,13 @@ function normalizeManagedBundle(input: Record<string, unknown>) {
   return { deploy, local } satisfies ManagedEnvBundle;
 }
 
-function extractManagedEnvFromProviders(
-  providers: Record<string, Record<string, unknown> | undefined> | null
+function extractManagedEnvFromCiphertext(
+  encrypted: Record<string, unknown> | null
 ): ManagedEnvBundle {
-  const encrypted = (providers?.runtime_env || {}) as Record<string, unknown>;
+  const payload = (encrypted || {}) as Record<string, unknown>;
   let raw: Record<string, unknown> = {};
   try {
-    raw = decryptManagedEnv(encrypted);
+    raw = decryptManagedEnv(payload);
   } catch {
     raw = {};
   }
@@ -63,31 +65,17 @@ export async function loadManagedEnvForOrg(orgId: string, options?: { force?: bo
   try {
     supabase = createAdminSupabaseClient();
   } catch {
-    return cached?.values || {};
+    return cached?.values || EMPTY_BUNDLE;
   }
 
-  const { data, error } = await supabase
-    .from("A_iam_auth_settings")
-    .select("id, providers, updated_at")
-    .eq("org_id", orgId)
-    .order("updated_at", { ascending: false })
-    .limit(200);
-
-  if (error || !data) {
-    return cached?.values || {};
+  const { value, updatedAt, error } = await fetchRuntimeEnvCiphertext(supabase, orgId);
+  if (error) {
+    return cached?.values || EMPTY_BUNDLE;
   }
-
-  const rows = data as Array<{
-    providers?: Record<string, Record<string, unknown>> | null;
-    updated_at?: string | null;
-    user_id?: string | null;
-  }>;
-  const withEnv = rows.filter((row) => row.providers?.runtime_env);
-  const picked = withEnv.find((row) => !row.user_id) || withEnv[0];
-  const values = extractManagedEnvFromProviders(picked?.providers || null);
+  const values = extractManagedEnvFromCiphertext(value);
   cache.set(orgId, {
     values,
-    updatedAt: picked?.updated_at || null,
+    updatedAt,
     expiresAt: now + CACHE_TTL_MS,
   });
   return values;

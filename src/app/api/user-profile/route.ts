@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   }
 
   return NextResponse.json({
+    user_id: context.user.id,
     plan: profile?.plan || "starter",
     is_admin: profile?.is_admin || false,
     org_role: profile?.org_role || "operator",

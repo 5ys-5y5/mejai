@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import type { User } from "@supabase/supabase-js";
 import { getServerContext, type ServerContextSuccess } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
+import { fetchChatPolicy } from "@/lib/chatPolicyStore";
 import { compilePolicy, type PolicyPack } from "@/lib/policyEngine";
 import { isUuidLike, isValidLlm } from "../shared/slotUtils";
 import type { KbRow } from "../shared/types";
@@ -9,7 +10,9 @@ import {
   fetchAdminKbs,
   fetchActiveAgentByParent,
   fetchAgent,
+  fetchDefaultUserKb,
   fetchKb,
+  fetchLatestSampleKb,
   getRecentTurns,
   matchesAdminGroup,
   createSession,
@@ -64,6 +67,8 @@ type WidgetContext = {
   widgetAllowedPaths: string[];
 };
 
+const WIDGET_GUEST_USER_ID = "00000000-0000-0000-0000-000000000000";
+
 function decodeHeaderValue(input: string) {
   const value = String(input || "").trim();
   if (!value) return "";
@@ -89,6 +94,11 @@ function parseHeaderArray(input: string) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function isPublicPageKey(value: unknown) {
+  const key = String(value || "").trim();
+  return key === "/" || key === "/demo";
 }
 
 type BootstrapParams = {
@@ -129,7 +139,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           queryErrorByProvider: string | null;
         };
         providerAvailable: string[];
-        providerConfig: { mall_id: string | null; shop_no: string | null; board_no: string | null };
+        providerConfig: { cafe24_mall_id: string | null; cafe24_shop_no: string | null; cafe24_board_no: string | null };
         runtimeFlags: { restock_lite: boolean };
         authSettings: Record<string, any> | null;
         userPlan: string | null;
@@ -161,9 +171,27 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const widgetSecret = String(req.headers.get("x-widget-secret") || "").trim();
   const expectedWidgetSecret = String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
   const isWidgetRequest = Boolean(widgetSecret && expectedWidgetSecret && widgetSecret === expectedWidgetSecret);
+  let isWidgetGuestUser = false;
   let context: ServerContextSuccess | null = null;
   let authContext: ServerContextSuccess | null = null;
   const authStartedAt = Date.now();
+
+  const parseBodyStartedAt = Date.now();
+  const body = (await req.json().catch(() => null)) as Body | null;
+  pushRuntimeTimingStage(timingStages, "parse_body", parseBodyStartedAt);
+  const agentId = String(body?.agent_id || "").trim();
+  const message = String(body?.message || "").trim();
+  const conversationMode = String(body?.mode || "").trim().toLowerCase() === "natural" ? "natural" : "mk2";
+  const runtimeFlags = {
+    restock_lite: Boolean(body?.runtime_flags?.restock_lite),
+  };
+  const runtimeEndUser =
+    (body?.end_user && typeof body.end_user === "object" ? body.end_user : null) ||
+    (body?.visitor && typeof body.visitor === "object" ? body.visitor : null);
+  const pageKey = String(body?.page_key || "").trim();
+  if (!message) {
+    return { response: respond({ error: "INVALID_BODY" }, { status: 400 }), state: null };
+  }
 
   if (isWidgetRequest) {
     const orgId = String(req.headers.get("x-widget-org-id") || "").trim();
@@ -183,43 +211,26 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       };
     }
     const headerUserId = String(req.headers.get("x-widget-user-id") || "").trim();
-    let userId = headerUserId;
-    let orgRole = "admin";
-    if (userId) {
+    let userId = "";
+    let orgRole = "operator";
+    if (headerUserId) {
       const { data: accessRow } = await supabaseAdmin
         .from("A_iam_user_access_maps")
         .select("user_id, is_admin, org_role")
         .eq("org_id", orgId)
-        .eq("user_id", userId)
+        .eq("user_id", headerUserId)
         .maybeSingle();
       if (!accessRow?.user_id) {
         userId = "";
       } else {
+        userId = String(accessRow.user_id);
         orgRole = String(accessRow.org_role || (accessRow.is_admin ? "admin" : "operator") || "operator");
       }
     }
     if (!userId) {
-      const { data: accessRows } = await supabaseAdmin
-        .from("A_iam_user_access_maps")
-        .select("user_id, is_admin, org_role")
-        .eq("org_id", orgId)
-        .order("is_admin", { ascending: false })
-        .limit(50);
-      const candidates = (accessRows || []) as Array<{
-        user_id?: string | null;
-        is_admin?: boolean | null;
-        org_role?: string | null;
-      }>;
-      const picked =
-        candidates.find((row) => String(row.org_role || "").toLowerCase() === "owner") ||
-        candidates.find((row) => Boolean(row.is_admin)) ||
-        candidates[0] ||
-        null;
-      userId = picked?.user_id ? String(picked.user_id) : "";
-      orgRole = String(picked?.org_role || (picked?.is_admin ? "admin" : "operator") || "operator");
-    }
-    if (!userId) {
-      return { response: respond({ error: "WIDGET_USER_NOT_FOUND" }, { status: 400 }), state: null };
+      userId = WIDGET_GUEST_USER_ID;
+      orgRole = "operator";
+      isWidgetGuestUser = true;
     }
     const user = { id: userId } as User;
     context = { supabase: supabaseAdmin, user, orgId, orgRole };
@@ -234,27 +245,34 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       if (debugEnabled) {
         console.debug("[runtime/chat/mk2] auth error", contextRes.error);
       }
-      return { response: respond({ error: contextRes.error }, { status: 401 }), state: null };
+      const isAnonymousNewModel = !agentId && isPublicPageKey(pageKey);
+      if (!isAnonymousNewModel) {
+        return { response: respond({ error: contextRes.error }, { status: 401 }), state: null };
+      }
+      let supabaseAdmin;
+      try {
+        supabaseAdmin = createAdminSupabaseClient();
+      } catch (error) {
+        return {
+          response: respond(
+            { error: error instanceof Error ? error.message : "ADMIN_SUPABASE_INIT_FAILED" },
+            { status: 500 }
+          ),
+          state: null,
+        };
+      }
+      const user = { id: WIDGET_GUEST_USER_ID } as User;
+      context = { supabase: supabaseAdmin, user, orgId: null, orgRole: "guest" };
+      authContext = context;
+    } else {
+      context = contextRes;
+      authContext = contextRes;
     }
-    context = contextRes;
-    authContext = contextRes;
   }
   if (!context || !authContext) {
     return { response: respond({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 }), state: null };
   }
 
-  const parseBodyStartedAt = Date.now();
-  const body = (await req.json().catch(() => null)) as Body | null;
-  pushRuntimeTimingStage(timingStages, "parse_body", parseBodyStartedAt);
-  const agentId = String(body?.agent_id || "").trim();
-  const message = String(body?.message || "").trim();
-  const conversationMode = String(body?.mode || "").trim().toLowerCase() === "natural" ? "natural" : "mk2";
-  const runtimeFlags = {
-    restock_lite: Boolean(body?.runtime_flags?.restock_lite),
-  };
-  const runtimeEndUser =
-    (body?.end_user && typeof body.end_user === "object" ? body.end_user : null) ||
-    (body?.visitor && typeof body.visitor === "object" ? body.visitor : null);
   if (runtimeEndUser) {
     (context as RuntimeContextAny).runtimeEndUser = runtimeEndUser as Record<string, any>;
   }
@@ -288,10 +306,6 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         .filter(Boolean)
     )
   );
-  if (!message) {
-    return { response: respond({ error: "INVALID_BODY" }, { status: 400 }), state: null };
-  }
-
   let agent: AgentShape | null = null;
   const agentLookupStartedAt = Date.now();
   let agentResolvedFromParent = false;
@@ -344,7 +358,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     pushRuntimeTimingStage(timingStages, "load_primary_kb", kbLookupStartedAt, { inline: true });
     kb = {
       id: "__INLINE_KB__",
-      title: "사용자 KB",
+      title: "User KB",
       content: inlineKbText,
       is_active: true,
       version: "inline",
@@ -360,11 +374,47 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       return { response: respond({ error: kbRes.error || "KB_NOT_FOUND" }, { status: 404 }), state: null };
     }
     kb = kbRes.data;
+  } else if (!agentId && context.orgId) {
+    const userKbRes = await fetchDefaultUserKb(context);
+    pushRuntimeTimingStage(timingStages, "load_primary_kb", kbLookupStartedAt, { default_user_kb: true });
+    if (userKbRes.data) {
+      kb = userKbRes.data;
+    } else {
+    kb = {
+      id: "__LAB_NO_KB__",
+      title: "KB not selected",
+      content: null,
+      is_active: true,
+      version: null,
+      is_admin: false,
+      apply_groups: null,
+      apply_groups_mode: null,
+      content_json: null,
+    };
+    }
+  } else if (!agentId && !context.orgId) {
+    const sampleRes = await fetchLatestSampleKb(context);
+    pushRuntimeTimingStage(timingStages, "load_primary_kb", kbLookupStartedAt, { sample_kb: true });
+    if (sampleRes.data) {
+      kb = sampleRes.data;
+    } else {
+    kb = {
+      id: "__LAB_NO_KB__",
+      title: "KB not selected",
+      content: null,
+      is_active: true,
+      version: null,
+      is_admin: false,
+      apply_groups: null,
+      apply_groups_mode: null,
+      content_json: null,
+    };
+    }
   } else {
     pushRuntimeTimingStage(timingStages, "load_primary_kb", kbLookupStartedAt, { skipped: true });
     kb = {
       id: "__LAB_NO_KB__",
-      title: "KB 미선택",
+      title: "KB not selected",
       content: null,
       is_active: true,
       version: null,
@@ -383,43 +433,60 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     .maybeSingle();
   const userGroup = (accessRow?.group as Record<string, any> | null) ?? null;
   const userPlan = (accessRow?.plan as string | null) ?? null;
-  const userIsAdmin = typeof accessRow?.is_admin === "boolean" ? accessRow.is_admin : null;
+  const rawUserIsAdmin = typeof accessRow?.is_admin === "boolean" ? accessRow.is_admin : null;
+  const userIsAdmin = isWidgetRequest && isWidgetGuestUser ? false : rawUserIsAdmin;
   const userRole = (accessRow?.org_role as string | null) ?? null;
   const userOrgId = (accessRow?.org_id as string | null) ?? null;
 
   let authSettings: { id?: string | null; providers?: Record<string, Record<string, any> | undefined> | null } | null = null;
-  const { data: authSettingsByUser } = await context.supabase
-    .from("A_iam_auth_settings")
-    .select("id, providers")
-    .eq("org_id", authContext.orgId)
-    .eq("user_id", authContext.user.id)
-    .maybeSingle();
-  authSettings = authSettingsByUser || null;
-  if (!authSettings && isWidgetRequest) {
+  let providers: Record<string, Record<string, any> | undefined> = {};
+  if (authContext.orgId) {
+    const { data: authSettingsByUser } = await context.supabase
+      .from("A_iam_auth_settings")
+      .select("id, providers")
+      .eq("org_id", authContext.orgId)
+      .eq("user_id", authContext.user.id)
+      .maybeSingle();
     const { data: authSettingsByOrg } = await context.supabase
       .from("A_iam_auth_settings")
       .select("id, providers")
       .eq("org_id", authContext.orgId)
       .is("user_id", null)
       .maybeSingle();
-    authSettings = authSettingsByOrg || null;
+    const userProviders = (authSettingsByUser?.providers || {}) as Record<string, Record<string, any> | undefined>;
+    const orgProviders = (authSettingsByOrg?.providers || {}) as Record<string, Record<string, any> | undefined>;
+    const mergedProviders: Record<string, Record<string, any> | undefined> = { ...userProviders };
+    try {
+      const adminSupabase = createAdminSupabaseClient();
+      const orgChatPolicy = await fetchChatPolicy(adminSupabase, authContext.orgId);
+      if (orgChatPolicy) {
+        mergedProviders.chat_policy = orgChatPolicy as unknown as Record<string, any>;
+      }
+    } catch {
+      // ignore admin fetch failures and leave chat_policy unset
+    }
+    if (isWidgetRequest && !authSettingsByUser) {
+      Object.assign(mergedProviders, orgProviders);
+    }
+    authSettings = { providers: mergedProviders };
+    providers = (authSettings?.providers || {}) as Record<string, Record<string, any> | undefined>;
+  } else {
+    authSettings = { providers: {} };
+    providers = {};
   }
-  const providers = (authSettings?.providers || {}) as Record<string, Record<string, any> | undefined>;
   const providerAvailable = Object.keys(providers || {}).filter((key) => {
     const value = providers[key];
     return value && Object.keys(value).length > 0;
   });
   const cafe24Provider = (providers.cafe24 || {}) as Record<string, any>;
   const providerConfig = {
-    mall_id: cafe24Provider.mall_id ? String(cafe24Provider.mall_id) : null,
-    shop_no: cafe24Provider.shop_no ? String(cafe24Provider.shop_no) : null,
-    board_no: cafe24Provider.board_no ? String(cafe24Provider.board_no) : null,
+    cafe24_mall_id: cafe24Provider.mall_id ? String(cafe24Provider.mall_id) : null,
+    cafe24_shop_no: cafe24Provider.shop_no ? String(cafe24Provider.shop_no) : null,
+    cafe24_board_no: cafe24Provider.board_no ? String(cafe24Provider.board_no) : null,
   };
   pushRuntimeTimingStage(timingStages, "load_auth_settings", iamLookupStartedAt);
 
   const adminKbStartedAt = Date.now();
-  const adminKbRes = await fetchAdminKbs(context);
-  const adminKbAll = adminKbRes.data || [];
   let adminKbFilterMeta: Array<{
     id: string;
     title?: string | null;
@@ -428,51 +495,69 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     matched: boolean;
     reason: string;
   }> = [];
-  let adminKbs = adminKbAll;
-    if (agentId) {
-      const allowed = new Set(agentAdminKbIds);
-      adminKbFilterMeta = adminKbAll.map((item) => ({
+  let adminKbs: Array<Record<string, any>> = [];
+  let shouldLoadAdminKbs = true;
+  try {
+    const existsRes = await context.supabase
+      .from("B_bot_knowledge_bases")
+      .select("id", { count: "exact", head: true })
+      .eq("is_admin", true)
+      .eq("is_active", true)
+      .not("content_json", "is", null)
+      .or(`org_id.eq.${context.orgId},org_id.is.null`);
+    shouldLoadAdminKbs = Boolean((existsRes as { count?: number | null }).count);
+  } catch {
+    shouldLoadAdminKbs = true;
+  }
+  let adminKbAll: Array<Record<string, any>> = [];
+  if (shouldLoadAdminKbs) {
+    const adminKbRes = await fetchAdminKbs(context);
+    adminKbAll = adminKbRes.data || [];
+  }
+  if (agentId) {
+    const allowed = new Set(agentAdminKbIds);
+    adminKbFilterMeta = adminKbAll.map((item) => ({
+      id: String(item.id || ""),
+      title: String((item as Record<string, any>).title || "") || null,
+      apply_groups: (item as Record<string, any>).apply_groups ?? null,
+      apply_groups_mode: String((item as Record<string, any>).apply_groups_mode || "") || null,
+      matched: allowed.has(item.id),
+      reason: allowed.has(item.id) ? "agent_selected" : "agent_not_selected",
+    }));
+    adminKbs = adminKbAll.filter((item) => allowed.has(item.id));
+  } else if (!agentId && overrideAdminKbIds !== null) {
+    const allowed = new Set(overrideAdminKbIds);
+    adminKbFilterMeta = adminKbAll.map((item) => ({
+      id: String(item.id || ""),
+      title: String((item as Record<string, any>).title || "") || null,
+      apply_groups: (item as Record<string, any>).apply_groups ?? null,
+      apply_groups_mode: String((item as Record<string, any>).apply_groups_mode || "") || null,
+      matched: allowed.has(item.id),
+      reason: allowed.has(item.id) ? "override_selected" : "override_not_selected",
+    }));
+    adminKbs = adminKbAll.filter((item) => allowed.has(item.id));
+  } else {
+    adminKbFilterMeta = adminKbAll.map((item) => {
+      const applyGroups = Array.isArray(item.apply_groups) ? item.apply_groups : null;
+      const applyMode = item.apply_groups_mode === "any" ? "any" : "all";
+      const matched = matchesAdminGroup(applyGroups, userGroup, applyMode);
+      return {
         id: String(item.id || ""),
         title: String((item as Record<string, any>).title || "") || null,
-        apply_groups: (item as Record<string, any>).apply_groups ?? null,
-        apply_groups_mode: String((item as Record<string, any>).apply_groups_mode || "") || null,
-        matched: allowed.has(item.id),
-        reason: allowed.has(item.id) ? "agent_selected" : "agent_not_selected",
-      }));
-      adminKbs = adminKbAll.filter((item) => allowed.has(item.id));
-    } else if (!agentId && overrideAdminKbIds !== null) {
-      const allowed = new Set(overrideAdminKbIds);
-      adminKbFilterMeta = adminKbAll.map((item) => ({
-        id: String(item.id || ""),
-        title: String((item as Record<string, any>).title || "") || null,
-        apply_groups: (item as Record<string, any>).apply_groups ?? null,
-        apply_groups_mode: String((item as Record<string, any>).apply_groups_mode || "") || null,
-        matched: allowed.has(item.id),
-        reason: allowed.has(item.id) ? "override_selected" : "override_not_selected",
-      }));
-      adminKbs = adminKbAll.filter((item) => allowed.has(item.id));
-    } else {
-      adminKbFilterMeta = adminKbAll.map((item) => {
-        const applyGroups = Array.isArray(item.apply_groups) ? item.apply_groups : null;
-        const applyMode = item.apply_groups_mode === "any" ? "any" : "all";
-        const matched = matchesAdminGroup(applyGroups, userGroup, applyMode);
-        return {
-          id: String(item.id || ""),
-          title: String((item as Record<string, any>).title || "") || null,
-          apply_groups: applyGroups,
-          apply_groups_mode: applyMode,
-          matched,
-          reason: matched ? "group_match" : "group_mismatch",
-        };
-      });
-      adminKbs = adminKbAll.filter((item) =>
-        matchesAdminGroup(
-          Array.isArray(item.apply_groups) ? item.apply_groups : null,
-          userGroup,
-          item.apply_groups_mode === "any" ? "any" : "all"
-        )
-      );
-    }
+        apply_groups: applyGroups,
+        apply_groups_mode: applyMode,
+        matched,
+        reason: matched ? "group_match" : "group_mismatch",
+      };
+    });
+    adminKbs = adminKbAll.filter((item) =>
+      matchesAdminGroup(
+        Array.isArray(item.apply_groups) ? item.apply_groups : null,
+        userGroup,
+        item.apply_groups_mode === "any" ? "any" : "all"
+      )
+    );
+  }
   const policyPacks = adminKbs
     .filter((item) => item.content_json)
     .map((item) => item.content_json as PolicyPack);
@@ -487,6 +572,8 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const allowedToolVersionByName = new Map<string, string | null>();
   const allowedToolByName = new Map<string, string[]>();
   const allowedToolsStartedAt = Date.now();
+  const isPublicContext = !context.orgId;
+  const applyPublicToolFilter = (query: any) => (isPublicContext ? query.eq("is_public", true) : query);
   let allowlistMeta = {
     requestedToolCount: 0,
     validToolCount: 0,
@@ -511,19 +598,23 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     );
     const [toolsById, toolsByProvider] = await Promise.all([
       validToolIds.length
-        ? context.supabase
+        ? applyPublicToolFilter(
+          context.supabase
           .from("C_mcp_tools")
           .select("id, name, provider_key, scope_key, version, is_active")
           .in("id", validToolIds)
+        )
         : Promise.resolve({
           data: [] as Array<{ id: string; name: string; provider_key: string; scope_key?: string | null; version?: string | null; is_active?: boolean | null }>,
         }),
       providerSelections.length
-        ? context.supabase
+        ? applyPublicToolFilter(
+          context.supabase
           .from("C_mcp_tools")
           .select("id, name, provider_key, scope_key, version, is_active")
           .in("provider_key", providerSelections)
           .eq("is_active", true)
+        )
         : Promise.resolve({
           data: [] as Array<{ id: string; name: string; provider_key: string; scope_key?: string | null; version?: string | null; is_active?: boolean | null }>,
         }),
@@ -572,12 +663,14 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       )
     );
     if (legacyScopes.length > 0) {
-      const { data: expanded } = await context.supabase
-        .from("C_mcp_tools")
-        .select("id, name, provider_key, version")
-        .eq("provider_key", "cafe24")
-        .eq("is_active", true)
-        .in("scope_key", legacyScopes);
+      const { data: expanded } = await applyPublicToolFilter(
+        context.supabase
+          .from("C_mcp_tools")
+          .select("id, name, provider_key, version")
+          .eq("provider_key", "cafe24")
+          .eq("is_active", true)
+          .in("scope_key", legacyScopes)
+      );
       (expanded || []).forEach((t) => {
         resolvedTools.set(String(t.id), {
           id: String(t.id),

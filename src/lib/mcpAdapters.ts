@@ -13,8 +13,8 @@ import { isTokenExpired, refreshCafe24Token } from "@/lib/cafe24Tokens";
 
 type AdapterContext = {
   supabase: SupabaseClient;
-  orgId: string;
-  userId: string;
+  orgId: string | null;
+  userId?: string | null;
 };
 
 type ToolAdapter = (params: Record<string, unknown>, ctx?: AdapterContext) => Promise<ToolCallResult>;
@@ -229,12 +229,28 @@ async function getCafe24Config(ctx?: AdapterContext) {
     return { ok: false as const, error: "MISSING_CONTEXT" };
   }
   const { supabase, orgId, userId } = ctx;
-  const { data, error } = await supabase
-    .from("A_iam_auth_settings")
-    .select("id, org_id, user_id, providers")
-    .eq("org_id", orgId)
-    .eq("user_id", userId)
-    .maybeSingle();
+  let data: Record<string, any> | null = null;
+  let error: { message?: string } | null = null;
+  if (userId) {
+    const res = await supabase
+      .from("A_iam_auth_settings")
+      .select("id, org_id, user_id, providers")
+      .eq("org_id", orgId)
+      .eq("user_id", userId)
+      .maybeSingle();
+    data = res.data as Record<string, any> | null;
+    error = res.error ?? null;
+  }
+  if (!data) {
+    const res = await supabase
+      .from("A_iam_auth_settings")
+      .select("id, org_id, user_id, providers")
+      .eq("org_id", orgId)
+      .is("user_id", null)
+      .maybeSingle();
+    data = res.data as Record<string, any> | null;
+    error = res.error ?? null;
+  }
   if (error || !data) {
     return { ok: false as const, error: "CAFE24_TOKEN_NOT_FOUND" };
   }
@@ -1634,7 +1650,7 @@ const adapters: Record<string, ToolAdapter> = {
         return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
       }
       const channel = String(params.channel || "").trim();
-      const mallId = String(params.mall_id || "").trim();
+      const mallId = String(params.cafe24_mall_id ?? "").trim();
       const sessionId = String(params.session_id || "").trim();
       const productId = String(params.product_id || "").trim();
       const topicTypeRaw = String(params.topic_type || "").trim().toLowerCase();
@@ -1642,9 +1658,6 @@ const adapters: Record<string, ToolAdapter> = {
       const topicKey = String(params.topic_key || productId || params.product_name || "").trim();
       if (!channel) {
         return { status: "error", error: { code: "INVALID_INPUT", message: "channel is required" } };
-      }
-      if (!mallId) {
-        return { status: "error", error: { code: "INVALID_INPUT", message: "mall_id is required" } };
       }
       if (!sessionId) {
         return { status: "error", error: { code: "INVALID_INPUT", message: "session_id is required" } };
@@ -1693,7 +1706,7 @@ const adapters: Record<string, ToolAdapter> = {
       const nowIso = new Date().toISOString();
       const rows = leadDaysToSchedule.map((leadDay) => ({
         org_id: ctx.orgId,
-        mall_id: mallId,
+        mall_id: mallId || null,
         session_id: sessionId,
         channel,
         phone: params.phone ? String(params.phone) : null,
@@ -1892,7 +1905,7 @@ const adapters: Record<string, ToolAdapter> = {
     const { error } = await ctx.supabase.from("H_auth_otp_verifications").insert({
       id: recordId,
       org_id: ctx.orgId,
-      user_id: ctx.userId,
+      user_id: ctx.userId || null,
       destination,
       otp_ref: otpRef,
       code_hash: codeHash,

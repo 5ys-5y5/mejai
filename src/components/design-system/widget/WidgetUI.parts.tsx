@@ -792,55 +792,49 @@ export type WidgetConversationTab = "chat" | "list" | "policy";
 export type WidgetTabBarLegoProps = {
   activeTab: WidgetConversationTab;
   onTabChange: (tab: WidgetConversationTab) => void;
+  showChatTab?: boolean;
+  showListTab?: boolean;
   showPolicyTab?: boolean;
 };
 
 export function WidgetTabBarLego({
   activeTab,
   onTabChange,
+  showChatTab = true,
+  showListTab = true,
   showPolicyTab = false,
 }: WidgetTabBarLegoProps) {
-  const tabGridClass = showPolicyTab ? "grid-cols-3" : "grid-cols-2";
+  const tabs = [
+    { key: "chat" as const, visible: showChatTab, icon: MessageCircle, label: "\uB300\uD654" },
+    { key: "list" as const, visible: showListTab, icon: List, label: "\uB9AC\uC2A4\uD2B8" },
+    { key: "policy" as const, visible: showPolicyTab, icon: Shield, label: "\uC815\uCC45" },
+  ];
+  const visibleTabs = tabs.filter((tab) => tab.visible);
+  if (visibleTabs.length === 0) return null;
+  const tabGridClass =
+    visibleTabs.length === 1 ? "grid-cols-1" : visibleTabs.length === 2 ? "grid-cols-2" : "grid-cols-3";
   return (
     <div
       className={cn("grid h-[50px] items-center gap-1 border-t border-slate-200 bg-white px-2 py-1", tabGridClass)}
       parts-lego="WidgetTabBarLego"
     >
-      <button
-        type="button"
-        onClick={() => onTabChange("chat")}
-        className={cn(
-          "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
-          activeTab === "chat" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
-        )}
-      >
-        <MessageCircle className="h-4 w-4" />
-        <span>대화</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onTabChange("list")}
-        className={cn(
-          "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
-          activeTab === "list" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
-        )}
-      >
-        <List className="h-4 w-4" />
-        <span>리스트</span>
-      </button>
-      {showPolicyTab ? (
-        <button
-          type="button"
-          onClick={() => onTabChange("policy")}
-          className={cn(
-            "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
-            activeTab === "policy" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
-          )}
-        >
-          <Shield className="h-4 w-4" />
-          <span>정책</span>
-        </button>
-      ) : null}
+      {visibleTabs.map((tab) => {
+        const Icon = tab.icon;
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => onTabChange(tab.key)}
+            className={cn(
+              "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
+              activeTab === tab.key ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
+            )}
+          >
+            <Icon className="h-4 w-4" />
+            <span>{tab.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -992,10 +986,20 @@ export type WidgetConversationLayoutProps = {
   onClose?: () => void;
   showClose?: boolean;
   closeLabel?: string;
+  showHeader?: boolean;
+  showHeaderLogo?: boolean;
+  showHeaderStatus?: boolean;
+  showHeaderAgentAction?: boolean;
   chatLegoProps: ConversationModelChatColumnLegoProps;
   setupLegoProps: ConversationModelSetupColumnLegoProps;
   activeTab: WidgetConversationTab;
   onTabChange: (tab: WidgetConversationTab) => void;
+  showChatPanel?: boolean;
+  showSetupPanel?: boolean;
+  showHistoryPanel?: boolean;
+  showTabBar?: boolean;
+  showChatTab?: boolean;
+  showListTab?: boolean;
   showPolicyTab?: boolean;
   policyFallback?: ReactNode;
   sessions: WidgetConversationSession[];
@@ -1019,10 +1023,20 @@ export function WidgetConversationLayout({
   onClose,
   showClose,
   closeLabel,
+  showHeader = true,
+  showHeaderLogo = true,
+  showHeaderStatus = true,
+  showHeaderAgentAction = true,
   chatLegoProps,
   setupLegoProps,
   activeTab,
   onTabChange,
+  showChatPanel = true,
+  showSetupPanel = true,
+  showHistoryPanel = true,
+  showTabBar = true,
+  showChatTab = true,
+  showListTab = true,
   showPolicyTab = false,
   policyFallback,
   sessions,
@@ -1042,6 +1056,13 @@ export function WidgetConversationLayout({
       접근 권한이 없습니다.
     </div>
   );
+  const availableTabs = [
+    showChatTab ? "chat" : null,
+    showListTab ? "list" : null,
+    showPolicyTab ? "policy" : null,
+  ].filter(Boolean) as WidgetConversationTab[];
+  const resolvedActiveTab =
+    availableTabs.length > 0 && availableTabs.includes(activeTab) ? activeTab : availableTabs[0] || "chat";
   const canStartNew = typeof showNewConversation === "boolean" ? showNewConversation : Boolean(onNewConversation);
 
   return (
@@ -1053,33 +1074,55 @@ export function WidgetConversationLayout({
       )}
       parts-lego="WidgetConversationLayout"
     >
-      <WidgetHeaderLego
-        brandName={brandName}
-        status={status}
-        iconUrl={iconUrl}
-        headerActions={headerActions}
-        onNewConversation={onNewConversation}
-        showNewConversation={canStartNew}
-        onClose={onClose}
-        showClose={showClose}
-        closeLabel={closeLabel}
-      />
+      {showHeader ? (
+        <WidgetHeaderLego
+          brandName={brandName}
+          status={showHeaderStatus ? status : ""}
+          iconUrl={showHeaderLogo ? iconUrl : null}
+          headerActions={showHeaderAgentAction ? headerActions : null}
+          onNewConversation={onNewConversation}
+          showNewConversation={canStartNew}
+          onClose={onClose}
+          showClose={showClose}
+          closeLabel={closeLabel}
+        />
+      ) : null}
       <div className="flex-1 min-h-0 overflow-hidden" panel-lego="WidgetConversationLayout.Panel">
-        {activeTab === "chat" ? <ConversationModelChatColumnLego {...chatLegoProps} /> : null}
-        {activeTab === "list" ? (
-          <WidgetHistoryPanelLego
-            sessions={sessions}
-            sessionsLoading={sessionsLoading}
-            sessionsError={sessionsError}
-            selectedSessionId={selectedSessionId}
-            onSelectSession={onSelectSession}
-            historyMessages={historyMessages}
-            historyLoading={historyLoading}
-          />
-        ) : null}
-        {activeTab === "policy" ? (showPolicyTab ? <ConversationModelSetupColumnLego {...setupLegoProps} /> : fallbackPanel) : null}
+        {resolvedActiveTab === "chat"
+          ? showChatPanel
+            ? <ConversationModelChatColumnLego {...chatLegoProps} />
+            : fallbackPanel
+          : null}
+        {resolvedActiveTab === "list"
+          ? showHistoryPanel
+            ? (
+              <WidgetHistoryPanelLego
+                sessions={sessions}
+                sessionsLoading={sessionsLoading}
+                sessionsError={sessionsError}
+                selectedSessionId={selectedSessionId}
+                onSelectSession={onSelectSession}
+                historyMessages={historyMessages}
+                historyLoading={historyLoading}
+              />
+            )
+            : fallbackPanel
+          : null}
+        {resolvedActiveTab === "policy"
+          ? showPolicyTab && showSetupPanel
+            ? <ConversationModelSetupColumnLego {...setupLegoProps} />
+            : fallbackPanel
+          : null}
       </div>
-      <WidgetTabBarLego activeTab={activeTab} onTabChange={onTabChange} showPolicyTab={showPolicyTab} />
+      {showTabBar ? (
+        <WidgetTabBarLego
+          activeTab={resolvedActiveTab}
+          onTabChange={onTabChange}
+          showChatTab={showChatTab}
+          showListTab={showListTab}
+          showPolicyTab={showPolicyTab}
+        />
+      ) : null}
     </div>
   );
 }

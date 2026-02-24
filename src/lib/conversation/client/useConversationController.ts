@@ -265,7 +265,6 @@ export function useConversationController(options: ControllerOptions) {
       copyByKind("conversation", enabledOverride, conversationDebugOptionsOverride),
     [copyByKind]
   );
-  const copyIssue = useCallback(async (enabledOverride?: boolean) => copyByKind("issue", enabledOverride), [copyByKind]);
 
   const toggleMessageSelection = useCallback((id: string) => {
     setSelectedMessageIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
@@ -284,12 +283,10 @@ export function useConversationController(options: ControllerOptions) {
       messageLogs,
       send,
       copyConversation,
-      copyIssue,
       loadTurnLogs,
     }),
     [
       copyConversation,
-      copyIssue,
       loadTurnLogs,
       messageLogs,
       messages,

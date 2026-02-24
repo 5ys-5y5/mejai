@@ -46,6 +46,10 @@ function readOrigin(input: Record<string, any>) {
   return "";
 }
 
+function isUuidLike(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function resolveWidgetUiSettingsSource(policy: ConversationFeaturesProviderShape | null) {
   const pageKey = WIDGET_PAGE_KEY;
   const hasPageOverride = Boolean(policy?.pages && policy.pages[pageKey]);
@@ -131,6 +135,19 @@ export async function POST(req: NextRequest) {
   }
 
   const visitorId = readVisitorId(body);
+  const requestedAdminUserId = String(body.admin_user_id || "").trim();
+  let adminUserId = "";
+  if (requestedAdminUserId && isUuidLike(requestedAdminUserId)) {
+    const { data: accessRow } = await supabaseAdmin
+      .from("A_iam_user_access_maps")
+      .select("user_id, is_admin")
+      .eq("org_id", widget.org_id)
+      .eq("user_id", requestedAdminUserId)
+      .maybeSingle();
+    if (accessRow?.user_id && accessRow.is_admin) {
+      adminUserId = String(accessRow.user_id);
+    }
+  }
   const now = nowIso();
   let sessionId = String(body.session_id || "").trim();
 
@@ -143,6 +160,20 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
     if (!existing) {
       sessionId = "";
+    } else if (adminUserId) {
+      const prevMeta = (existing.metadata && typeof existing.metadata === "object" ? existing.metadata : {}) as Record<
+        string,
+        any
+      >;
+      if (prevMeta.admin_user_id !== adminUserId) {
+        await supabaseAdmin
+          .from("D_conv_sessions")
+          .update({
+            metadata: { ...prevMeta, admin_user_id: adminUserId },
+          })
+          .eq("id", sessionId)
+          .eq("org_id", widget.org_id);
+      }
     }
   }
 
@@ -155,6 +186,7 @@ export async function POST(req: NextRequest) {
       referrer: String(body.referrer || "").trim() || null,
       visitor_id: visitorId || null,
       visitor: body.visitor && typeof body.visitor === "object" ? body.visitor : null,
+      admin_user_id: adminUserId || null,
     };
     const payload = {
       id: sessionId,
@@ -179,6 +211,7 @@ export async function POST(req: NextRequest) {
       session_id: sessionId,
       visitor_id: visitorId || null,
       origin: origin || null,
+      ...(adminUserId ? { admin_user_id: adminUserId } : {}),
     });
   } catch (error) {
     return NextResponse.json(

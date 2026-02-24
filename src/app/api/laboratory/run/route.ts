@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
+import { fetchChatPolicy } from "@/lib/chatPolicyStore";
 import {
   applyConversationFeatureVisibility,
   isProviderEnabled,
@@ -27,6 +28,17 @@ function parsePageKey(value: unknown): ConversationPageKey {
   const pageKey = String(value || "").trim();
   if (!pageKey) return "/app/laboratory";
   return pageKey;
+}
+
+function isPublicReferrer(req: NextRequest) {
+  const raw = req.headers.get("referer") || "";
+  if (!raw) return false;
+  try {
+    const url = new URL(raw);
+    return url.pathname === "/" || url.pathname === "/demo";
+  } catch {
+    return false;
+  }
 }
 
 function parseForwardedHeader(value?: string | null) {
@@ -481,7 +493,17 @@ export async function POST(req: NextRequest) {
     markStage("lab.proxy.auth_context.start");
     const serverCtx = await getServerContext(authHeader, cookieHeader);
     markStage("lab.proxy.auth_context.done");
-    if (!("error" in serverCtx)) {
+    if ("error" in serverCtx) {
+      const agentId = String(body?.agent_id || "").trim();
+      const isPublicPage = pageKey === "/" || pageKey === "/demo";
+      const isAnonymousNewModel = !agentId && (isPublicPage || isPublicReferrer(req));
+      if (!isAnonymousNewModel) {
+        return NextResponse.json({ error: serverCtx.error }, { status: 401 });
+      }
+      if (!isPublicPage && isPublicReferrer(req)) {
+        pageKey = "/";
+      }
+    } else {
       serverContext = { userId: serverCtx.user.id, orgId: serverCtx.orgId };
       const { data: access } = await serverCtx.supabase
         .from("A_iam_user_access_maps")
@@ -489,14 +511,12 @@ export async function POST(req: NextRequest) {
         .eq("user_id", serverCtx.user.id)
         .maybeSingle();
       isAdminUser = Boolean(access?.is_admin);
-      const { data: settings } = await serverCtx.supabase
-        .from("A_iam_auth_settings")
-        .select("providers")
-        .eq("org_id", serverCtx.orgId)
-        .is("user_id", null)
-        .maybeSingle();
-      const providers = (settings?.providers || {}) as Record<string, ConversationFeaturesProviderShape | undefined>;
-      providerValue = providers.chat_policy || null;
+      try {
+        const adminSupabase = createAdminSupabaseClient();
+        providerValue = await fetchChatPolicy(adminSupabase, serverCtx.orgId);
+      } catch {
+        providerValue = null;
+      }
     }
     const featureFlags = applyConversationFeatureVisibility(
       resolveConversationPageFeatures(pageKey, providerValue),
@@ -544,6 +564,7 @@ export async function POST(req: NextRequest) {
         "x-runtime-trace-id": traceId,
       },
       body: JSON.stringify({
+        page_key: pageKey,
         message: String(body.message || ""),
         session_id: body.session_id || undefined,
         agent_id: body.agent_id || undefined,

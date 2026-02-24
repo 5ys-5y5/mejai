@@ -1,6 +1,5 @@
 import {
   buildDebugTranscript,
-  buildIssueTranscript,
   type DebugTranscriptOptions,
   type LogBundle,
   type TranscriptMessage,
@@ -13,13 +12,12 @@ import {
 } from "@/lib/conversation/pageFeaturePolicy";
 
 export type CopyPageKey = ConversationPageKey;
-export type CopyKind = "conversation" | "issue";
+export type CopyKind = "conversation";
 export type CopyDestination = "clipboard";
 
 type CopyRule = {
   enabled: boolean;
   disabledReason?: string;
-  formatter: "debug_transcript_v1" | "issue_transcript_v1";
   useSelectedMessages: boolean;
   debugOptions?: DebugTranscriptOptions;
 };
@@ -28,7 +26,6 @@ export type PageCopyPolicy = {
   page: CopyPageKey;
   destinations: CopyDestination[];
   conversation: CopyRule;
-  issue: CopyRule;
   note: string;
 };
 
@@ -264,13 +261,7 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
       useSelectedMessages: true,
       debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
     },
-    issue: {
-      enabled: PAGE_CONVERSATION_FEATURES["/"].adminPanel.copyIssue,
-      // disabledReason: "랜딩 페이지에서는 문제 로그 복사를 지원하지 않습니다.",
-      formatter: "issue_transcript_v1",
-      useSelectedMessages: false,
-    },
-    note: "랜딩/실험실 대화 복사 정책",
+    note: "\uB79C\uB529/\uC2E4\uD5D8\uC2E4 \uB300\uD654 \uBCF5\uC0AC \uC815\uCC45",
   },
   "/app/laboratory": {
     page: "/app/laboratory",
@@ -281,12 +272,7 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
       useSelectedMessages: true,
       debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
     },
-    issue: {
-      enabled: PAGE_CONVERSATION_FEATURES["/app/laboratory"].adminPanel.copyIssue,
-      formatter: "issue_transcript_v1",
-      useSelectedMessages: false,
-    },
-    note: "랜딩/실험실 대화 복사 정책",
+    note: "\uB79C\uB529/\uC2E4\uD5D8\uC2E4 \uB300\uD654 \uBCF5\uC0AC \uC815\uCC45",
   },
   [WIDGET_PAGE_KEY]: {
     page: WIDGET_PAGE_KEY,
@@ -297,12 +283,7 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
       useSelectedMessages: true,
       debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
     },
-    issue: {
-      enabled: PAGE_CONVERSATION_FEATURES[WIDGET_PAGE_KEY].adminPanel.copyIssue,
-      formatter: "issue_transcript_v1",
-      useSelectedMessages: false,
-    },
-    note: "위젯 대화 복사 정책",
+    note: "\uC704\uC817 \uB300\uD654 \uBCF5\uC0AC \uC815\uCC45",
   },
 };
 
@@ -325,7 +306,7 @@ export function buildCopyPayload(input: {
   const policy = PAGE_COPY_POLICY[input.page];
   const selectedIds = input.selectedMessageIds || [];
   const logs = input.messageLogs || {};
-  const rule = input.kind === "conversation" ? policy.conversation : policy.issue;
+  const rule = policy.conversation;
   const enabled = input.enabledOverride ?? rule.enabled;
   if (!enabled) {
     return {
@@ -338,10 +319,7 @@ export function buildCopyPayload(input: {
   }
   const scopedMessages = pickMessages(input.messages, selectedIds, rule.useSelectedMessages);
   const effectiveDebugOptions = input.conversationDebugOptionsOverride || rule.debugOptions;
-  const text =
-    rule.formatter === "debug_transcript_v1"
-      ? buildDebugTranscript({ messages: scopedMessages, messageLogs: logs, options: effectiveDebugOptions })
-      : buildIssueTranscript({ messages: scopedMessages, messageLogs: logs });
+  const text = buildDebugTranscript({ messages: scopedMessages, messageLogs: logs, options: effectiveDebugOptions });
   return {
     policy,
     destination: policy.destinations[0],

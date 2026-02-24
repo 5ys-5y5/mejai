@@ -1155,6 +1155,7 @@ export function DesignSystemContent() {
   const [conversationAdminOpen, setConversationAdminOpen] = useState(false);
   const [conversationSelectionEnabled, setConversationSelectionEnabled] = useState(false);
   const [conversationShowLogs, setConversationShowLogs] = useState(false);
+  const [conversationShowMeta, setConversationShowMeta] = useState(false);
   const [conversationDebugOptions, setConversationDebugOptions] = useState<DebugTranscriptOptions>(
     () => structuredClone(DEFAULT_CONVERSATION_DEBUG_OPTIONS)
   );
@@ -1448,9 +1449,6 @@ export function DesignSystemContent() {
       updateDemoModel((prev) => ({ ...prev, conversationMode: mode }));
     },
     onCopyConversation: () => undefined,
-    onCopyIssue: () => undefined,
-    conversationDebugOptions,
-    onUpdateConversationDebugOptions: (next) => setConversationDebugOptions(next),
     onToggleMessageSelection: (_id, messageId) => {
       updateDemoModel((prev) => ({
         ...prev,
@@ -1648,10 +1646,9 @@ export function DesignSystemContent() {
               onToggleSelection={() => setConversationSelectionEnabled((prev) => !prev)}
               showLogs={conversationShowLogs}
               onToggleLogs={() => setConversationShowLogs((prev) => !prev)}
+              metaEnabled={conversationShowMeta}
+              onToggleMeta={() => setConversationShowMeta((prev) => !prev)}
               onCopyConversation={() => undefined}
-              onCopyIssue={() => undefined}
-              debugOptions={conversationDebugOptions}
-              onUpdateDebugOptions={(next) => setConversationDebugOptions(next)}
             />
           </div>
         </div>
@@ -1947,7 +1944,7 @@ export function DesignSystemContent() {
                 <Button variant="ghost" panel-lego="Button">고스트</Button>
                 <Button variant="destructive" panel-lego="Button">삭제</Button>
               </div>
-              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/settings/ChatSettingsPanel.tsx"]} />
+              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/settings/ChatSettingsPanelCore.tsx"]} />
             </Card>
 
             <Card className="p-4">
@@ -1958,7 +1955,7 @@ export function DesignSystemContent() {
                 <InlineToggle checked panel-lego="InlineToggle" />
                 <InlineToggle checked={false} panel-lego="InlineToggle" />
               </div>
-              <UsedInPages pages={["src/components/settings/ChatSettingsPanel.tsx"]} />
+              <UsedInPages pages={["src/components/settings/ChatSettingsPanelCore.tsx"]} />
             </Card>
 
             <Card className="p-4">
@@ -2132,7 +2129,7 @@ export function DesignSystemContent() {
         >
           <div className="grid grid-cols-1 gap-4">
             <Card className="p-4">
-              <div className="mb-2 text-sm font-semibold text-slate-900">ChatSettingsPanel 기반 Conversation UI 구현 샘플</div>
+              <div className="mb-2 text-sm font-semibold text-slate-900">ChatSettingsPanelCore 기반 Conversation UI 구현 샘플</div>
               <div className="grid grid-cols-1 gap-3">
                 {sortConversationEntries(conversationDemoEntries).map((entry) => (
                   <div
@@ -2149,7 +2146,7 @@ export function DesignSystemContent() {
             </Card>
 
             <Card className="p-4">
-              <div className="mb-2 text-sm font-semibold text-slate-900">ChatSettingsPanel Conversation Definition Coverage</div>
+              <div className="mb-2 text-sm font-semibold text-slate-900">ChatSettingsPanelCore Conversation Definition Coverage</div>
               <div className="mb-3 text-xs text-slate-500">
                 각 항목은 type / name / depends / role 키로 정리됩니다.
               </div>
@@ -2195,7 +2192,7 @@ export function DesignSystemContent() {
               </div>
               <UsedInPages
                 pages={[
-                  "src/components/settings/ChatSettingsPanel.tsx",
+                  "src/components/settings/ChatSettingsPanelCore.tsx",
                   "src/components/design-system/conversation/ConversationUI.parts.tsx",
                 ]}
               />
@@ -2323,7 +2320,7 @@ export function DesignSystemContent() {
             <div>
               {renderUiDefinitionMetaByName("StateBanner", highlightName, handleCopyLink, copiedName)}
               <StateBanner tone="success" title="저장 완료" description="대화 설정이 정상적으로 저장되었습니다." panel-lego="StateBanner" />
-              <UsedInPages pages={["src/components/settings/ChatSettingsPanel.tsx"]} />
+              <UsedInPages pages={["src/components/settings/ChatSettingsPanelCore.tsx"]} />
             </div>
             <div>
               {renderUiDefinitionMetaByName("StateBanner", highlightName, handleCopyLink, copiedName)}
@@ -2347,7 +2344,7 @@ export function DesignSystemContent() {
           <Card className="p-4">
             {renderUiDefinitionMetaByName("OverlayShell", highlightName, handleCopyLink, copiedName)}
             <OverlayShell panel-lego="OverlayShell" />
-            <UsedInPages pages={["src/components/design-system/shells.tsx", "src/components/MobileDrawer.tsx", "src/components/settings/ChatSettingsPanel.tsx", "src/app/app/page.tsx"]} />
+            <UsedInPages pages={["src/components/design-system/shells.tsx", "src/components/MobileDrawer.tsx", "src/components/settings/ChatSettingsPanelCore.tsx", "src/app/app/page.tsx"]} />
           </Card>
         </SectionBlock>
       ),
@@ -2397,7 +2394,7 @@ export function DesignSystemContent() {
               <UnderlineTabs tabs={stepTabItems} activeKey={stepTab} onSelect={setStepTab} panel-lego="UnderlineTabs" />
               <div className="mt-3 text-xs text-slate-500">Active: {stepTab}</div>
               <div className="mt-3 text-xs text-slate-500">실험실/설정 페이지에서 반복되는 세그먼트 선택 UI</div>
-              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/settings/ChatSettingsPanel.tsx"]} />
+              <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/settings/ChatSettingsPanelCore.tsx"]} />
             </Card>
 
             <Card className="p-4">

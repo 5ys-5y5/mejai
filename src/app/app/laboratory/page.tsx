@@ -1,17 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
-  ConversationModelChatColumnLego,
   ConversationModelSetupColumnLego,
   ConversationSessionHeader,
   ConversationWorkbenchTopBar,
   createConversationModelLegos,
+  WidgetConversationLayout,
+  type WidgetConversationTab,
 } from "@/components/design-system";
 import { useConversationPageController } from "@/lib/conversation/client/useConversationPageController";
 
 export default function LaboratoryPage() {
   const ctrl = useConversationPageController("/app/laboratory");
+  const [activeTabs, setActiveTabs] = useState<Record<string, WidgetConversationTab>>({});
   const createModelProps = (model: (typeof ctrl.models)[number], index: number) => ({
     index,
     modelCount: ctrl.models.length,
@@ -50,9 +53,6 @@ export default function LaboratoryPage() {
     onSearchSessionById: ctrl.handleSearchSessionById,
     onChangeConversationMode: ctrl.handleChangeConversationMode,
     onCopyConversation: ctrl.handleCopyTranscript,
-    onCopyIssue: ctrl.handleCopyIssueTranscript,
-    conversationDebugOptions: ctrl.conversationDebugOptions,
-    onUpdateConversationDebugOptions: ctrl.updateConversationDebugOptions,
     onToggleMessageSelection: ctrl.toggleMessageSelection,
     onSubmitMessage: ctrl.submitMessage,
     onExpand: ctrl.expandModelLayout,
@@ -67,6 +67,21 @@ export default function LaboratoryPage() {
     describeLlm: ctrl.describeLlm,
     describeRoute: ctrl.describeRoute,
   });
+
+  useEffect(() => {
+    setActiveTabs((prev) => {
+      const next = { ...prev };
+      ctrl.models.forEach((model) => {
+        if (!next[model.id]) next[model.id] = "chat";
+      });
+      Object.keys(next).forEach((id) => {
+        if (!ctrl.models.some((model) => model.id === id)) {
+          delete next[id];
+        }
+      });
+      return next;
+    });
+  }, [ctrl.models]);
 
   return (
     <div className="px-5 md:px-8 py-6">
@@ -102,6 +117,7 @@ export default function LaboratoryPage() {
           {!ctrl.loading && !ctrl.error
             ? ctrl.models.map((model, index) => {
               const assembled = createConversationModelLegos(createModelProps(model, index));
+              const activeTab = activeTabs[model.id] || "chat";
               return (
                 <div key={`model-${model.id}`} className="overflow-hidden rounded-xl border border-slate-200 bg-white">
                   <ConversationSessionHeader
@@ -119,7 +135,41 @@ export default function LaboratoryPage() {
                       <ConversationModelSetupColumnLego {...assembled.setupLegoProps} />
                     </div>
                     <div className="min-h-[380px] max-h-[550px] h-full overflow-hidden">
-                      <ConversationModelChatColumnLego {...assembled.chatLegoProps} />
+                      <WidgetConversationLayout
+                        brandName="Mejai"
+                        status=""
+                        iconUrl="/brand/logo.png"
+                        chatLegoProps={assembled.chatLegoProps}
+                        setupLegoProps={assembled.setupLegoProps}
+                        fill={false}
+                        className="h-full"
+                        activeTab={activeTab}
+                        onTabChange={(tab) => setActiveTabs((prev) => ({ ...prev, [model.id]: tab }))}
+                        showPolicyTab={ctrl.pageFeatures.widget.tabBar.policy}
+                        sessions={model.sessions}
+                        sessionsLoading={model.sessionsLoading}
+                        sessionsError={model.sessionsError || ""}
+                        selectedSessionId={model.selectedSessionId}
+                        onSelectSession={(sessionId) => {
+                          if (!sessionId) return;
+                          void ctrl.handleSelectSession(model.id, sessionId);
+                        }}
+                        historyMessages={model.historyMessages}
+                        historyLoading={model.sessionsLoading}
+                        onNewConversation={() => ctrl.resetModel(model.id)}
+                        showNewConversation={ctrl.pageFeatures.widget.header.newConversation}
+                        showClose={ctrl.pageFeatures.widget.header.close}
+                        showHeader={ctrl.pageFeatures.widget.header.enabled}
+                        showHeaderLogo={ctrl.pageFeatures.widget.header.logo}
+                        showHeaderStatus={ctrl.pageFeatures.widget.header.status}
+                        showHeaderAgentAction={ctrl.pageFeatures.widget.header.agentAction}
+                        showChatPanel={ctrl.pageFeatures.widget.chatPanel}
+                        showSetupPanel={ctrl.pageFeatures.widget.setupPanel}
+                        showHistoryPanel={ctrl.pageFeatures.widget.historyPanel}
+                        showTabBar={ctrl.pageFeatures.widget.tabBar.enabled}
+                        showChatTab={ctrl.pageFeatures.widget.tabBar.chat}
+                        showListTab={ctrl.pageFeatures.widget.tabBar.list}
+                      />
                     </div>
                   </div>
                 </div>

@@ -30,18 +30,34 @@ export function useConversationMcpCatalog(enabled: boolean, pageFeatures: Conver
   useEffect(() => {
     if (!enabled) return;
     let active = true;
+    const applyResult = (res: { providers?: McpProvider[] }) => {
+      if (!active) return;
+      const nextProviders = (res.providers || []).filter((provider) => isProviderEnabled(provider.key, pageFeatures));
+      const nextTools = nextProviders
+        .flatMap((provider) => (provider.actions || []).map((tool) => ({ ...tool, provider: provider.key })))
+        .filter((tool) => isToolEnabled(tool.id, pageFeatures));
+      setProviders(nextProviders);
+      setTools(nextTools);
+    };
     apiFetch<{ providers?: McpProvider[] }>("/api/mcp")
-      .then((res) => {
+      .then(applyResult)
+      .catch(async (err) => {
         if (!active) return;
-        const nextProviders = (res.providers || []).filter((provider) => isProviderEnabled(provider.key, pageFeatures));
-        const nextTools = nextProviders
-          .flatMap((provider) => (provider.actions || []).map((tool) => ({ ...tool, provider: provider.key })))
-          .filter((tool) => isToolEnabled(tool.id, pageFeatures));
-        setProviders(nextProviders);
-        setTools(nextTools);
-      })
-      .catch(() => {
-        if (!active) return;
+        if (err instanceof Error && err.message === "UNAUTHORIZED") {
+          try {
+            const res = await fetch("/api/mcp", { cache: "no-store" });
+            if (!res.ok) {
+              setProviders([]);
+              setTools([]);
+              return;
+            }
+            const payload = (await res.json()) as { providers?: McpProvider[] };
+            applyResult(payload);
+            return;
+          } catch {
+            // fall through to reset
+          }
+        }
         setProviders([]);
         setTools([]);
       });

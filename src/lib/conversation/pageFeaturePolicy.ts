@@ -58,9 +58,35 @@ type ConversationFeatureVisibility = {
   adminPanel: VisibilityFields<ConversationPageFeatures["adminPanel"]>;
   interaction: VisibilityFields<ConversationPageFeatures["interaction"]>;
   setup: VisibilityFields<ConversationPageFeatures["setup"]>;
+  widget: {
+    header: VisibilityFields<ConversationPageFeatures["widget"]["header"]>;
+    chatPanel: FeatureVisibilityMode;
+    setupPanel: FeatureVisibilityMode;
+    historyPanel: FeatureVisibilityMode;
+    tabBar: VisibilityFields<ConversationPageFeatures["widget"]["tabBar"]>;
+  };
 };
 
 export type ConversationPageFeatures = {
+  widget: {
+    header: {
+      enabled: boolean;
+      logo: boolean;
+      status: boolean;
+      agentAction: boolean;
+      newConversation: boolean;
+      close: boolean;
+    };
+    chatPanel: boolean;
+    setupPanel: boolean;
+    historyPanel: boolean;
+    tabBar: {
+      enabled: boolean;
+      chat: boolean;
+      list: boolean;
+      policy: boolean;
+    };
+  };
   mcp: {
     /** MCP provider 선택 UI 노출 여부 */
     providerSelector: boolean;
@@ -78,14 +104,10 @@ export type ConversationPageFeatures = {
     selectionToggle: boolean;
     /** "로그 ON/OFF" 토글 버튼 노출 및 동작 */
     logsToggle: boolean;
-    /** 메시지 선택 동작 허용 여부 */
-    messageSelection: boolean;
     /** 메시지 메타(role/id/session) 노출 여부 */
     messageMeta: boolean;
     /** "대화 복사" 버튼 노출/동작 */
     copyConversation: boolean;
-    /** "문제 로그 복사" 버튼 노출/동작 */
-    copyIssue: boolean;
   };
   interaction: {
     /** quick reply 선택 UI 활성화 */
@@ -241,6 +263,46 @@ const DEFAULT_THREE_PHASE_LABELS = {
   next: "그 다음으로 확인할 것",
 } as const;
 
+const DEFAULT_WIDGET_FEATURES: ConversationPageFeatures["widget"] = {
+  header: {
+    enabled: true,
+    logo: true,
+    status: true,
+    agentAction: false,
+    newConversation: true,
+    close: true,
+  },
+  chatPanel: true,
+  setupPanel: true,
+  historyPanel: true,
+  tabBar: {
+    enabled: true,
+    chat: true,
+    list: true,
+    policy: false,
+  },
+};
+
+const DEFAULT_WIDGET_VISIBILITY: ConversationFeatureVisibility["widget"] = {
+  header: {
+    enabled: "user",
+    logo: "user",
+    status: "admin",
+    agentAction: "user",
+    newConversation: "user",
+    close: "user",
+  },
+  chatPanel: "user",
+  setupPanel: "user",
+  historyPanel: "user",
+  tabBar: {
+    enabled: "user",
+    chat: "user",
+    list: "user",
+    policy: "admin",
+  },
+};
+
 function normalizeSetupOrder(order?: SetupFieldKey[]) {
   const seen = new Set<SetupFieldKey>();
   const normalized: SetupFieldKey[] = [];
@@ -341,6 +403,25 @@ export function mergeConversationPageFeatures(
 ): ConversationPageFeatures {
   if (!override) return base;
   return {
+    widget: {
+      header: {
+        enabled: override.widget?.header?.enabled ?? base.widget.header.enabled,
+        logo: override.widget?.header?.logo ?? base.widget.header.logo,
+        status: override.widget?.header?.status ?? base.widget.header.status,
+        agentAction: override.widget?.header?.agentAction ?? base.widget.header.agentAction,
+        newConversation: override.widget?.header?.newConversation ?? base.widget.header.newConversation,
+        close: override.widget?.header?.close ?? base.widget.header.close,
+      },
+      chatPanel: override.widget?.chatPanel ?? base.widget.chatPanel,
+      setupPanel: override.widget?.setupPanel ?? base.widget.setupPanel,
+      historyPanel: override.widget?.historyPanel ?? base.widget.historyPanel,
+      tabBar: {
+        enabled: override.widget?.tabBar?.enabled ?? base.widget.tabBar.enabled,
+        chat: override.widget?.tabBar?.chat ?? base.widget.tabBar.chat,
+        list: override.widget?.tabBar?.list ?? base.widget.tabBar.list,
+        policy: override.widget?.tabBar?.policy ?? base.widget.tabBar.policy,
+      },
+    },
     mcp: {
       providerSelector: override.mcp?.providerSelector ?? base.mcp.providerSelector,
       actionSelector: override.mcp?.actionSelector ?? base.mcp.actionSelector,
@@ -351,10 +432,8 @@ export function mergeConversationPageFeatures(
       enabled: override.adminPanel?.enabled ?? base.adminPanel.enabled,
       selectionToggle: override.adminPanel?.selectionToggle ?? base.adminPanel.selectionToggle,
       logsToggle: override.adminPanel?.logsToggle ?? base.adminPanel.logsToggle,
-      messageSelection: override.adminPanel?.messageSelection ?? base.adminPanel.messageSelection,
       messageMeta: override.adminPanel?.messageMeta ?? base.adminPanel.messageMeta,
       copyConversation: override.adminPanel?.copyConversation ?? base.adminPanel.copyConversation,
-      copyIssue: override.adminPanel?.copyIssue ?? base.adminPanel.copyIssue,
     },
     interaction: {
       quickReplies: override.interaction?.quickReplies ?? base.interaction.quickReplies,
@@ -398,6 +477,26 @@ export function mergeConversationPageFeatures(
       defaultLlm: override.setup?.defaultLlm ?? base.setup.defaultLlm,
     },
     visibility: {
+      widget: {
+        header: {
+          enabled: override.visibility?.widget?.header?.enabled ?? base.visibility.widget.header.enabled,
+          logo: override.visibility?.widget?.header?.logo ?? base.visibility.widget.header.logo,
+          status: override.visibility?.widget?.header?.status ?? base.visibility.widget.header.status,
+          agentAction: override.visibility?.widget?.header?.agentAction ?? base.visibility.widget.header.agentAction,
+          newConversation:
+            override.visibility?.widget?.header?.newConversation ?? base.visibility.widget.header.newConversation,
+          close: override.visibility?.widget?.header?.close ?? base.visibility.widget.header.close,
+        },
+        chatPanel: override.visibility?.widget?.chatPanel ?? base.visibility.widget.chatPanel,
+        setupPanel: override.visibility?.widget?.setupPanel ?? base.visibility.widget.setupPanel,
+        historyPanel: override.visibility?.widget?.historyPanel ?? base.visibility.widget.historyPanel,
+        tabBar: {
+          enabled: override.visibility?.widget?.tabBar?.enabled ?? base.visibility.widget.tabBar.enabled,
+          chat: override.visibility?.widget?.tabBar?.chat ?? base.visibility.widget.tabBar.chat,
+          list: override.visibility?.widget?.tabBar?.list ?? base.visibility.widget.tabBar.list,
+          policy: override.visibility?.widget?.tabBar?.policy ?? base.visibility.widget.tabBar.policy,
+        },
+      },
       mcp: {
         providerSelector: override.visibility?.mcp?.providerSelector ?? base.visibility.mcp.providerSelector,
         actionSelector: override.visibility?.mcp?.actionSelector ?? base.visibility.mcp.actionSelector,
@@ -406,11 +505,9 @@ export function mergeConversationPageFeatures(
         enabled: override.visibility?.adminPanel?.enabled ?? base.visibility.adminPanel.enabled,
         selectionToggle: override.visibility?.adminPanel?.selectionToggle ?? base.visibility.adminPanel.selectionToggle,
         logsToggle: override.visibility?.adminPanel?.logsToggle ?? base.visibility.adminPanel.logsToggle,
-        messageSelection: override.visibility?.adminPanel?.messageSelection ?? base.visibility.adminPanel.messageSelection,
         messageMeta: override.visibility?.adminPanel?.messageMeta ?? base.visibility.adminPanel.messageMeta,
         copyConversation:
           override.visibility?.adminPanel?.copyConversation ?? base.visibility.adminPanel.copyConversation,
-        copyIssue: override.visibility?.adminPanel?.copyIssue ?? base.visibility.adminPanel.copyIssue,
       },
       interaction: {
         quickReplies: override.visibility?.interaction?.quickReplies ?? base.visibility.interaction.quickReplies,
@@ -495,6 +592,52 @@ export function applyConversationFeatureVisibility(
 ): ConversationPageFeatures {
   return {
     ...features,
+    widget: {
+      ...features.widget,
+      header: {
+        ...features.widget.header,
+        enabled: withVisibilityFlag(
+          features.widget.header.enabled,
+          features.visibility.widget.header.enabled,
+          isAdminUser
+        ),
+        logo: withVisibilityFlag(features.widget.header.logo, features.visibility.widget.header.logo, isAdminUser),
+        status: withVisibilityFlag(features.widget.header.status, features.visibility.widget.header.status, isAdminUser),
+        agentAction: withVisibilityFlag(
+          features.widget.header.agentAction,
+          features.visibility.widget.header.agentAction,
+          isAdminUser
+        ),
+        newConversation: withVisibilityFlag(
+          features.widget.header.newConversation,
+          features.visibility.widget.header.newConversation,
+          isAdminUser
+        ),
+        close: withVisibilityFlag(
+          features.widget.header.close,
+          features.visibility.widget.header.close,
+          isAdminUser
+        ),
+      },
+      chatPanel: withVisibilityFlag(features.widget.chatPanel, features.visibility.widget.chatPanel, isAdminUser),
+      setupPanel: withVisibilityFlag(features.widget.setupPanel, features.visibility.widget.setupPanel, isAdminUser),
+      historyPanel: withVisibilityFlag(
+        features.widget.historyPanel,
+        features.visibility.widget.historyPanel,
+        isAdminUser
+      ),
+      tabBar: {
+        ...features.widget.tabBar,
+        enabled: withVisibilityFlag(
+          features.widget.tabBar.enabled,
+          features.visibility.widget.tabBar.enabled,
+          isAdminUser
+        ),
+        chat: withVisibilityFlag(features.widget.tabBar.chat, features.visibility.widget.tabBar.chat, isAdminUser),
+        list: withVisibilityFlag(features.widget.tabBar.list, features.visibility.widget.tabBar.list, isAdminUser),
+        policy: withVisibilityFlag(features.widget.tabBar.policy, features.visibility.widget.tabBar.policy, isAdminUser),
+      },
+    },
     mcp: {
       ...features.mcp,
       providerSelector: withVisibilityFlag(
@@ -512,10 +655,9 @@ export function applyConversationFeatureVisibility(
         features.visibility.adminPanel.selectionToggle,
         isAdminUser
       ),
-      logsToggle: withVisibilityFlag(features.adminPanel.logsToggle, features.visibility.adminPanel.logsToggle, isAdminUser),
-      messageSelection: withVisibilityFlag(
-        features.adminPanel.messageSelection,
-        features.visibility.adminPanel.messageSelection,
+      logsToggle: withVisibilityFlag(
+        features.adminPanel.logsToggle,
+        features.visibility.adminPanel.logsToggle,
         isAdminUser
       ),
       messageMeta: withVisibilityFlag(features.adminPanel.messageMeta, features.visibility.adminPanel.messageMeta, isAdminUser),
@@ -524,7 +666,6 @@ export function applyConversationFeatureVisibility(
         features.visibility.adminPanel.copyConversation,
         isAdminUser
       ),
-      copyIssue: withVisibilityFlag(features.adminPanel.copyIssue, features.visibility.adminPanel.copyIssue, isAdminUser),
     },
     interaction: {
       ...features.interaction,
@@ -619,12 +760,22 @@ export function applyConversationFeatureVisibility(
  * 2) 특정 tool만 허용하고 싶으면:
  *    mcp.tools.allowlist 에 tool id만 나열
  * 3) 관리자 복사 기능만 끄고 싶으면:
- *    adminPanel.copyConversation / copyIssue = false
  * 4) 선택형 응답(quickReplies/cards)만 끄고 싶으면:
  *    interaction.quickReplies / productCards = false
  */
 export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures> = {
   "/": {
+    widget: {
+      ...DEFAULT_WIDGET_FEATURES,
+      header: {
+        ...DEFAULT_WIDGET_FEATURES.header,
+        close: false,
+      },
+      tabBar: {
+        ...DEFAULT_WIDGET_FEATURES.tabBar,
+        policy: false,
+      },
+    },
     mcp: {
       providerSelector: true,
       actionSelector: true,
@@ -638,10 +789,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       enabled: true,
       selectionToggle: true,
       logsToggle: true,
-      messageSelection: true,
       messageMeta: true,
       copyConversation: true,
-      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -679,6 +828,17 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultLlm: "chatgpt",
     },
     visibility: {
+      widget: {
+        ...DEFAULT_WIDGET_VISIBILITY,
+        header: {
+          ...DEFAULT_WIDGET_VISIBILITY.header,
+          close: "user",
+        },
+        tabBar: {
+          ...DEFAULT_WIDGET_VISIBILITY.tabBar,
+          policy: "admin",
+        },
+      },
       mcp: {
         providerSelector: "user",
         actionSelector: "user",
@@ -687,10 +847,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         enabled: "user",
         selectionToggle: "user",
         logsToggle: "user",
-        messageSelection: "user",
         messageMeta: "user",
         copyConversation: "user",
-        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",
@@ -721,6 +879,17 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
   },
   "/app/laboratory": {
+    widget: {
+      ...DEFAULT_WIDGET_FEATURES,
+      header: {
+        ...DEFAULT_WIDGET_FEATURES.header,
+        close: false,
+      },
+      tabBar: {
+        ...DEFAULT_WIDGET_FEATURES.tabBar,
+        policy: false,
+      },
+    },
     mcp: {
       providerSelector: true,
       actionSelector: true,
@@ -732,10 +901,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       enabled: true,
       selectionToggle: true,
       logsToggle: true,
-      messageSelection: true,
       messageMeta: true,
       copyConversation: true,
-      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -773,6 +940,17 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultLlm: "chatgpt",
     },
     visibility: {
+      widget: {
+        ...DEFAULT_WIDGET_VISIBILITY,
+        header: {
+          ...DEFAULT_WIDGET_VISIBILITY.header,
+          close: "user",
+        },
+        tabBar: {
+          ...DEFAULT_WIDGET_VISIBILITY.tabBar,
+          policy: "admin",
+        },
+      },
       mcp: {
         providerSelector: "user",
         actionSelector: "user",
@@ -781,10 +959,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         enabled: "admin",
         selectionToggle: "admin",
         logsToggle: "admin",
-        messageSelection: "admin",
         messageMeta: "admin",
         copyConversation: "admin",
-        copyIssue: "admin",
       },
       interaction: {
         quickReplies: "user",
@@ -815,6 +991,17 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
   },
   [WIDGET_PAGE_KEY]: {
+    widget: {
+      ...DEFAULT_WIDGET_FEATURES,
+      header: {
+        ...DEFAULT_WIDGET_FEATURES.header,
+        close: true,
+      },
+      tabBar: {
+        ...DEFAULT_WIDGET_FEATURES.tabBar,
+        policy: false,
+      },
+    },
     mcp: {
       providerSelector: true,
       actionSelector: true,
@@ -827,10 +1014,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       enabled: true,
       selectionToggle: true,
       logsToggle: true,
-      messageSelection: true,
       messageMeta: true,
       copyConversation: true,
-      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -868,6 +1053,17 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultLlm: "chatgpt",
     },
     visibility: {
+      widget: {
+        ...DEFAULT_WIDGET_VISIBILITY,
+        header: {
+          ...DEFAULT_WIDGET_VISIBILITY.header,
+          close: "user",
+        },
+        tabBar: {
+          ...DEFAULT_WIDGET_VISIBILITY.tabBar,
+          policy: "admin",
+        },
+      },
       mcp: {
         providerSelector: "user",
         actionSelector: "user",
@@ -876,10 +1072,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         enabled: "user",
         selectionToggle: "user",
         logsToggle: "user",
-        messageSelection: "user",
         messageMeta: "user",
         copyConversation: "user",
-        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",
@@ -910,6 +1104,17 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
   },
   "/demo": {
+    widget: {
+      ...DEFAULT_WIDGET_FEATURES,
+      header: {
+        ...DEFAULT_WIDGET_FEATURES.header,
+        close: true,
+      },
+      tabBar: {
+        ...DEFAULT_WIDGET_FEATURES.tabBar,
+        policy: false,
+      },
+    },
     mcp: {
       providerSelector: true,
       actionSelector: true,
@@ -922,10 +1127,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       enabled: true,
       selectionToggle: true,
       logsToggle: true,
-      messageSelection: true,
       messageMeta: true,
       copyConversation: true,
-      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -963,6 +1166,17 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultLlm: "chatgpt",
     },
     visibility: {
+      widget: {
+        ...DEFAULT_WIDGET_VISIBILITY,
+        header: {
+          ...DEFAULT_WIDGET_VISIBILITY.header,
+          close: "user",
+        },
+        tabBar: {
+          ...DEFAULT_WIDGET_VISIBILITY.tabBar,
+          policy: "admin",
+        },
+      },
       mcp: {
         providerSelector: "user",
         actionSelector: "user",
@@ -971,10 +1185,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         enabled: "user",
         selectionToggle: "user",
         logsToggle: "user",
-        messageSelection: "user",
         messageMeta: "user",
         copyConversation: "user",
-        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",
@@ -1005,6 +1217,17 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
   },
   "/call": {
+    widget: {
+      ...DEFAULT_WIDGET_FEATURES,
+      header: {
+        ...DEFAULT_WIDGET_FEATURES.header,
+        close: true,
+      },
+      tabBar: {
+        ...DEFAULT_WIDGET_FEATURES.tabBar,
+        policy: false,
+      },
+    },
     mcp: {
       providerSelector: true,
       actionSelector: true,
@@ -1017,10 +1240,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       enabled: true,
       selectionToggle: true,
       logsToggle: true,
-      messageSelection: true,
       messageMeta: true,
       copyConversation: true,
-      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -1058,6 +1279,17 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultLlm: "chatgpt",
     },
     visibility: {
+      widget: {
+        ...DEFAULT_WIDGET_VISIBILITY,
+        header: {
+          ...DEFAULT_WIDGET_VISIBILITY.header,
+          close: "user",
+        },
+        tabBar: {
+          ...DEFAULT_WIDGET_VISIBILITY.tabBar,
+          policy: "admin",
+        },
+      },
       mcp: {
         providerSelector: "user",
         actionSelector: "user",
@@ -1066,10 +1298,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         enabled: "user",
         selectionToggle: "user",
         logsToggle: "user",
-        messageSelection: "user",
         messageMeta: "user",
         copyConversation: "user",
-        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",

@@ -24,7 +24,7 @@ type KbItem = {
   is_active: boolean | null;
   created_at?: string | null;
   is_admin?: boolean | string | null;
-  is_sample?: boolean | null;
+  is_public?: boolean | null;
 };
 
 type KbParentGroup = {
@@ -38,16 +38,16 @@ const llmOptions = [
   {
     id: "chatgpt",
     title: "chatGPT",
-    description: "대화형 작업에 최적화된 기본 모델",
+    description: "?�?�형 ?�업??최적?�된 기본 모델",
   },
   {
     id: "gemini",
     title: "GEMINI",
-    description: "빠른 요약과 멀티모달 확장에 강점",
+    description: "빠른 ?�약�?멀?�모???�장??강점",
   },
 ];
 
-const stepLabels = ["LLM 선택", "MCP 연결", "KB 선택", "에이전트 정보"];
+const stepLabels = ["LLM ?�택", "MCP ?�결", "KB ?�택", "?�이?�트 ?�보"];
 
 function parseVersionParts(value?: string | null) {
   if (!value) return null;
@@ -118,7 +118,7 @@ export default function NewAgentPage() {
     });
     return Array.from(byParent.entries()).map(([parentId, versions]) => {
       const sorted = [...versions].sort(compareVersions);
-      const title = sorted[0]?.title || "제목 없음";
+      const title = sorted[0]?.title || "?�목 ?�음";
       const isAdmin = sorted.some((item) => isAdminKbValue(item.is_admin));
       return { parentId, title, versions: sorted, isAdmin } satisfies KbParentGroup;
     });
@@ -168,7 +168,7 @@ export default function NewAgentPage() {
         setKbItems(kbRes?.items || []);
       } catch {
         if (!mounted) return;
-        toast.error("에이전트 설정 데이터를 불러오지 못했습니다.");
+        toast.error("?�이?�트 ?�정 ?�이?��? 불러?��? 못했?�니??");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -205,7 +205,7 @@ export default function NewAgentPage() {
 
   const handleNext = () => {
     if (!canNext) {
-      toast.error("필수 항목을 완료해 주세요.");
+      toast.error("?�수 ??��???�료??주세??");
       return;
     }
     setStep((prev) => Math.min(prev + 1, stepLabels.length - 1));
@@ -239,7 +239,7 @@ export default function NewAgentPage() {
 
   const handleCreate = async () => {
     if (!canSubmit) {
-      toast.error("필수 항목을 입력해 주세요.");
+      toast.error("?�수 ??��???�력??주세??");
       return;
     }
     try {
@@ -258,11 +258,11 @@ export default function NewAgentPage() {
         },
         body: JSON.stringify(payload),
       });
-      toast.success("에이전트가 등록되었습니다.");
+      toast.success("?�이?�트가 ?�록?�었?�니??");
       router.push("/app/agents");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "에이전트 생성에 실패했습니다.";
-      toast.error(message || "에이전트 생성에 실패했습니다.");
+      const message = err instanceof Error ? err.message : "?�이?�트 ?�성???�패?�습?�다.";
+      toast.error(message || "?�이?�트 ?�성???�패?�습?�다.");
     }
   };
 
@@ -270,7 +270,7 @@ export default function NewAgentPage() {
     <div className="px-5 md:px-8 py-8">
       <div className="mx-auto w-full max-w-3xl">
         <div className="text-center">
-          <div className="text-xl font-semibold text-slate-900">새 에이전트</div>
+          <div className="text-xl font-semibold text-slate-900">???�이?�트</div>
           <div className="mt-1 text-sm text-slate-500">{stepLabels[step]}</div>
         </div>
 
@@ -303,13 +303,13 @@ export default function NewAgentPage() {
         {step === 1 ? (
           <div className="mt-8 space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-              MCP 연결은 유료 플랜에서만 사용할 수 있습니다.
-              {isPaid ? " 연결할 공급자를 선택하세요." : " 현재 플랜에서는 비활성화됩니다."}
+              MCP ?�결?� ?�료 ?�랜?�서�??�용?????�습?�다.
+              {isPaid ? " ?�결??공급?��? ?�택?�세??" : " ?�재 ?�랜?�서??비활?�화?�니??"}
             </div>
             {loading ? (
-              <div className="text-sm text-slate-500">MCP 공급자를 불러오는 중...</div>
+              <div className="text-sm text-slate-500">MCP 공급?��? 불러?�는 �?..</div>
             ) : mcpProviderOptions.length === 0 ? (
-              <div className="text-sm text-slate-500">연결 가능한 MCP 공급자가 없습니다.</div>
+              <div className="text-sm text-slate-500">?�결 가?�한 MCP 공급?��? ?�습?�다.</div>
             ) : (
               <div className="grid gap-3">
                 <button
@@ -323,8 +323,8 @@ export default function NewAgentPage() {
                   )}
                 >
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">선택 안 함</div>
-                    <div className="mt-1 text-xs text-slate-500">MCP 연결 없이 진행합니다.</div>
+                    <div className="text-sm font-semibold text-slate-900">?�택 ????/div>
+                    <div className="mt-1 text-xs text-slate-500">MCP ?�결 ?�이 진행?�니??</div>
                   </div>
                   <span
                     className={cn(
@@ -332,7 +332,7 @@ export default function NewAgentPage() {
                       selectedMcpProviders.length === 0 ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"
                     )}
                   >
-                    {selectedMcpProviders.length === 0 ? "선택됨" : "미선택"}
+                    {selectedMcpProviders.length === 0 ? "?�택?? : "미선??}
                   </span>
                 </button>
                 {mcpProviderOptions.map((provider) => {
@@ -351,7 +351,7 @@ export default function NewAgentPage() {
                     >
                       <div>
                         <div className="text-sm font-semibold text-slate-900">{provider.key}</div>
-                        <div className="mt-1 text-xs text-slate-500">활성 MCP {provider.count}개</div>
+                        <div className="mt-1 text-xs text-slate-500">?�성 MCP {provider.count}�?/div>
                       </div>
                       <span
                         className={cn(
@@ -359,7 +359,7 @@ export default function NewAgentPage() {
                           selected ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-500"
                         )}
                       >
-                        {selected ? "선택됨" : "미선택"}
+                        {selected ? "?�택?? : "미선??}
                       </span>
                     </button>
                   );
@@ -373,14 +373,14 @@ export default function NewAgentPage() {
           <div className="mt-8 space-y-5">
             {isAdminUser ? (
               <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
-                admin KB는 <span className="font-semibold text-slate-900">ADMIN</span> 배지로 표시됩니다.
+                admin KB??<span className="font-semibold text-slate-900">ADMIN</span> 배�?�??�시?�니??
               </div>
             ) : null}
-            <div className="text-sm font-semibold text-slate-900">KB 부모 선택</div>
+            <div className="text-sm font-semibold text-slate-900">KB 부�??�택</div>
             {loading ? (
-              <div className="text-sm text-slate-500">KB 목록을 불러오는 중...</div>
+              <div className="text-sm text-slate-500">KB 목록??불러?�는 �?..</div>
             ) : kbParents.length === 0 ? (
-              <div className="text-sm text-slate-500">선택 가능한 KB가 없습니다.</div>
+              <div className="text-sm text-slate-500">?�택 가?�한 KB가 ?�습?�다.</div>
             ) : (
               <div className="grid gap-3">
                 {kbParents.map((group) => (
@@ -403,7 +403,7 @@ export default function NewAgentPage() {
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-1 text-xs text-slate-500">버전 {group.versions.length}개</div>
+                    <div className="mt-1 text-xs text-slate-500">버전 {group.versions.length}�?/div>
                   </button>
                 ))}
               </div>
@@ -411,7 +411,7 @@ export default function NewAgentPage() {
 
             {selectedGroup ? (
               <div className="space-y-3">
-                <div className="text-sm font-semibold text-slate-900">KB 버전 선택</div>
+                <div className="text-sm font-semibold text-slate-900">KB 버전 ?�택</div>
                 <div className="grid gap-3">
                   {selectedGroup.versions.map((version) => {
                     const selected = selectedKbId === version.id;
@@ -427,7 +427,7 @@ export default function NewAgentPage() {
                       >
                         <div>
                           <div className="flex items-center gap-2">
-                            <div className="text-sm font-semibold text-slate-900">{version.version || "버전 없음"}</div>
+                            <div className="text-sm font-semibold text-slate-900">{version.version || "버전 ?�음"}</div>
                             {isAdminKbValue(version.is_admin) ? (
                               <span className="inline-flex h-5 items-center rounded-full bg-amber-100 px-2 text-[10px] font-semibold text-amber-700">
                                 ADMIN
@@ -444,7 +444,7 @@ export default function NewAgentPage() {
                             version.is_active ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"
                           )}
                         >
-                          {version.is_active ? "배포" : "비활성"}
+                          {version.is_active ? "배포" : "비활??}
                         </span>
                       </button>
                     );
@@ -458,25 +458,25 @@ export default function NewAgentPage() {
         {step === 3 ? (
           <div className="mt-8 space-y-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-900">에이전트 이름 *</label>
+              <label className="text-sm font-medium text-slate-900">?�이?�트 ?�름 *</label>
               <input
                 value={agentName}
                 onChange={(e) => setAgentName(e.target.value)}
-                placeholder="에이전트 이름을 입력하세요"
+                placeholder="?�이?�트 ?�름???�력?�세??
                 className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
               />
               <div className="text-xs text-slate-400">{agentName.length}/50</div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-900">웹사이트 (선택)</label>
+              <label className="text-sm font-medium text-slate-900">?�사?�트 (?�택)</label>
               <input
                 value={website}
                 onChange={(e) => setWebsite(e.target.value)}
                 placeholder="https://yourwebsite.com"
                 className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
               />
-              <div className="text-xs text-slate-400">공개된 정보만 참고하여 에이전트를 개인화합니다.</div>
+              <div className="text-xs text-slate-400">공개???�보�?참고?�여 ?�이?�트�?개인?�합?�다.</div>
             </div>
 
             <div className="space-y-2">
@@ -484,7 +484,7 @@ export default function NewAgentPage() {
               <textarea
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
-                placeholder="에이전트가 달성해야 하는 목표를 적어주세요."
+                placeholder="?�이?�트가 ?�성?�야 ?�는 목표�??�어주세??"
                 className="min-h-[120px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
               />
             </div>
@@ -503,7 +503,7 @@ export default function NewAgentPage() {
                 : "border-slate-200 bg-white hover:bg-slate-50 text-slate-700"
             )}
           >
-            이전
+            ?�전
           </button>
 
           {step < stepLabels.length - 1 ? (
@@ -516,7 +516,7 @@ export default function NewAgentPage() {
                 canNext ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-400"
               )}
             >
-              다음
+              ?�음
             </button>
           ) : (
             <button
@@ -528,7 +528,7 @@ export default function NewAgentPage() {
                 canSubmit ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-400"
               )}
             >
-              에이전트 생성
+              ?�이?�트 ?�성
             </button>
           )}
         </div>
