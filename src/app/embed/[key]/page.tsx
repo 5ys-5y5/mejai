@@ -21,7 +21,7 @@ import {
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
 import { useConversationAdminProfile } from "@/lib/conversation/client/useConversationAdminProfile";
-import { useConversationAdminVisibility } from "@/lib/conversation/client/useConversationAdminVisibility";
+import { useConversationAccessRole } from "@/lib/conversation/client/useConversationAccessRole";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 import {
   fetchConversationDebugOptions,
@@ -320,7 +320,7 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
 
   const { isAdminUser, userId: adminUserId } = useConversationAdminProfile();
-  const adminVisibility = useConversationAdminVisibility({ sessionId, widgetToken });
+  const accessRoleState = useConversationAccessRole({ sessionId, widgetToken });
   const fallbackReferrer = useMemo(
     () => (typeof document !== "undefined" ? document.referrer : ""),
     []
@@ -362,10 +362,10 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
     () => resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerPolicy),
     [providerPolicy]
   );
-  const adminVisible = adminVisibility.isAdminVisible;
+  const accessRole = debugBypass ? "admin" : accessRoleState.accessRole;
   const pageFeatures = useMemo(
-    () => applyConversationFeatureVisibility(baseFeatures, adminVisible || debugBypass),
-    [baseFeatures, debugBypass, adminVisible]
+    () => applyConversationFeatureVisibility(baseFeatures, accessRole),
+    [baseFeatures, accessRole]
   );
   const setupUi = useMemo(() => resolveConversationSetupUi(WIDGET_PAGE_KEY, providerPolicy), [providerPolicy]);
   const debugOptions = useMemo(
@@ -399,7 +399,7 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
     theme.launcher_icon_url || theme.launcherIconUrl || theme.icon_url || theme.iconUrl || ""
   );
   const headerIcon = launcherIconUrl || "/brand/logo.png";
-  const isAdminOrDebug = adminVisible || debugBypass;
+  const isAdminOrDebug = accessRole === "admin";
   const statusLabel = status;
   const showPolicyTab = pageFeatures.widget.tabBar.policy;
   const policyFeatures = pageFeatures;

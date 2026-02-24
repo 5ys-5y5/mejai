@@ -50,6 +50,7 @@ export function isRestockInquiry(text: string) {
 
 export function detectIntent(text: string) {
   const action = parseActionToken(text);
+  if (INTENT_KEYWORDS.adminLogin.test(text)) return "admin_login";
   if (action === "restock_subscribe") return "restock_subscribe";
   if (isRestockSubscribe(text)) return "restock_subscribe";
   if (isRestockInquiry(text)) return "restock_inquiry";
@@ -62,6 +63,7 @@ export function detectIntent(text: string) {
 export function detectIntentCandidates(text: string) {
   const out: string[] = [];
   const action = parseActionToken(text);
+  if (INTENT_KEYWORDS.adminLogin.test(text)) out.push("admin_login");
   if (action === "restock_subscribe") out.push("restock_subscribe");
   if (isRestockSubscribe(text)) out.push("restock_subscribe");
   if (isRestockInquiry(text)) out.push("restock_inquiry");
@@ -75,6 +77,8 @@ export function detectIntentCandidates(text: string) {
 
 export function intentLabel(intent: string) {
   switch (intent) {
+    case "admin_login":
+      return "관리자 로그인";
     case "restock_inquiry":
       return "재입고 문의";
     case "restock_subscribe":
@@ -94,6 +98,8 @@ export function intentLabel(intent: string) {
 
 export function intentSupportScope(intent: string) {
   switch (intent) {
+    case "admin_login":
+      return "관리자 로그인 및 인증";
     case "restock_inquiry":
       return "재입고 일정 확인";
     case "restock_subscribe":
@@ -245,4 +251,3 @@ export function toLeadDayQuickReplies(days: number[], max = 7) {
   ).slice(0, Math.max(1, max));
   return normalized.map((n) => ({ label: `D-${n}`, value: String(n) }));
 }
-

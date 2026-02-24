@@ -68,6 +68,11 @@ const INTENT_CONTRACTS: IntentContract[] = [
     completionCues: ["\uC7AC\uC785\uACE0 \uC54C\uB9BC \uC2E0\uCCAD\uC774 \uC644\uB8CC", "\uC694\uC57D:"],
   },
   {
+    intent: "admin_login",
+    reuseSlots: ["phone"],
+    completionCues: ["\uC778\uC99D \uC644\uB8CC", "\uB85C\uADF8\uC778 \uC644\uB8CC"],
+  },
+  {
     intent: "faq",
     reuseSlots: [],
   },

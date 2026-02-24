@@ -11,6 +11,7 @@ import {
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
 import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
+import { resolveAccessRoleForSession } from "@/lib/conversation/accessRole";
 
 function getWidgetRuntimeSecret() {
   return String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
@@ -75,9 +76,15 @@ async function handleStream(
   } catch {
     providerValue = null;
   }
+  const accessRole = await resolveAccessRoleForSession({
+    supabase: supabaseAdmin,
+    orgId: String(widget.org_id || ""),
+    sessionId,
+    adminUserId: String(payload.admin_user_id || "").trim(),
+  });
   const featureFlags = applyConversationFeatureVisibility(
     resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
-    false
+    accessRole
   );
   const requestToolIds: unknown[] = Array.isArray(extras?.mcp_tool_ids) ? extras!.mcp_tool_ids! : [];
   const requestProviderKeys: unknown[] = Array.isArray(extras?.mcp_provider_keys)

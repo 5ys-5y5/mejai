@@ -1,4 +1,5 @@
 export const INTENT_KEYWORDS = {
+  adminLogin: /(\uad00\ub9ac\uc790\s*\ub85c\uadf8\uc778|\uad00\ub9ac\uc790\s*\ubaa8\ub4dc|\uad00\ub9ac\uc790\s*\uc778\uc99d|admin\s*login|admin\s*mode|admin\s*signin|admin\s*sign\s*in)/i,
   restock: /(\uc7ac\uc785\uace0|\uc7ac\uace0|\uc785\uace0|\ud488\uc808|restock|stock)/i,
   restockSubscribe: /(\uc54c\ub9bc|\uc2e0\uccad|\uad6c\ub3c5|\uc608\uc57d|notify|subscribe|sms|\ubb38\uc790|\uce74\ud1a1|\uce74\uce74\uc624|email|\uc774\uba54\uc77c)/i,
   orderChange:

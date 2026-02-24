@@ -13,6 +13,7 @@ import {
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
 import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
+import { resolveAccessRoleForSession } from "@/lib/conversation/accessRole";
 
 function encodeHeaderValue(input: string) {
   const value = String(input || "").trim();
@@ -151,9 +152,15 @@ export async function POST(req: NextRequest) {
   } catch {
     providerValue = null;
   }
+  const accessRole = await resolveAccessRoleForSession({
+    supabase: supabaseAdmin,
+    orgId: String(widget.org_id || ""),
+    sessionId,
+    adminUserId,
+  });
   const featureFlags = applyConversationFeatureVisibility(
     resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
-    false
+    accessRole
   );
   const requestToolIds: unknown[] = Array.isArray(mcpToolIds) ? mcpToolIds : [];
   const requestProviderKeys: unknown[] = Array.isArray(mcpProviderKeys) ? mcpProviderKeys : [];

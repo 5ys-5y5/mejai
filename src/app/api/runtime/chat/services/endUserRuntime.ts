@@ -416,29 +416,68 @@ async function resolveVerifiedPhoneByToken(input: {
   return normalizePhone(destination || null);
 }
 
+async function linkAccessMapByPhone(input: {
+  context: EndUserSyncContext;
+  orgId: string;
+  endUserId: string;
+  verifiedPhone: string | null;
+}) : Promise<boolean> {
+  const { context, orgId, endUserId, verifiedPhone } = input;
+  if (!verifiedPhone) return false;
+  const { data: accessRow } = await context.supabase
+    .from("A_iam_user_access_maps")
+    .select("id, end_user_id, verified_phone")
+    .eq("org_id", orgId)
+    .eq("verified_phone", verifiedPhone)
+    .maybeSingle();
+  if (!accessRow?.id) return false;
+  const updates: Record<string, any> = {};
+  const currentEndUserId = readString((accessRow as Record<string, any>).end_user_id);
+  if (!currentEndUserId || currentEndUserId !== endUserId) {
+    updates.end_user_id = endUserId;
+  }
+  if (Object.keys(updates).length === 0) return false;
+  await context.supabase.from("A_iam_user_access_maps").update(updates).eq("id", accessRow.id);
+  return true;
+}
+
 async function linkAdminUserToEndUser(input: {
   context: EndUserSyncContext;
   orgId: string;
   adminUserId: string | null;
   endUserId: string;
   adminEmail?: string | null;
-}) {
-  const { context, orgId, adminUserId, endUserId, adminEmail } = input;
-  if (!adminUserId || !endUserId) return;
+  verifiedPhone?: string | null;
+}) : Promise<{ linkedEndUser: boolean; verifiedPhoneUpdated: boolean }> {
+  const { context, orgId, adminUserId, endUserId, adminEmail, verifiedPhone } = input;
+  const result = { linkedEndUser: false, verifiedPhoneUpdated: false };
+  if (!adminUserId || !endUserId) return result;
   const { data: accessRow } = await context.supabase
     .from("A_iam_user_access_maps")
-    .select("is_admin, end_user_id")
+    .select("is_admin, end_user_id, verified_phone")
     .eq("org_id", orgId)
     .eq("user_id", adminUserId)
     .maybeSingle();
-  if (!accessRow?.is_admin) return;
+  if (!accessRow?.is_admin) return result;
   const currentEndUserId = readString((accessRow as Record<string, any>).end_user_id);
-  if (currentEndUserId && currentEndUserId === endUserId) return;
-  await context.supabase
-    .from("A_iam_user_access_maps")
-    .update({ end_user_id: endUserId })
-    .eq("org_id", orgId)
-    .eq("user_id", adminUserId);
+  const updates: Record<string, any> = {};
+  if (!currentEndUserId || currentEndUserId !== endUserId) {
+    updates.end_user_id = endUserId;
+    result.linkedEndUser = true;
+  }
+  if (verifiedPhone) {
+    if (readString((accessRow as Record<string, any>).verified_phone) !== verifiedPhone) {
+      updates.verified_phone = verifiedPhone;
+      result.verifiedPhoneUpdated = true;
+    }
+  }
+  if (Object.keys(updates).length > 0) {
+    await context.supabase
+      .from("A_iam_user_access_maps")
+      .update(updates)
+      .eq("org_id", orgId)
+      .eq("user_id", adminUserId);
+  }
 
   const { data: endUserRow } = await context.supabase
     .from("A_end_users")
@@ -447,7 +486,7 @@ async function linkAdminUserToEndUser(input: {
     .eq("id", endUserId)
     .maybeSingle();
   const endUserEmail = readString((endUserRow as Record<string, any> | null)?.email);
-  if (endUserEmail) return;
+  if (endUserEmail) return result;
 
   let resolvedAdminEmail = readString(adminEmail);
   if (!resolvedAdminEmail && (context.supabase as any)?.auth?.admin?.getUserById) {
@@ -458,13 +497,15 @@ async function linkAdminUserToEndUser(input: {
       resolvedAdminEmail = null;
     }
   }
-  if (!resolvedAdminEmail) return;
+  if (!resolvedAdminEmail) return result;
   await context.supabase
     .from("A_end_users")
     .update({ email: normalizeEmail(resolvedAdminEmail), updated_at: nowIso() })
     .eq("org_id", orgId)
     .eq("id", endUserId);
+  return result;
 }
+
 
 export async function fetchEndUserMemoryEntity(input: {
   context: EndUserSyncContext;
@@ -737,6 +778,7 @@ export async function syncEndUserFromTurn(input: {
     const entityProfile = extractProfileFromEntity(entity);
     const botContext = readRecord(turnPayload.bot_context) || {};
     const verificationToken = readString(botContext.customer_verification_token);
+    const intentName = readString(botContext.intent_name);
 
     const mergedProfile = mergeProfiles(mergeProfiles(entityProfile, metadataProfile), runtimeProfile);
     const confirmedEntity = normalizeConfirmedEntity((turnPayload.bot_context || {})?.confirmed_entity);
@@ -879,9 +921,52 @@ export async function syncEndUserFromTurn(input: {
 
     if (!endUserId) return;
 
+    let adminLinkResult: { linkedEndUser: boolean; verifiedPhoneUpdated: boolean } | null = null;
     if (adminUserId && verifiedPhone) {
       const adminEmail = readString((context as Record<string, any>)?.user?.email || null);
-      await linkAdminUserToEndUser({ context, orgId, adminUserId, endUserId, adminEmail });
+      adminLinkResult = await linkAdminUserToEndUser({ context, orgId, adminUserId, endUserId, adminEmail, verifiedPhone });
+    }
+    if (adminLinkResult?.verifiedPhoneUpdated) {
+      await insertEndUserAuditEvent({
+        context,
+        sessionId,
+        turnId,
+        eventType: "VERIFIED_PHONE_RECORDED",
+        payload: {
+          org_id: orgId,
+          end_user_id: endUserId,
+          admin_user_id: adminUserId,
+          verified_phone_masked: maskPhone(verifiedPhone || ""),
+          source: "admin_login",
+        },
+        botContext: {
+          org_id: orgId,
+          end_user_id: endUserId,
+          verified_phone_masked: maskPhone(verifiedPhone || ""),
+        },
+      });
+    }
+    if (intentName === "admin_login" && verifiedPhone) {
+      const linked = await linkAccessMapByPhone({ context, orgId, endUserId, verifiedPhone });
+      if (linked && !adminLinkResult?.verifiedPhoneUpdated) {
+        await insertEndUserAuditEvent({
+          context,
+          sessionId,
+          turnId,
+          eventType: "VERIFIED_PHONE_RECORDED",
+          payload: {
+            org_id: orgId,
+            end_user_id: endUserId,
+            verified_phone_masked: maskPhone(verifiedPhone || ""),
+            source: "admin_login_intent",
+          },
+          botContext: {
+            org_id: orgId,
+            end_user_id: endUserId,
+            verified_phone_masked: maskPhone(verifiedPhone || ""),
+          },
+        });
+      }
     }
 
     const identityTypes = identities.map((item) => item.identity_type);

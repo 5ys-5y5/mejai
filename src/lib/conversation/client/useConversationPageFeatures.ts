@@ -6,12 +6,13 @@ import {
   applyConversationFeatureVisibility,
   getDefaultConversationPageFeatures,
   resolveConversationPageFeatures,
+  type AccessRole,
   type ConversationFeaturesProviderShape,
   type ConversationPageFeatures,
   type ConversationPageKey,
 } from "@/lib/conversation/pageFeaturePolicy";
 
-export function useConversationPageFeatures(page: ConversationPageKey, isAdminUser = false) {
+export function useConversationPageFeatures(page: ConversationPageKey, accessRole: AccessRole = "public") {
   const [providerValue, setProviderValue] = useState<ConversationFeaturesProviderShape | null>(null);
 
   useEffect(() => {
@@ -58,8 +59,8 @@ export function useConversationPageFeatures(page: ConversationPageKey, isAdminUs
 
   const features: ConversationPageFeatures = useMemo(() => {
     const resolved = resolveConversationPageFeatures(page, providerValue);
-    return applyConversationFeatureVisibility(resolved, isAdminUser);
-  }, [isAdminUser, page, providerValue]);
+    return applyConversationFeatureVisibility(resolved, accessRole);
+  }, [accessRole, page, providerValue]);
 
   return {
     defaults: getDefaultConversationPageFeatures(page),

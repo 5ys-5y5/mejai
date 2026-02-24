@@ -287,48 +287,74 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
   useEffect(() => {
     if (!pageFeatures.mcp.actionSelector) {
       setModels((prev) =>
-        prev.map((model) => ({
-          ...model,
-          config: { ...model.config, mcpToolIds: [] },
-        }))
+        {
+          let changed = false;
+          const next = prev.map((model) => {
+            if (model.config.mcpToolIds.length === 0) return model;
+            changed = true;
+            return {
+              ...model,
+              config: { ...model.config, mcpToolIds: [] },
+            };
+          });
+          return changed ? next : prev;
+        }
       );
       return;
     }
     if (!tools.length) return;
     const allToolIds = tools.map((tool) => tool.id);
     setModels((prev) =>
-      prev.map((model) => ({
-        ...model,
-        config:
-          model.config.mcpToolIds.length === 0
-            ? { ...model.config, mcpToolIds: allToolIds }
-            : model.config,
-      }))
+      {
+        let changed = false;
+        const next = prev.map((model) => {
+          if (model.config.mcpToolIds.length !== 0) return model;
+          changed = true;
+          return {
+            ...model,
+            config: { ...model.config, mcpToolIds: allToolIds },
+          };
+        });
+        return changed ? next : prev;
+      }
     );
-  }, [pageFeatures, pageFeatures.mcp.actionSelector, tools]);
+  }, [pageFeatures.mcp.actionSelector, tools]);
 
   useEffect(() => {
     if (!pageFeatures.mcp.providerSelector) {
       setModels((prev) =>
-        prev.map((model) => ({
-          ...model,
-          config: { ...model.config, mcpProviderKeys: [] },
-        }))
+        {
+          let changed = false;
+          const next = prev.map((model) => {
+            if (model.config.mcpProviderKeys.length === 0) return model;
+            changed = true;
+            return {
+              ...model,
+              config: { ...model.config, mcpProviderKeys: [] },
+            };
+          });
+          return changed ? next : prev;
+        }
       );
       return;
     }
     if (!mcpProviders.length) return;
     const allProviderKeys = mcpProviders.map((provider) => provider.key);
     setModels((prev) =>
-      prev.map((model) => ({
-        ...model,
-        config:
-          model.config.mcpProviderKeys.length === 0
-            ? { ...model.config, mcpProviderKeys: allProviderKeys }
-            : model.config,
-      }))
+      {
+        let changed = false;
+        const next = prev.map((model) => {
+          if (model.config.mcpProviderKeys.length !== 0) return model;
+          changed = true;
+          return {
+            ...model,
+            config: { ...model.config, mcpProviderKeys: allProviderKeys },
+          };
+        });
+        return changed ? next : prev;
+      }
     );
-  }, [mcpProviders, pageFeatures, pageFeatures.mcp.providerSelector]);
+  }, [mcpProviders, pageFeatures.mcp.providerSelector]);
 
   useLayoutEffect(() => {
     const raf = requestAnimationFrame(() => {

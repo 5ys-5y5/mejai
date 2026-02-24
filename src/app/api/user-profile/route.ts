@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     user_id: context.user.id,
     plan: profile?.plan || "starter",
     is_admin: profile?.is_admin || false,
+    access_role: profile?.is_admin ? "admin" : profile ? "user" : "public",
     org_role: profile?.org_role || "operator",
     org_id: profile?.org_id || null,
   });

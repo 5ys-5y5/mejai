@@ -827,7 +827,7 @@ export async function POST(req: NextRequest) {
       adminKbContents: adminKbs.map((item) => item.content || ""),
     });
     let otpAckPending = false;
-    const OTP_ACK_TEXT = "\uC778\uC99D\uC774 \uD655\uC778\uB418\uC5C8\uC2B5\uB2C8\uB2E4.";
+    const OTP_ACK_TEXT = "\uC778\uC99D \uC644\uB8CC\uB418\uC5C8\uC2B5\uB2C8\uB2E4.";
     const decorateReplyText = (text: string) => {
       const baseText = String(text || "");
       const hasAck = baseText.includes(OTP_ACK_TEXT);

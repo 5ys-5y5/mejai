@@ -5,7 +5,7 @@ const CONFIG_EVENT_TYPE = "RUNTIME_GOVERNANCE_CONFIG_UPDATED";
 
 export type GovernanceConfig = {
   enabled: boolean;
-  visibility_mode: "user" | "admin";
+  visibility_mode: "public" | "user" | "admin";
   source: "principles_default" | "event_override";
   updated_at: string | null;
   updated_by: string | null;
@@ -51,8 +51,12 @@ export async function readGovernanceConfig(input: {
   const payload = readObject(matched.payload);
   return {
     enabled: Boolean(payload.enabled),
-    visibility_mode:
-      String(payload.visibility_mode || "").toLowerCase() === "user" ? "user" : "admin",
+    visibility_mode: (() => {
+      const mode = String(payload.visibility_mode || "").toLowerCase();
+      if (mode === "public") return "public";
+      if (mode === "user") return "user";
+      return "admin";
+    })(),
     source: "event_override",
     updated_at: String(matched.created_at || "") || null,
     updated_by: String(payload.updated_by || "") || null,
@@ -63,7 +67,7 @@ export async function writeGovernanceConfig(input: {
   supabase: SupabaseClient;
   orgId: string;
   enabled: boolean;
-  visibilityMode: "user" | "admin";
+  visibilityMode: "public" | "user" | "admin";
   updatedBy: string | null;
 }) {
   await input.supabase.from("F_audit_events").insert({

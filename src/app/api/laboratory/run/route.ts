@@ -10,6 +10,7 @@ import {
   type ConversationFeaturesProviderShape,
   type ConversationPageKey,
 } from "@/lib/conversation/pageFeaturePolicy";
+import { resolveAccessRoleForUser } from "@/lib/conversation/accessRole";
 import { buildDebugPrefixJson, buildFailedPayload, nowIso } from "@/app/api/runtime/chat/runtime/runtimeSupport";
 import { upsertDebugLog } from "@/app/api/runtime/chat/services/auditRuntime";
 import { isUuidLike } from "@/app/api/runtime/chat/shared/slotUtils";
@@ -489,7 +490,7 @@ export async function POST(req: NextRequest) {
     const requestToolIds: unknown[] = Array.isArray(body.mcp_tool_ids) ? body.mcp_tool_ids : [];
     const requestProviderKeys: unknown[] = Array.isArray(body.mcp_provider_keys) ? body.mcp_provider_keys : [];
     let providerValue: ConversationFeaturesProviderShape | null = null;
-    let isAdminUser = false;
+    let accessRole: "public" | "user" | "admin" = "public";
     markStage("lab.proxy.auth_context.start");
     const serverCtx = await getServerContext(authHeader, cookieHeader);
     markStage("lab.proxy.auth_context.done");
@@ -505,12 +506,11 @@ export async function POST(req: NextRequest) {
       }
     } else {
       serverContext = { userId: serverCtx.user.id, orgId: serverCtx.orgId };
-      const { data: access } = await serverCtx.supabase
-        .from("A_iam_user_access_maps")
-        .select("is_admin")
-        .eq("user_id", serverCtx.user.id)
-        .maybeSingle();
-      isAdminUser = Boolean(access?.is_admin);
+      accessRole = await resolveAccessRoleForUser({
+        supabase: serverCtx.supabase,
+        userId: serverCtx.user.id,
+        orgId: serverCtx.orgId,
+      });
       try {
         const adminSupabase = createAdminSupabaseClient();
         providerValue = await fetchChatPolicy(adminSupabase, serverCtx.orgId);
@@ -520,7 +520,7 @@ export async function POST(req: NextRequest) {
     }
     const featureFlags = applyConversationFeatureVisibility(
       resolveConversationPageFeatures(pageKey, providerValue),
-      isAdminUser
+      accessRole
     );
     const filteredProviderKeys = featureFlags.mcp.providerSelector
       ? requestProviderKeys

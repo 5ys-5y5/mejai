@@ -6,8 +6,7 @@ import {
   resolveConversationSetupUi,
   type ConversationPageKey,
 } from "@/lib/conversation/pageFeaturePolicy";
-import { useConversationAdminStatus } from "@/lib/conversation/client/useConversationAdminStatus";
-import { useConversationAdminVisibility } from "@/lib/conversation/client/useConversationAdminVisibility";
+import { useConversationAccessRole, useConversationAccessRoleFromProfile } from "@/lib/conversation/client/useConversationAccessRole";
 import { useConversationPageFeatures } from "@/lib/conversation/client/useConversationPageFeatures";
 
 export function useConversationPageRuntimeConfig(
@@ -15,10 +14,11 @@ export function useConversationPageRuntimeConfig(
   options?: { sessionId?: string | null; widgetToken?: string | null }
 ) {
   const sessionId = options?.sessionId || null;
-  const adminVisibility = useConversationAdminVisibility({ sessionId, widgetToken: options?.widgetToken });
-  const fallbackAdminUser = useConversationAdminStatus();
-  const isAdminUser = sessionId ? adminVisibility.isAdminVisible : fallbackAdminUser;
-  const { features: resolvedFeatures, providerValue } = useConversationPageFeatures(pageKey, isAdminUser);
+  const sessionRole = useConversationAccessRole({ sessionId, widgetToken: options?.widgetToken });
+  const profileRole = useConversationAccessRoleFromProfile();
+  const accessRole = sessionId ? sessionRole.accessRole : profileRole;
+  const isAdminUser = accessRole === "admin";
+  const { features: resolvedFeatures, providerValue } = useConversationPageFeatures(pageKey, accessRole);
   const pageFeatures = useMemo(() => {
     if (pageKey !== "/" || isAdminUser) return resolvedFeatures;
     if (resolvedFeatures.setup.inlineUserKbInput) return resolvedFeatures;

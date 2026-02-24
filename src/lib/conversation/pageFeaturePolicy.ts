@@ -1,4 +1,4 @@
-import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
+﻿import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 
 export type ConversationPageKey = string;
 
@@ -28,26 +28,27 @@ export type ConversationSetupUi = {
 };
 
 /**
- * 중앙 대화 기능 정책 파일
+ * 以묒븰 ???湲곕뒫 ?뺤콉 ?뚯씪
  *
- * 운영 규칙:
- * - 페이지별 기능 차등은 이 파일에서만 조정한다.
- * - 페이지 컴포넌트에서 하드코딩 분기(예: provider.key !== "cafe24")를 만들지 않는다.
- * - UI 노출/동작 가능 여부/요청 payload 포함 여부를 같은 정책으로 맞춘다.
+ * ?댁쁺 洹쒖튃:
+ * - ?섏씠吏蹂?湲곕뒫 李⑤벑? ???뚯씪?먯꽌留?議곗젙?쒕떎.
+ * - ?섏씠吏 而댄룷?뚰듃?먯꽌 ?섎뱶肄붾뵫 遺꾧린(?? provider.key !== "cafe24")瑜?留뚮뱾吏 ?딅뒗??
+ * - UI ?몄텧/?숈옉 媛???щ?/?붿껌 payload ?ы븿 ?щ?瑜?媛숈? ?뺤콉?쇰줈 留욎텣??
  *
- * 적용 범위:
- * - "/" (랜딩 체험)
- * - "/app/laboratory" (실험실)
- * - "/embed" (위젯)
+ * ?곸슜 踰붿쐞:
+ * - "/" (?쒕뵫 泥댄뿕)
+ * - "/app/laboratory" (?ㅽ뿕??
+ * - "/embed" (?꾩젽)
  */
 type IdGate = {
-  /** 허용 목록. 비어있으면 전체 허용 */
+  /** ?덉슜 紐⑸줉. 鍮꾩뼱?덉쑝硫??꾩껜 ?덉슜 */
   allowlist?: string[];
-  /** 차단 목록. allowlist보다 우선 차단 */
+  /** 李⑤떒 紐⑸줉. allowlist蹂대떎 ?곗꽑 李⑤떒 */
   denylist?: string[];
 };
 
-export type FeatureVisibilityMode = "user" | "admin";
+export type FeatureVisibilityMode = "public" | "user" | "admin";
+export type AccessRole = "public" | "user" | "admin";
 
 type VisibilityFields<T extends Record<string, unknown>> = {
   [K in keyof T as T[K] extends boolean ? K : never]: FeatureVisibilityMode;
@@ -88,31 +89,31 @@ export type ConversationPageFeatures = {
     };
   };
   mcp: {
-    /** MCP provider 선택 UI 노출 여부 */
+    /** MCP provider ?좏깮 UI ?몄텧 ?щ? */
     providerSelector: boolean;
-    /** MCP action 선택 UI 노출 여부 */
+    /** MCP action ?좏깮 UI ?몄텧 ?щ? */
     actionSelector: boolean;
-    /** provider key 단위 허용/차단 */
+    /** provider key ?⑥쐞 ?덉슜/李⑤떒 */
     providers: IdGate;
-    /** tool id 단위 허용/차단 */
+    /** tool id ?⑥쐞 ?덉슜/李⑤떒 */
     tools: IdGate;
   };
   adminPanel: {
-    /** 관리자 메뉴 자체 노출 여부 */
+    /** 愿由ъ옄 硫붾돱 ?먯껜 ?몄텧 ?щ? */
     enabled: boolean;
-    /** "선택 ON/OFF" 토글 버튼 노출 및 동작 */
+    /** "?좏깮 ON/OFF" ?좉? 踰꾪듉 ?몄텧 諛??숈옉 */
     selectionToggle: boolean;
-    /** "로그 ON/OFF" 토글 버튼 노출 및 동작 */
+    /** "濡쒓렇 ON/OFF" ?좉? 踰꾪듉 ?몄텧 諛??숈옉 */
     logsToggle: boolean;
-    /** 메시지 메타(role/id/session) 노출 여부 */
+    /** 硫붿떆吏 硫뷀?(role/id/session) ?몄텧 ?щ? */
     messageMeta: boolean;
-    /** "대화 복사" 버튼 노출/동작 */
+    /** "???蹂듭궗" 踰꾪듉 ?몄텧/?숈옉 */
     copyConversation: boolean;
   };
   interaction: {
-    /** quick reply 선택 UI 활성화 */
+    /** quick reply ?좏깮 UI ?쒖꽦??*/
     quickReplies: boolean;
-    /** product card 선택 UI 활성화 */
+    /** product card ?좏깮 UI ?쒖꽦??*/
     productCards: boolean;
     /** 3-phase prompt (confirmed/confirming/next) */
     threePhasePrompt: boolean;
@@ -126,10 +127,10 @@ export type ConversationPageFeatures = {
     threePhasePromptShowNext: boolean;
     threePhasePromptHideLabels: boolean;
     inputPlaceholder: string;
-    /** 초기 안내 prefill 메시지 출력 */
+    /** 珥덇린 ?덈궡 prefill 硫붿떆吏 異쒕젰 */
     prefill: boolean;
     prefillMessages: string[];
-    /** 입력창/전송 버튼 활성화 */
+    /** ?낅젰李??꾩넚 踰꾪듉 ?쒖꽦??*/
     inputSubmit: boolean;
     /** Widget header: agent connect button */
     widgetHeaderAgentAction: boolean;
@@ -139,40 +140,40 @@ export type ConversationPageFeatures = {
     widgetHeaderClose: boolean;
   };
   setup: {
-    /** 모델(기존/신규) 선택 UI 노출 */
+    /** 紐⑤뜽(湲곗〈/?좉퇋) ?좏깮 UI ?몄텧 */
     modelSelector: boolean;
-    /** existing 모드 하위 에이전트 선택 UI 노출 */
+    /** existing 紐⑤뱶 ?섏쐞 ?먯씠?꾪듃 ?좏깮 UI ?몄텧 */
     agentSelector: boolean;
-    /** LLM 선택 UI 노출 */
+    /** LLM ?좏깮 UI ?몄텧 */
     llmSelector: boolean;
-    /** LLM 선택 UI 하위 항목 허용/차단 (llm id) */
+    /** LLM ?좏깮 UI ?섏쐞 ??ぉ ?덉슜/李⑤떒 (llm id) */
     llms: IdGate;
-    /** KB 선택 UI 노출 */
+    /** KB ?좏깮 UI ?몄텧 */
     kbSelector: boolean;
-    /** KB 선택 UI 하위 항목 허용/차단 (KB id) */
+    /** KB ?좏깮 UI ?섏쐞 ??ぉ ?덉슜/李⑤떒 (KB id) */
     kbIds: IdGate;
-    /** 관리자 KB 선택 UI 노출 */
+    /** 愿由ъ옄 KB ?좏깮 UI ?몄텧 */
     adminKbSelector: boolean;
-    /** 관리자 KB 선택 UI 하위 항목 허용/차단 (KB id) */
+    /** 愿由ъ옄 KB ?좏깮 UI ?섏쐞 ??ぉ ?덉슜/李⑤떒 (KB id) */
     adminKbIds: IdGate;
-    /** existing 모드 버튼/동작 허용 */
+    /** existing 紐⑤뱶 踰꾪듉/?숈옉 ?덉슜 */
     modeExisting: boolean;
-    /** existing 모드에서 세션 ID 직접 검색 UI 노출 */
+    /** existing 紐⑤뱶?먯꽌 ?몄뀡 ID 吏곸젒 寃??UI ?몄텧 */
     sessionIdSearch: boolean;
-    /** new 모드 버튼/동작 허용 */
+    /** new 紐⑤뱶 踰꾪듉/?숈옉 ?덉슜 */
     modeNew: boolean;
-    /** runtime(route) 선택 UI 노출 */
+    /** runtime(route) ?좏깮 UI ?몄텧 */
     routeSelector: boolean;
-    /** runtime(route) 선택 UI 하위 항목 허용/차단 (route id) */
+    /** runtime(route) ?좏깮 UI ?섏쐞 ??ぉ ?덉슜/李⑤떒 (route id) */
     routes: IdGate;
-    /** 인라인 사용자 KB 입력 textarea 노출 */
+    /** ?몃씪???ъ슜??KB ?낅젰 textarea ?몄텧 */
     inlineUserKbInput: boolean;
-    /** 기본 모드 */
+    /** 湲곕낯 紐⑤뱶 */
     defaultSetupMode: "existing" | "new";
-    /** 기본 LLM */
+    /** 湲곕낯 LLM */
     defaultLlm: "chatgpt" | "gemini";
   };
-  /** on/off 기능의 user/admin 가시성 제어 */
+  /** on/off 湲곕뒫??user/admin 媛?쒖꽦 ?쒖뼱 */
   visibility: ConversationFeatureVisibility;
 };
 
@@ -232,35 +233,35 @@ const DEFAULT_SETUP_UI: ConversationSetupUi = {
     "mcpActionSelector",
   ],
   labels: {
-    inlineUserKbInput: "사용자 KB입력란",
-    llmSelector: "LLM 선택",
-    kbSelector: "KB 선택",
-    adminKbSelector: "관리자 KB 선택",
-    routeSelector: "Runtime 선택",
-    mcpProviderSelector: "MCP 프로바이더 선택",
-    mcpActionSelector: "MCP 액션 선택",
+    inlineUserKbInput: "Inline KB input",
+    llmSelector: "LLM selector",
+    kbSelector: "KB selector",
+    adminKbSelector: "Admin KB selector",
+    routeSelector: "Runtime selector",
+    mcpProviderSelector: "MCP provider selector",
+    mcpActionSelector: "MCP action selector",
   },
   existingOrder: ["agentSelector", "versionSelector", "conversationMode", "sessionSelector", "sessionIdSearch"],
   existingLabels: {
-    modeExisting: "기존 모델",
-    modeNew: "신규 모델",
-    agentSelector: "에이전트 선택",
-    versionSelector: "버전 선택",
-    sessionSelector: "세션 선택",
-    sessionIdSearch: "세션 ID 직접 조회",
-    conversationMode: "모드 선택",
+    modeExisting: "Existing mode",
+    modeNew: "New mode",
+    agentSelector: "Agent selector",
+    versionSelector: "Version selector",
+    sessionSelector: "Session selector",
+    sessionIdSearch: "Session ID search",
+    conversationMode: "Conversation mode",
   },
 };
 
 const DEFAULT_PREFILL_MESSAGES = [
-  "기록한대로 응대하는 AI 상담사를",
-  "압도적으로 저렴하게 사용해보세요",
+  "Describe your issue and context for the AI assistant.",
+  "Provide goals, constraints, and any required inputs.",
 ];
 
 const DEFAULT_THREE_PHASE_LABELS = {
-  confirmed: "확인한 것",
-  confirming: "확인할 것",
-  next: "그 다음으로 확인할 것",
+  confirmed: "Confirmed",
+  confirming: "Confirming",
+  next: "Confirm Next",
 } as const;
 
 const DEFAULT_WIDGET_FEATURES: ConversationPageFeatures["widget"] = {
@@ -580,15 +581,16 @@ export function isToolEnabled(toolId: string, features: ConversationPageFeatures
   return isEnabledByGate(toolId, features.mcp.tools);
 }
 
-function withVisibilityFlag(enabled: boolean, visibility: FeatureVisibilityMode, isAdminUser: boolean) {
+function withVisibilityFlag(enabled: boolean, visibility: FeatureVisibilityMode, accessRole: AccessRole) {
   if (!enabled) return false;
-  if (visibility === "admin" && !isAdminUser) return false;
-  return true;
+  if (visibility === "public") return true;
+  if (visibility === "user") return accessRole === "user" || accessRole === "admin";
+  return accessRole === "admin";
 }
 
 export function applyConversationFeatureVisibility(
   features: ConversationPageFeatures,
-  isAdminUser: boolean
+  accessRole: AccessRole
 ): ConversationPageFeatures {
   return {
     ...features,
@@ -599,43 +601,43 @@ export function applyConversationFeatureVisibility(
         enabled: withVisibilityFlag(
           features.widget.header.enabled,
           features.visibility.widget.header.enabled,
-          isAdminUser
+          accessRole
         ),
-        logo: withVisibilityFlag(features.widget.header.logo, features.visibility.widget.header.logo, isAdminUser),
-        status: withVisibilityFlag(features.widget.header.status, features.visibility.widget.header.status, isAdminUser),
+        logo: withVisibilityFlag(features.widget.header.logo, features.visibility.widget.header.logo, accessRole),
+        status: withVisibilityFlag(features.widget.header.status, features.visibility.widget.header.status, accessRole),
         agentAction: withVisibilityFlag(
           features.widget.header.agentAction,
           features.visibility.widget.header.agentAction,
-          isAdminUser
+          accessRole
         ),
         newConversation: withVisibilityFlag(
           features.widget.header.newConversation,
           features.visibility.widget.header.newConversation,
-          isAdminUser
+          accessRole
         ),
         close: withVisibilityFlag(
           features.widget.header.close,
           features.visibility.widget.header.close,
-          isAdminUser
+          accessRole
         ),
       },
-      chatPanel: withVisibilityFlag(features.widget.chatPanel, features.visibility.widget.chatPanel, isAdminUser),
-      setupPanel: withVisibilityFlag(features.widget.setupPanel, features.visibility.widget.setupPanel, isAdminUser),
+      chatPanel: withVisibilityFlag(features.widget.chatPanel, features.visibility.widget.chatPanel, accessRole),
+      setupPanel: withVisibilityFlag(features.widget.setupPanel, features.visibility.widget.setupPanel, accessRole),
       historyPanel: withVisibilityFlag(
         features.widget.historyPanel,
         features.visibility.widget.historyPanel,
-        isAdminUser
+        accessRole
       ),
       tabBar: {
         ...features.widget.tabBar,
         enabled: withVisibilityFlag(
           features.widget.tabBar.enabled,
           features.visibility.widget.tabBar.enabled,
-          isAdminUser
+          accessRole
         ),
-        chat: withVisibilityFlag(features.widget.tabBar.chat, features.visibility.widget.tabBar.chat, isAdminUser),
-        list: withVisibilityFlag(features.widget.tabBar.list, features.visibility.widget.tabBar.list, isAdminUser),
-        policy: withVisibilityFlag(features.widget.tabBar.policy, features.visibility.widget.tabBar.policy, isAdminUser),
+        chat: withVisibilityFlag(features.widget.tabBar.chat, features.visibility.widget.tabBar.chat, accessRole),
+        list: withVisibilityFlag(features.widget.tabBar.list, features.visibility.widget.tabBar.list, accessRole),
+        policy: withVisibilityFlag(features.widget.tabBar.policy, features.visibility.widget.tabBar.policy, accessRole),
       },
     },
     mcp: {
@@ -643,28 +645,28 @@ export function applyConversationFeatureVisibility(
       providerSelector: withVisibilityFlag(
         features.mcp.providerSelector,
         features.visibility.mcp.providerSelector,
-        isAdminUser
+        accessRole
       ),
-      actionSelector: withVisibilityFlag(features.mcp.actionSelector, features.visibility.mcp.actionSelector, isAdminUser),
+      actionSelector: withVisibilityFlag(features.mcp.actionSelector, features.visibility.mcp.actionSelector, accessRole),
     },
     adminPanel: {
       ...features.adminPanel,
-      enabled: withVisibilityFlag(features.adminPanel.enabled, features.visibility.adminPanel.enabled, isAdminUser),
+      enabled: withVisibilityFlag(features.adminPanel.enabled, features.visibility.adminPanel.enabled, accessRole),
       selectionToggle: withVisibilityFlag(
         features.adminPanel.selectionToggle,
         features.visibility.adminPanel.selectionToggle,
-        isAdminUser
+        accessRole
       ),
       logsToggle: withVisibilityFlag(
         features.adminPanel.logsToggle,
         features.visibility.adminPanel.logsToggle,
-        isAdminUser
+        accessRole
       ),
-      messageMeta: withVisibilityFlag(features.adminPanel.messageMeta, features.visibility.adminPanel.messageMeta, isAdminUser),
+      messageMeta: withVisibilityFlag(features.adminPanel.messageMeta, features.visibility.adminPanel.messageMeta, accessRole),
       copyConversation: withVisibilityFlag(
         features.adminPanel.copyConversation,
         features.visibility.adminPanel.copyConversation,
-        isAdminUser
+        accessRole
       ),
     },
     interaction: {
@@ -672,95 +674,95 @@ export function applyConversationFeatureVisibility(
       quickReplies: withVisibilityFlag(
         features.interaction.quickReplies,
         features.visibility.interaction.quickReplies,
-        isAdminUser
+        accessRole
       ),
       productCards: withVisibilityFlag(
         features.interaction.productCards,
         features.visibility.interaction.productCards,
-        isAdminUser
+        accessRole
       ),
       threePhasePrompt: withVisibilityFlag(
         features.interaction.threePhasePrompt,
         features.visibility.interaction.threePhasePrompt,
-        isAdminUser
+        accessRole
       ),
       threePhasePromptShowConfirmed: withVisibilityFlag(
         features.interaction.threePhasePromptShowConfirmed,
         features.visibility.interaction.threePhasePromptShowConfirmed,
-        isAdminUser
+        accessRole
       ),
       threePhasePromptShowConfirming: withVisibilityFlag(
         features.interaction.threePhasePromptShowConfirming,
         features.visibility.interaction.threePhasePromptShowConfirming,
-        isAdminUser
+        accessRole
       ),
       threePhasePromptShowNext: withVisibilityFlag(
         features.interaction.threePhasePromptShowNext,
         features.visibility.interaction.threePhasePromptShowNext,
-        isAdminUser
+        accessRole
       ),
       threePhasePromptHideLabels: withVisibilityFlag(
         features.interaction.threePhasePromptHideLabels,
         features.visibility.interaction.threePhasePromptHideLabels,
-        isAdminUser
+        accessRole
       ),
       threePhasePromptLabels: features.interaction.threePhasePromptLabels,
       inputPlaceholder: features.interaction.inputPlaceholder,
-      prefill: withVisibilityFlag(features.interaction.prefill, features.visibility.interaction.prefill, isAdminUser),
+      prefill: withVisibilityFlag(features.interaction.prefill, features.visibility.interaction.prefill, accessRole),
       prefillMessages: features.interaction.prefillMessages,
-      inputSubmit: withVisibilityFlag(features.interaction.inputSubmit, features.visibility.interaction.inputSubmit, isAdminUser),
+      inputSubmit: withVisibilityFlag(features.interaction.inputSubmit, features.visibility.interaction.inputSubmit, accessRole),
       widgetHeaderAgentAction: withVisibilityFlag(
         features.interaction.widgetHeaderAgentAction,
         features.visibility.interaction.widgetHeaderAgentAction,
-        isAdminUser
+        accessRole
       ),
       widgetHeaderNewConversation: withVisibilityFlag(
         features.interaction.widgetHeaderNewConversation,
         features.visibility.interaction.widgetHeaderNewConversation,
-        isAdminUser
+        accessRole
       ),
       widgetHeaderClose: withVisibilityFlag(
         features.interaction.widgetHeaderClose,
         features.visibility.interaction.widgetHeaderClose,
-        isAdminUser
+        accessRole
       ),
     },
     setup: {
       ...features.setup,
-      modelSelector: withVisibilityFlag(features.setup.modelSelector, features.visibility.setup.modelSelector, isAdminUser),
-      agentSelector: withVisibilityFlag(features.setup.agentSelector, features.visibility.setup.agentSelector, isAdminUser),
-      llmSelector: withVisibilityFlag(features.setup.llmSelector, features.visibility.setup.llmSelector, isAdminUser),
-      kbSelector: withVisibilityFlag(features.setup.kbSelector, features.visibility.setup.kbSelector, isAdminUser),
+      modelSelector: withVisibilityFlag(features.setup.modelSelector, features.visibility.setup.modelSelector, accessRole),
+      agentSelector: withVisibilityFlag(features.setup.agentSelector, features.visibility.setup.agentSelector, accessRole),
+      llmSelector: withVisibilityFlag(features.setup.llmSelector, features.visibility.setup.llmSelector, accessRole),
+      kbSelector: withVisibilityFlag(features.setup.kbSelector, features.visibility.setup.kbSelector, accessRole),
       adminKbSelector: withVisibilityFlag(
         features.setup.adminKbSelector,
         features.visibility.setup.adminKbSelector,
-        isAdminUser
+        accessRole
       ),
-      modeExisting: withVisibilityFlag(features.setup.modeExisting, features.visibility.setup.modeExisting, isAdminUser),
+      modeExisting: withVisibilityFlag(features.setup.modeExisting, features.visibility.setup.modeExisting, accessRole),
       sessionIdSearch: withVisibilityFlag(
         features.setup.sessionIdSearch,
         features.visibility.setup.sessionIdSearch,
-        isAdminUser
+        accessRole
       ),
-      modeNew: withVisibilityFlag(features.setup.modeNew, features.visibility.setup.modeNew, isAdminUser),
-      routeSelector: withVisibilityFlag(features.setup.routeSelector, features.visibility.setup.routeSelector, isAdminUser),
+      modeNew: withVisibilityFlag(features.setup.modeNew, features.visibility.setup.modeNew, accessRole),
+      routeSelector: withVisibilityFlag(features.setup.routeSelector, features.visibility.setup.routeSelector, accessRole),
       inlineUserKbInput: withVisibilityFlag(
         features.setup.inlineUserKbInput,
         features.visibility.setup.inlineUserKbInput,
-        isAdminUser
+        accessRole
       ),
     },
   };
 }
 
 /**
- * 정책 편집 가이드:
- * 1) 특정 페이지에서 provider를 막고 싶으면:
- *    mcp.providers.denylist 에 key 추가 (예: "cafe24")
- * 2) 특정 tool만 허용하고 싶으면:
- *    mcp.tools.allowlist 에 tool id만 나열
- * 3) 관리자 복사 기능만 끄고 싶으면:
- * 4) 선택형 응답(quickReplies/cards)만 끄고 싶으면:
+ * ?뺤콉 ?몄쭛 媛?대뱶:
+ * 1) ?뱀젙 ?섏씠吏?먯꽌 provider瑜?留됯퀬 ?띠쑝硫?
+ *    mcp.providers.denylist ??key 異붽? (?? "cafe24")
+ * 2) ?뱀젙 tool留??덉슜?섍퀬 ?띠쑝硫?
+ *    mcp.tools.allowlist ??tool id留??섏뿴
+ * 3) 愿由ъ옄 蹂듭궗 湲곕뒫留??꾧퀬 ?띠쑝硫?
+ * 4) ?좏깮???묐떟(quickReplies/cards)留??꾧퀬 ?띠쑝硫?
  *    interaction.quickReplies / productCards = false
  */
 export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures> = {
@@ -780,7 +782,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       providerSelector: true,
       actionSelector: true,
       providers: {
-        // 랜딩은 Cafe24 provider 차단
+        // ?쒕뵫? Cafe24 provider 李⑤떒
         denylist: ["cafe24"],
       },
       tools: {},
@@ -866,15 +868,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       setup: {
         modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "admin",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
+        agentSelector: "Agent selector",
+        llmSelector: "LLM selector",
+        kbSelector: "KB selector",
+        adminKbSelector: "Admin KB selector",
+        modeExisting: "Existing mode",
+        sessionIdSearch: "Session ID search",
+        modeNew: "New mode",
+        routeSelector: "Runtime selector",
+        inlineUserKbInput: "Inline KB input",
       },
     },
   },
@@ -893,7 +895,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     mcp: {
       providerSelector: true,
       actionSelector: true,
-      // 실험실은 기본 전체 허용
+      // ?ㅽ뿕?ㅼ? 湲곕낯 ?꾩껜 ?덉슜
       providers: {},
       tools: {},
     },
@@ -978,15 +980,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       setup: {
         modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "admin",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
+        agentSelector: "Agent selector",
+        llmSelector: "LLM selector",
+        kbSelector: "KB selector",
+        adminKbSelector: "Admin KB selector",
+        modeExisting: "Existing mode",
+        sessionIdSearch: "Session ID search",
+        modeNew: "New mode",
+        routeSelector: "Runtime selector",
+        inlineUserKbInput: "Inline KB input",
       },
     },
   },
@@ -1091,15 +1093,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       setup: {
         modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "admin",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
+        agentSelector: "Agent selector",
+        llmSelector: "LLM selector",
+        kbSelector: "KB selector",
+        adminKbSelector: "Admin KB selector",
+        modeExisting: "Existing mode",
+        sessionIdSearch: "Session ID search",
+        modeNew: "New mode",
+        routeSelector: "Runtime selector",
+        inlineUserKbInput: "Inline KB input",
       },
     },
   },
@@ -1204,15 +1206,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       setup: {
         modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "admin",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
+        agentSelector: "Agent selector",
+        llmSelector: "LLM selector",
+        kbSelector: "KB selector",
+        adminKbSelector: "Admin KB selector",
+        modeExisting: "Existing mode",
+        sessionIdSearch: "Session ID search",
+        modeNew: "New mode",
+        routeSelector: "Runtime selector",
+        inlineUserKbInput: "Inline KB input",
       },
     },
   },
@@ -1317,15 +1319,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       setup: {
         modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "admin",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
+        agentSelector: "Agent selector",
+        llmSelector: "LLM selector",
+        kbSelector: "KB selector",
+        adminKbSelector: "Admin KB selector",
+        modeExisting: "Existing mode",
+        sessionIdSearch: "Session ID search",
+        modeNew: "New mode",
+        routeSelector: "Runtime selector",
+        inlineUserKbInput: "Inline KB input",
       },
     },
   },
@@ -1358,3 +1360,4 @@ export function resolveRegisteredPageKey(
   if ((providerValue?.page_registry || []).includes(normalized)) return normalized;
   return normalized;
 }
+

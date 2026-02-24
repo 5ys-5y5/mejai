@@ -8,43 +8,20 @@ type VisibilityResult = {
   reason?: string;
 };
 
-function normalizeEmail(value: unknown) {
-  const text = String(value ?? "").trim().toLowerCase();
-  return text || null;
-}
-
-async function resolveAuthUserEmail(
-  supabaseAdmin: ReturnType<typeof createAdminSupabaseClient>,
-  userId: string
-) {
-  if (!userId) return null;
-  try {
-    const res = await supabaseAdmin.auth.admin.getUserById(userId);
-    return normalizeEmail(res?.data?.user?.email || null);
-  } catch {
-    return null;
-  }
+function normalizePhone(value: unknown) {
+  const digits = String(value ?? "").replace(/[^\d]/g, "");
+  return digits || null;
 }
 
 async function resolveAdminVisibility(input: {
   supabaseAdmin: ReturnType<typeof createAdminSupabaseClient>;
   orgId: string;
-  userId: string;
+  userId?: string | null;
   sessionId: string;
 }): Promise<VisibilityResult> {
   const { supabaseAdmin, orgId, userId, sessionId } = input;
-  if (!orgId || !userId || !sessionId) {
+  if (!orgId || !sessionId) {
     return { is_admin_visible: false, reason: "MISSING_CONTEXT" };
-  }
-
-  const { data: accessRow } = await supabaseAdmin
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("org_id", orgId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (!accessRow?.is_admin) {
-    return { is_admin_visible: false, reason: "NOT_ADMIN" };
   }
 
   const { data: sessionRow } = await supabaseAdmin
@@ -60,24 +37,49 @@ async function resolveAdminVisibility(input: {
 
   const { data: endUserRow } = await supabaseAdmin
     .from("A_end_users")
-    .select("email")
+    .select("phone")
     .eq("org_id", orgId)
     .eq("id", endUserId)
     .maybeSingle();
-  const endUserEmail = normalizeEmail((endUserRow as Record<string, any> | null)?.email || null);
-  if (!endUserEmail) {
-    return { is_admin_visible: false, reason: "END_USER_EMAIL_MISSING" };
+  const endUserPhone = normalizePhone((endUserRow as Record<string, any> | null)?.phone || null);
+  const resolvedUserId = String(userId || "").trim();
+
+  if (resolvedUserId) {
+    const { data: accessRow } = await supabaseAdmin
+      .from("A_iam_user_access_maps")
+      .select("is_admin, end_user_id, verified_phone")
+      .eq("org_id", orgId)
+      .eq("user_id", resolvedUserId)
+      .maybeSingle();
+    if (!accessRow?.is_admin) {
+      return { is_admin_visible: false, reason: "NOT_ADMIN" };
+    }
+    const linkedEndUserId = String((accessRow as Record<string, any> | null)?.end_user_id || "").trim();
+    if (linkedEndUserId && linkedEndUserId === endUserId) {
+      return { is_admin_visible: true };
+    }
+    const accessPhone = normalizePhone((accessRow as Record<string, any> | null)?.verified_phone);
+    if (!endUserPhone) {
+      return { is_admin_visible: false, reason: "END_USER_PHONE_MISSING" };
+    }
+    if (!accessPhone) {
+      return { is_admin_visible: false, reason: "ACCESS_PHONE_MISSING" };
+    }
+    if (accessPhone !== endUserPhone) {
+      return { is_admin_visible: false, reason: "PHONE_MISMATCH" };
+    }
+    return { is_admin_visible: true };
   }
 
-  const adminEmail = await resolveAuthUserEmail(supabaseAdmin, userId);
-  if (!adminEmail) {
-    return { is_admin_visible: false, reason: "ADMIN_EMAIL_MISSING" };
+  const { data: accessRow } = await supabaseAdmin
+    .from("A_iam_user_access_maps")
+    .select("is_admin")
+    .eq("org_id", orgId)
+    .eq("end_user_id", endUserId)
+    .maybeSingle();
+  if (!accessRow?.is_admin) {
+    return { is_admin_visible: false, reason: "NOT_ADMIN" };
   }
-
-  if (adminEmail !== endUserEmail) {
-    return { is_admin_visible: false, reason: "EMAIL_MISMATCH" };
-  }
-
   return { is_admin_visible: true };
 }
 

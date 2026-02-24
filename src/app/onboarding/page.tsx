@@ -37,6 +37,8 @@ export default function OnboardingPage() {
   const [orgName, setOrgName] = useState("");
   const [ownerName, setOwnerName] = useState("");
   const [businessNumber, setBusinessNumber] = useState("");
+  const [pendingOrgId, setPendingOrgId] = useState<string | null>(null);
+  const [pendingOrgKey, setPendingOrgKey] = useState<string>("");
   const [existingOrg, setExistingOrg] = useState<{
     id: string;
     name: string;
@@ -45,6 +47,13 @@ export default function OnboardingPage() {
   } | null>(null);
   const [isCheckingOrg, setIsCheckingOrg] = useState(false);
   const [nameLocked, setNameLocked] = useState(false);
+  const [otpPhone, setOtpPhone] = useState("");
+  const [otpRef, setOtpRef] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
+  const [verificationToken, setVerificationToken] = useState<string | null>(null);
   const router = useRouter();
 
   const normalizedBusinessNumber = useMemo(
@@ -60,6 +69,9 @@ export default function OnboardingPage() {
     const part3 = digits.slice(5, 10);
     return [part1, part2, part3].filter(Boolean).join("-");
   }, [normalizedBusinessNumber]);
+
+  const normalizedOtpPhone = useMemo(() => otpPhone.replace(/\D/g, ""), [otpPhone]);
+  const otpOrgId = existingOrg?.id || pendingOrgId;
 
   useEffect(() => {
     let mounted = true;
@@ -119,14 +131,129 @@ export default function OnboardingPage() {
     };
   }, [normalizedBusinessNumber, orgName]);
 
+  const sendOtp = async () => {
+    if (!otpOrgId) {
+      toast.error("조직 정보를 먼저 등록해 주세요.");
+      return;
+    }
+    if (normalizedOtpPhone.length < 10 || normalizedOtpPhone.length > 11) {
+      toast.error("휴대폰 번호를 정확히 입력해 주세요.");
+      return;
+    }
+    setOtpSending(true);
+    try {
+      const res = await fetch("/api/auth/otp/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: otpOrgId, phone: normalizedOtpPhone }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, any>;
+      if (!res.ok) {
+        toast.error(data?.error || "인증번호 전송에 실패했습니다.");
+        return;
+      }
+      setOtpRef(String(data?.otp_ref || ""));
+      setOtpCode("");
+      setVerifiedPhone(null);
+      setVerificationToken(null);
+      toast.success("인증번호를 전송했습니다.");
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (!otpOrgId) {
+      toast.error("조직 정보를 먼저 등록해 주세요.");
+      return;
+    }
+    if (!otpRef) {
+      toast.error("인증번호를 먼저 전송해 주세요.");
+      return;
+    }
+    if (!otpCode.trim()) {
+      toast.error("인증번호를 입력해 주세요.");
+      return;
+    }
+    setOtpVerifying(true);
+    try {
+      const res = await fetch("/api/auth/otp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: otpOrgId, otp_ref: otpRef, code: otpCode }),
+      });
+      const data = (await res.json().catch(() => ({}))) as Record<string, any>;
+      if (!res.ok) {
+        toast.error(data?.error || "인증에 실패했습니다.");
+        return;
+      }
+      const verified = String(data?.verified_phone || "").trim();
+      setVerifiedPhone(verified || null);
+      setVerificationToken(String(data?.verification_token || ""));
+      toast.success("인증 완료되었습니다.");
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
+
   const nextStep = async () => {
     if (currentStep === 1) {
       if (!orgName.trim()) {
-        toast.error("사업체 공식 명칭을 입력해 주세요.");
+        toast.error("????????? ?????? ????????? ????????? ?????????.");
         return;
       }
       if (normalizedBusinessNumber.length !== 10) {
-        toast.error("사업자 등록번호를 정확히 입력해 주세요.");
+        toast.error("????????? ??????????????? ????????? ????????? ?????????.");
+        return;
+      }
+      if (!existingOrg && !pendingOrgId) {
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+          toast.error("Supabase ????????? ???????????????.");
+          return;
+        }
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData.user) {
+          toast.error("????????? ????????? ??????????????????.");
+          return;
+        }
+        const { data: orgData, error: orgError } = await supabase
+          .from("A_iam_organizations")
+          .insert({
+            name: orgName.trim(),
+            owner_id: userData.user.id,
+            registrant_id: userData.user.id,
+            business_registration_number: normalizedBusinessNumber,
+          })
+          .select("id")
+          .single();
+
+        if (orgError) {
+          const { data: existingMatch } = await supabase
+            .from("A_iam_organizations")
+            .select("id, name, owner_id, business_registration_number")
+            .eq("business_registration_number", normalizedBusinessNumber)
+            .maybeSingle();
+          if (existingMatch) {
+            setExistingOrg(existingMatch);
+            setNameLocked(true);
+            setOrgName(existingMatch.name);
+            setPendingOrgId(null);
+            toast.info("????????? ????????? ???????????? ???????????????.");
+          } else {
+            toast.error(orgError.message || "?????? ????????? ??????????????????.");
+            return;
+          }
+        } else if (orgData?.id) {
+          setPendingOrgId(orgData.id);
+          setPendingOrgKey(orgData.id);
+        }
+      }
+    }
+
+    if (currentStep === 2) {
+      if (!verifiedPhone) {
+        toast.error("????????? ????????? ????????? ?????????.");
         return;
       }
     }
@@ -137,32 +264,37 @@ export default function OnboardingPage() {
     }
 
     if (!orgName.trim()) {
-      toast.error("사업체 공식 명칭을 입력해 주세요.");
+      toast.error("????????? ?????? ????????? ????????? ?????????.");
       setCurrentStep(1);
       return;
     }
     if (normalizedBusinessNumber.length !== 10) {
-      toast.error("사업자 등록번호를 정확히 입력해 주세요.");
+      toast.error("????????? ??????????????? ????????? ????????? ?????????.");
       setCurrentStep(1);
+      return;
+    }
+    if (!verifiedPhone) {
+      toast.error("????????? ????????? ????????? ?????????.");
+      setCurrentStep(2);
       return;
     }
 
     const supabase = getSupabaseClient();
     if (!supabase) {
-      toast.error("Supabase 설정이 필요합니다.");
+      toast.error("Supabase ????????? ???????????????.");
       return;
     }
 
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError || !userData.user) {
-      toast.error("로그인 상태를 확인해주세요.");
+      toast.error("????????? ????????? ??????????????????.");
       return;
     }
 
     if (existingOrg) {
       if (orgName.trim() !== existingOrg.name) {
         setOrgName(existingOrg.name);
-        toast.error("기존에 등록된 사업체 공식 명칭과 일치해야 합니다.");
+        toast.error("????????? ????????? ????????? ?????? ????????? ???????????? ?????????.");
         setCurrentStep(1);
         return;
       }
@@ -174,7 +306,7 @@ export default function OnboardingPage() {
           .eq("id", existingOrg.id);
 
         if (updateError) {
-          toast.error(updateError.message || "등록자 정보 업데이트에 실패했습니다.");
+          toast.error(updateError.message || "????????? ?????? ??????????????? ??????????????????.");
           return;
         }
 
@@ -184,13 +316,14 @@ export default function OnboardingPage() {
           plan: "starter",
           is_admin: false,
           org_role: "pending",
+          verified_phone: verifiedPhone,
         });
         if (accessError) {
-          toast.error(accessError.message || "승인 요청 생성에 실패했습니다.");
+          toast.error(accessError.message || "?????? ?????? ????????? ??????????????????.");
           return;
         }
 
-        toast.success("승인 요청이 접수되었습니다. 소유자 승인 후 이용할 수 있습니다.");
+        toast.success("?????? ????????? ?????????????????????. ????????? ?????? ??? ????????? ??? ????????????.");
         router.push("/app");
         return;
       }
@@ -201,50 +334,41 @@ export default function OnboardingPage() {
         plan: "starter",
         is_admin: true,
         org_role: "owner",
+        verified_phone: verifiedPhone,
       });
       if (accessError) {
-        toast.error(accessError.message || "사용자 권한 생성에 실패했습니다.");
+        toast.error(accessError.message || "????????? ?????? ????????? ??????????????????.");
         return;
       }
 
-      toast.success("온보딩이 완료되었습니다.");
+      toast.success("???????????? ?????????????????????.");
       router.push("/app");
       return;
     }
 
-    const { data: orgData, error: orgError } = await supabase
-      .from("A_iam_organizations")
-      .insert({
-        name: orgName.trim(),
-        owner_id: userData.user.id,
-        registrant_id: userData.user.id,
-        business_registration_number: normalizedBusinessNumber,
-      })
-      .select("id")
-      .single();
-
-    if (orgError) {
-      toast.error(orgError.message || "조직 생성에 실패했습니다.");
+    const finalOrgId = pendingOrgId;
+    if (!finalOrgId) {
+      toast.error("?????? ????????? ???????????? ???????????????. ?????? ????????? ?????????.");
       return;
     }
 
-    if (orgData?.id) {
-      const { error: accessError } = await supabase.from("A_iam_user_access_maps").upsert({
-        user_id: userData.user.id,
-        org_id: orgData.id,
-        plan: "starter",
-        is_admin: true,
-        org_role: "owner",
-      });
-      if (accessError) {
-        toast.error(accessError.message || "사용자 권한 생성에 실패했습니다.");
-        return;
-      }
+    const { error: accessError } = await supabase.from("A_iam_user_access_maps").upsert({
+      user_id: userData.user.id,
+      org_id: finalOrgId,
+      plan: "starter",
+      is_admin: true,
+      org_role: "owner",
+      verified_phone: verifiedPhone,
+    });
+    if (accessError) {
+      toast.error(accessError.message || "????????? ?????? ????????? ??????????????????.");
+      return;
     }
 
-    toast.success("온보딩이 완료되었습니다.");
+    toast.success("???????????? ?????????????????????.");
     router.push("/app");
   };
+
 
   const prevStep = () => {
     if (currentStep > 1) {
@@ -365,25 +489,58 @@ export default function OnboardingPage() {
                     <Phone className="w-6 h-6 text-primary" />
                   </div>
                   <div className="space-y-1">
-                    <p className="font-bold">기존 번호 연결하기</p>
+                    <p className="font-bold">????????? ??????</p>
                     <p className="text-sm text-muted-foreground">
-                      Twilio, Telnyx 등의 번호를 입력해 주세요.
+                      ????????? ????????? ????????? ??????????????? ?????? ???????????????.
                     </p>
                   </div>
-                  <Input placeholder="+82 02-1234-5678" className="max-w-xs mx-auto text-center" />
-                  <Button variant="outline" size="sm">
-                    연결 테스트
-                  </Button>
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="01012345678"
+                      className="max-w-xs mx-auto text-center"
+                      value={otpPhone}
+                      onChange={(e) => setOtpPhone(e.target.value)}
+                      disabled={otpSending || otpVerifying}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={sendOtp}
+                      disabled={otpSending || otpVerifying || !otpOrgId}
+                    >
+                      {otpSending ? "?????? ???..." : "???????????? ??????"}
+                    </Button>
+                  </div>
+                  {otpRef ? (
+                    <p className="text-xs text-muted-foreground">??????????????? ?????????????????????.</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">????????? ???????????? ??????????????? ????????? ?????????.</p>
+                  )}
                 </div>
-                <div className="text-center">
-                  <span className="text-sm text-muted-foreground">또는</span>
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="???????????? 6??????"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value)}
+                      disabled={!otpRef || otpVerifying}
+                    />
+                    <Button
+                      onClick={verifyOtp}
+                      disabled={!otpRef || otpVerifying || !otpCode.trim()}
+                    >
+                      {otpVerifying ? "?????? ???..." : "?????? ??????"}
+                    </Button>
+                  </div>
+                  {verifiedPhone ? (
+                    <p className="text-sm font-medium text-primary">?????? ?????????????????????.</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">??????????????? ????????? ?????????.</p>
+                  )}
                 </div>
-                <Button variant="ghost" className="w-full border">
-                  신규 번호 발급 요청하기
-                </Button>
               </div>
             )}
-            {currentStep === 3 && (
+{currentStep === 3 && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="p-4 border rounded-xl hover:border-primary cursor-pointer transition-colors space-y-2">

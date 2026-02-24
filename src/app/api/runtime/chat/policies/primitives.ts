@@ -6,7 +6,7 @@ export const CHAT_PRIMITIVES = {
     requireSlotRequestResponseContractValidation: true,
   },
   safety: {
-    otpRequiredIntents: ["order_change", "shipping_inquiry", "refund_request"] as const,
+    otpRequiredIntents: ["order_change", "shipping_inquiry", "refund_request", "admin_login"] as const,
     otpRequiredTools: [
       "find_customer_by_phone",
       "list_orders",

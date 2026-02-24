@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ensureGovernanceAccess, ensureGovernanceReadAccess } from "../_lib/access";
 import { readGovernanceConfig, writeGovernanceConfig } from "../_lib/config";
 
-type Body = { enabled?: boolean; visibility_mode?: "user" | "admin" };
+type Body = { enabled?: boolean; visibility_mode?: "public" | "user" | "admin" };
 
 export async function GET(req: NextRequest) {
   try {
@@ -31,8 +31,13 @@ export async function POST(req: NextRequest) {
     if (typeof body.enabled !== "boolean") {
       return NextResponse.json({ error: "enabled(boolean) is required" }, { status: 400 });
     }
-    if (body.visibility_mode && body.visibility_mode !== "user" && body.visibility_mode !== "admin") {
-      return NextResponse.json({ error: "visibility_mode must be user|admin" }, { status: 400 });
+    if (
+      body.visibility_mode &&
+      body.visibility_mode !== "public" &&
+      body.visibility_mode !== "user" &&
+      body.visibility_mode !== "admin"
+    ) {
+      return NextResponse.json({ error: "visibility_mode must be public|user|admin" }, { status: 400 });
     }
     const current = await readGovernanceConfig({
       supabase: access.supabaseAdmin,

@@ -149,7 +149,7 @@ export function isSelfUpdateEnabledByDefault() {
 }
 
 export function getSelfUpdateVisibilityDefault() {
-  return CHAT_PRINCIPLES.memory.selfUpdateVisibilityDefault as "user" | "admin";
+  return CHAT_PRINCIPLES.memory.selfUpdateVisibilityDefault as "public" | "user" | "admin";
 }
 
 export function shouldRequireBeforeAfterOnMutation() {
