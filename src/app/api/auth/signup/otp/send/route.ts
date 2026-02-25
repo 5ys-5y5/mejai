@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const result = await callAdapter(
     "solapi",
     { destination: phone },
-    { supabase: supabaseAdmin, orgId: null, userId: null },
+    { supabase: supabaseAdmin, agentId: null, userId: null },
     { toolName: "send_otp_guest" }
   );
 

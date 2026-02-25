@@ -44,9 +44,9 @@ function stripUserKbIds(
 
 export async function fetchChatPolicyRow(
   supabase: SupabaseClient,
-  orgId: string
+  agentId: string
 ): Promise<ChatSettingsResult> {
-  void orgId;
+  void agentId;
   return fetchGlobalChatPolicyRow(supabase);
 }
 
@@ -66,9 +66,9 @@ export async function fetchGlobalChatPolicyRow(
 
 export async function fetchRuntimeEnvRow(
   supabase: SupabaseClient,
-  orgId: string
+  agentId: string
 ): Promise<ChatSettingsResult> {
-  void orgId;
+  void agentId;
   return fetchGlobalChatPolicyRow(supabase);
 }
 
@@ -100,7 +100,7 @@ export function normalizeChatPolicy(
 
 export async function fetchChatPolicy(
   supabase: SupabaseClient,
-  orgId: string
+  agentId: string
 ): Promise<ConversationFeaturesProviderShape | null> {
   const { row, error } = await fetchGlobalChatPolicyRow(supabase);
   if (error) return null;
@@ -109,11 +109,11 @@ export async function fetchChatPolicy(
 
 export async function upsertChatPolicy(
   supabase: SupabaseClient,
-  orgId: string,
+  agentId: string,
   policy: ConversationFeaturesProviderShape,
   updatedBy?: string | null
 ): Promise<{ error: { message: string } | null }> {
-  void orgId;
+  void agentId;
   const sanitized = stripUserKbIds(policy) || policy;
   const payload: Record<string, unknown> = {
     chat_policy: sanitized,
@@ -135,9 +135,9 @@ export async function upsertChatPolicy(
 
 export async function fetchRuntimeEnvCiphertext(
   supabase: SupabaseClient,
-  orgId: string
+  agentId: string
 ): Promise<{ value: Record<string, unknown> | null; updatedAt: string | null; error: { message: string } | null }> {
-  const { row, error } = await fetchRuntimeEnvRow(supabase, orgId);
+  const { row, error } = await fetchRuntimeEnvRow(supabase, agentId);
   if (error) return { value: null, updatedAt: null, error };
   return {
     value: (row?.runtime_env as Record<string, unknown> | null) || null,
@@ -148,11 +148,11 @@ export async function fetchRuntimeEnvCiphertext(
 
 export async function upsertRuntimeEnv(
   supabase: SupabaseClient,
-  orgId: string,
+  agentId: string,
   encryptedPayload: Record<string, unknown>,
   updatedBy?: string | null
 ): Promise<{ error: { message: string } | null }> {
-  void orgId;
+  void agentId;
   const payload: Record<string, unknown> = {
     runtime_env: encryptedPayload,
     updated_at: new Date().toISOString(),

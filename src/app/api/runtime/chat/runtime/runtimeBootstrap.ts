@@ -3,6 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { getServerContext, type ServerContextSuccess } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { fetchChatPolicy } from "@/lib/chatPolicyStore";
+import { normalizeConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
 import { compilePolicy, type PolicyPack } from "@/lib/policyEngine";
 import { isUuidLike, isValidLlm } from "../shared/slotUtils";
 import type { KbRow } from "../shared/types";
@@ -17,6 +18,7 @@ import {
   matchesAdminGroup,
   createSession,
 } from "../services/dataAccess";
+import { insertEvent } from "../services/auditRuntime";
 import { prepareSessionState } from "./sessionRuntime";
 import { pushRuntimeTimingStage, type RuntimeTimingStage } from "./runtimeSupport";
 import { DEFAULT_TOOL_PROVIDER_MAP } from "./mcpToolRegistry";
@@ -62,12 +64,43 @@ type WidgetContext = {
   widgetName: string | null;
   widgetPublicKey: string | null;
   widgetAgentId: string | null;
-  widgetOrgId: string | null;
   widgetAllowedDomains: string[];
   widgetAllowedPaths: string[];
 };
 
 const WIDGET_GUEST_USER_ID = "00000000-0000-0000-0000-000000000000";
+const policyFailureOnce = new Set<string>();
+
+async function recordPolicyFailure(input: {
+  context: RuntimeContextAny;
+  sessionId: string | null;
+  pageKey: string;
+  reason: string;
+  error?: unknown;
+}) {
+  const { context, sessionId, pageKey, reason, error } = input;
+  const key = `${sessionId || "no_session"}:${pageKey}:${reason}`;
+  if (policyFailureOnce.has(key)) return;
+  policyFailureOnce.add(key);
+  console.error("[runtime/chat/mk2] chat_policy error", {
+    page_key: pageKey,
+    reason,
+    error: error instanceof Error ? error.message : error ? String(error) : null,
+  });
+  if (!sessionId) return;
+  await insertEvent(
+    context,
+    sessionId,
+    null,
+    "CHAT_POLICY_ERROR",
+    {
+      page_key: pageKey,
+      reason,
+      error: error instanceof Error ? error.message : error ? String(error) : null,
+    },
+    { source: "runtime_bootstrap" }
+  );
+}
 
 function decodeHeaderValue(input: string) {
   const value = String(input || "").trim();
@@ -174,12 +207,17 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   let isWidgetGuestUser = false;
   let context: RuntimeContextAny | null = null;
   let authContext: RuntimeContextAny | null = null;
+  let resolvedUserPlan: string | null = null;
+  let resolvedUserGroup: Record<string, any> | null = null;
+  let resolvedUserIsAdmin: boolean | null = null;
+  let userOrgId: string | null = null;
   const authStartedAt = Date.now();
 
   const parseBodyStartedAt = Date.now();
   const body = (await req.json().catch(() => null)) as Body | null;
   pushRuntimeTimingStage(timingStages, "parse_body", parseBodyStartedAt);
   const agentId = String(body?.agent_id || "").trim();
+  const headerAgentId = decodeHeaderValue(req.headers.get("x-agent-id") || "");
   const message = String(body?.message || "").trim();
   const conversationMode = String(body?.mode || "").trim().toLowerCase() === "natural" ? "natural" : "mk2";
   const runtimeFlags = {
@@ -189,15 +227,18 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     (body?.end_user && typeof body.end_user === "object" ? body.end_user : null) ||
     (body?.visitor && typeof body.visitor === "object" ? body.visitor : null);
   const pageKey = String(body?.page_key || "").trim();
+  const requestSessionId = String(body?.session_id || "").trim() || null;
   if (!message) {
     return { response: respond({ error: "INVALID_BODY" }, { status: 400 }), state: null };
   }
 
   if (isWidgetRequest) {
-    const orgId = String(req.headers.get("x-widget-org-id") || "").trim();
-    if (!orgId) {
-      return { response: respond({ error: "WIDGET_ORG_ID_REQUIRED" }, { status: 400 }), state: null };
+    const agentId = String(req.headers.get("x-widget-agent-id") || "").trim();
+    if (!agentId) {
+      return { response: respond({ error: "WIDGET_AGENT_ID_REQUIRED" }, { status: 400 }), state: null };
     }
+    const widgetHeaderAgentId = decodeHeaderValue(req.headers.get("x-widget-agent-id") || "");
+    const widgetAgentId = widgetHeaderAgentId || agentId || null;
     let supabaseAdmin;
     try {
       supabaseAdmin = createAdminSupabaseClient();
@@ -212,29 +253,39 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     }
     const headerUserId = String(req.headers.get("x-widget-user-id") || "").trim();
     let userId = "";
-    let orgRole = "operator";
+    let agentRole = "viewer";
     if (headerUserId) {
       const { data: accessRow } = await supabaseAdmin
-        .from("A_iam_user_access_maps")
-        .select("user_id, is_admin, org_role")
-        .eq("org_id", orgId)
+        .from("B_bot_agent_access")
+        .select("role")
+        .eq("agent_id", agentId)
         .eq("user_id", headerUserId)
         .maybeSingle();
-      if (!accessRow?.user_id) {
-        userId = "";
-      } else {
-        userId = String(accessRow.user_id);
-        orgRole = String(accessRow.org_role || (accessRow.is_admin ? "admin" : "operator") || "operator");
+      const { data: profileRow } = await supabaseAdmin
+        .from("A_iam_user_profiles")
+        .select("is_admin, plan, group")
+        .eq("user_id", headerUserId)
+        .maybeSingle();
+      if (accessRow?.role || profileRow?.is_admin) {
+        userId = headerUserId;
+        resolvedUserIsAdmin = Boolean(profileRow?.is_admin);
+        resolvedUserPlan = (profileRow?.plan as string | null) ?? null;
+        resolvedUserGroup = (profileRow?.group as Record<string, any> | null) ?? null;
+        agentRole = accessRow?.role || (resolvedUserIsAdmin ? "admin" : "viewer");
       }
     }
     if (!userId) {
       userId = WIDGET_GUEST_USER_ID;
-      orgRole = "operator";
+      agentRole = "guest";
       isWidgetGuestUser = true;
+      resolvedUserIsAdmin = false;
+      resolvedUserPlan = null;
+      resolvedUserGroup = null;
     }
     const user = { id: userId } as User;
-    context = { supabase: supabaseAdmin, user, orgId, orgRole };
+    context = { supabase: supabaseAdmin, user, agentId: widgetAgentId, agentRole };
     authContext = context;
+    userOrgId = widgetAgentId;
     pushRuntimeTimingStage(timingStages, "auth_context", authStartedAt, { widget: true });
   } else {
     const authHeader = req.headers.get("authorization") || "";
@@ -262,11 +313,18 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         };
       }
       const user = { id: WIDGET_GUEST_USER_ID } as User;
-      context = { supabase: supabaseAdmin, user, orgId: null, orgRole: "guest" };
+      const guestAgentId = headerAgentId || agentId || null;
+      context = { supabase: supabaseAdmin, user, agentId: guestAgentId, agentRole: "guest" };
       authContext = context;
+      userOrgId = guestAgentId;
     } else {
-      context = contextRes;
-      authContext = contextRes;
+      const resolvedAgentId = headerAgentId || agentId || null;
+      context = { ...contextRes, agentId: resolvedAgentId };
+      authContext = context;
+      resolvedUserPlan = contextRes.plan ?? null;
+      resolvedUserGroup = (contextRes.group as Record<string, any> | null) ?? null;
+      resolvedUserIsAdmin = contextRes.isAdmin ?? null;
+      userOrgId = contextRes.agentId ?? null;
     }
   }
   if (!context || !authContext) {
@@ -347,6 +405,13 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   if (!agent) {
     return { response: respond({ error: "AGENT_NOT_FOUND" }, { status: 404 }), state: null };
   }
+  if (agent?.id) {
+    context.agentId = String(agent.id);
+    authContext.agentId = String(agent.id);
+  } else if (!context.agentId) {
+    context.agentId = null;
+    authContext.agentId = null;
+  }
 
   const agentAdminKbIds = Array.isArray(agent.admin_kb_ids)
     ? agent.admin_kb_ids.map((id) => String(id)).filter(Boolean)
@@ -374,7 +439,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       return { response: respond({ error: kbRes.error || "KB_NOT_FOUND" }, { status: 404 }), state: null };
     }
     kb = kbRes.data;
-  } else if (!agentId && context.orgId) {
+  } else if (!agentId && context.agentId) {
     const userKbRes = await fetchDefaultUserKb(context);
     pushRuntimeTimingStage(timingStages, "load_primary_kb", kbLookupStartedAt, { default_user_kb: true });
     if (userKbRes.data) {
@@ -392,7 +457,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       content_json: null,
     };
     }
-  } else if (!agentId && !context.orgId) {
+  } else if (!agentId && !context.agentId) {
     const sampleRes = await fetchLatestSampleKb(context);
     pushRuntimeTimingStage(timingStages, "load_primary_kb", kbLookupStartedAt, { sample_kb: true });
     if (sampleRes.data) {
@@ -426,53 +491,86 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   }
 
   const iamLookupStartedAt = Date.now();
-  const { data: accessRow } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("group, plan, is_admin, org_role, org_id")
-    .eq("user_id", authContext.user.id)
-    .maybeSingle();
-  const userGroup = (accessRow?.group as Record<string, any> | null) ?? null;
-  const userPlan = (accessRow?.plan as string | null) ?? null;
-  const rawUserIsAdmin = typeof accessRow?.is_admin === "boolean" ? accessRow.is_admin : null;
+  const userGroup = resolvedUserGroup;
+  const userPlan = resolvedUserPlan;
+  const rawUserIsAdmin = typeof resolvedUserIsAdmin === "boolean" ? resolvedUserIsAdmin : null;
   const userIsAdmin = isWidgetRequest && isWidgetGuestUser ? false : rawUserIsAdmin;
-  const userRole = (accessRow?.org_role as string | null) ?? null;
-  const userOrgId = (accessRow?.org_id as string | null) ?? null;
+  const userRole = context.agentRole ?? null;
+  const userAgentId = context.agentId ?? null;
 
   let authSettings: { id?: string | null; providers?: Record<string, Record<string, any> | undefined> | null } | null = null;
   let providers: Record<string, Record<string, any> | undefined> = {};
-  if (authContext.orgId) {
+  if (authContext.agentId) {
     const { data: authSettingsByUser } = await context.supabase
       .from("A_iam_auth_settings")
       .select("id, providers")
-      .eq("org_id", authContext.orgId)
+      .eq("agent_id", authContext.agentId)
       .eq("user_id", authContext.user.id)
       .maybeSingle();
     const { data: authSettingsByOrg } = await context.supabase
       .from("A_iam_auth_settings")
       .select("id, providers")
-      .eq("org_id", authContext.orgId)
+      .eq("agent_id", authContext.agentId)
       .is("user_id", null)
       .maybeSingle();
     const userProviders = (authSettingsByUser?.providers || {}) as Record<string, Record<string, any> | undefined>;
     const orgProviders = (authSettingsByOrg?.providers || {}) as Record<string, Record<string, any> | undefined>;
     const mergedProviders: Record<string, Record<string, any> | undefined> = { ...userProviders };
-    try {
-      const adminSupabase = createAdminSupabaseClient();
-      const orgChatPolicy = await fetchChatPolicy(adminSupabase, authContext.orgId);
-      if (orgChatPolicy) {
-        mergedProviders.chat_policy = orgChatPolicy as unknown as Record<string, any>;
-      }
-    } catch {
-      // ignore admin fetch failures and leave chat_policy unset
-    }
     if (isWidgetRequest && !authSettingsByUser) {
       Object.assign(mergedProviders, orgProviders);
     }
     authSettings = { providers: mergedProviders };
     providers = (authSettings?.providers || {}) as Record<string, Record<string, any> | undefined>;
   } else {
-    authSettings = { providers: {} };
-    providers = {};
+    const mergedProviders: Record<string, Record<string, any> | undefined> = {};
+    authSettings = { providers: mergedProviders };
+    providers = (authSettings?.providers || {}) as Record<string, Record<string, any> | undefined>;
+  }
+  try {
+    const adminSupabase = createAdminSupabaseClient();
+    const orgChatPolicy = await fetchChatPolicy(adminSupabase, authContext.agentId || "");
+    if (!orgChatPolicy) {
+      await recordPolicyFailure({
+        context,
+        sessionId: requestSessionId,
+        pageKey: pageKey || "/",
+        reason: "CHAT_POLICY_MISSING",
+      });
+      return { response: respond({ error: "CHAT_POLICY_MISSING" }, { status: 500 }), state: null };
+    }
+    const normalizedPageKey = normalizeConversationPageKey(pageKey || "/");
+    const registry = Array.isArray(orgChatPolicy.page_registry)
+      ? orgChatPolicy.page_registry.map((entry) => normalizeConversationPageKey(entry))
+      : [];
+    if (!registry.includes(normalizedPageKey)) {
+      await recordPolicyFailure({
+        context,
+        sessionId: requestSessionId,
+        pageKey: normalizedPageKey,
+        reason: "CHAT_POLICY_PAGE_NOT_REGISTERED",
+      });
+      return { response: respond({ error: "CHAT_POLICY_PAGE_NOT_REGISTERED" }, { status: 500 }), state: null };
+    }
+    if (!orgChatPolicy.pages || !orgChatPolicy.pages[normalizedPageKey]) {
+      await recordPolicyFailure({
+        context,
+        sessionId: requestSessionId,
+        pageKey: normalizedPageKey,
+        reason: "CHAT_POLICY_PAGE_SETTINGS_MISSING",
+      });
+      return { response: respond({ error: "CHAT_POLICY_PAGE_SETTINGS_MISSING" }, { status: 500 }), state: null };
+    }
+    providers = { ...providers, chat_policy: orgChatPolicy as unknown as Record<string, any> };
+    authSettings = { ...(authSettings || {}), providers };
+  } catch (error) {
+    await recordPolicyFailure({
+      context,
+      sessionId: requestSessionId,
+      pageKey: pageKey || "/",
+      reason: "CHAT_POLICY_FETCH_FAILED",
+      error,
+    });
+    return { response: respond({ error: "CHAT_POLICY_FETCH_FAILED" }, { status: 500 }), state: null };
   }
   const providerAvailable = Object.keys(providers || {}).filter((key) => {
     const value = providers[key];
@@ -504,7 +602,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       .eq("is_admin", true)
       .eq("is_active", true)
       .not("content_json", "is", null)
-      .or(`org_id.eq.${context.orgId},org_id.is.null`);
+      .or(`agent_id.eq.${context.agentId},agent_id.is.null`);
     shouldLoadAdminKbs = Boolean((existsRes as { count?: number | null }).count);
   } catch {
     shouldLoadAdminKbs = true;
@@ -572,7 +670,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const allowedToolVersionByName = new Map<string, string | null>();
   const allowedToolByName = new Map<string, string[]>();
   const allowedToolsStartedAt = Date.now();
-  const isPublicContext = !context.orgId;
+  const isPublicContext = !context.agentId;
   const applyPublicToolFilter = (query: any) => (isPublicContext ? query.eq("is_public", true) : query);
   let allowlistMeta = {
     requestedToolCount: 0,
@@ -758,7 +856,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           decodeHeaderValue(req.headers.get("x-widget-agent-id") || "") ||
           String(agent.id || "").trim() ||
           null,
-        widgetOrgId: decodeHeaderValue(req.headers.get("x-widget-org-id") || "") || authContext.orgId || null,
+        widgetOrgId: decodeHeaderValue(req.headers.get("x-widget-agent-id") || "") || authContext.agentId || null,
         widgetAllowedDomains: parseHeaderArray(req.headers.get("x-widget-allowed-domains") || ""),
         widgetAllowedPaths: parseHeaderArray(req.headers.get("x-widget-allowed-paths") || ""),
       }

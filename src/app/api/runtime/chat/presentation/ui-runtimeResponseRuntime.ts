@@ -17,7 +17,7 @@ import {
   type RuntimeResponderPayload,
   validateRuntimeResponseSchema,
 } from "./runtimeResponseSchema";
-import { buildRenderPlan } from "../policies/renderPolicy";
+import { buildRenderPlan, resolvePromptKindFromContract } from "../policies/renderPolicy";
 import type { RuntimeContext } from "../shared/runtimeTypes";
 
 type RuntimeContextAnyLike = RuntimeContext;
@@ -31,6 +31,8 @@ export function createRuntimeResponder(input: {
   getCurrentSessionId: () => string | null;
   getLatestTurnId: () => string | null;
   getFirstTurnInSession: () => boolean;
+  getExpectedInputStage?: () => string | null;
+  getExpectedInput?: () => string | null;
 }) {
   const {
     runtimeTraceId,
@@ -41,6 +43,8 @@ export function createRuntimeResponder(input: {
     getCurrentSessionId,
     getLatestTurnId,
     getFirstTurnInSession,
+    getExpectedInputStage,
+    getExpectedInput,
   } = input;
   let timingLogged = false;
 
@@ -67,7 +71,7 @@ export function createRuntimeResponder(input: {
       });
   }
 
-  return (payload: RuntimeResponderPayload, init?: ResponseInit) => {
+  return async (payload: RuntimeResponderPayload, init?: ResponseInit) => {
     if (ENABLE_RUNTIME_TIMING && !timingLogged) {
       timingLogged = true;
       const responseStatus = init?.status || 200;
@@ -202,6 +206,10 @@ export function createRuntimeResponder(input: {
       quickReplyConfig: resolvedQuickReplyConfig || null,
       cards,
       quickReplySource,
+      promptKindOverride: resolvePromptKindFromContract({
+        expectedInputStage: getExpectedInputStage ? getExpectedInputStage() : null,
+        expectedInput: getExpectedInput ? getExpectedInput() : null,
+      }),
     });
     const responseSchema = buildRuntimeResponseSchema({
       message: payload.message,
@@ -215,35 +223,33 @@ export function createRuntimeResponder(input: {
     });
     const schemaValidation = validateRuntimeResponseSchema(responseSchema);
     if (RuntimeContextAny && currentTurnId) {
-      void (async () => {
-        try {
-          const { data } = await RuntimeContextAny.supabase
-            .from("D_conv_turns")
-            .select("bot_context")
-            .eq("id", currentTurnId)
-            .maybeSingle();
-          const currentBotContext =
-            data?.bot_context && typeof data.bot_context === "object" ? (data.bot_context as Record<string, any>) : {};
-          await RuntimeContextAny.supabase
-            .from("D_conv_turns")
-            .update({
-              bot_context: {
-                ...currentBotContext,
-                response_schema: responseSchema,
-                render_plan: renderPlan,
-                response_schema_issues: schemaValidation.ok ? null : schemaValidation.issues,
-              },
-            })
-            .eq("id", currentTurnId);
-        } catch (error: unknown) {
-          console.warn("[runtime/chat_mk2] failed to persist response schema", {
-            trace_id: runtimeTraceId,
-            session_id: currentSessionId,
-            turn_id: currentTurnId,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      })();
+      try {
+        const { data } = await RuntimeContextAny.supabase
+          .from("D_conv_turns")
+          .select("bot_context")
+          .eq("id", currentTurnId)
+          .maybeSingle();
+        const currentBotContext =
+          data?.bot_context && typeof data.bot_context === "object" ? (data.bot_context as Record<string, any>) : {};
+        await RuntimeContextAny.supabase
+          .from("D_conv_turns")
+          .update({
+            bot_context: {
+              ...currentBotContext,
+              response_schema: responseSchema,
+              render_plan: renderPlan,
+              response_schema_issues: schemaValidation.ok ? null : schemaValidation.issues,
+            },
+          })
+          .eq("id", currentTurnId);
+      } catch (error: unknown) {
+        console.warn("[runtime/chat_mk2] failed to persist response schema", {
+          trace_id: runtimeTraceId,
+          session_id: currentSessionId,
+          turn_id: currentTurnId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
     return NextResponse.json(
       {

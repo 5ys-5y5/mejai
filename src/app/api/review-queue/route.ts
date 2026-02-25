@@ -11,9 +11,12 @@ function parseOrder(orderParam: string | null) {
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
-  const context = await getServerContext(authHeader, cookieHeader);
+  const context = await getServerContext(authHeader, cookieHeader, null, { requireAgent: false });
   if ("error" in context) {
     return NextResponse.json({ error: context.error }, { status: 401 });
+  }
+  if (!context.agentId) {
+    return NextResponse.json({ items: [], total: 0 });
   }
   const url = new URL(req.url);
   const limit = Math.min(Number(url.searchParams.get("limit") || 20), 100);
@@ -24,8 +27,8 @@ export async function GET(req: NextRequest) {
 
   let query = context.supabase
     .from("E_ops_review_queue_items")
-    .select("*, D_conv_sessions!inner(id, org_id)", { count: "exact" })
-    .eq("D_conv_sessions.org_id", context.orgId)
+    .select("*, D_conv_sessions!inner(id, agent_id)", { count: "exact" })
+    .eq("D_conv_sessions.agent_id", context.agentId)
     .order(field, { ascending })
     .range(offset, offset + limit - 1);
 

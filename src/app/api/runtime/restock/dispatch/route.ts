@@ -4,7 +4,7 @@ import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 
 type NotificationRow = {
   id: string;
-  org_id: string | null;
+  agent_id: string | null;
   mall_id: string | null;
   session_id: string | null;
   phone: string;
@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await supabase
     .from("E_ops_notification_messages")
     .select(
-      "id,org_id,mall_id,session_id,phone,channel,category,product_id,product_name,intent_name,restock_at,lead_day,scheduled_for,message_text,template_key,template_vars,attempts"
+      "id,agent_id,mall_id,session_id,phone,channel,category,product_id,product_name,intent_name,restock_at,lead_day,scheduled_for,message_text,template_key,template_vars,attempts"
     )
     .eq("status", "pending")
     .order("scheduled_for", { ascending: true })

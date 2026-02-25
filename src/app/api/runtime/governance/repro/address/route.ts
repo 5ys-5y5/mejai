@@ -22,7 +22,7 @@ function nowIso() {
 
 async function createReproSessionAndTurn(input: {
   supabaseAdmin: ReturnType<typeof createAdminSupabaseClient>;
-  orgId: string;
+  agentId: string;
   reproCase: ReproCase;
 }) {
   const startedAt = nowIso();
@@ -30,7 +30,7 @@ async function createReproSessionAndTurn(input: {
   const { data: session, error: sessionError } = await input.supabaseAdmin
     .from("D_conv_sessions")
     .insert({
-      org_id: input.orgId,
+      agent_id: input.agentId,
       session_code: sessionCode,
       started_at: startedAt,
       channel: "runtime_repro",
@@ -127,11 +127,11 @@ export async function POST(req: NextRequest) {
   if (!access.ok && !localBypassAllowed) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
-  const orgId = access.ok
-    ? access.orgId
+  const agentId = access.ok
+    ? access.agentId
     : String(
-        (body as Record<string, unknown>).org_id ||
-          req.headers.get("x-org-id") ||
+        (body as Record<string, unknown>).agent_id ||
+          req.headers.get("x-agent-id") ||
           "8ad81b6b-3210-40dd-8e00-9a43a4395923"
       ).trim();
   const supabaseAdmin = access.ok ? access.supabaseAdmin : createAdminSupabaseClient();
@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     try {
       reproSession = await createReproSessionAndTurn({
         supabaseAdmin,
-        orgId,
+        agentId,
         reproCase,
       });
     } catch (error) {
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
   const exceptionStats = await fetchExceptionStats({
     supabase: supabaseAdmin,
     fingerprint: exceptionFingerprint,
-    orgId,
+    agentId,
   });
   const proposal = await buildPatchProposal({
     violation,
@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
         turnId: violation.turn_id,
         eventType: "PRINCIPLE_VIOLATION_DETECTED",
         payload: {
-          org_id: orgId,
+          agent_id: agentId,
           violation_id: violation.violation_id,
           principle_key: violation.principle_key,
           runtime_scope: violation.runtime_scope,
@@ -207,7 +207,7 @@ export async function POST(req: NextRequest) {
           evidence: violation.evidence,
           baseline_source: baseline.source,
         },
-        botContext: { org_id: orgId, actor: actorType, source: "repro_address" },
+        botContext: { agent_id: agentId, actor: actorType, source: "repro_address" },
       });
       await insertAuditEvent({
         supabase: supabaseAdmin,
@@ -216,10 +216,10 @@ export async function POST(req: NextRequest) {
         eventType: "RUNTIME_PATCH_PROPOSAL_CREATED",
         payload: {
           ...(proposal as unknown as Record<string, unknown>),
-          org_id: orgId,
+          agent_id: agentId,
           repro_case: reproCase,
         },
-        botContext: { org_id: orgId, actor: actorType, source: "repro_address" },
+        botContext: { agent_id: agentId, actor: actorType, source: "repro_address" },
       });
     } catch (error) {
       return NextResponse.json(
@@ -255,9 +255,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: access.error }, { status: access.status });
   }
 
-  const orgId = access.ok
-    ? access.orgId
-    : String(req.nextUrl.searchParams.get("org_id") || req.headers.get("x-org-id") || "8ad81b6b-3210-40dd-8e00-9a43a4395923").trim();
+  const agentId = access.ok
+    ? access.agentId
+    : String(req.nextUrl.searchParams.get("agent_id") || req.headers.get("x-agent-id") || "8ad81b6b-3210-40dd-8e00-9a43a4395923").trim();
   const supabaseAdmin = access.ok ? access.supabaseAdmin : createAdminSupabaseClient();
   const limit = Math.max(1, Math.min(200, Number(req.nextUrl.searchParams.get("limit") || 40)));
 
@@ -275,8 +275,8 @@ export async function GET(req: NextRequest) {
   const reproRows = rows
     .filter((row) => {
       const payload = row && typeof row.payload === "object" ? (row.payload as Record<string, unknown>) : {};
-      const payloadOrg = String(payload.org_id || "");
-      return Boolean(payload.repro_case) && (!payloadOrg || payloadOrg === orgId);
+      const payloadOrg = String(payload.agent_id || "");
+      return Boolean(payload.repro_case) && (!payloadOrg || payloadOrg === agentId);
     })
     .slice(0, limit)
     .map((row) => {
@@ -296,7 +296,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    org_id: orgId,
+    agent_id: agentId,
     count: reproRows.length,
     rows: reproRows,
   });

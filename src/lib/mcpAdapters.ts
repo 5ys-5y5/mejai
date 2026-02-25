@@ -13,7 +13,8 @@ import { isTokenExpired, refreshCafe24Token } from "@/lib/cafe24Tokens";
 
 type AdapterContext = {
   supabase: SupabaseClient;
-  orgId: string | null;
+  agentId: string | null;
+  agentId?: string | null;
   userId?: string | null;
 };
 
@@ -79,7 +80,7 @@ type Cafe24ProviderConfig = {
 
 type AuthSettingsRow = {
   id: string;
-  org_id: string;
+  agent_id: string;
   user_id: string;
   providers: Record<string, Cafe24ProviderConfig | undefined>;
 };
@@ -228,14 +229,14 @@ async function getCafe24Config(ctx?: AdapterContext) {
   if (!ctx) {
     return { ok: false as const, error: "MISSING_CONTEXT" };
   }
-  const { supabase, orgId, userId } = ctx;
+  const { supabase, agentId, userId } = ctx;
   let data: Record<string, any> | null = null;
   let error: { message?: string } | null = null;
   if (userId) {
     const res = await supabase
       .from("A_iam_auth_settings")
-      .select("id, org_id, user_id, providers")
-      .eq("org_id", orgId)
+      .select("id, agent_id, user_id, providers")
+      .eq("agent_id", agentId)
       .eq("user_id", userId)
       .maybeSingle();
     data = res.data as Record<string, any> | null;
@@ -244,8 +245,8 @@ async function getCafe24Config(ctx?: AdapterContext) {
   if (!data) {
     const res = await supabase
       .from("A_iam_auth_settings")
-      .select("id, org_id, user_id, providers")
-      .eq("org_id", orgId)
+      .select("id, agent_id, user_id, providers")
+      .eq("agent_id", agentId)
       .is("user_id", null)
       .maybeSingle();
     data = res.data as Record<string, any> | null;
@@ -1281,14 +1282,14 @@ const adapters: Record<string, ToolAdapter> = {
     }
     const { data, error } = await ctx.supabase
       .from("G_com_product_aliases")
-      .select("org_id, alias, product_id, match_type, priority, is_active")
+      .select("agent_id, alias, product_id, match_type, priority, is_active")
       .eq("is_active", true)
-      .or(`org_id.eq.${ctx.orgId},org_id.is.null`);
+      .or(`agent_id.eq.${ctx.agentId},agent_id.is.null`);
     if (error) {
       return { status: "error", error: { code: "DB_ERROR", message: error.message } };
     }
     const aliases = (data || []) as Array<{
-      org_id: string | null;
+      agent_id: string | null;
       alias: string;
       product_id: string;
       match_type: string;
@@ -1705,7 +1706,8 @@ const adapters: Record<string, ToolAdapter> = {
 
       const nowIso = new Date().toISOString();
       const rows = leadDaysToSchedule.map((leadDay) => ({
-        org_id: ctx.orgId,
+        agent_id: ctx.agentId,
+        agent_id: ctx.agentId || null,
         mall_id: mallId || null,
         session_id: sessionId,
         channel,
@@ -1909,11 +1911,12 @@ const adapters: Record<string, ToolAdapter> = {
       code_hash: codeHash,
       expires_at: expiresAt,
     };
-    if (ctx.orgId) {
-      otpRow.org_id = ctx.orgId;
+    if (ctx.agentId) {
+      otpRow.agent_id = ctx.agentId;
     } else {
-      otpRow.org_id = null;
+      otpRow.agent_id = null;
     }
+    otpRow.agent_id = ctx.agentId || null;
     if (ctx.userId) {
       otpRow.user_id = ctx.userId;
     }
@@ -1923,11 +1926,12 @@ const adapters: Record<string, ToolAdapter> = {
     }
     const otpNowIso = new Date().toISOString();
     let notifData: Record<string, unknown> | null = null;
-    if (ctx.orgId) {
+    if (ctx.agentId) {
       const { data, error: notifError } = await ctx.supabase
         .from("E_ops_notification_messages")
         .insert({
-          org_id: ctx.orgId,
+          agent_id: ctx.agentId,
+          agent_id: ctx.agentId || null,
           mall_id: null,
           session_id: String(params.session_id || "") || null,
           channel: "sms",

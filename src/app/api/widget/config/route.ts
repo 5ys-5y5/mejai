@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   const { data: widget, error } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, name, theme, public_key, allowed_domains, is_active")
+    .select("id, agent_id, name, theme, public_key, allowed_domains, is_active")
     .eq("public_key", publicKey)
     .eq("is_active", true)
     .maybeSingle();
@@ -50,6 +50,9 @@ export async function GET(req: NextRequest) {
   if (!widget) {
     return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
   }
+  if (!widget.agent_id) {
+    return withCors(NextResponse.json({ error: "WIDGET_AGENT_REQUIRED" }, { status: 400 }), originHeader);
+  }
 
   const allowedDomains = Array.isArray(widget.allowed_domains) ? widget.allowed_domains : [];
   const originHost = extractHostFromUrl(originHeader || "");
@@ -57,7 +60,7 @@ export async function GET(req: NextRequest) {
     return withCors(NextResponse.json({ error: "DOMAIN_NOT_ALLOWED" }, { status: 403 }), originHeader);
   }
 
-  const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null);
+  const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.agent_id || "")).catch(() => null);
 
   return withCors(
     NextResponse.json({

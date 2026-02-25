@@ -54,8 +54,8 @@ function extractManagedEnvFromCiphertext(
   return normalizeManagedBundle(raw);
 }
 
-export async function loadManagedEnvForOrg(orgId: string, options?: { force?: boolean }) {
-  const cached = cache.get(orgId);
+export async function loadManagedEnvForOrg(agentId: string, options?: { force?: boolean }) {
+  const cached = cache.get(agentId);
   const now = Date.now();
   if (!options?.force && cached && cached.expiresAt > now) {
     return cached.values;
@@ -68,12 +68,12 @@ export async function loadManagedEnvForOrg(orgId: string, options?: { force?: bo
     return cached?.values || EMPTY_BUNDLE;
   }
 
-  const { value, updatedAt, error } = await fetchRuntimeEnvCiphertext(supabase, orgId);
+  const { value, updatedAt, error } = await fetchRuntimeEnvCiphertext(supabase, agentId);
   if (error) {
     return cached?.values || EMPTY_BUNDLE;
   }
   const values = extractManagedEnvFromCiphertext(value);
-  cache.set(orgId, {
+  cache.set(agentId, {
     values,
     updatedAt,
     expiresAt: now + CACHE_TTL_MS,
@@ -81,8 +81,8 @@ export async function loadManagedEnvForOrg(orgId: string, options?: { force?: bo
   return values;
 }
 
-export async function applyManagedEnvOverrides(orgId: string) {
-  const bundle = await loadManagedEnvForOrg(orgId);
+export async function applyManagedEnvOverrides(agentId: string) {
+  const bundle = await loadManagedEnvForOrg(agentId);
   const mode = process.env.NODE_ENV === "development" ? "local" : "deploy";
   const picked = mode === "local" ? bundle.local : bundle.deploy;
   const fallback = mode === "local" ? bundle.deploy : bundle.local;

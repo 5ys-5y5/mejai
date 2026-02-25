@@ -26,7 +26,7 @@ type DebugSnapshot = {
   providerAvailable: string[];
   authSettingsId: string | null;
   userId: string;
-  orgId: string | null;
+  agentId: string | null;
   userPlan: string | null;
   userIsAdmin: boolean | null;
   userRole: string | null;
@@ -174,7 +174,7 @@ type InsertTurnParams = {
     debugPrefixJson: Record<string, any>
   ) => Promise<InsertFinalTurnResult>;
   context: RuntimeContextAny;
-  orgId?: string | null;
+  agentId?: string | null;
 };
 
 const ASK_ADDRESS_REGEX = /(주소|배송지|수령지|우편번호)/;
@@ -397,12 +397,12 @@ async function backfillTurnIdForRuntimeTrace(input: {
 
 async function runRuntimeSelfUpdateReview(params: {
   context: RuntimeContextAny;
-  orgId: string;
+  agentId: string;
   sessionId: string;
   turnId: string;
 }) {
-  const { context, orgId, sessionId, turnId } = params;
-  const config = await readGovernanceConfig({ supabase: context.supabase, orgId });
+  const { context, agentId, sessionId, turnId } = params;
+  const config = await readGovernanceConfig({ supabase: context.supabase, agentId });
   if (!config.enabled) return;
 
   await insertAuditEvent(context, {
@@ -410,12 +410,12 @@ async function runRuntimeSelfUpdateReview(params: {
     turnId,
     eventType: "RUNTIME_SELF_UPDATE_REVIEW_STARTED",
     payload: {
-      org_id: orgId,
+      agent_id: agentId,
       session_id: sessionId,
       turn_id: turnId,
       config_source: config.source,
     },
-    botContext: { org_id: orgId, stage: "runtime_self_update" },
+    botContext: { agent_id: agentId, stage: "runtime_self_update" },
   });
 
   const [{ data: turnsData }, { data: eventsData }, { data: mcpData }, { data: debugData }] = await Promise.all([
@@ -509,13 +509,13 @@ async function runRuntimeSelfUpdateReview(params: {
       turnId,
       eventType: "RUNTIME_SELF_UPDATE_REVIEW_COMPLETED",
       payload: {
-        org_id: orgId,
+        agent_id: agentId,
         session_id: sessionId,
         turn_id: turnId,
         violation_count: 0,
         deduped_violation_count: collapsed.length - targets.length,
       },
-      botContext: { org_id: orgId, stage: "runtime_self_update" },
+      botContext: { agent_id: agentId, stage: "runtime_self_update" },
     });
     return;
   }
@@ -528,7 +528,7 @@ async function runRuntimeSelfUpdateReview(params: {
     const exceptionStats = await fetchExceptionStats({
       supabase: context.supabase,
       fingerprint: exceptionFingerprint,
-      orgId,
+      agentId,
     });
     const proposal = await buildPatchProposal({
       violation,
@@ -542,7 +542,7 @@ async function runRuntimeSelfUpdateReview(params: {
       turnId,
       eventType: "PRINCIPLE_VIOLATION_DETECTED",
       payload: {
-        org_id: orgId,
+        agent_id: agentId,
         violation_id: violation.violation_id,
         principle_key: violation.principle_key,
         runtime_scope: violation.runtime_scope,
@@ -553,7 +553,7 @@ async function runRuntimeSelfUpdateReview(params: {
         trigger: "runtime_turn_write",
         issue_fingerprint: issueFingerprint,
       },
-      botContext: { org_id: orgId, stage: "runtime_self_update" },
+      botContext: { agent_id: agentId, stage: "runtime_self_update" },
     });
     await insertAuditEvent(context, {
       sessionId,
@@ -561,11 +561,11 @@ async function runRuntimeSelfUpdateReview(params: {
       eventType: "RUNTIME_PATCH_PROPOSAL_CREATED",
       payload: {
         ...(proposal as unknown as Record<string, any>),
-        org_id: orgId,
+        agent_id: agentId,
         trigger: "runtime_turn_write",
         issue_fingerprint: issueFingerprint,
       },
-      botContext: { org_id: orgId, actor: "runtime_self_update" },
+      botContext: { agent_id: agentId, actor: "runtime_self_update" },
     });
   }
 
@@ -574,14 +574,14 @@ async function runRuntimeSelfUpdateReview(params: {
     turnId,
     eventType: "RUNTIME_SELF_UPDATE_REVIEW_COMPLETED",
     payload: {
-      org_id: orgId,
+      agent_id: agentId,
       session_id: sessionId,
       turn_id: turnId,
       violation_count: targets.length,
       proposal_count: targets.length,
       deduped_violation_count: collapsed.length - targets.length,
     },
-    botContext: { org_id: orgId, stage: "runtime_self_update" },
+    botContext: { agent_id: agentId, stage: "runtime_self_update" },
   });
 }
 
@@ -598,7 +598,7 @@ export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
     pendingIntentQueue,
     insertFinalTurn,
     context,
-    orgId,
+    agentId,
   } = params;
   let nextDebugPrefixJson = currentDebugPrefixJson;
 
@@ -629,7 +629,7 @@ export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
   }
   const result = await insertFinalTurn(context, payload, nextDebugPrefixJson);
   const latestTurnId = result.data?.id || null;
-  if (!result.error && latestTurnId && result.data?.session_id && orgId) {
+  if (!result.error && latestTurnId && result.data?.session_id && agentId) {
     try {
       await backfillTurnIdForRuntimeTrace({
         context,
@@ -638,7 +638,7 @@ export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
       });
       await runRuntimeSelfUpdateReview({
         context,
-        orgId: String(orgId),
+        agentId: String(agentId),
         sessionId: String(result.data.session_id),
         turnId: String(latestTurnId),
       });

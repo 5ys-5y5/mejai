@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await context.supabase
     .from("B_bot_knowledge_bases")
     .select("id, content")
-    .eq("org_id", context.orgId)
+    .eq("agent_id", context.agentId)
     .is("embedding", null)
     .limit(limit);
 

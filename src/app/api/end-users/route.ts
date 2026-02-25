@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
   let query = context.supabase
     .from("A_end_users")
     .select("*", { count: "exact" })
-    .eq("org_id", context.orgId)
+    .eq("agent_id", context.agentId)
     .is("deleted_at", null)
     .order(field, { ascending })
     .range(offset, offset + limit - 1);

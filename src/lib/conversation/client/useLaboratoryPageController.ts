@@ -90,7 +90,15 @@ function buildMessageLogsForMessages(
 }
 
 export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app/laboratory") {
-  const { isAdminUser, pageFeatures, providerValue, loadPlan, setupUi } = useConversationPageRuntimeConfig(pageKey);
+  const {
+    isAdminUser,
+    pageFeatures,
+    providerValue,
+    loadPlan,
+    setupUi,
+    policyLoading,
+    policyError,
+  } = useConversationPageRuntimeConfig(pageKey);
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,17 +106,18 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
   const { providers: mcpProviders, tools } = useConversationMcpCatalog(loadPlan.loadMcp, pageFeatures);
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [inlineKbSamples, setInlineKbSamples] = useState<InlineKbSampleItem[]>([]);
-  const [wsStatus, setWsStatus] = useState("연결 대기");
+  const [wsStatus, setWsStatus] = useState("\uC5F0\uACB0 \uB300\uAE30");
   const wsRef = useRef<WebSocket | null>(null);
   const loadingHints = useMemo(() => {
     const hints: string[] = [];
+    if (policyLoading) hints.push("chat_policy");
     if (loadPlan.loadKb) hints.push("KB");
-    if (loadPlan.loadAgents) hints.push("에이전트/세션");
-    if (loadPlan.loadInlineKbSamples) hints.push("인라인 KB 샘플");
-    if (loadPlan.loadMcp) hints.push("MCP 목록");
-    if (hints.length === 0) hints.push("대화 설정");
+    if (loadPlan.loadAgents) hints.push("\uC5D0\uC774\uC804\uD2B8/\uC138\uC158");
+    if (loadPlan.loadInlineKbSamples) hints.push("\uC778\uB77C\uC778 KB \uC0D8\uD50C");
+    if (loadPlan.loadMcp) hints.push("MCP \uBAA9\uB85D");
+    if (hints.length === 0) hints.push("\uC900\uBE44 \uC911");
     return hints;
-  }, [loadPlan]);
+  }, [loadPlan, policyLoading]);
 
   const [models, setModels] = useState<ModelState[]>(() => [createDefaultModel()]);
   const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
@@ -130,6 +139,12 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     [pageFeatures.setup.llms]
   );
   const effectiveDefaultLlm = visibleLlmIds[0] || "chatgpt";
+  useEffect(() => {
+    if (!policyError) return;
+    setLoading(false);
+    setError(policyError);
+  }, [policyError]);
+
 
   useEffect(() => {
     setModels((prev) =>
@@ -198,6 +213,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
   }, [pageFeatures.setup.inlineUserKbInput]);
 
   useEffect(() => {
+    if (policyLoading || policyError) return;
     let mounted = true;
     async function load() {
       setLoading(true);
@@ -232,7 +248,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     return () => {
       mounted = false;
     };
-  }, [loadPlan, pageFeatures]);
+  }, [loadPlan, pageFeatures, pageKey, policyLoading, policyError]);
 
   const connectWs = useCallback(() => {
     if (!WS_URL) {
@@ -1160,11 +1176,14 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     }
   };
 
+  const combinedLoading = loading || policyLoading;
+  const combinedError = policyError || error;
+
   return {
     MAX_MODELS,
     EXPANDED_PANEL_HEIGHT,
-    loading,
-    error,
+    loading: combinedLoading,
+    error: combinedError,
     kbItems,
     inlineKbSamples,
     wsStatus,

@@ -19,7 +19,12 @@ export function useConversationPageRuntimeConfig(
   const profileRole = useConversationAccessRoleFromProfile();
   const accessRole = sessionId ? sessionRole.accessRole : profileRole;
   const isAdminUser = accessRole === "admin";
-  const { features: resolvedFeatures, providerValue } = useConversationPageFeatures(pageKey, accessRole);
+  const {
+    features: resolvedFeatures,
+    providerValue,
+    loading: policyLoading,
+    error: policyError,
+  } = useConversationPageFeatures(pageKey, accessRole);
   const pageFeatures: ConversationPageFeatures = useMemo(() => {
     if (pageKey !== "/" || isAdminUser) return resolvedFeatures;
     if (resolvedFeatures.setup.inlineUserKbInput) return resolvedFeatures;
@@ -45,7 +50,12 @@ export function useConversationPageRuntimeConfig(
     }
     return plan;
   }, [pageFeatures, pageKey]);
-  const setupUi = useMemo(() => resolveConversationSetupUi(pageKey, providerValue), [pageKey, providerValue]);
+  const setupUi = useMemo(() => {
+    if (policyError || policyLoading || !providerValue) {
+      return resolveConversationSetupUi(pageKey, null);
+    }
+    return resolveConversationSetupUi(pageKey, providerValue);
+  }, [pageKey, policyError, policyLoading, providerValue]);
 
   return {
     isAdminUser,
@@ -53,6 +63,8 @@ export function useConversationPageRuntimeConfig(
     providerValue,
     loadPlan,
     setupUi,
+    policyLoading,
+    policyError,
   };
 }
 

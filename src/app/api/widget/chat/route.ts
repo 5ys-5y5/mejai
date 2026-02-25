@@ -55,12 +55,11 @@ async function logWidgetProxyEvent(input: {
   supabase: ReturnType<typeof createAdminSupabaseClient>;
   sessionId: string;
   widgetId: string;
-  orgId: string;
   agentId?: string | null;
   eventType: string;
   payload: Record<string, unknown>;
 }) {
-  const { supabase, sessionId, widgetId, orgId, agentId, eventType, payload } = input;
+  const { supabase, sessionId, widgetId, agentId, eventType, payload } = input;
   try {
     await supabase.from("F_audit_events").insert({
       session_id: sessionId,
@@ -68,7 +67,6 @@ async function logWidgetProxyEvent(input: {
       event_type: eventType,
       payload: {
         widget_id: widgetId,
-        org_id: orgId,
         agent_id: agentId || null,
         ...payload,
       },
@@ -133,35 +131,52 @@ export async function POST(req: NextRequest) {
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, agent_id, is_active, name, public_key, allowed_domains, allowed_paths")
+    .select("id, agent_id, is_active, name, public_key, allowed_domains, allowed_paths")
     .eq("id", payload.widget_id)
     .maybeSingle();
   if (!widget || !widget.is_active) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
+  if (!widget.agent_id) {
+    return NextResponse.json({ error: "WIDGET_AGENT_REQUIRED" }, { status: 400 });
+  }
 
   try {
-    await applyManagedEnvOverrides(String(widget.org_id));
+    await applyManagedEnvOverrides(String(widget.agent_id || ""));
   } catch {
     // Ignore managed env failures; fall back to process.env.
   }
 
   let providerValue: ConversationFeaturesProviderShape | null = null;
   try {
-    providerValue = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || ""));
+    providerValue = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.agent_id || ""));
   } catch {
     providerValue = null;
   }
   const accessRole = await resolveAccessRoleForSession({
     supabase: supabaseAdmin,
-    orgId: String(widget.org_id || ""),
+    agentId: String(widget.agent_id || ""),
     sessionId,
     adminUserId,
   });
-  const featureFlags = applyConversationFeatureVisibility(
-    resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
-    accessRole
-  );
+  let featureFlags: ReturnType<typeof applyConversationFeatureVisibility>;
+  try {
+    featureFlags = applyConversationFeatureVisibility(
+      resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
+      accessRole
+    );
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "CHAT_POLICY_ERROR";
+    await logWidgetProxyEvent({
+      supabase: supabaseAdmin,
+      sessionId,
+      widgetId: String(widget.id),
+      agentId: widget.agent_id || null,
+      eventType: "CHAT_POLICY_ERROR",
+      payload: { reason },
+    });
+    return NextResponse.json({ error: reason }, { status: 500 });
+  }
   const requestToolIds: unknown[] = Array.isArray(mcpToolIds) ? mcpToolIds : [];
   const requestProviderKeys: unknown[] = Array.isArray(mcpProviderKeys) ? mcpProviderKeys : [];
   const filteredProviderKeys = featureFlags.mcp.providerSelector
@@ -216,8 +231,7 @@ export async function POST(req: NextRequest) {
     supabase: supabaseAdmin,
     sessionId,
     widgetId: String(widget.id),
-    orgId: String(widget.org_id),
-    agentId: widget.agent_id || null,
+        agentId: widget.agent_id || null,
     eventType: "WIDGET_RUNTIME_PROXY_START",
     payload: {
       ...requestMeta,
@@ -232,8 +246,7 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         "x-widget-secret": secret,
-        "x-widget-org-id": String(widget.org_id),
-        "x-widget-id": String(widget.id || ""),
+                "x-widget-id": String(widget.id || ""),
         "x-widget-name": encodeHeaderValue(String(widget.name || "")),
         "x-widget-public-key": String(widget.public_key || ""),
         "x-widget-agent-id": String(widget.agent_id || ""),
@@ -262,8 +275,7 @@ export async function POST(req: NextRequest) {
       supabase: supabaseAdmin,
       sessionId,
       widgetId: String(widget.id),
-      orgId: String(widget.org_id),
-      agentId: widget.agent_id || null,
+            agentId: widget.agent_id || null,
       eventType: "WIDGET_RUNTIME_PROXY_FETCH_FAILED",
       payload: {
         ...requestMeta,
@@ -274,8 +286,7 @@ export async function POST(req: NextRequest) {
       supabase: supabaseAdmin,
       sessionId,
       widgetId: String(widget.id),
-      orgId: String(widget.org_id),
-      agentId: widget.agent_id || null,
+            agentId: widget.agent_id || null,
       eventType: "WIDGET_RUNTIME_PROXY_END",
       payload: {
         ...requestMeta,
@@ -302,8 +313,7 @@ export async function POST(req: NextRequest) {
       supabase: supabaseAdmin,
       sessionId,
       widgetId: String(widget.id),
-      orgId: String(widget.org_id),
-      agentId: widget.agent_id || null,
+            agentId: widget.agent_id || null,
       eventType: "WIDGET_RUNTIME_PROXY_INVALID_JSON",
       payload: {
         ...requestMeta,
@@ -315,8 +325,7 @@ export async function POST(req: NextRequest) {
       supabase: supabaseAdmin,
       sessionId,
       widgetId: String(widget.id),
-      orgId: String(widget.org_id),
-      agentId: widget.agent_id || null,
+            agentId: widget.agent_id || null,
       eventType: "WIDGET_RUNTIME_PROXY_END",
       payload: {
         ...requestMeta,
@@ -339,8 +348,7 @@ export async function POST(req: NextRequest) {
       supabase: supabaseAdmin,
       sessionId,
       widgetId: String(widget.id),
-      orgId: String(widget.org_id),
-      agentId: widget.agent_id || null,
+            agentId: widget.agent_id || null,
       eventType: "WIDGET_RUNTIME_PROXY_ERROR",
       payload: {
         ...requestMeta,
@@ -360,8 +368,7 @@ export async function POST(req: NextRequest) {
     supabase: supabaseAdmin,
     sessionId,
     widgetId: String(widget.id),
-    orgId: String(widget.org_id),
-    agentId: widget.agent_id || null,
+        agentId: widget.agent_id || null,
     eventType: "WIDGET_RUNTIME_PROXY_END",
     payload: {
       ...requestMeta,

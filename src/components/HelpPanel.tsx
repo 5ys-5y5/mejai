@@ -24,7 +24,7 @@ type ReviewItem = {
 };
 
 type UserProfile = {
-  org_id: string | null;
+  agent_access?: unknown[] | null;
 };
 
 function formatDate(value?: string | null) {
@@ -108,7 +108,7 @@ export function HelpPanel() {
     async function loadProfile() {
       try {
         const profile = await apiFetch<UserProfile>("/api/user-profile");
-        const next = !profile.org_id;
+        const next = !Array.isArray(profile.agent_access) || profile.agent_access.length === 0;
         if (mounted) setShowOnboarding(next);
         return next;
       } catch {

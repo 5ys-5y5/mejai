@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   const cookieHeader = req.headers.get("cookie") || "";
   const contextRes = await getServerContext(authHeader, cookieHeader);
   let supabase: SupabaseClient;
-  let orgId: string | null = null;
+  let agentId: string | null = null;
   let publicOnly = false;
   if ("error" in contextRes) {
     publicOnly = true;
@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
     }
   } else {
     supabase = contextRes.supabase;
-    orgId = contextRes.orgId;
+    agentId = contextRes.agentId;
   }
 
   const url = new URL(req.url);
@@ -55,12 +55,12 @@ export async function GET(req: NextRequest) {
 
   let sessionQuery = supabase
     .from("D_conv_sessions")
-    .select("id, org_id")
+    .select("id, agent_id")
     .eq("id", sessionId);
   if (publicOnly) {
-    sessionQuery = sessionQuery.is("org_id", null);
+    sessionQuery = sessionQuery.is("agent_id", null);
   } else {
-    sessionQuery = sessionQuery.eq("org_id", orgId);
+    sessionQuery = sessionQuery.or(`agent_id.eq.${agentId},agent_id.is.null`);
   }
   const { data: sessionRow, error: sessionError } = await sessionQuery.maybeSingle();
 
@@ -71,7 +71,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: publicOnly ? "UNAUTHORIZED" : "SESSION_NOT_FOUND" }, { status: publicOnly ? 401 : 404 });
   }
 
-  const applyOrgFilter = (query: any) => (publicOnly ? query.is("org_id", null) : query.eq("org_id", orgId));
+  const applyOrgFilter = (query: any) =>
+    publicOnly ? query.is("agent_id", null) : query.or(`agent_id.eq.${agentId},agent_id.is.null`);
 
   const [mcpRes, eventRes, debugRes] = await Promise.all([
     fetchAllRows(

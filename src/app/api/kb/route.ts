@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
   const cookieHeader = req.headers.get("cookie") || "";
   const contextRes = await getServerContext(authHeader, cookieHeader);
   let supabase = null as unknown as ReturnType<typeof createServerSupabaseClient>;
-  let orgId: string | null = null;
+  let agentId: string | null = null;
   let userId: string | null = null;
   let publicOnly = false;
   if ("error" in contextRes) {
@@ -66,7 +66,7 @@ export async function GET(req: NextRequest) {
     }
   } else {
     supabase = contextRes.supabase as ReturnType<typeof createServerSupabaseClient>;
-    orgId = contextRes.orgId;
+    agentId = contextRes.agentId;
     userId = contextRes.user.id;
   }
   const url = new URL(req.url);
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
   if (publicOnly) {
     query = query.eq("is_public", true);
   } else {
-    query = query.or(`org_id.eq.${orgId},org_id.is.null`);
+    query = query.or(`agent_id.eq.${agentId},agent_id.is.null`);
   }
 
   if (category) {
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
   let userGroup: Record<string, unknown> | null = null;
   if (!publicOnly && userId) {
     const { data: accessRow } = await supabase
-      .from("A_iam_user_access_maps")
+      .from("A_iam_user_profiles")
       .select("group")
       .eq("user_id", userId)
       .maybeSingle();
@@ -143,6 +143,9 @@ export async function POST(req: NextRequest) {
   if (!body || !body.title || !body.content) {
     return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
   }
+  const agentId =
+    String(req.headers.get("x-agent-id") || body.agent_id || context.agentId || "")
+      .trim() || null;
 
   const newId = crypto.randomUUID();
   const wantsSample = body.is_public === true || body.is_sample === true || isSampleKbValue(body.is_admin);
@@ -152,12 +155,7 @@ export async function POST(req: NextRequest) {
     body.apply_groups_mode === "any" || body.apply_groups_mode === "all" ? body.apply_groups_mode : "all";
   let isAdmin = false;
   if (wantsAdmin || wantsSample) {
-    const { data: access, error: accessError } = await context.supabase
-      .from("A_iam_user_access_maps")
-      .select("is_admin")
-      .eq("user_id", context.user.id)
-      .maybeSingle();
-    if (accessError || !access?.is_admin) {
+    if (!context.isAdmin) {
       return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
     }
     isAdmin = wantsAdmin;
@@ -176,13 +174,16 @@ export async function POST(req: NextRequest) {
     category: body.category ?? null,
     version: "1.0",
     is_active: body.is_active ?? true,
-    org_id: context.orgId,
+    agent_id: agentId,
     embedding: null as number[] | null,
     is_admin: isAdmin,
     is_public: wantsSample,
     apply_groups: applyGroups,
     apply_groups_mode: applyGroupsMode,
     content_json: isAdmin ? (body.content_json ?? null) : null,
+    created_user_id: context.user.id,
+    owner_user_ids: [context.user.id],
+    allowed_user_ids: [],
   };
 
   try {

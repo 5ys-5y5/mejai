@@ -60,12 +60,7 @@ async function requireAdmin(authHeader: string, cookieHeader: string) {
   if ("error" in context) {
     return { ok: false as const, status: 401, error: context.error };
   }
-  const { data: access, error } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  if (error || !access?.is_admin) {
+  if (!context.isAdmin) {
     return { ok: false as const, status: 403, error: "ADMIN_ONLY" };
   }
   return { ok: true as const, context };
@@ -94,12 +89,12 @@ export async function POST(
   }
 
   const supabase = admin.context.supabase;
-  const orgId = admin.context.orgId;
+  const agentId = admin.context.agentId;
 
   const { data: sourceUser } = await supabase
     .from("A_end_users")
     .select("*")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("id", sourceId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -110,7 +105,7 @@ export async function POST(
   const { data: targetUser } = await supabase
     .from("A_end_users")
     .select("*")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("id", targetId)
     .is("deleted_at", null)
     .maybeSingle();
@@ -123,44 +118,44 @@ export async function POST(
   await supabase
     .from("A_end_user_sessions")
     .update({ end_user_id: targetId })
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", sourceId);
   await supabase
     .from("A_end_user_messages")
     .update({ end_user_id: targetId })
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", sourceId);
   await supabase
     .from("A_end_user_memories")
     .update({ end_user_id: targetId })
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", sourceId);
   await supabase
     .from("A_end_user_response_materials")
     .update({ end_user_id: targetId })
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", sourceId);
   await supabase
     .from("A_end_user_session_resources")
     .update({ end_user_id: targetId })
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", sourceId);
 
   const { data: sourceIdentities } = await supabase
     .from("A_end_user_identities")
     .select("identity_type, identity_value, identity_hash")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", sourceId);
   const { data: targetIdentities } = await supabase
     .from("A_end_user_identities")
     .select("identity_hash")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", targetId);
   const targetHashes = new Set((targetIdentities || []).map((row) => String(row.identity_hash || "")));
   const identityRows = (sourceIdentities || [])
     .filter((row) => row.identity_hash && !targetHashes.has(String(row.identity_hash)))
     .map((row) => ({
-      org_id: orgId,
+      agent_id: agentId,
       end_user_id: targetId,
       identity_type: row.identity_type,
       identity_value: row.identity_value,
@@ -174,13 +169,13 @@ export async function POST(
   await supabase
     .from("A_end_user_identities")
     .delete()
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", sourceId);
 
   const { data: summaries } = await supabase
     .from("A_end_user_summaries")
     .select("end_user_id, summary_text, updated_at, source_session_id")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .in("end_user_id", [sourceId, targetId]);
   const latestSummary = (summaries || [])
     .filter((row) => row.summary_text)
@@ -192,19 +187,19 @@ export async function POST(
   if (latestSummary?.summary_text) {
     await supabase.from("A_end_user_summaries").upsert(
       {
-        org_id: orgId,
+        agent_id: agentId,
         end_user_id: targetId,
         summary_text: latestSummary.summary_text,
         source_session_id: latestSummary.source_session_id,
         updated_at: latestSummary.updated_at || now,
       },
-      { onConflict: "org_id,end_user_id" }
+      { onConflict: "agent_id,end_user_id" }
     );
   }
   await supabase
     .from("A_end_user_summaries")
     .delete()
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", sourceId);
 
   const mergedTags = mergeTags(targetUser.tags, sourceUser.tags);
@@ -215,7 +210,7 @@ export async function POST(
   const { data: latestSession } = await supabase
     .from("A_end_user_sessions")
     .select("session_id, started_at, ended_at")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", targetId)
     .order("started_at", { ascending: false })
     .limit(1)
@@ -224,7 +219,7 @@ export async function POST(
   const { count: sessionsCount } = await supabase
     .from("A_end_user_sessions")
     .select("id", { count: "exact", head: true })
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", targetId);
 
   const lastSeen = maxTime(
@@ -254,13 +249,13 @@ export async function POST(
       has_chat: (sessionsCount ?? 0) > 0,
       updated_at: now,
     })
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("id", targetId);
 
   await supabase
     .from("A_end_users")
     .update({ deleted_at: now, updated_at: now })
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("id", sourceId);
 
   await supabase.from("F_audit_events").insert({
@@ -269,7 +264,7 @@ export async function POST(
     event_type: "END_USER_MANUAL_MERGE",
     payload: { source_id: sourceId, target_id: targetId },
     created_at: now,
-    bot_context: { org_id: orgId },
+    bot_context: { agent_id: agentId },
   });
 
   return NextResponse.json({ merged: true, source_id: sourceId, target_id: targetId });

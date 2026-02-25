@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (provider === "runtime_env") {
-    const { value, error } = await fetchRuntimeEnvCiphertext(supabase, context.orgId);
+    const { value, error } = await fetchRuntimeEnvCiphertext(supabase, context.agentId);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
@@ -109,7 +109,7 @@ export async function GET(req: NextRequest) {
   const result = await supabase
     .from("A_iam_auth_settings")
     .select("providers")
-    .eq("org_id", context.orgId)
+    .eq("agent_id", context.agentId)
     .eq("user_id", context.user.id)
     .maybeSingle();
   data = result.data;
@@ -129,13 +129,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }
 
-  const { data: access } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-
-  if (!access?.is_admin) {
+  if (!context.isAdmin) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
@@ -170,7 +164,7 @@ export async function POST(req: NextRequest) {
 
   if (provider === "chat_policy") {
     const payload = body.values as ConversationFeaturesProviderShape;
-    const { error } = await upsertChatPolicy(supabase, context.orgId, payload, context.user.id);
+    const { error } = await upsertChatPolicy(supabase, context.agentId, payload, context.user.id);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
@@ -185,7 +179,7 @@ export async function POST(req: NextRequest) {
       acc[key] = incoming[key] ?? "";
       return acc;
     }, {});
-    const { value, error } = await fetchRuntimeEnvCiphertext(supabase, context.orgId);
+    const { value, error } = await fetchRuntimeEnvCiphertext(supabase, context.agentId);
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
@@ -217,7 +211,7 @@ export async function POST(req: NextRequest) {
     }
     const { error: upsertError } = await upsertRuntimeEnv(
       supabase,
-      context.orgId,
+      context.agentId,
       encrypted as Record<string, unknown>,
       context.user.id
     );
@@ -234,7 +228,7 @@ export async function POST(req: NextRequest) {
   const result = await supabase
     .from("A_iam_auth_settings")
     .select("id, providers")
-    .eq("org_id", context.orgId)
+    .eq("agent_id", context.agentId)
     .eq("user_id", context.user.id)
     .maybeSingle();
   data = result.data;
@@ -269,15 +263,21 @@ export async function POST(req: NextRequest) {
       }
     }
     const nowIso = new Date().toISOString();
-    const insertPayload = {
-      org_id: context.orgId,
+    const agentId =
+      String(req.headers.get("x-agent-id") || (body as { agent_id?: unknown }).agent_id || "")
+        .trim() || null;
+    const insertPayload: Record<string, unknown> = {
+      agent_id: context.agentId,
       user_id: context.user.id,
       providers,
       updated_at: nowIso,
     };
+    if (agentId) {
+      insertPayload.agent_id = agentId;
+    }
     const { error: insertError } = await supabase
       .from("A_iam_auth_settings")
-      .upsert(insertPayload, { onConflict: "org_id,user_id" });
+      .upsert(insertPayload, { onConflict: "agent_id,user_id" });
     if (insertError) {
       return NextResponse.json({ error: insertError.message }, { status: 400 });
     }

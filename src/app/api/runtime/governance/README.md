@@ -42,7 +42,7 @@
 - Admin user (IAM `is_admin=true`) or cron secret.
 - Cron mode requires:
   - `x-cron-secret: <CRON_SECRET>`
-  - `x-org-id: <org uuid>`
+- `x-agent-id: <agent uuid>`
 
 ## Events written to `F_audit_events`
 - `PRINCIPLE_VIOLATION_DETECTED`

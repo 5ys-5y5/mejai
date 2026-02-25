@@ -34,19 +34,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }
 
-  const { data: access, error: accessError } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  if (accessError || !access?.is_admin) {
+  if (!context.isAdmin) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
+  const { data: accessRows, error: accessError } = await context.supabase
+    .from("B_bot_agent_access")
+    .select("user_id")
+    .eq("agent_id", context.agentId);
+  if (accessError) {
+    return NextResponse.json({ error: accessError.message }, { status: 400 });
+  }
+  const userIds = (accessRows || []).map((row) => row.user_id).filter(Boolean);
+  if (userIds.length === 0) {
+    return NextResponse.json({ items: [] });
+  }
+
   const { data, error } = await context.supabase
-    .from("A_iam_user_access_maps")
+    .from("A_iam_user_profiles")
     .select("group")
-    .eq("org_id", context.orgId);
+    .in("user_id", userIds);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

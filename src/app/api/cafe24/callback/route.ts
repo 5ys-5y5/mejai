@@ -14,7 +14,7 @@ function decodeStatePayload(state: string) {
     return JSON.parse(decoded) as {
       mall_id?: string;
       scope?: string;
-      org_id?: string;
+      agent_id?: string;
       user_id?: string;
       origin?: string;
     } | null;
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     return renderErrorPage(error);
   }
 
-  if (!decodedState?.org_id || !decodedState?.user_id) {
+  if (!decodedState?.agent_id || !decodedState?.user_id) {
     return new NextResponse("Invalid state", { status: 400 });
   }
 

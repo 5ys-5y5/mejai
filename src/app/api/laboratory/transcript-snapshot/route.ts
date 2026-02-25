@@ -36,10 +36,16 @@ async function assertSessionAccess(
   }
   const { data: sessionRow, error } = await context.supabase
     .from("D_conv_sessions")
-    .select("id, org_id")
+    .select("id, agent_id")
     .eq("id", sessionId)
-    .eq("org_id", context.orgId)
     .maybeSingle();
+  if (!error && sessionRow) {
+    const sameAgent = context.agentId && sessionRow.agent_id === context.agentId;
+    const isPublicSession = sessionRow.agent_id === null;
+    if (!sameAgent && !isPublicSession) {
+      return { error: NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 }) };
+    }
+  }
   if (error) return { error: NextResponse.json({ error: error.message }, { status: 400 }) };
   if (!sessionRow) return { error: NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 }) };
   return { error: null };

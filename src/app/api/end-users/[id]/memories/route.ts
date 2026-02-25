@@ -23,7 +23,7 @@ export async function GET(
   let query = contextAuth.supabase
     .from("A_end_user_memories")
     .select("*", { count: "exact" })
-    .eq("org_id", contextAuth.orgId)
+    .eq("agent_id", contextAuth.agentId)
     .eq("end_user_id", id)
     .order("updated_at", { ascending: false })
     .range(offset, offset + limit - 1);

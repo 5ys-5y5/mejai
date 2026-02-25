@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
@@ -27,37 +27,47 @@ const RUNTIME_ENV_FIELDS: RuntimeEnvField[] = [
   {
     key: "OPENAI_API_KEY",
     label: "OPENAI_API_KEY",
-    description: "OpenAI 호출에 사용되는 API 키 (서버 전용).",
+    description: "OpenAI ?몄텧???ъ슜?섎뒗 API ??(?쒕쾭 ?꾩슜).",
   },
   {
     key: "GEMINI_API_KEY",
     label: "GEMINI_API_KEY",
-    description: "Gemini 호출에 사용되는 API 키 (서버 전용).",
+    description: "Gemini ?몄텧???ъ슜?섎뒗 API ??(?쒕쾭 ?꾩슜).",
   },
   {
     key: "SOLAPI_API_KEY",
     label: "SOLAPI_API_KEY",
-    description: "재입고 알림 SMS 발송용 Solapi API 키.",
+    description: "?ъ엯怨??뚮┝ SMS 諛쒖넚??Solapi API ??",
   },
   {
     key: "SOLAPI_API_SECRET",
     label: "SOLAPI_API_SECRET",
-    description: "재입고 알림 SMS 발송용 Solapi API 시크릿.",
+    description: "?ъ엯怨??뚮┝ SMS 諛쒖넚??Solapi API ?쒗겕由?",
   },
   {
     key: "SOLAPI_FROM",
     label: "SOLAPI_FROM",
-    description: "재입고 알림 발신 번호.",
+    description: "?ъ엯怨??뚮┝ 諛쒖떊 踰덊샇.",
   },
   {
     key: "SOLAPI_BYPASS",
     label: "SOLAPI_BYPASS",
-    description: "재입고 알림 발송 바이패스 여부(true/false).",
+    description: "?ъ엯怨??뚮┝ 諛쒖넚 諛붿씠?⑥뒪 ?щ?(true/false).",
+  },
+  {
+    key: "SOLAPI_TEMP",
+    label: "SOLAPI_TEMP",
+    description: "Solapi bypass temp code.",
   },
   {
     key: "JUSO_API_KEY",
     label: "JUSO_API_KEY",
-    description: "주소 검색 API 키.",
+    description: "二쇱냼 寃??API ??",
+  },
+  {
+    key: "SIGNUP_OTP_ORG_ID",
+    label: "SIGNUP_OTP_ORG_ID",
+    description: "Signup OTP org id.",
   },
   {
     key: "CAFE24_REDIRECT_URI",
@@ -77,7 +87,7 @@ const RUNTIME_ENV_FIELDS: RuntimeEnvField[] = [
   {
     key: "CAFE24_SERVICE_KEY",
     label: "CAFE24_SERVICE_KEY",
-    description: "Cafe24 서비스 키 (현재 코드에서는 사용하지 않음).",
+    description: "Cafe24 ?쒕퉬????(?꾩옱 肄붾뱶?먯꽌???ъ슜?섏? ?딆쓬).",
   },
   {
     key: "CAFE24_SCOPE",
@@ -88,22 +98,22 @@ const RUNTIME_ENV_FIELDS: RuntimeEnvField[] = [
   {
     key: "WIDGET_RUNTIME_BASE_URL",
     label: "WIDGET_RUNTIME_BASE_URL",
-    description: "위젯 런타임 호출 베이스 URL.",
+    description: "?꾩젽 ?고????몄텧 踰좎씠??URL.",
   },
   {
     key: "WIDGET_RUNTIME_SECRET",
     label: "WIDGET_RUNTIME_SECRET",
-    description: "위젯 런타임 호출 시 사용하는 서버 시크릿.",
+    description: "?꾩젽 ?고????몄텧 ???ъ슜?섎뒗 ?쒕쾭 ?쒗겕由?",
   },
   {
     key: "NEXT_PUBLIC_SUPABASE_URL",
     label: "NEXT_PUBLIC_SUPABASE_URL",
-    description: "Supabase URL (클라이언트 번들에 포함됨).",
+    description: "Supabase URL (?대씪?댁뼵??踰덈뱾???ы븿??.",
   },
   {
     key: "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     label: "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-    description: "Supabase anon key (클라이언트 번들에 포함됨).",
+    description: "Supabase anon key (?대씪?댁뼵??踰덈뱾???ы븿??.",
   },
   {
     key: "SUPABASE_SERVICE_ROLE_KEY",
@@ -113,32 +123,39 @@ const RUNTIME_ENV_FIELDS: RuntimeEnvField[] = [
   {
     key: "CRON_SECRET",
     label: "CRON_SECRET",
-    description: "Cron 보호용 시크릿.",
+    description: "Cron 蹂댄샇???쒗겕由?",
   },
   {
     key: "CAFE24_OAUTH_STATE_SECRET",
     label: "CAFE24_OAUTH_STATE_SECRET",
-    description: "Cafe24 OAuth state 검증 시크릿.",
+    description: "Cafe24 OAuth state 寃利??쒗겕由?",
   },
   {
     key: "NEXT_PUBLIC_CALL_WS_URL",
     label: "NEXT_PUBLIC_CALL_WS_URL",
-    description: "콜(WebSocket) 호출 URL (클라이언트 번들에 포함됨).",
+    description: "肄?WebSocket) ?몄텧 URL (?대씪?댁뼵??踰덈뱾???ы븿??.",
   },
   {
     key: "WIDGET_TOKEN_SECRET",
     label: "WIDGET_TOKEN_SECRET",
-    description: "위젯 토큰 서명 시크릿.",
+    description: "?꾩젽 ?좏겙 ?쒕챸 ?쒗겕由?",
   },
   {
     key: "NEXT_PUBLIC_WIDGET_DEBUG_ORIGINS",
     label: "NEXT_PUBLIC_WIDGET_DEBUG_ORIGINS",
-    description: "위젯 디버그 허용 오리진 목록 (콤마).",
+    description: "?꾩젽 ?붾쾭洹??덉슜 ?ㅻ━吏?紐⑸줉 (肄ㅻ쭏).",
+  },
+  {
+    key: "RUNTIME_ENV_ENC_KEY",
+    label: "RUNTIME_ENV_ENC_KEY",
+    description: "Managed env encryption key (Railway/.env only).",
   },
 ];
 
 function parseEnvBulk(text: string) {
   const output: Partial<Record<ManagedEnvKey, string>> = {};
+  const ignored: string[] = [];
+  const keySet = new Set(MANAGED_ENV_KEYS);
   const lines = String(text || "")
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -147,8 +164,11 @@ function parseEnvBulk(text: string) {
     if (line.startsWith("#")) continue;
     const eqIndex = line.indexOf("=");
     if (eqIndex <= 0) continue;
-    const key = line.slice(0, eqIndex).trim();
-    if (!MANAGED_ENV_KEYS.includes(key as ManagedEnvKey)) continue;
+    const key = line.slice(0, eqIndex).trim().replace(/^\uFEFF/, "");
+    if (!keySet.has(key as ManagedEnvKey)) {
+      ignored.push(key);
+      continue;
+    }
     let value = line.slice(eqIndex + 1).trim();
     if (
       (value.startsWith("\"") && value.endsWith("\"")) ||
@@ -158,7 +178,7 @@ function parseEnvBulk(text: string) {
     }
     output[key as ManagedEnvKey] = value;
   }
-  return output;
+  return { values: output, ignored };
 }
 
 async function parseJsonBody<T>(res: Response): Promise<T | null> {
@@ -195,7 +215,7 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
     {} as Record<ManagedEnvKey, boolean>
   );
   const [envBulkText, setEnvBulkText] = useState<string>("");
-  const [envBulkMode, setEnvBulkMode] = useState<"deploy" | "local">("deploy");
+  const [envActiveMode, setEnvActiveMode] = useState<"deploy" | "local">("deploy");
   const [envReveal, setEnvReveal] = useState<Record<ManagedEnvKey, boolean>>(
     {} as Record<ManagedEnvKey, boolean>
   );
@@ -224,7 +244,7 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
         );
         const payload = await parseJsonBody<{ provider?: Record<string, unknown>; error?: string }>(res);
         if (!res.ok) {
-          setEnvError(payload?.error || "환경 변수 설정을 불러오지 못했습니다.");
+          setEnvError(payload?.error || "?섍꼍 蹂???ㅼ젙??遺덈윭?ㅼ? 紐삵뻽?듬땲??");
           return;
         }
         const provider = (payload?.provider || {}) as {
@@ -249,7 +269,7 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
         setEnvTouchedLocal({} as Record<ManagedEnvKey, boolean>);
         setEnvRevealMode(reveal);
       } catch {
-        setEnvError("환경 변수 설정을 불러오지 못했습니다.");
+        setEnvError("?섍꼍 蹂???ㅼ젙??遺덈윭?ㅼ? 紐삵뻽?듬땲??");
       } finally {
         setEnvLoading(false);
       }
@@ -289,7 +309,7 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
       const touchedDeploy = MANAGED_ENV_KEYS.filter((key) => envTouchedDeploy[key]);
       const touchedLocal = MANAGED_ENV_KEYS.filter((key) => envTouchedLocal[key]);
       if (touchedDeploy.length === 0 && touchedLocal.length === 0) {
-        setEnvError("변경된 값이 없습니다. 수정 또는 일괄 붙여넣기를 먼저 진행해주세요.");
+        setEnvError("蹂寃쎈맂 媛믪씠 ?놁뒿?덈떎. ?섏젙 ?먮뒗 ?쇨큵 遺숈뿬?ｊ린瑜?癒쇱? 吏꾪뻾?댁＜?몄슂.");
         return;
       }
       if (touchedDeploy.length > 0) {
@@ -309,7 +329,7 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
         });
         const payload = await parseJsonBody<{ ok?: boolean; error?: string }>(res);
         if (!res.ok || payload?.error || !payload?.ok) {
-          throw new Error(payload?.error || "배포 환경 변수 저장에 실패했습니다.");
+          throw new Error(payload?.error || "諛고룷 ?섍꼍 蹂????μ뿉 ?ㅽ뙣?덉뒿?덈떎.");
         }
       }
       if (touchedLocal.length > 0) {
@@ -329,14 +349,14 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
         });
         const payload = await parseJsonBody<{ ok?: boolean; error?: string }>(res);
         if (!res.ok || payload?.error || !payload?.ok) {
-          throw new Error(payload?.error || "로컬 환경 변수 저장에 실패했습니다.");
+          throw new Error(payload?.error || "濡쒖뺄 ?섍꼍 蹂????μ뿉 ?ㅽ뙣?덉뒿?덈떎.");
         }
       }
       setEnvSavedAt(new Date().toLocaleString("ko-KR"));
       setEnvTouchedDeploy({} as Record<ManagedEnvKey, boolean>);
       setEnvTouchedLocal({} as Record<ManagedEnvKey, boolean>);
     } catch (err) {
-      setEnvError(err instanceof Error ? err.message : "환경 변수 저장에 실패했습니다.");
+      setEnvError(err instanceof Error ? err.message : "?섍꼍 蹂????μ뿉 ?ㅽ뙣?덉뒿?덈떎.");
     } finally {
       setEnvSaving(false);
     }
@@ -357,58 +377,63 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="text-sm font-semibold text-slate-900">런타임 환경 변수</div>
+        <div className="text-sm font-semibold text-slate-900">{"\uB7F0\uD0C0\uC784 \uD658\uACBD \uBCC0\uC218"}</div>
         <div className="mt-1 text-xs text-slate-500">
-          관리자 화면에서 저장하면 서버 런타임에서 즉시 반영됩니다. 저장 값은 암호화되어 보관되며, 화면에는 마스킹된
-          값만 표시됩니다.
-          <span className="font-semibold text-amber-600"> 즉시 반영 불가</span>로 표시된 값은 빌드/인프라 단계에서만
-          적용됩니다.
+          愿由ъ옄 ?붾㈃?먯꽌 ??ν븯硫??쒕쾭 ?고??꾩뿉??利됱떆 諛섏쁺?⑸땲?? ???媛믪? ?뷀샇?붾릺??蹂닿??섎ŉ, ?붾㈃?먮뒗 留덉뒪?밸맂
+          媛믩쭔 ?쒖떆?⑸땲??
+          <span className="font-semibold text-amber-600"> 利됱떆 諛섏쁺 遺덇?</span>濡??쒖떆??媛믪? 鍮뚮뱶/?명봽???④퀎?먯꽌留?
+          ?곸슜?⑸땲??
         </div>
         <div className="mt-2 text-[11px] text-slate-500">
-          <span className="font-semibold text-amber-600">즉시 반영 불가</span> 표시가 있는 항목은 로컬 .env 또는 Railway
-          환경변수에 남겨두어야 합니다. (예: <span className="font-mono">RUNTIME_ENV_ENC_KEY</span>)
+          <span className="font-semibold text-amber-600">利됱떆 諛섏쁺 遺덇?</span> ?쒖떆媛 ?덈뒗 ??ぉ? 濡쒖뺄 .env ?먮뒗 Railway
+          ?섍꼍蹂?섏뿉 ?④꺼?먯뼱???⑸땲?? (?? <span className="font-mono">RUNTIME_ENV_ENC_KEY</span>)
         </div>
-        {envLoading ? <div className="mt-2 text-xs text-slate-500">불러오는 중...</div> : null}
+        {envLoading ? <div className="mt-2 text-xs text-slate-500">遺덈윭?ㅻ뒗 以?..</div> : null}
         {envError ? <div className="mt-2 text-xs text-rose-600">{envError}</div> : null}
-        {envSavedAt ? <div className="mt-2 text-xs text-slate-500">저장됨: {envSavedAt}</div> : null}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        {envSavedAt ? <div className="mt-2 text-xs text-slate-500">??λ맖: {envSavedAt}</div> : null}
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+          <span className="text-slate-500">{"\uAD00\uB9AC \uBAA8\uB4DC:"}</span>
+          <button
+            type="button"
+            onClick={() => setEnvActiveMode("deploy")}
+            className={`rounded-lg border px-2 py-1 ${
+              envActiveMode === "deploy"
+                ? "border-slate-300 bg-white text-slate-900"
+                : "border-slate-200 bg-slate-100 text-slate-500"
+            }`}
+          >
+            {"\uBC30\uD3EC\uC6A9"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setEnvActiveMode("local")}
+            className={`rounded-lg border px-2 py-1 ${
+              envActiveMode === "local"
+                ? "border-slate-300 bg-white text-slate-900"
+                : "border-slate-200 bg-slate-100 text-slate-500"
+            }`}
+          >
+            {"\uB85C\uCEEC\uC6A9"}
+          </button>
+        </div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
           <Button type="button" variant="outline" onClick={() => void loadRuntimeEnv()} disabled={envLoading || envSaving}>
-            새로고침
+            {"\uC0C8\uB85C\uACE0\uCE68"}
           </Button>
           <Button type="button" onClick={() => void handleRuntimeEnvSave()} disabled={envLoading || envSaving}>
-            {envSaving ? "저장 중..." : "저장"}
+            {envSaving ? "\uC800\uC7A5 \uC911..." : "\uC800\uC7A5"}
           </Button>
         </div>
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
-          <div className="text-xs font-semibold text-slate-900">일괄 붙여넣기</div>
+          <div className="text-xs font-semibold text-slate-900">{"\uC77C\uAD04 \uBD99\uC5EC\uB123\uAE30"}</div>
           <div className="mt-1 text-[11px] text-slate-500">
-            <span className="font-semibold">KEY=VALUE</span> 형식으로 붙여넣기 후 적용하세요. 마스킹된 기존 값은 저장되지
-            않으므로 변경하지 않을 값도 다시 입력해야 유지됩니다. 즉시 반영 불가로 표시된 키는 저장 시 무시됩니다.
+            <span className="font-semibold">KEY=VALUE</span> {"\uD615\uC2DD\uC73C\uB85C \uBD99\uC5EC\uB123\uAE30 \uD6C4 \uC801\uC6A9\uD558\uC138\uC694."}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
-            <span className="text-slate-500">붙여넣기 모드:</span>
-            <button
-              type="button"
-              onClick={() => setEnvBulkMode("deploy")}
-              className={`rounded-lg border px-2 py-1 ${
-                envBulkMode === "deploy"
-                  ? "border-slate-300 bg-white text-slate-900"
-                  : "border-slate-200 bg-slate-100 text-slate-500"
-              }`}
-            >
-              배포용
-            </button>
-            <button
-              type="button"
-              onClick={() => setEnvBulkMode("local")}
-              className={`rounded-lg border px-2 py-1 ${
-                envBulkMode === "local"
-                  ? "border-slate-300 bg-white text-slate-900"
-                  : "border-slate-200 bg-slate-100 text-slate-500"
-              }`}
-            >
-              로컬용
-            </button>
+            <span className="text-slate-500">{"\uD604\uC7AC \uBAA8\uB4DC:"}</span>
+            <span className="rounded-md border border-slate-200 bg-white px-2 py-0.5 text-slate-700">
+              {envActiveMode === "deploy" ? "\uBC30\uD3EC\uC6A9" : "\uB85C\uCEEC\uC6A9"}
+            </span>
           </div>
           <textarea
             value={envBulkText}
@@ -422,13 +447,19 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
               variant="outline"
               onClick={() => {
                 const parsed = parseEnvBulk(envBulkText);
-                const keys = Object.keys(parsed) as ManagedEnvKey[];
+                const keys = Object.keys(parsed.values) as ManagedEnvKey[];
                 if (keys.length === 0) {
-                  setEnvError("붙여넣기에서 인식된 키가 없습니다.");
+                  setEnvError("\uBD99\uC5EC\uB123\uAE30\uC5D0\uC11C \uC778\uC2DD\uB41C \uD0A4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4.");
                   return;
                 }
-                if (envBulkMode === "local") {
-                  setEnvDraftLocal((prev) => ({ ...prev, ...(parsed as Record<ManagedEnvKey, string>) }));
+                if (parsed.ignored.length > 0) {
+                  setEnvError(`\uAD00\uB9AC \uB300\uC0C1\uC774 \uC544\uB2CC \uD0A4\uB294 \uBB34\uC2DC\uD588\uC2B5\uB2C8\uB2E4: ${parsed.ignored.join(", ")}`);
+                }
+                if (envActiveMode === "local") {
+                  setEnvDraftLocal((prev) => ({
+                    ...prev,
+                    ...(parsed.values as Record<ManagedEnvKey, string>),
+                  }));
                   setEnvTouchedLocal((prev) => {
                     const next = { ...prev } as Record<ManagedEnvKey, boolean>;
                     keys.forEach((key) => {
@@ -437,7 +468,10 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
                     return next;
                   });
                 } else {
-                  setEnvDraftDeploy((prev) => ({ ...prev, ...(parsed as Record<ManagedEnvKey, string>) }));
+                  setEnvDraftDeploy((prev) => ({
+                    ...prev,
+                    ...(parsed.values as Record<ManagedEnvKey, string>),
+                  }));
                   setEnvTouchedDeploy((prev) => {
                     const next = { ...prev } as Record<ManagedEnvKey, boolean>;
                     keys.forEach((key) => {
@@ -449,10 +483,18 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
                 setEnvError(null);
               }}
             >
-              적용
+              {"\uC801\uC6A9"}
             </Button>
             <Button type="button" variant="outline" onClick={() => setEnvBulkText("")}>
-              초기화
+              {"\uCD08\uAE30\uD654"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => ensureRevealMode(!envRevealMode)}
+              disabled={envLoading || envSaving}
+            >
+              {"\uC77C\uAD04 \uB178\uCD9C"}
             </Button>
           </div>
         </div>
@@ -463,6 +505,12 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
             const inputType = isSensitive && !envReveal[field.key] ? "password" : "text";
             const labelSuffix = isRailwayOnly ? " (즉시 반영 불가)" : "";
             const revealEnabled = envRevealMode && !isRailwayOnly;
+            const activeValue =
+              envActiveMode === "local" ? envDraftLocal[field.key] || "" : envDraftDeploy[field.key] || "";
+            const inactiveValue =
+              envActiveMode === "local" ? envDraftDeploy[field.key] || "" : envDraftLocal[field.key] || "";
+            const inactiveLabel = envActiveMode === "local" ? "배포용" : "로컬용";
+            const inactiveDisplay = inactiveValue === "" ? "null" : inactiveValue;
             return (
               <label key={`env-field-${field.key}`} className="block">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -475,17 +523,6 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
                       <button
                         type="button"
                         className={`rounded-md border px-2 py-1 ${
-                          envRevealMode
-                            ? "border-emerald-500 bg-emerald-50 text-emerald-700"
-                            : "border-slate-200 bg-slate-100 text-slate-500"
-                        }`}
-                        onClick={() => ensureRevealMode(!envRevealMode)}
-                      >
-                        일괄 노출
-                      </button>
-                      <button
-                        type="button"
-                        className={`rounded-md border px-2 py-1 ${
                           envReveal[field.key]
                             ? "border-emerald-500 bg-emerald-50 text-emerald-700"
                             : "border-slate-200 bg-slate-100 text-slate-500"
@@ -495,47 +532,64 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
                         }
                         disabled={!revealEnabled}
                       >
-                        {envReveal[field.key] ? "숨김" : "노출"}
+                        {envReveal[field.key] ? "노출" : "미노출"}
                       </button>
                     </div>
                   ) : null}
                 </div>
                 <div className="mt-2 space-y-2">
                   {field.multiline ? (
-                    <textarea
-                      value={envDraftDeploy[field.key] || ""}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setEnvDraftDeploy((prev) => ({ ...prev, [field.key]: value }));
-                        setEnvTouchedDeploy((prev) => ({ ...prev, [field.key]: true }));
-                      }}
-                      placeholder={field.placeholder || "배포용"}
-                      className="h-24 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-400"
-                    />
+                    <>
+                      <textarea
+                        value={activeValue}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          if (envActiveMode === "local") {
+                            setEnvDraftLocal((prev) => ({ ...prev, [field.key]: value }));
+                            setEnvTouchedLocal((prev) => ({ ...prev, [field.key]: true }));
+                          } else {
+                            setEnvDraftDeploy((prev) => ({ ...prev, [field.key]: value }));
+                            setEnvTouchedDeploy((prev) => ({ ...prev, [field.key]: true }));
+                          }
+                        }}
+                        placeholder={field.placeholder || (envActiveMode === "deploy" ? "배포용" : "로컬용")}
+                        className="h-24 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-400"
+                      />
+                      <textarea
+                        value={inactiveDisplay}
+                        readOnly
+                        disabled
+                        className="h-24 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-400"
+                      />
+                      <div className="text-[10px] text-slate-400">{inactiveLabel} 값</div>
+                    </>
                   ) : (
                     <>
                       <Input
-                        value={envDraftDeploy[field.key] || ""}
+                        value={activeValue}
                         onChange={(e) => {
                           const value = e.target.value;
-                          setEnvDraftDeploy((prev) => ({ ...prev, [field.key]: value }));
-                          setEnvTouchedDeploy((prev) => ({ ...prev, [field.key]: true }));
+                          if (envActiveMode === "local") {
+                            setEnvDraftLocal((prev) => ({ ...prev, [field.key]: value }));
+                            setEnvTouchedLocal((prev) => ({ ...prev, [field.key]: true }));
+                          } else {
+                            setEnvDraftDeploy((prev) => ({ ...prev, [field.key]: value }));
+                            setEnvTouchedDeploy((prev) => ({ ...prev, [field.key]: true }));
+                          }
                         }}
-                        placeholder={field.placeholder || "배포용"}
+                        placeholder={field.placeholder || (envActiveMode === "deploy" ? "배포용" : "로컬용")}
                         type={inputType}
                         className="h-9 text-xs disabled:bg-slate-100 disabled:text-slate-400"
                       />
                       <Input
-                        value={envDraftLocal[field.key] || ""}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setEnvDraftLocal((prev) => ({ ...prev, [field.key]: value }));
-                          setEnvTouchedLocal((prev) => ({ ...prev, [field.key]: true }));
-                        }}
-                        placeholder={field.placeholder || "로컬용"}
-                        type={inputType}
-                        className="h-9 text-xs disabled:bg-slate-100 disabled:text-slate-400"
+                        value={inactiveDisplay}
+                        readOnly
+                        disabled
+                        placeholder={inactiveLabel}
+                        type="text"
+                        className="h-9 text-xs bg-slate-50 text-slate-400"
                       />
+                      <div className="text-[10px] text-slate-400">{inactiveLabel} 값</div>
                     </>
                   )}
                 </div>
@@ -548,3 +602,4 @@ export function ChatSettingsPanelEnv({ authToken }: Props) {
     </div>
   );
 }
+

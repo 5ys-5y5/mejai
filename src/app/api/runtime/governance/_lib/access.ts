@@ -4,13 +4,13 @@ import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { getServerContext } from "@/lib/serverAuth";
 
 type AccessResult =
-  | { ok: true; orgId: string; actor: { type: "cron" | "user"; userId: string | null }; supabaseAdmin: SupabaseClient }
+  | { ok: true; agentId: string; actor: { type: "cron" | "user"; userId: string | null }; supabaseAdmin: SupabaseClient }
   | { ok: false; status: number; error: string };
 
 type ReadAccessResult =
   | {
       ok: true;
-      orgId: string;
+      agentId: string;
       actor: { type: "cron" | "user"; userId: string | null };
       isAdmin: boolean;
       supabaseAdmin: SupabaseClient;
@@ -28,20 +28,6 @@ function readProvidedSecret(req: NextRequest) {
   return (headerSecret || bearer).trim();
 }
 
-async function checkIsAdmin(input: { supabase: SupabaseClient; userId: string }) {
-  const { data } = await input.supabase
-    .from("A_iam_user_access_maps")
-    .select("org_id, is_admin")
-    .eq("user_id", input.userId)
-    .maybeSingle();
-  if (!data?.org_id) return { ok: false as const };
-  return {
-    ok: true as const,
-    orgId: String(data.org_id),
-    isAdmin: Boolean(data.is_admin),
-  };
-}
-
 export async function ensureGovernanceAccess(req: NextRequest): Promise<AccessResult> {
   const readAccess = await ensureGovernanceReadAccess(req);
   if (!readAccess.ok) return readAccess;
@@ -50,7 +36,7 @@ export async function ensureGovernanceAccess(req: NextRequest): Promise<AccessRe
   }
   return {
     ok: true,
-    orgId: readAccess.orgId,
+    agentId: readAccess.agentId,
     actor: readAccess.actor,
     supabaseAdmin: readAccess.supabaseAdmin,
   };
@@ -62,13 +48,13 @@ export async function ensureGovernanceReadAccess(req: NextRequest): Promise<Read
   const supabaseAdmin = createAdminSupabaseClient();
 
   if (expected && provided && provided === expected) {
-    const orgIdHeader = String(req.headers.get("x-org-id") || "").trim();
-    if (!orgIdHeader) {
-      return { ok: false, status: 400, error: "ORG_ID_REQUIRED_FOR_CRON" };
+    const agentIdHeader = String(req.headers.get("x-agent-id") || "").trim();
+    if (!agentIdHeader) {
+      return { ok: false, status: 400, error: "AGENT_ID_REQUIRED_FOR_CRON" };
     }
     return {
       ok: true,
-      orgId: orgIdHeader,
+      agentId: agentIdHeader,
       actor: { type: "cron", userId: null },
       isAdmin: true,
       supabaseAdmin,
@@ -81,15 +67,11 @@ export async function ensureGovernanceReadAccess(req: NextRequest): Promise<Read
   if ("error" in serverContext) {
     return { ok: false, status: 401, error: serverContext.error };
   }
-  const adminCheck = await checkIsAdmin({ supabase: serverContext.supabase, userId: serverContext.user.id });
-  if (!adminCheck.ok) {
-    return { ok: false, status: 403, error: "ORG_NOT_FOUND" };
-  }
   return {
     ok: true,
-    orgId: adminCheck.orgId,
+    agentId: serverContext.agentId,
     actor: { type: "user", userId: serverContext.user.id },
-    isAdmin: Boolean(adminCheck.isAdmin),
+    isAdmin: Boolean(serverContext.isAdmin),
     supabaseAdmin,
   };
 }

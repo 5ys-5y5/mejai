@@ -4,7 +4,7 @@ import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageF
 
 export async function fetchWidgetChatPolicy(
   supabaseAdmin: SupabaseClient,
-  orgId: string
+  agentId: string
 ): Promise<ConversationFeaturesProviderShape | null> {
-  return fetchChatPolicy(supabaseAdmin, orgId);
+  return fetchChatPolicy(supabaseAdmin, agentId);
 }

@@ -179,7 +179,7 @@ export class MatrixRain {
     this.flowRate = flowRate;
     this.fadeRate = fadeRate;
 
-    const context = this.canvas.getContext("2d");
+    const context = this.canvas.getContext("2d", { willReadFrequently: true } as CanvasRenderingContext2DSettings);
     if (!context) throw new Error("Could not get 2d context");
     this.ctx = context;
 

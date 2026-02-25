@@ -50,25 +50,25 @@ function bumpVersion(value?: string | null) {
   return `${raw}-rev1`;
 }
 
-function buildScopedQuery(client: SupabaseClient, id: string, orgId: string | null, publicOnly: boolean) {
+function buildScopedQuery(client: SupabaseClient, id: string, agentId: string | null, publicOnly: boolean) {
   let query = client.from("B_bot_knowledge_bases").select("*").eq("id", id);
   if (publicOnly) {
     return query.eq("is_public", true);
   }
-  if (orgId) {
-    return query.or(`org_id.eq.${orgId},org_id.is.null`);
+  if (agentId) {
+    return query.or(`agent_id.eq.${agentId},agent_id.is.null`);
   }
-  return query.is("org_id", null);
+  return query.is("agent_id", null);
 }
 
-function buildParentQuery(client: SupabaseClient, parentId: string, orgId: string | null, publicOnly: boolean) {
+function buildParentQuery(client: SupabaseClient, parentId: string, agentId: string | null, publicOnly: boolean) {
   let query = client.from("B_bot_knowledge_bases").select("*").eq("parent_id", parentId);
   if (publicOnly) {
     query = query.eq("is_public", true);
-  } else if (orgId) {
-    query = query.or(`org_id.eq.${orgId},org_id.is.null`);
+  } else if (agentId) {
+    query = query.or(`agent_id.eq.${agentId},agent_id.is.null`);
   } else {
-    query = query.is("org_id", null);
+    query = query.is("agent_id", null);
   }
   return query.order("is_active", { ascending: false }).order("created_at", { ascending: false });
 }
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   }
   const serverContext = await getServerContext(authHeader, cookieHeader);
   let supabase: SupabaseClient;
-  let orgId: string | null = null;
+  let agentId: string | null = null;
   let publicOnly = false;
   if ("error" in serverContext) {
     if (process.env.NODE_ENV !== "production") {
@@ -100,7 +100,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     }
   } else {
     supabase = serverContext.supabase;
-    orgId = serverContext.orgId;
+    agentId = serverContext.agentId;
   }
 
   const rawId = routeId;
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     }
     return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
   }
-  const { data: scopedData, error } = await buildScopedQuery(supabase, id, orgId, publicOnly).maybeSingle();
+  const { data: scopedData, error } = await buildScopedQuery(supabase, id, agentId, publicOnly).maybeSingle();
   let data = scopedData;
 
   if (error) {
@@ -124,7 +124,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   }
 
   if (!data) {
-    const parentResult = await buildParentQuery(supabase, id, orgId, publicOnly).limit(1).maybeSingle();
+    const parentResult = await buildParentQuery(supabase, id, agentId, publicOnly).limit(1).maybeSingle();
     if (parentResult.error) {
       return NextResponse.json({ error: parentResult.error.message }, { status: 400 });
     }
@@ -133,13 +133,13 @@ export async function GET(req: NextRequest, context: RouteContext) {
 
   if (!data) {
     if (process.env.NODE_ENV !== "production") {
-      console.debug("[api/kb/[id]] GET not found", { id, orgId });
+      console.debug("[api/kb/[id]] GET not found", { id, agentId });
     }
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
   if (process.env.NODE_ENV !== "production") {
-    console.debug("[api/kb/[id]] GET ok", { id, orgId });
+    console.debug("[api/kb/[id]] GET ok", { id, agentId });
   }
   return NextResponse.json(data);
 }
@@ -174,6 +174,9 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const updateAgentIds = Array.isArray(body.update_agent_ids)
     ? body.update_agent_ids.filter((id: unknown): id is string => typeof id === "string" && isUuid(id))
     : [];
+  const agentId =
+    String(req.headers.get("x-agent-id") || body.agent_id || "")
+      .trim() || null;
 
   if (payload.title !== undefined && payload.title.trim().length === 0) {
     return NextResponse.json({ error: "INVALID_TITLE" }, { status: 400 });
@@ -187,7 +190,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const { data: fetched, error: fetchError } = await buildScopedQuery(
     serverContext.supabase,
     id,
-    serverContext.orgId,
+    serverContext.agentId,
     false
   ).maybeSingle();
   let existing = fetched;
@@ -197,7 +200,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   }
 
   if (!existing) {
-    const parentResult = await buildParentQuery(serverContext.supabase, id, serverContext.orgId, false).limit(1).maybeSingle();
+    const parentResult = await buildParentQuery(serverContext.supabase, id, serverContext.agentId, false).limit(1).maybeSingle();
     if (parentResult.error) {
       return NextResponse.json({ error: parentResult.error.message }, { status: 400 });
     }
@@ -208,6 +211,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   }
 
   const parentId = (existing as { parent_id?: string | null }).parent_id ?? existing.id;
+  const resolvedAgentId =
+    agentId || String((existing as Record<string, unknown>)?.agent_id || "").trim() || null;
   const nextTitle = payload.title ?? existing.title;
   const nextCategory = payload.category ?? existing.category ?? null;
   const nextContent = payload.content ?? existing.content;
@@ -230,7 +235,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       .from("B_bot_knowledge_bases")
       .update({ title: nextTitle, category: nextCategory })
       .eq("parent_id", parentId)
-      .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+      .or(`agent_id.eq.${serverContext.agentId},agent_id.is.null`);
     if (updateMetaError) {
       return NextResponse.json({ error: updateMetaError.message }, { status: 400 });
     }
@@ -259,7 +264,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         .from("B_bot_knowledge_bases")
         .update({ is_active: false })
         .eq("parent_id", parentId)
-        .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+        .or(`agent_id.eq.${serverContext.agentId},agent_id.is.null`);
       if (deactivateError) {
         return NextResponse.json({ error: deactivateError.message }, { status: 400 });
       }
@@ -273,7 +278,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       embedding,
       version: nextVersion,
       is_active: nextIsActive,
-      org_id: existing.org_id ?? serverContext.orgId,
+      agent_id: existing.agent_id ?? serverContext.agentId,
+      agent_id: resolvedAgentId,
       is_admin: nextIsAdmin,
       apply_groups: nextApplyGroups,
       apply_groups_mode: nextApplyGroupsMode,
@@ -292,13 +298,14 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     if (categoryChanged) updatePayload.category = nextCategory;
     if (shouldActivate) updatePayload.is_active = true;
     if (shouldDeactivate) updatePayload.is_active = false;
+    if (agentId) updatePayload.agent_id = agentId;
 
     if (shouldActivate) {
       const { error: deactivateError } = await serverContext.supabase
         .from("B_bot_knowledge_bases")
         .update({ is_active: false })
         .eq("parent_id", parentId)
-        .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+        .or(`agent_id.eq.${serverContext.agentId},agent_id.is.null`);
       if (deactivateError) {
         return NextResponse.json({ error: deactivateError.message }, { status: 400 });
       }
@@ -308,7 +315,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       .from("B_bot_knowledge_bases")
       .update(updatePayload)
       .eq("id", existing.id)
-      .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)
+      .or(`agent_id.eq.${serverContext.agentId},agent_id.is.null`)
       .select("*")
       .maybeSingle();
     data = updated as typeof existing;
@@ -324,8 +331,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       .from("B_bot_agents")
       .select("*")
       .in("id", updateAgentIds)
-      .eq("kb_id", existing.id)
-      .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+      .eq("kb_id", existing.id);
 
     if (agentError) {
       return NextResponse.json({ error: agentError.message }, { status: 400 });
@@ -339,8 +345,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         const { error: deactivateError } = await serverContext.supabase
           .from("B_bot_agents")
           .update({ is_active: false })
-          .eq("parent_id", agentParentId)
-          .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+          .eq("parent_id", agentParentId);
         if (deactivateError) {
           return NextResponse.json({ error: deactivateError.message }, { status: 400 });
         }
@@ -360,7 +365,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         goal: agent.goal ?? null,
         version: bumpVersion(agent.version),
         is_active: nextAgentIsActive,
-        org_id: agent.org_id ?? serverContext.orgId,
         created_by: agent.created_by ?? serverContext.user.id,
       });
 
@@ -393,7 +397,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     .from("B_bot_knowledge_bases")
     .delete()
     .eq("id", id)
-    .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)
+    .or(`agent_id.eq.${serverContext.agentId},agent_id.is.null`)
     .select("*")
     .maybeSingle();
 

@@ -24,7 +24,7 @@ export async function GET(
   const { data, error, count } = await contextAuth.supabase
     .from("A_end_user_messages")
     .select("*", { count: "exact" })
-    .eq("org_id", contextAuth.orgId)
+    .eq("agent_id", contextAuth.agentId)
     .eq("end_user_id", id)
     .eq("session_id", sessionId)
     .order("created_at", { ascending: true })

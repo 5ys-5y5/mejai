@@ -31,17 +31,20 @@ export async function GET(req: NextRequest) {
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, is_active")
+    .select("id, agent_id, is_active")
     .eq("id", payload.widget_id)
     .maybeSingle();
   if (!widget || !widget.is_active) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
+  if (!widget.agent_id) {
+    return NextResponse.json({ error: "WIDGET_AGENT_REQUIRED" }, { status: 400 });
+  }
 
   const { data, error } = await supabaseAdmin
     .from("D_conv_sessions")
     .select("id, session_code, started_at, metadata")
-    .eq("org_id", widget.org_id)
+    .eq("agent_id", widget.agent_id)
     .contains("metadata", { visitor_id: visitorId, widget_id: widget.id })
     .order("started_at", { ascending: false })
     .limit(40);

@@ -25,12 +25,7 @@ function readTheme(value: unknown) {
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
   if ("error" in context) return { ok: false, status: 401, error: context.error };
-  const { data: access } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  if (!access?.is_admin) {
+  if (!context.isAdmin) {
     return { ok: false, status: 403, error: "FORBIDDEN" };
   }
   return { ok: true as const };
@@ -47,7 +42,7 @@ export async function GET(req: NextRequest) {
   const { data, error } = await context.supabase
     .from("B_chat_widgets")
     .select("*")
-    .eq("org_id", context.orgId)
+    .eq("agent_id", context.agentId)
     .maybeSingle();
 
   if (error) {
@@ -77,7 +72,7 @@ export async function POST(req: NextRequest) {
 
   const nowIso = new Date().toISOString();
   const name = String(body.name || "").trim() || "Web Widget";
-  const agentId = String(body.agent_id || "").trim() || null;
+  const agentId = String(body.agent_id || "").trim() || context.agentId;
   const allowedDomains = normalizeStringArray(body.allowed_domains);
   const allowedPaths = normalizeStringArray(body.allowed_paths);
   const theme = readTheme(body.theme);
@@ -97,7 +92,7 @@ export async function POST(req: NextRequest) {
   const { data: existing } = await supabaseAdmin
     .from("B_chat_widgets")
     .select("*")
-    .eq("org_id", context.orgId)
+    .eq("agent_id", context.agentId)
     .maybeSingle();
 
   if (existing?.id) {
@@ -127,7 +122,6 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabaseAdmin
     .from("B_chat_widgets")
     .insert({
-      org_id: context.orgId,
       name,
       agent_id: agentId,
       allowed_domains: allowedDomains,

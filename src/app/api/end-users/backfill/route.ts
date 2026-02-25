@@ -4,7 +4,7 @@ import { getServerContext } from "@/lib/serverAuth";
 import { syncEndUserFromTurn, type EndUserSyncContext } from "@/app/api/runtime/chat/services/endUserRuntime";
 
 type BackfillBody = {
-  org_id?: string;
+  agent_id?: string;
   since?: string;
   until?: string;
   limit?: number;
@@ -35,12 +35,12 @@ async function resolveAccess(req: NextRequest, body: BackfillBody) {
   const expected = readCronSecret();
   const provided = readProvidedSecret(req);
   if (expected && provided && provided === expected) {
-    const headerOrg = String(req.headers.get("x-org-id") || "").trim();
-    const orgId = headerOrg || String(body.org_id || "").trim();
-    if (!orgId) {
-      return { ok: false as const, status: 400, error: "ORG_ID_REQUIRED" };
+    const headerOrg = String(req.headers.get("x-agent-id") || "").trim();
+    const agentId = headerOrg || String(body.agent_id || "").trim();
+    if (!agentId) {
+      return { ok: false as const, status: 400, error: "AGENT_ID_REQUIRED" };
     }
-    return { ok: true as const, orgId };
+    return { ok: true as const, agentId };
   }
 
   const authHeader = req.headers.get("authorization") || "";
@@ -50,16 +50,11 @@ async function resolveAccess(req: NextRequest, body: BackfillBody) {
     return { ok: false as const, status: 401, error: context.error };
   }
 
-  const { data: access, error } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  if (error || !access?.is_admin) {
+  if (!context.isAdmin) {
     return { ok: false as const, status: 403, error: "ADMIN_ONLY" };
   }
 
-  return { ok: true as const, orgId: context.orgId };
+  return { ok: true as const, agentId: context.agentId };
 }
 
 export async function POST(req: NextRequest) {
@@ -97,8 +92,8 @@ export async function POST(req: NextRequest) {
 
   let sessionQuery = supabase
     .from("D_conv_sessions")
-    .select("id, org_id, started_at, created_at")
-    .eq("org_id", access.orgId)
+    .select("id, agent_id, started_at, created_at")
+    .eq("agent_id", access.agentId)
     .order("created_at", { ascending: true })
     .range(offset, offset + limit - 1);
 
@@ -111,7 +106,7 @@ export async function POST(req: NextRequest) {
   }
 
   const summary = {
-    org_id: access.orgId,
+    agent_id: access.agentId,
     dry_run: dryRun,
     sessions_scanned: sessions?.length || 0,
     sessions_processed: 0,
@@ -124,7 +119,7 @@ export async function POST(req: NextRequest) {
 
   const syncContext: EndUserSyncContext = {
     supabase,
-    orgId: access.orgId,
+    agentId: access.agentId,
     runtimeEndUser: null,
   };
 
@@ -179,13 +174,13 @@ export async function POST(req: NextRequest) {
       payload: summary,
       created_at: new Date().toISOString(),
       bot_context: {
-        org_id: access.orgId,
+        agent_id: access.agentId,
         source: "end_user_backfill",
       },
     });
   } catch (error) {
     console.warn("[end-users/backfill] failed to insert audit summary", {
-      org_id: access.orgId,
+      agent_id: access.agentId,
       error: error instanceof Error ? error.message : String(error),
     });
   }

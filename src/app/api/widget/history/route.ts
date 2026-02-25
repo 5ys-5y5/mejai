@@ -44,18 +44,21 @@ export async function GET(req: NextRequest) {
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, is_active")
+    .select("id, agent_id, is_active")
     .eq("id", payload.widget_id)
     .maybeSingle();
   if (!widget || !widget.is_active) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
+  if (!widget.agent_id) {
+    return NextResponse.json({ error: "WIDGET_AGENT_REQUIRED" }, { status: 400 });
+  }
 
   const { data: session } = await supabaseAdmin
     .from("D_conv_sessions")
-    .select("id, org_id, metadata")
+    .select("id, agent_id, metadata")
     .eq("id", targetSessionId)
-    .eq("org_id", widget.org_id)
+    .eq("agent_id", widget.agent_id)
     .maybeSingle();
   if (!session) {
     return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 });

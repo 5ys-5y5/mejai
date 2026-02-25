@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
   const baseline = getPrincipleBaseline();
   const config = await readGovernanceConfig({
     supabase: access.supabaseAdmin,
-    orgId: access.orgId,
+    agentId: access.agentId,
   });
   if (!config.enabled) {
     return NextResponse.json({
@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
 
   const turns = await fetchRecentTurns({
     supabase: access.supabaseAdmin,
-    orgId: access.orgId,
+    agentId: access.agentId,
     sessionId: body.session_id ? String(body.session_id) : null,
     limit,
   });
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
     const exceptionStats = await fetchExceptionStats({
       supabase: access.supabaseAdmin,
       fingerprint,
-      orgId: access.orgId,
+      agentId: access.agentId,
     });
     const proposal = await buildPatchProposal({
       violation,
@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
         turnId: violation.turn_id,
         eventType: "PRINCIPLE_VIOLATION_DETECTED",
         payload: {
-          org_id: access.orgId,
+          agent_id: access.agentId,
           violation_id: violation.violation_id,
           principle_key: violation.principle_key,
           runtime_scope: violation.runtime_scope,
@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
           evidence: violation.evidence,
           baseline_source: baseline.source,
         },
-        botContext: { org_id: access.orgId },
+        botContext: { agent_id: access.agentId },
       });
       await insertAuditEvent({
         supabase: access.supabaseAdmin,
@@ -141,9 +141,9 @@ export async function POST(req: NextRequest) {
         eventType: "RUNTIME_PATCH_PROPOSAL_CREATED",
         payload: {
           ...(proposal as unknown as Record<string, unknown>),
-          org_id: access.orgId,
+          agent_id: access.agentId,
         },
-        botContext: { org_id: access.orgId, actor: access.actor.type },
+        botContext: { agent_id: access.agentId, actor: access.actor.type },
       });
     }
 

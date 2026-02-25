@@ -17,7 +17,7 @@ export async function GET(
     .from("A_end_users")
     .select("*")
     .eq("id", id)
-    .eq("org_id", contextAuth.orgId)
+    .eq("agent_id", contextAuth.agentId)
     .is("deleted_at", null)
     .maybeSingle();
 
@@ -31,14 +31,14 @@ export async function GET(
   const { data: summary } = await contextAuth.supabase
     .from("A_end_user_summaries")
     .select("summary_text, updated_at, source_session_id")
-    .eq("org_id", contextAuth.orgId)
+    .eq("agent_id", contextAuth.agentId)
     .eq("end_user_id", user.id)
     .maybeSingle();
 
   const { data: identities } = await contextAuth.supabase
     .from("A_end_user_identities")
     .select("id, identity_type, identity_value, identity_hash, is_primary, created_at")
-    .eq("org_id", contextAuth.orgId)
+    .eq("agent_id", contextAuth.agentId)
     .eq("end_user_id", user.id);
 
   return NextResponse.json({

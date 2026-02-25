@@ -1,4 +1,5 @@
-﻿import { NextRequest } from "next/server";
+import { NextRequest } from "next/server";
+import type { User } from "@supabase/supabase-js";
 import { runLlm } from "@/lib/llm_mk2";
 import {
   formatOutputDefault,
@@ -109,7 +110,14 @@ import { handlePreTurnGuards } from "./preTurnGuardRuntime";
 import { deriveSlotsForTurn } from "./slotDerivationRuntime";
 import {
   buildInputContractMismatch,
+  readInputContractStore,
+  resolveInputContractBinding,
   resolveInputContractSnapshot,
+  resolveStageGroup,
+  resolveStageGroupForIntent,
+  resolveStageOrderIndex,
+  selectInputContractFromStore,
+  updateInputContractStore,
   type InputContractConfig,
 } from "./inputContractRuntime";
 import { emitGuardedEvent } from "./guardedEventRuntime";
@@ -204,7 +212,7 @@ export async function POST(req: NextRequest) {
   const requestMeta = {
     domain: requestDomain || null,
     origin: requestOrigin || null,
-    widgetOrgIdPresent: Boolean(readHeader("x-widget-org-id")),
+    widgetOrgIdPresent: Boolean(readHeader("x-widget-agent-id")),
     widgetUserIdPresent: Boolean(readHeader("x-widget-user-id")),
     widgetAgentIdPresent: Boolean(readHeader("x-widget-agent-id")),
     widgetSecretPresent: Boolean(readHeader("x-widget-secret")),
@@ -228,6 +236,8 @@ export async function POST(req: NextRequest) {
   let latestInsertedBotContext: Record<string, any> | null = null;
   let policyContext = {} as PolicyEvalContext;
   let pipelineStateForError: RuntimePipelineState | null = null;
+  let expectedInput: string | null = null;
+  let expectedInputStage: string | null = null;
   let lastStage = "bootstrap.start";
   const stageHistory: Array<{ stage: string; at: string }> = [];
   const runtimeCallChain: Array<{ module_path: string; function_name: string }> = [];
@@ -296,7 +306,13 @@ export async function POST(req: NextRequest) {
       });
       return null;
     }
-    const auditContext = { supabase: admin, runtimeTraceId } as RuntimeContext;
+    const auditContext = {
+      supabase: admin,
+      user: { id: "00000000-0000-0000-0000-000000000000" } as User,
+      agentId: null,
+      agentId: null,
+      runtimeTraceId,
+    } as RuntimeContext;
     const scope = deriveScopeLevels(localLastStage);
     let resolvedSessionId = sessionId;
     if (!resolvedSessionId) {
@@ -304,7 +320,8 @@ export async function POST(req: NextRequest) {
       try {
         await admin.from("D_conv_sessions").insert({
           id: resolvedSessionId,
-          org_id: null,
+          agent_id: null,
+          agent_id: null,
           session_code: `err_${Math.random().toString(36).slice(2, 8)}`,
           started_at: nowIso(),
           channel: "runtime_error",
@@ -452,6 +469,8 @@ export async function POST(req: NextRequest) {
     getCurrentSessionId: () => currentSessionId,
     getLatestTurnId: () => latestTurnId,
     getFirstTurnInSession: () => firstTurnInSession,
+    getExpectedInputStage: () => expectedInputStage,
+    getExpectedInput: () => expectedInput,
   });
   let respond = (payload: Record<string, any>, init?: ResponseInit) => {
     const message = typeof payload?.message === "string" ? payload.message : "";
@@ -520,6 +539,10 @@ export async function POST(req: NextRequest) {
     const threePhaseConfig = {
       enabled: pageFeaturesForRuntime.interaction.threePhasePrompt,
       labels: pageFeaturesForRuntime.interaction.threePhasePromptLabels,
+      showConfirmed: pageFeaturesForRuntime.interaction.threePhasePromptShowConfirmed,
+      showConfirming: pageFeaturesForRuntime.interaction.threePhasePromptShowConfirming,
+      showNext: pageFeaturesForRuntime.interaction.threePhasePromptShowNext,
+      hideLabels: pageFeaturesForRuntime.interaction.threePhasePromptHideLabels,
     };
     if (context && typeof context === "object") {
       const contextRecord = context as Record<string, any>;
@@ -572,7 +595,8 @@ export async function POST(req: NextRequest) {
     const prevFlowIndex = Number.isFinite(Number(prevFlowIndexRaw)) ? Number(prevFlowIndexRaw) : 0;
     let activeFlowId = prevFlowId || crypto.randomUUID();
     let activeFlowIndex = prevFlowIndex || 1;
-    if (isOtherInquiryText(message)) {
+    const shouldResetForNewFlow = isOtherInquiryText(message);
+    if (shouldResetForNewFlow) {
       activeFlowId = crypto.randomUUID();
       activeFlowIndex = prevFlowIndex > 0 ? prevFlowIndex + 1 : 1;
     }
@@ -585,6 +609,13 @@ export async function POST(req: NextRequest) {
     const prevAddressFromTranscript = initialized.prevAddressFromTranscript;
     let recentEntity = initialized.recentEntity;
     let confirmedEntityState = normalizeConfirmedEntity(effectivePrevBotContext?.confirmed_entity);
+    if (shouldResetForNewFlow) {
+      confirmedEntityState = {};
+      if (effectivePrevBotContext && typeof effectivePrevBotContext === "object") {
+        (effectivePrevBotContext as Record<string, any>).confirmed_entity = {};
+        (effectivePrevBotContext as Record<string, any>).confirmed_entity_meta = {};
+      }
+    }
     const pipelineState = initialized.pipelineState;
     const memoryEntity = await fetchEndUserMemoryEntity({
       context,
@@ -607,14 +638,20 @@ export async function POST(req: NextRequest) {
     }
     const derivedChannel = initialized.derivedChannel;
     pipelineStateForError = pipelineState;
-    let expectedInput = initialized.expectedInput;
+    expectedInput = initialized.expectedInput;
     let expectedInputs = initialized.expectedInputs;
-    let expectedInputStage = initialized.expectedInputStage;
+    expectedInputStage = initialized.expectedInputStage;
     let customerVerificationToken = initialized.customerVerificationToken;
     let derivedOrderId = initialized.derivedOrderId;
     let derivedPhone = initialized.derivedPhone;
     let derivedZipcode = initialized.derivedZipcode;
     let derivedAddress = initialized.derivedAddress;
+    const rawDerivedSlots = {
+      order_id: derivedOrderId,
+      phone: derivedPhone,
+      zipcode: derivedZipcode,
+      address: derivedAddress,
+    };
     let updateConfirmAcceptedThisTurn = initialized.updateConfirmAcceptedThisTurn;
     let refundConfirmAcceptedThisTurn = initialized.refundConfirmAcceptedThisTurn;
     let restockSubscribeAcceptedThisTurn = initialized.restockSubscribeAcceptedThisTurn;
@@ -623,6 +660,8 @@ export async function POST(req: NextRequest) {
     let pendingIntentQueue = initialized.pendingIntentQueue;
     let slotDebug = initialized.slotDebug;
     let expectedInputSource = initialized.expectedInputSource;
+    const inputContractStore = readInputContractStore(effectivePrevBotContext as Record<string, any>);
+    let intentSwitchSkipOtpGate = false;
     let usedRuleIds = initialized.usedRuleIds;
     let usedTemplateIds = initialized.usedTemplateIds;
     let inputRuleIds = initialized.inputRuleIds;
@@ -698,6 +737,38 @@ export async function POST(req: NextRequest) {
         },
       });
     };
+    const isExpectedAnswer = (expected: string | null, text: string) => {
+      const expectedInputKey = String(expected || "").trim();
+      if (!expectedInputKey) return false;
+      if (expectedInputKey === "confirm") {
+        return isYesText(text) || isNoText(text);
+      }
+      if (expectedInputKey === "choice") {
+        return /(\d{1,2})/.test(String(text || "").trim());
+      }
+      if (expectedInputKey === "otp_code") {
+        return Boolean(extractOtpCode(text));
+      }
+      if (expectedInputKey === "phone") {
+        return Boolean(extractPhone(text));
+      }
+      if (expectedInputKey === "order_id") {
+        return Boolean(extractOrderId(text));
+      }
+      if (expectedInputKey === "zipcode") {
+        const digits = String(text || "").replace(/[^\d]/g, "");
+        return Boolean(extractZipcode(text) || /^\d{5}$/.test(digits));
+      }
+      if (expectedInputKey === "address") {
+        const zipCandidate = extractZipcode(text);
+        const extracted = extractAddress(text, null, null, zipCandidate);
+        return Boolean(extracted || /(?:address|addr|배송지|주소|도로명|지번)/i.test(String(text || "")));
+      }
+      if (expectedInputKey === "restock_lead_days") {
+        return /D-\d{1,2}/i.test(String(text || "")) || /(\d{1,2})/.test(String(text || ""));
+      }
+      return false;
+    };
     const inputContractBefore = resolveInputContractSnapshot({
       botContext: effectivePrevBotContext as Record<string, any>,
       derivedExpectedInput:
@@ -729,7 +800,7 @@ export async function POST(req: NextRequest) {
         providerAvailable,
         authSettingsId: authSettings?.id || null,
         userId: authContext.user.id,
-        orgId: userOrgId || authContext.orgId,
+        agentId: userOrgId || authContext.agentId,
         userPlan,
         userIsAdmin,
         userRole,
@@ -871,7 +942,7 @@ export async function POST(req: NextRequest) {
       context,
       insertFinalTurn,
       pendingIntentQueue,
-      orgId: userOrgId || authContext.orgId || null,
+      agentId: userOrgId || authContext.agentId || null,
       getSnapshot: buildRuntimeSnapshot,
       getFallbackSnapshot: () => buildRuntimeSnapshot(null, []),
       getToolResults: () => toolResults,
@@ -900,6 +971,24 @@ export async function POST(req: NextRequest) {
         safePayload.bot_context && typeof safePayload.bot_context === "object"
           ? ({ ...(safePayload.bot_context as Record<string, any>) } as Record<string, any>)
           : {};
+      const prevOtpPhones = new Set<string>();
+      const prevOtpList = (effectivePrevBotContext as Record<string, any>)?.otp_verified_phones;
+      if (Array.isArray(prevOtpList)) {
+        prevOtpList.forEach((value) => {
+          const text = String(value || "").trim();
+          if (text) prevOtpPhones.add(text);
+        });
+      }
+      const prevOtpSingle = String((effectivePrevBotContext as Record<string, any>)?.otp_verified_phone || "").trim();
+      if (prevOtpSingle) prevOtpPhones.add(prevOtpSingle);
+      const currentOtpList = Array.isArray(botContext.otp_verified_phones) ? botContext.otp_verified_phones : [];
+      const mergedOtpList = [...new Set([...prevOtpPhones, ...currentOtpList].filter(Boolean))];
+      if (mergedOtpList.length > 0) {
+        botContext.otp_verified_phones = mergedOtpList;
+      }
+      if (!botContext.otp_verified_phone && prevOtpSingle) {
+        botContext.otp_verified_phone = prevOtpSingle;
+      }
       const derivedConfirmed = deriveConfirmedEntityFromBotContext(botContext);
       const promotedConfirmed = extractPromotedFieldsFromBotContext(botContext);
       const confirmedDelta: ConfirmedEntity = { ...promotedConfirmed };
@@ -922,6 +1011,16 @@ export async function POST(req: NextRequest) {
       if (Object.keys(confirmedDelta).length > 0) {
         botContext.confirmed_entity_delta = confirmedDelta;
         const now = nowIso();
+        const stageKeyForMeta = expectedInputStage || null;
+        const stageGroupForMeta = resolveStageGroup({ stageKey: stageKeyForMeta });
+        const stageIndexForMeta = resolveStageOrderIndex({
+          stageKey: stageKeyForMeta,
+          contractConfig: inputContractConfig,
+        });
+        const intentNameForMeta =
+          typeof botContext.intent_name === "string"
+            ? String(botContext.intent_name).trim()
+            : String(resolvedIntent || "").trim() || null;
         const baseMeta =
           botContext.confirmed_entity_meta && typeof botContext.confirmed_entity_meta === "object"
             ? ({ ...(botContext.confirmed_entity_meta as Record<string, any>) } as Record<string, any>)
@@ -936,11 +1035,85 @@ export async function POST(req: NextRequest) {
           meta.last_used_at = now;
           if (!meta.flow_id) meta.flow_id = activeFlowId;
           if (!meta.source) meta.source = "confirmed_entity";
+          if (intentNameForMeta) meta.intent_name = intentNameForMeta;
+          if (stageKeyForMeta) meta.stage_key = stageKeyForMeta;
+          if (stageGroupForMeta) meta.stage_group = stageGroupForMeta;
+          if (stageIndexForMeta !== null) meta.stage_index = stageIndexForMeta;
           baseMeta[key] = meta;
         });
         botContext.confirmed_entity_meta = baseMeta;
       }
+      const normalizedAuthPhone = normalizePhoneDigits(
+        String(
+          (botContext.confirmed_entity as Record<string, any>)?.phone ||
+            (botContext.entity as Record<string, any>)?.phone ||
+            botContext.pending_phone ||
+            botContext.selected_phone ||
+            ""
+        )
+      );
+      const authPhone = normalizedAuthPhone ? normalizedAuthPhone : null;
+      const verifiedPhoneSet = new Set(
+        (Array.isArray(botContext.otp_verified_phones) ? botContext.otp_verified_phones : [])
+          .map((value) => normalizePhoneDigits(String(value || "")))
+          .filter(Boolean)
+      );
+      const verifiedSingle = normalizePhoneDigits(String(botContext.otp_verified_phone || ""));
+      if (verifiedSingle) verifiedPhoneSet.add(verifiedSingle);
+      if (authPhone) {
+        botContext.phone_auth_phone = authPhone;
+        botContext.phone_auth_status = verifiedPhoneSet.has(authPhone) ? "authorized" : "unauthorized";
+      } else {
+        botContext.phone_auth_phone = null;
+        botContext.phone_auth_status = null;
+      }
       const intentName = String(botContext.intent_name || resolvedIntent || "").trim();
+      const prevOtpPending = Boolean((effectivePrevBotContext as Record<string, any>)?.otp_pending);
+      if (prevOtpPending && typeof botContext.otp_pending !== "boolean") {
+        botContext.otp_pending = true;
+      }
+      if (botContext.otp_pending === true) {
+        const prevOtpStage = String((effectivePrevBotContext as Record<string, any>)?.otp_stage || "").trim();
+        botContext.otp_stage = botContext.otp_stage || prevOtpStage || "awaiting_code";
+        if (!botContext.otp_destination) {
+          botContext.otp_destination = (effectivePrevBotContext as Record<string, any>)?.otp_destination || null;
+        }
+        if (!botContext.otp_ref) {
+          botContext.otp_ref = (effectivePrevBotContext as Record<string, any>)?.otp_ref || null;
+        }
+        botContext.expected_input =
+          botContext.otp_stage === "awaiting_phone" ? "phone" : "otp_code";
+        botContext.expected_inputs = [botContext.expected_input];
+      }
+      const prevGateStateRaw = (effectivePrevBotContext as Record<string, any>)?.gate_state;
+      const prevGateState =
+        prevGateStateRaw && typeof prevGateStateRaw === "object" ? (prevGateStateRaw as Record<string, any>) : null;
+      if (botContext.otp_pending === true) {
+        const prevStageKey = String((effectivePrevBotContext as Record<string, any>)?.expected_input_stage || "").trim();
+        const prevExpectedInput = String((effectivePrevBotContext as Record<string, any>)?.expected_input || "").trim() || null;
+        const prevExpectedInputs = Array.isArray((effectivePrevBotContext as Record<string, any>)?.expected_inputs)
+          ? ((effectivePrevBotContext as Record<string, any>).expected_inputs as string[])
+              .map((value) => String(value || "").trim())
+              .filter(Boolean)
+          : [];
+        if (!prevGateState || prevGateState.type !== "otp") {
+          botContext.gate_state = {
+            type: "otp",
+            resume_stage_key: prevStageKey && !prevStageKey.startsWith("auth_gate.") ? prevStageKey : null,
+            resume_expected_input: prevExpectedInput,
+            resume_expected_inputs: prevExpectedInputs.length > 0 ? prevExpectedInputs : null,
+          };
+        } else if (!prevGateState.resume_stage_key && prevStageKey && !prevStageKey.startsWith("auth_gate.")) {
+          botContext.gate_state = {
+            ...prevGateState,
+            resume_stage_key: prevStageKey,
+            resume_expected_input: prevExpectedInput,
+            resume_expected_inputs: prevExpectedInputs.length > 0 ? prevExpectedInputs : null,
+          };
+        }
+      } else if (prevGateState) {
+        botContext.gate_state = null;
+      }
       botContext.flow_id =
         typeof botContext.flow_id === "string" && botContext.flow_id.trim()
           ? botContext.flow_id
@@ -950,6 +1123,25 @@ export async function POST(req: NextRequest) {
         : activeFlowIndex;
       if (intentName) {
         botContext.flow_intent = intentName;
+      }
+      const inputBinding = resolveInputContractBinding({
+        botContext,
+        derivedExpectedInput:
+          typeof botContext.expected_input === "string" ? String(botContext.expected_input).trim() : null,
+        contractConfig: inputContractConfig,
+        intent: intentName,
+      });
+      const updatedContractStore = updateInputContractStore(readInputContractStore(botContext), inputBinding);
+      botContext.expected_input_contract = inputBinding;
+      botContext.expected_input_contracts = updatedContractStore;
+      if (inputBinding.stage) {
+        botContext.expected_input_stage = inputBinding.stage;
+      }
+      if (inputBinding.expectedInputs.length > 0) {
+        botContext.expected_inputs = inputBinding.expectedInputs;
+      }
+      if (inputBinding.source) {
+        botContext.expected_input_source = inputBinding.source;
       }
       safePayload.bot_context = botContext;
       latestInsertedBotContext = botContext;
@@ -1017,41 +1209,96 @@ export async function POST(req: NextRequest) {
       expectedInput,
       resolvedIntent,
     };
-    markStage("intent_disambiguation.start");
-    pushRuntimeCall("src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts", "resolveIntentDisambiguation");
-    const disambiguation = await resolveIntentDisambiguation({
-      context,
-      sessionId,
-      nextSeq,
-      message: disambiguationInput.message,
-      prevIntent,
-      prevEntity,
-      prevBotContext: effectivePrevBotContext,
-      expectedInput: disambiguationInput.expectedInput,
-      latestTurnId,
-      resolvedIntent: disambiguationInput.resolvedIntent,
-      detectIntentCandidates,
-      hasChoiceAnswerCandidates,
-      intentLabel,
-      intentSupportScope,
-      parseIndexedChoices,
-      isYesText,
-      makeReply,
-      insertTurn,
-      insertEvent,
-      respond,
-    });
-    if (disambiguation.response) return disambiguation.response;
-    const disambiguationOutput: DisambiguationStepOutput = {
-      forcedIntentQueue: disambiguation.forcedIntentQueue,
-      pendingIntentQueue: disambiguation.pendingIntentQueue,
-      effectiveMessageForIntent: disambiguation.effectiveMessageForIntent,
-    };
-    forcedIntentQueue = disambiguationOutput.forcedIntentQueue;
-    pendingIntentQueue = disambiguationOutput.pendingIntentQueue;
+    const prevExpectedInputs = Array.isArray((effectivePrevBotContext as Record<string, any>)?.expected_inputs)
+      ? ((effectivePrevBotContext as Record<string, any>).expected_inputs as string[])
+          .map((value) => String(value || "").trim())
+          .filter(Boolean)
+      : [];
+    const prevExpectedInputStage = String(
+      (effectivePrevBotContext as Record<string, any>)?.expected_input_stage || ""
+    ).trim();
+    const prevExpectedInput = String(
+      (effectivePrevBotContext as Record<string, any>)?.expected_input || ""
+    ).trim();
+    const hasUnconsumedExpectation =
+      Boolean(disambiguationInput.expectedInput) ||
+      expectedInputs.length > 0 ||
+      Boolean(expectedInputStage) ||
+      Boolean(prevExpectedInput) ||
+      prevExpectedInputs.length > 0 ||
+      Boolean(prevExpectedInputStage);
+    let intentSwitchDecision: DisambiguationStepOutput["intentSwitchDecision"] | null = null;
+    let effectiveMessageForIntent = message;
+    if (!hasUnconsumedExpectation) {
+      markStage("intent_disambiguation.start");
+      pushRuntimeCall("src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts", "resolveIntentDisambiguation");
+      const disambiguation = await resolveIntentDisambiguation({
+        context,
+        sessionId,
+        nextSeq,
+        message: disambiguationInput.message,
+        prevIntent,
+        prevEntity,
+        prevBotContext: effectivePrevBotContext,
+        expectedInput: disambiguationInput.expectedInput,
+        latestTurnId,
+        resolvedIntent: disambiguationInput.resolvedIntent,
+        detectIntentCandidates,
+        hasChoiceAnswerCandidates,
+        intentLabel,
+        intentSupportScope,
+        parseIndexedChoices,
+        isYesText,
+        isExpectedAnswer,
+        makeReply,
+        insertTurn,
+        insertEvent,
+        respond,
+      });
+      if (disambiguation.response) return disambiguation.response;
+      const disambiguationOutput: DisambiguationStepOutput = {
+        forcedIntentQueue: disambiguation.forcedIntentQueue,
+        pendingIntentQueue: disambiguation.pendingIntentQueue,
+        effectiveMessageForIntent: disambiguation.effectiveMessageForIntent,
+      };
+      forcedIntentQueue = disambiguationOutput.forcedIntentQueue;
+      pendingIntentQueue = disambiguationOutput.pendingIntentQueue;
+      intentSwitchDecision = disambiguation.intentSwitchDecision;
+      effectiveMessageForIntent = disambiguationOutput.effectiveMessageForIntent;
+    } else {
+      forcedIntentQueue = [];
+      pendingIntentQueue = [];
+    }
+    if (intentSwitchDecision) {
+      const targetIntent = intentSwitchDecision.targetIntent;
+      const targetGroup = resolveStageGroupForIntent(targetIntent);
+      const currentGroup = resolveStageGroup({ stageKey: expectedInputStage });
+      const switchBinding = selectInputContractFromStore({
+        store: inputContractStore,
+        stageGroup: targetGroup,
+        intent: targetIntent,
+      });
+      if (switchBinding) {
+        expectedInput = switchBinding.expectedInput;
+        expectedInputs = switchBinding.expectedInputs;
+        expectedInputStage = switchBinding.stage;
+        expectedInputSource = "intent_switch_binding";
+      } else {
+        expectedInput = null;
+        expectedInputs = [];
+        expectedInputStage = null;
+        expectedInputSource = "intent_switch";
+      }
+      if (currentGroup === "auth_gate" && targetGroup && targetGroup !== "auth_gate") {
+        intentSwitchSkipOtpGate = true;
+      }
+    }
+    if (expectedInput) {
+      forcedIntentQueue = [];
+      pendingIntentQueue = [];
+    }
     pipelineState.forcedIntentQueue = forcedIntentQueue;
     pipelineState.pendingIntentQueue = pendingIntentQueue;
-    const effectiveMessageForIntent = disambiguationOutput.effectiveMessageForIntent;
     const preTurnGuardInput: PreTurnGuardStepInput = {
       message,
       resolvedIntent,
@@ -1099,9 +1346,9 @@ export async function POST(req: NextRequest) {
     derivedOrderId = preTurnGuardOutput.derivedOrderId;
     derivedAddress = preTurnGuardOutput.derivedAddress;
     derivedZipcode = preTurnGuardOutput.derivedZipcode;
-    const prevExpectedInput = expectedInput;
+    const prevExpectedInputFromGuard = expectedInput;
     expectedInput = preTurnGuardOutput.expectedInput;
-    if (preTurnGuardOutput.expectedInput !== prevExpectedInput) {
+    if (preTurnGuardOutput.expectedInput !== prevExpectedInputFromGuard) {
       expectedInputSource = "pre_turn_guard";
     }
     if (preTurnGuardOutput.reuseConfirmedSlot) {
@@ -1127,6 +1374,10 @@ export async function POST(req: NextRequest) {
     pipelineState.expectedInput = expectedInput;
     pipelineState.expectedInputs = expectedInputs;
     pipelineState.expectedInputStage = expectedInputStage;
+    const gateContractStage = String(expectedInputStage || "").startsWith("auth_gate.")
+      ? String(expectedInputStage || "").trim()
+      : null;
+    const reuseConfirmedSlot = preTurnGuardOutput.reuseConfirmedSlot;
     const inputContractAfter = {
       expectedInputs,
       expectedInput,
@@ -1160,6 +1411,19 @@ export async function POST(req: NextRequest) {
         },
         botContext: { intent_name: resolvedIntent },
       });
+    }
+    const confirmationOnly =
+      expectedInputs.length > 0 &&
+      expectedInputs.every((slot) => ["confirm", "choice", "reason"].includes(String(slot || "").trim()));
+    if (confirmationOnly) {
+      derivedOrderId = null;
+      derivedPhone = null;
+      derivedZipcode = null;
+      derivedAddress = null;
+      pipelineState.derivedOrderId = derivedOrderId;
+      pipelineState.derivedPhone = derivedPhone;
+      pipelineState.derivedZipcode = derivedZipcode;
+      pipelineState.derivedAddress = derivedAddress;
     }
     markStage("slot_derivation.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts", "deriveSlotsForTurn");
@@ -1233,6 +1497,129 @@ export async function POST(req: NextRequest) {
         },
         { intent_name: resolvedIntent }
       );
+    }
+    let otpGateHandled = false;
+    let otpVerifiedThisTurn = false;
+    let otpPending = false;
+    const runOtpGate = async (resolvedOrderIdForGate: string | null) => {
+      otpGateHandled = true;
+      markStage("otp_gate.start");
+      pushRuntimeCall("src/app/api/runtime/chat/runtime/otpRuntime.ts", "handleOtpLifecycleAndOrderGate");
+      const otpGate =
+        intentSwitchSkipOtpGate
+          ? {
+              response: null,
+              otpVerifiedThisTurn: false,
+              otpPending: false,
+              customerVerificationToken,
+              policyContext,
+              auditEntity,
+              mcpCandidateCalls,
+            }
+          : await handleOtpLifecycleAndOrderGate({
+              lastTurn,
+              resolvedIntent,
+              extractOtpCode,
+              message,
+              extractPhone,
+              makeReply,
+              insertTurn,
+              sessionId,
+              nextSeq,
+              resolvedOrderId: resolvedOrderIdForGate,
+              respond,
+              hasAllowedToolName,
+              noteMcpSkip,
+              allowedToolNames,
+              flushMcpSkipLogs,
+              callMcpTool,
+              context,
+              latestTurnId,
+              allowedTools,
+              noteMcp,
+              mcpActions,
+              prevBotContext: effectivePrevBotContext,
+              derivedPhone,
+              prevPhoneFromTranscript,
+              expectedInput,
+              expectedInputs,
+              customerVerificationToken,
+              policyContext,
+              auditEntity,
+              mcpCandidateCalls,
+              expectedInputStage: gateContractStage || expectedInputStage,
+              reuseConfirmedSlot,
+            });
+      if (otpGate.response) return otpGate.response;
+      const otpGateOutput: OtpGateStepOutput = {
+        otpVerifiedThisTurn: otpGate.otpVerifiedThisTurn,
+        otpPending: otpGate.otpPending,
+        customerVerificationToken: otpGate.customerVerificationToken,
+        mcpCandidateCalls: otpGate.mcpCandidateCalls,
+      };
+      otpVerifiedThisTurn = otpGateOutput.otpVerifiedThisTurn;
+      otpPending = otpGateOutput.otpPending;
+      customerVerificationToken = otpGateOutput.customerVerificationToken;
+      policyContext = otpGate.policyContext;
+      auditEntity = otpGate.auditEntity;
+      mcpCandidateCalls = otpGateOutput.mcpCandidateCalls;
+      pipelineState.customerVerificationToken = customerVerificationToken;
+      pipelineState.mcpCandidateCalls = mcpCandidateCalls;
+      otpAckPending = Boolean(otpVerifiedThisTurn);
+
+      const gateStageActive = Boolean(gateContractStage);
+      if (gateStageActive && !otpVerifiedThisTurn) {
+        if (!otpPending) {
+          otpPending = true;
+        }
+        const stageKey = String(gateContractStage || expectedInputStage || "").trim();
+        const otpStage = stageKey.endsWith("awaiting_phone") ? "awaiting_phone" : "awaiting_code";
+        const gateExpectedInput = otpStage === "awaiting_phone" ? "phone" : "otp_code";
+        expectedInputStage = stageKey;
+        expectedInput = gateExpectedInput;
+        expectedInputs = [gateExpectedInput];
+        expectedInputSource = "gate_contract";
+        pipelineState.expectedInputStage = expectedInputStage;
+        pipelineState.expectedInput = expectedInput;
+        pipelineState.expectedInputs = expectedInputs;
+        pipelineState.expectedInputSource = expectedInputSource;
+        const gatePrompt =
+          otpStage === "awaiting_phone"
+            ? "\uBCF8\uC778 \uD655\uC778\uC744 \uC704\uD574 \uD734\uB300\uD3F0 \uBC88\uD638\uB97C \uC54C\uB824\uC8FC\uC138\uC694."
+            : "\uBB38\uC790\uB85C \uC804\uC1A1\uB41C \uC778\uC99D\uBC88\uD638\uB97C \uC785\uB825\uD574 \uC8FC\uC138\uC694.";
+        const reply = makeReply(gatePrompt);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: reply,
+          final_answer: reply,
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            otp_pending: true,
+            otp_stage: otpStage || "awaiting_code",
+            otp_destination: (effectivePrevBotContext as Record<string, any>)?.otp_destination || null,
+            otp_ref: (effectivePrevBotContext as Record<string, any>)?.otp_ref || null,
+            expected_input: gateExpectedInput,
+          },
+        });
+        return respond({ session_id: sessionId, step: "confirm", message: reply, mcp_actions: [] });
+      }
+      if (otpVerifiedThisTurn) {
+        expectedInput = null;
+        expectedInputs = [];
+        expectedInputStage = null;
+        expectedInputSource = "otp_verified";
+        pipelineState.expectedInput = expectedInput;
+        pipelineState.expectedInputs = expectedInputs;
+        pipelineState.expectedInputStage = expectedInputStage;
+      }
+      return null;
+    };
+    if (gateContractStage) {
+      const otpGateResponse = await runOtpGate(null);
+      if (otpGateResponse) return otpGateResponse;
     }
     markStage("pending_state.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/pendingStateRuntime.ts", "handleAddressChangeRefundPending");
@@ -1541,54 +1928,10 @@ export async function POST(req: NextRequest) {
       return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
     }
 
-    markStage("otp_gate.start");
-    pushRuntimeCall("src/app/api/runtime/chat/runtime/otpRuntime.ts", "handleOtpLifecycleAndOrderGate");
-    const otpGate = await handleOtpLifecycleAndOrderGate({
-      lastTurn,
-      resolvedIntent,
-      extractOtpCode,
-      message,
-      extractPhone,
-      makeReply,
-      insertTurn,
-      sessionId,
-      nextSeq,
-      resolvedOrderId,
-      respond,
-      hasAllowedToolName,
-      noteMcpSkip,
-      allowedToolNames,
-      flushMcpSkipLogs,
-      callMcpTool,
-      context,
-      latestTurnId,
-      allowedTools,
-      noteMcp,
-      mcpActions,
-      prevBotContext: effectivePrevBotContext,
-      derivedPhone,
-      prevPhoneFromTranscript,
-      customerVerificationToken,
-      policyContext,
-      auditEntity,
-      mcpCandidateCalls,
-    });
-    if (otpGate.response) return otpGate.response;
-    const otpGateOutput: OtpGateStepOutput = {
-      otpVerifiedThisTurn: otpGate.otpVerifiedThisTurn,
-      otpPending: otpGate.otpPending,
-      customerVerificationToken: otpGate.customerVerificationToken,
-      mcpCandidateCalls: otpGate.mcpCandidateCalls,
-    };
-    const otpVerifiedThisTurn = otpGateOutput.otpVerifiedThisTurn;
-    const otpPending = otpGateOutput.otpPending;
-    customerVerificationToken = otpGateOutput.customerVerificationToken;
-    policyContext = otpGate.policyContext;
-    auditEntity = otpGate.auditEntity;
-    mcpCandidateCalls = otpGateOutput.mcpCandidateCalls;
-    pipelineState.customerVerificationToken = customerVerificationToken;
-    pipelineState.mcpCandidateCalls = mcpCandidateCalls;
-    otpAckPending = Boolean(otpVerifiedThisTurn);
+    if (!otpGateHandled) {
+      const otpGateResponse = await runOtpGate(resolvedOrderId || null);
+      if (otpGateResponse) return otpGateResponse;
+    }
 
     const confirmedProductId =
       typeof confirmedEntityState.product_id === "string" ? confirmedEntityState.product_id.trim() : "";

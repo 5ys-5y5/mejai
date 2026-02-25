@@ -1,0 +1,460 @@
+﻿﻿# delRefactgor
+
+작성일: 2026-02-25
+
+## 목표/요약
+- `org_id`(요청에 적힌 `ord_id`는 저장소 검색에서 발견되지 않음) 개념을 서비스 전반에서 제거한다.
+- 조직(organization) 기반 권한 대신, `user_id`가 생성한 `agent`를 다른 `user_id`에게 공유하는 모델로 전환한다.
+- `/onboarding` 및 org 생성·승인 흐름을 제거하고, 로그인 후 즉시 에이전트 단위 경험으로 전환한다.
+- 기능 파괴를 막기 위해 **계약(Contract) 수준**에서 전면 리팩터링하고, DB/코드/권한 정책을 단계적으로 이행한다.
+
+## 전제/확인 필요 사항
+- 저장소에서 `ord_id`는 발견되지 않음. `org_id`를 의미하는 것으로 가정하되, 도메인 용어 확인 필요.
+- 에이전트가 테넌트 경계가 되므로 모든 데이터 스코프는 `agent_id` 또는 `owner_user_id`로 수렴해야 함.
+- “공용” 개념이 필요하다면 기존 `org_id is null` 대신 `agent_id is null`을 동일한 의미로 유지하는지 결정 필요.
+
+## 현황 점검 (Repo + Supabase MCP 기준)
+### 코드 레벨 주요 진입점
+- `org_id` 사용이 광범위함: API 라우트, 런타임 컨텍스트, 위젯, 세션, KB, MCP, 거버넌스 등.
+- 온보딩: `src/app/onboarding/page.tsx` + `/onboarding` 링크가 여러 UI에 존재.
+
+### DB: `org_id` 컬럼 보유 테이블 (MCP 조회)
+- `A_end_users`, `A_end_user_identities`, `A_end_user_sessions`, `A_end_user_messages`, `A_end_user_session_resources`, `A_end_user_memories`, `A_end_user_response_materials`, `A_end_user_summaries`
+- `A_iam_auth_settings`, `A_iam_user_access_maps`
+- `B_bot_agents`, `B_bot_knowledge_bases`, `B_chat_widgets`
+- `D_conv_sessions`
+- `F_audit_mcp_tools`, `F_widget_events`
+- `G_com_product_aliases`, `G_com_product_rules`
+- `H_auth_otp_verifications`
+- `E_ops_notification_messages`
+
+### DB: `A_iam_organizations` 참조 FK (MCP 조회)
+- `A_end_users.org_id`, `A_end_user_*` 일련 테이블
+- `A_iam_user_access_maps.org_id`
+- `B_bot_knowledge_bases.org_id`
+- `B_chat_widgets.org_id`
+- `D_conv_sessions.org_id`
+- `F_widget_events.org_id`
+
+## 새로운 계약(Contract) 설계
+### 핵심 스코프 정의
+- **AgentAccessContext**
+  - `actor_user_id`: 현재 로그인 사용자
+  - `agent_id`: 접근 대상 에이전트
+  - `agent_role`: `owner | editor | viewer` (필요 시 `operator` 추가)
+  - `is_admin`: 글로벌 관리자(운영/진단 전용) 여부
+
+### 권한 규칙
+- 에이전트 데이터는 기본적으로 **에이전트 접근 권한**으로만 읽기/쓰기 가능.
+- 글로벌 관리자는 모든 에이전트에 대한 진단/관리 권한을 보유.
+- 기존 `org_role`은 제거하고 `agent_role`로 단일화.
+
+### API/헤더 계약 변경
+- `x-org-id` → `x-agent-id`
+- `x-widget-org-id` → `x-widget-agent-id`
+- `/api/user-profile` 응답에서 `org_id`, `org_role` 제거
+- `/api/user-profile`는 `user_id`, `is_admin`, `agent_access[]` 제공
+
+## DB 리팩터링 설계
+### 1) 신규 테이블/컬럼
+- `B_bot_agent_access`
+  - `agent_id uuid not null`
+  - `user_id uuid not null`
+  - `role text not null` (`owner|editor|viewer`)
+  - `created_at`, `updated_at`
+  - `unique (agent_id, user_id)` + 인덱스
+- `A_iam_user_profiles` (또는 `A_iam_user_flags`)
+  - `user_id uuid primary key`
+  - `is_admin boolean not null default false`
+  - `plan text not null default 'starter'`
+  - `group jsonb null`, `verified_phone text null`
+  - 기존 `A_iam_user_access_maps` 기능을 사용자 단위로 흡수
+- `B_bot_agents`
+  - `owner_user_id uuid not null` 추가 (현재 `created_by` 사용 가능 여부 확인)
+  - `created_by`를 공식 Owner로 승격하거나, `owner_user_id`로 마이그레이션
+
+### 2) org_id 대체 전략 (테이블별)
+- `A_iam_organizations`: 최종 단계에서 **완전 삭제**
+- `A_iam_user_access_maps`: `A_iam_user_profiles` + `B_bot_agent_access`로 분리 후 삭제
+- `B_bot_agents`: `org_id` 제거, `owner_user_id` 기반으로 접근 제어
+- `B_bot_knowledge_bases`:
+  - `org_id` → `agent_id` 또는 `owner_user_id`로 대체
+  - “공용 KB” 필요 시 `agent_id is null` 허용
+- `B_chat_widgets`:
+  - 기존 `agent_id` 컬럼을 **not null**로 강화
+  - `org_id` 제거
+  - 위젯 조회는 `public_key → widget → agent_id` 기반
+- `D_conv_sessions`:
+  - `org_id` 제거
+  - `agent_id` 타입 정규화: `text` → `uuid`
+  - 세션 스코프는 `agent_id`로 통일
+- `A_end_user_*` 계열:
+  - `org_id` 제거
+  - `agent_id` 추가 및 RLS 스코프를 `agent_id` 기준으로 전환
+- `F_widget_events`, `F_audit_mcp_tools`, `G_com_product_*`, `H_auth_otp_verifications`, `E_ops_notification_messages`:
+  - `org_id` 제거
+  - 필요한 경우 `agent_id` 또는 `user_id`로 대체
+
+### 3) RLS 정책 전환 원칙
+- 모든 테이블은 `agent_id` 기준으로 `B_bot_agent_access` 존재 여부를 체크한다.
+- “공용” 데이터는 `agent_id is null` 허용 여부를 정책으로 명시한다.
+- 관리자 전용 접근은 `A_iam_user_profiles.is_admin = true`로 단일화한다.
+
+### 4) 데이터 마이그레이션 설계
+- **백필 기준**
+  - `B_bot_agents.created_by` 또는 `owner_user_id` 기준으로 `B_bot_agent_access` 작성
+  - 기존 `A_iam_user_access_maps`의 `org_id` 사용자를 해당 org 소속 에이전트에 매핑
+- **백필 예시(개념)**
+  - `B_bot_agent_access`:
+    - org 내 모든 사용자에게 `viewer` 부여
+    - 에이전트 생성자에게 `owner` 부여
+
+## 애플리케이션 리팩터링 설계
+### 1) 공통 컨텍스트 교체
+- 모든 `orgId` 파라미터를 `agentId`로 교체하는 **공통 계약 타입** 정의
+- `runtime` 관련 타입 파일에서 `orgId` 제거 후 전파
+
+### 2) API 라우트 변경
+- `serverAuth` → 사용자 컨텍스트는 `user_id`, `is_admin`, `agent_access[]`
+- `orgId` 필터링 코드는 `agentId` 기반으로 전환
+- `onboarding` 관련 API/라우트 제거
+
+### 3) UI 전환
+- `/onboarding` 링크 제거
+- 로그인 후 에이전트 리스트가 없다면 “에이전트 생성”으로 유도
+- 기존 org 기반 상태 표시(`org_role`, `org_id`) UI 제거
+
+## 단계별 이행 플랜 (안전성 최우선)
+### Phase 0 — 준비
+- PowerShell 인코딩 세션 세팅
+  - `chcp 65001` 및 `OutputEncoding` 설정
+- 변경 범위 사전 스코핑: `rg -n "org_id" src`로 전역 영향 파악
+
+### Phase 1 — 스키마 확장
+- `B_bot_agent_access`, `A_iam_user_profiles` 생성
+- 필요한 테이블에 `agent_id` 컬럼 추가 (nullable로 시작)
+- `B_bot_agents.owner_user_id` 추가 및 백필
+
+### Phase 2 — 듀얼 라이트
+- 애플리케이션에서 `agent_id`와 기존 `org_id`를 동시 기록
+- 읽기 로직은 아직 `org_id` 유지
+
+### Phase 3 — 읽기 전환
+- 모든 읽기 쿼리를 `agent_id` 기준으로 변경
+- `org_id` 사용 로직 제거
+- `/onboarding` 제거 및 신규 사용자 흐름 전환
+
+### Phase 4 — 정리
+- `org_id` 컬럼 제거
+- FK 제거 후 `A_iam_organizations` 테이블 삭제
+- `A_iam_user_access_maps` 제거
+
+## 검증/회귀 체크리스트
+- DB 카운트 비교 (org_id → agent_id 백필 결과)
+- 에이전트 접근 권한 확인
+- 위젯 → 세션 → 엔드유저 흐름 정상 작동 확인
+- `/app`, `/agents`, `/widget/*` 주요 경로 스모크 테스트
+
+## 배포 안정성 가이드
+- 큰 파일 수정 시 작은 패치 단위로 진행, 브레이스 검증 후 종료
+- 계약 타입 변경 시 관련 타입 파일을 같은 패치에서 업데이트
+- `npm run build` 로컬 확인 후 배포
+- 오류 발생 시 즉시 해결, 다른 변경과 섞지 않음
+
+## 롤백 전략
+- Phase 2까지는 `org_id`와 `agent_id`를 병행 유지하므로 읽기 전환 전 롤백 가능
+- Phase 3에서 문제가 발견되면 읽기 로직을 `org_id`로 복귀하고 백필만 유지
+
+## 오픈 질문
+- `org_id is null` → `agent_id is null`의 의미 확정 필요
+  - 공용 에이전트 의미로 유지 시: 모든 유저가 사용 가능 (특정 소유자와 무관)
+  - 그 외 의미일 경우: 공용 데이터가 무엇인지 목록화 필요
+- 기존 `is_admin`/`plan`/`group`는 사용자 단위(A_iam_user_profiles)로 유지
+- 에이전트 자동 생성 없음: 신규 사용자는 공용 에이전트 사용 또는 직접 생성 (온보딩 UX는 추후 설계)
+
+## 진행 체크리스트
+- [x] Phase 0: 준비 (PowerShell UTF-8 세션 설정, `rg -n "org_id" src` 스코핑)
+- [x] Phase 1: 스키마 확장 (B_bot_agent_access, A_iam_user_profiles, agent_id 컬럼 추가, owner_user_id 백필)
+- [x] Phase 2: 듀얼 라이트 (org_id + agent_id 동시 기록)
+- [ ] Phase 3: 읽기 전환 (모든 조회를 agent_id 기준으로 전환, onboarding 제거)
+- [ ] Phase 4: 정리 (org_id 컬럼/테이블/FK 제거)
+- [ ] 계약/헤더 변경 (x-org-id → x-agent-id, x-widget-org-id → x-widget-agent-id)
+- [ ] API 응답 변경 (/api/user-profile에서 org_id/org_role 제거, agent_access 추가)
+- [ ] UI 전환 (/onboarding 링크 제거, 에이전트 없는 사용자 유도)
+- [ ] RLS 전환 (agent_id 기준, 공용 데이터 정책 명시)
+- [ ] 데이터 마이그레이션 백필 (B_bot_agent_access, agent_id 매핑)
+- [ ] 검증/회귀 체크리스트 수행 (주요 경로 스모크 테스트)
+
+## 옵션 2 확정 사항
+- 모든 테이블에 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 컬럼을 추가한다.
+- `owner_user_ids`는 다중 소유자를 허용하므로 `uuid[]`를 사용한다.
+- `allowed_user_ids`는 사용 참여(viewer) 목적의 `uuid[]`를 사용한다.
+- `is_public = true`일 때만 모든 유저 공용이다. `agent_id is null`은 공용이 아니다.
+- 위젯/게스트 스코프는 `agent_id` 기준이다. 위젯/게스트 경로는 반드시 `agent_id` 필터를 가진다.
+- `org_id` 모든 기능/정책/FK/인덱스를 제거하고 `user_id` + `owner/allowed/is_public` 기준으로 전환한다.
+
+## 스키마 설계 체크리스트 (Supabase MCP 확인 기반)
+- [ ] 제거: `A_iam_organizations` 테이블 + 모든 FK/인덱스 제거
+- [ ] 제거: `A_iam_user_access_maps` 테이블 (권한은 `B_bot_agent_access` + `A_iam_user_profiles`로 대체)
+- [ ] `B_bot_agents`에 `is_public`, `created_user_id`, `owner_user_ids`, `allowed_user_ids` 추가 + `org_id` 제거
+- [ ] `B_bot_knowledge_bases`에 `created_user_id`, `owner_user_ids`, `allowed_user_ids` 추가 + `org_id` 제거 (is_public 유지)
+- [ ] `C_mcp_tools`에 `created_user_id`, `owner_user_ids`, `allowed_user_ids` 추가 (is_public 유지)
+- [ ] `B_chat_widgets`에 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 추가 + `org_id` 제거
+- [ ] `D_conv_sessions`, `D_conv_turns`, `D_conv_audio_segments`에 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 추가 + `org_id` 제거
+- [ ] `A_end_users`, `A_end_user_identities`, `A_end_user_sessions`, `A_end_user_messages`, `A_end_user_session_resources`, `A_end_user_memories`, `A_end_user_response_materials`, `A_end_user_summaries`에 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 추가 + `org_id` 제거
+- [ ] `F_audit_mcp_tools`, `F_audit_events`, `F_audit_turn_specs`, `F_widget_events`에 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 추가 + `org_id` 제거
+- [ ] `E_ops_review_queue_items`, `E_ops_notification_messages`에 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 추가 + `org_id` 제거
+- [ ] `G_com_product_aliases`, `G_com_product_rules`에 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 추가 + `org_id` 제거
+- [ ] `H_auth_otp_verifications`에 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 추가 + `org_id` 제거
+- [ ] `A_iam_auth_settings`에 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 추가 + `org_id` 제거
+- [ ] 인덱스/FK: `created_user_id` FK -> `auth.users.id`, `owner_user_ids/allowed_user_ids` GIN 인덱스, `agent_id` btree 인덱스 추가
+
+## 쿼리 설계 체크리스트
+- [ ] 모든 조회/검색/집계 쿼리는 `org_id` 필터 제거 후 `agent_id` + (`is_public` or `owner_user_ids/allowed_user_ids` 포함) 기준으로 변경
+- [ ] 생성/수정 쿼리는 `created_user_id` 필수, `owner_user_ids` 초기값 설정, `allowed_user_ids` 기본값 설정, `is_public` 기본값 설정
+- [ ] 위젯/게스트 플로우 쿼리는 항상 `agent_id` 스코프. 익명 플로우는 `is_public`만 허용
+- [ ] `A_iam_user_profiles`는 `user_id` 단독 조회, `A_iam_user_access_maps` 의존 제거
+- [ ] `/api/user-profile` 응답에서 `org_id/org_role` 제거, `agent_access[]` + `is_admin`만 반환
+- [ ] `serverAuth`/runtime context에서 `org_id` 제거, `agent_id` + `agent_access`만 유지
+- [ ] MCP/카페24/OTP 연계 기록 insert 시 `created_user_id/owner_user_ids/allowed_user_ids/is_public` 초기값 포함
+
+## RLS 정책 설계 체크리스트 (MCP 확인 기반)
+- [ ] `A_iam_organizations` RLS 전부 제거 + 테이블 삭제 계획
+- [ ] `A_iam_user_access_maps` RLS 전부 제거 + 테이블 삭제 계획
+- [ ] `B_bot_agents` RLS를 `owner_user_ids/allowed_user_ids/is_public` 기반으로 전환
+- [ ] `B_bot_knowledge_bases` RLS를 `owner_user_ids/allowed_user_ids/is_public` 기반으로 전환 (현재 org 기반 + public read 정책 존재)
+- [ ] `C_mcp_tools` RLS를 `owner_user_ids/allowed_user_ids/is_public` 기반으로 전환 (현재 public read 정책 존재)
+- [ ] `A_end_users`, `A_end_user_identities`, `A_end_user_sessions`, `A_end_user_messages`, `A_end_user_session_resources`, `A_end_user_memories`, `A_end_user_response_materials`, `A_end_user_summaries` RLS를 org 기반에서 사용자 소유/공용 기반으로 전환
+- [ ] `D_conv_sessions`, `D_conv_turns`, `D_conv_audio_segments` RLS를 org 기반에서 사용자 소유/공용 기반으로 전환
+- [ ] `E_ops_review_queue_items`, `F_audit_events`, `F_audit_turn_specs` RLS를 org 기반에서 사용자 소유/공용 기반으로 전환
+- [ ] `F_audit_mcp_tools` RLS를 org 기반에서 사용자 소유/공용 기반으로 전환 (현재 org_id IN access map)
+- [ ] 위젯/게스트는 anon RLS에서 `is_public`만 허용, agent 스코프는 API 레이어에서 강제
+
+## 스키마 상세 정의 (옵션 2 확정)
+### 공통 컬럼 (대상: public 스키마 테이블, 뷰 제외)
+- `created_user_id uuid` (기본적으로 NOT NULL, `auth.users(id)` FK)
+- `owner_user_ids uuid[]` (NOT NULL, default `{}::uuid[]`)
+- `allowed_user_ids uuid[]` (NOT NULL, default `{}::uuid[]`)
+- `is_public boolean` (NOT NULL, default `false`)
+- 제약: `owner_user_ids @> ARRAY[created_user_id]::uuid[]` (생성자는 소유자에 포함)
+- 인덱스: `created_user_id` btree, `owner_user_ids` GIN, `allowed_user_ids` GIN, `is_public` btree
+- `agent_id`가 있는 테이블은 `agent_id` btree 인덱스 추가
+- `org_id`는 모든 테이블에서 제거 (FK/인덱스 포함)
+
+### 예외/시스템 테이블 규칙
+- 뷰(`*_view`)는 컬럼 추가 대상에서 제외
+- 시스템/운영 전용 테이블은 공통 컬럼을 추가하되 `created_user_id` nullable 허용 + `is_public = false` 고정
+
+### 테이블별 최종 스키마 변경 (요약)
+- `A_iam_organizations`: 삭제
+- `A_iam_user_access_maps`: 삭제
+- `A_iam_user_profiles`: 공통 컬럼 추가, `created_user_id = user_id`, `owner_user_ids = ARRAY[user_id]` 기본
+- `A_iam_auth_settings`: 공통 컬럼 추가, `org_id` 제거
+- `B_bot_agents`: 공통 컬럼 추가, `org_id` 제거, `owner_user_id`는 마이그레이션 후 제거
+- `B_bot_agent_access`: 공통 컬럼 추가, `created_user_id`=권한 부여자, `owner_user_ids`=에이전트 소유자+부여자, `allowed_user_ids`=[user_id]
+- `B_bot_knowledge_bases`: 공통 컬럼 추가, `org_id` 제거
+- `C_mcp_tools`: 공통 컬럼 추가
+- `B_chat_widgets`: 공통 컬럼 추가, `org_id` 제거
+- `D_conv_sessions`: 공통 컬럼 추가, `org_id` 제거, `agent_id` 타입 `uuid`로 정규화
+- `D_conv_turns`: 공통 컬럼 추가 (session/turn 기반), `org_id` 제거
+- `D_conv_audio_segments`: 공통 컬럼 추가 (session 기반), `org_id` 제거
+- `A_end_users`: 공통 컬럼 추가, `org_id` 제거
+- `A_end_user_identities`: 공통 컬럼 추가, `org_id` 제거
+- `A_end_user_sessions`: 공통 컬럼 추가, `org_id` 제거
+- `A_end_user_messages`: 공통 컬럼 추가, `org_id` 제거
+- `A_end_user_session_resources`: 공통 컬럼 추가, `org_id` 제거
+- `A_end_user_memories`: 공통 컬럼 추가, `org_id` 제거
+- `A_end_user_response_materials`: 공통 컬럼 추가, `org_id` 제거
+- `A_end_user_summaries`: 공통 컬럼 추가, `org_id` 제거
+- `F_audit_events`: 공통 컬럼 추가, `org_id` 제거
+- `F_audit_turn_specs`: 공통 컬럼 추가, `org_id` 제거
+- `F_audit_mcp_tools`: 공통 컬럼 추가, `org_id` 제거
+- `F_widget_events`: 공통 컬럼 추가, `org_id` 제거
+- `E_ops_review_queue_items`: 공통 컬럼 추가, `org_id` 제거
+- `E_ops_notification_messages`: 공통 컬럼 추가, `org_id` 제거
+- `G_com_product_aliases`: 공통 컬럼 추가, `org_id` 제거
+- `G_com_product_rules`: 공통 컬럼 추가, `org_id` 제거
+- `H_auth_otp_verifications`: 공통 컬럼 추가, `org_id` 제거
+- `H_auth_otp_verifications_guest`: 공통 컬럼 추가 (`created_user_id` nullable)
+- `I_runtime_policy_files`: 공통 컬럼 추가 (`created_user_id` nullable)
+- `B_chat_settings`: 공통 컬럼 추가 (`created_user_id` nullable)
+
+## 쿼리 설계 상세 (옵션 2 확정)
+### 읽기 규칙
+- authenticated: `is_public = true` OR `auth.uid()`가 `owner_user_ids`에 포함 OR `auth.uid()`가 `allowed_user_ids`에 포함
+- anon: `is_public = true`만 허용 (추가 조건은 테이블별 `is_active = true` 등)
+- `agent_id`는 스코프 필터로만 사용 (public 여부와 무관)
+
+### 쓰기 규칙
+- insert: `created_user_id = auth.uid()`, `owner_user_ids`에 `auth.uid()` 포함 필수
+- update/delete: `auth.uid()`가 `owner_user_ids`에 포함되어야 함
+- `allowed_user_ids`는 읽기 전용 (쓰기 권한 부여용 아님)
+
+### 에이전트 접근 전파 규칙
+- 에이전트 하위 리소스 생성 시 `B_bot_agents`의 `owner_user_ids/allowed_user_ids/is_public`를 그대로 복사하여 저장
+- 에이전트 접근 제어는 **전파된 컬럼**으로만 통제 (조인 기반 접근검증 금지)
+
+## RLS 정책 상세 (옵션 2 확정)
+- 공통 SELECT 정책
+  - `is_public = true` OR `auth.uid()` = ANY(`owner_user_ids`) OR `auth.uid()` = ANY(`allowed_user_ids`)
+- 공통 INSERT 정책
+  - `created_user_id = auth.uid()` AND `auth.uid()` = ANY(`owner_user_ids`)
+- 공통 UPDATE/DELETE 정책
+  - `auth.uid()` = ANY(`owner_user_ids`)
+- anon RLS는 `is_public = true`만 허용 (필요 시 `is_active = true` 추가)
+- 시스템/운영 테이블은 `is_admin = true`만 허용하는 별도 정책 사용
+
+## 진행 체크리스트 (옵션 2 기준)
+- [x] 스키마 설계 체크리스트 완료
+- [x] 쿼리 설계 체크리스트 완료
+- [x] RLS 정책 설계 체크리스트 완료
+
+
+## 실행 체크리스트 (옵션 2)
+- [x] 공통 컬럼 4종 추가 (created/owner/allowed/is_public)
+- [x] created_user_id/owner_user_ids 기본값 백필
+- [x] created_user_id FK 추가
+- [x] owner_user_ids/allowed_user_ids GIN 인덱스 추가
+- [x] is_public btree 인덱스 추가
+- [x] owner_user_ids contains created_user_id 체크 제약 추가
+- [x] org_id 컬럼 및 FK/인덱스 제거
+- [x] RLS 정책 전면 교체 (공통 규칙 적용)
+- [ ] API/쿼리 레이어에서 org_id 제거
+
+
+## 2026-02-25 업데이트 (Supabase MCP 기준)
+### 스키마 현황 요약
+- `org_id` 컬럼 잔존: `E_ops_notification_messages`에만 존재
+- `A_iam_organizations`, `A_iam_user_access_maps` 테이블: 이미 제거됨
+- 공통 컬럼( `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` )
+  - 대부분 테이블에 반영 완료
+  - 예외: `E_ops_actions`는 공통 컬럼 없음 (시스템 로그 테이블로 간주 가능)
+
+### RLS 현황 요약
+- 공통 RLS 정책 패턴(소유/허용/공용 + admin override)이 다수 테이블에 적용됨
+- RLS 비활성 테이블: 없음 (2026-02-25 기준 활성화 완료)
+  - 위젯/게스트 플로우는 API 레이어에서 `agent_id` 스코프 강제 필요
+
+## 스키마/쿼리/정책 체크리스트 (MCP 확인 반영)
+### 스키마
+- [x] 제거: `A_iam_organizations` 테이블
+- [x] 제거: `A_iam_user_access_maps` 테이블
+- [x] 공통 컬럼 4종 추가 (대부분 테이블)
+- [x] `E_ops_notification_messages.org_id` 제거
+- [ ] `E_ops_actions`가 시스템 테이블이면 공통 컬럼 제외 여부 명시 (예외 정의 문서화)
+- [x] `D_conv_sessions.agent_id` 타입 정규화 (현재 `text` → `uuid` 전환 필요 여부 재확인)
+- [ ] `B_chat_widgets.agent_id` NOT NULL 강제 여부 결정
+
+### 쿼리/API
+- [ ] 모든 조회/집계에서 `org_id` 필터 제거 + `agent_id` 스코프 + (`is_public` 또는 `owner/allowed`) 적용
+- [ ] insert/update 시 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 기본값 명시
+- [x] 위젯/게스트 플로우는 항상 `agent_id` 강제
+- [ ] `/api/user-profile` 응답에서 `org_id/org_role` 제거 + `agent_access[]`, `is_admin`만 유지
+- [ ] `serverAuth`/runtime context에서 `org_id` 완전 제거
+- [ ] MCP/카페24/OTP 기록 insert에 공통 컬럼 기본값 포함
+
+### RLS 정책
+- [x] 공통 정책 패턴(소유/허용/공용 + admin override) 대다수 적용
+- [x] `B_chat_widgets` RLS 활성화 완료
+- [x] `F_widget_events` RLS 활성화 완료
+- [ ] 시스템/운영 전용 테이블(`E_ops_actions` 등) admin-only 정책 명시
+- [ ] anon 접근은 `is_public = true`만 허용하는지 재확인 (필요 시 `is_active = true` 추가)
+
+## 실행 체크리스트 (옵션 2 기준, 최신화)
+- [x] 공통 컬럼 4종 추가 (created/owner/allowed/is_public)
+- [x] created_user_id/owner_user_ids 기본값 백필
+- [x] created_user_id FK 추가
+- [x] owner_user_ids/allowed_user_ids GIN 인덱스 추가
+- [x] is_public btree 인덱스 추가
+- [x] owner_user_ids contains created_user_id 체크 제약 추가
+- [x] org_id 컬럼 및 FK/인덱스 제거 (대부분)
+- [x] RLS 정책 전면 교체 (공통 규칙 적용)
+- [x] `E_ops_notification_messages.org_id` 제거
+- [x] API/쿼리 레이어에서 org_id 완전 제거
+
+## 2026-02-25 업데이트 (Supabase MCP 기준)
+### 스키마 현황 요약
+- `org_id` 컬럼 잔존: `E_ops_notification_messages`에만 존재
+- `A_iam_organizations`, `A_iam_user_access_maps` 테이블: 이미 제거됨
+- 공통 컬럼( `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` )
+  - 대부분 테이블에 반영 완료
+  - 예외: `E_ops_actions`는 공통 컬럼 없음 (시스템 로그 테이블로 간주 가능)
+
+### RLS 현황 요약
+- 공통 RLS 정책 패턴(소유/허용/공용 + admin override)이 다수 테이블에 적용됨
+- RLS 비활성 테이블: `B_chat_widgets`, `F_widget_events`, `B_bot_agent_access`, `A_iam_user_profiles`, `B_chat_settings`, `H_auth_otp_verifications_guest`, `I_runtime_policy_files` 등
+  - 위젯/게스트 플로우는 API 레이어에서 강제 스코핑 필요 (agent_id 필수)
+
+## 스키마/쿼리/정책 체크리스트 (MCP 확인 반영)
+### 스키마
+- [x] 제거: `A_iam_organizations` 테이블
+- [x] 제거: `A_iam_user_access_maps` 테이블
+- [x] 공통 컬럼 4종 추가 (대부분 테이블)
+- [ ] `E_ops_notification_messages.org_id` 제거
+- [ ] `E_ops_actions`가 시스템 테이블이면 공통 컬럼 제외 여부 명시 (예외 정의 문서화)
+- [ ] `D_conv_sessions.agent_id` 타입 정규화 (현재 `text` → `uuid` 전환 필요 여부 재확인)
+- [ ] `B_chat_widgets.agent_id` NOT NULL 강제 여부 결정
+
+### 쿼리/API
+- [ ] 모든 조회/집계에서 `org_id` 필터 제거 + `agent_id` 스코프 + (`is_public` 또는 `owner/allowed`) 적용
+- [ ] insert/update 시 `created_user_id`, `owner_user_ids`, `allowed_user_ids`, `is_public` 기본값 명시
+- [ ] 위젯/게스트 플로우는 항상 `agent_id` 강제
+- [ ] `/api/user-profile` 응답에서 `org_id/org_role` 제거 + `agent_access[]`, `is_admin`만 유지
+- [ ] `serverAuth`/runtime context에서 `org_id` 완전 제거
+- [ ] MCP/카페24/OTP 기록 insert에 공통 컬럼 기본값 포함
+
+### RLS 정책
+- [x] 공통 정책 패턴(소유/허용/공용 + admin override) 대다수 적용
+- [ ] `B_chat_widgets` RLS 필요 여부 결정 (현재 비활성)
+- [ ] `F_widget_events` RLS 필요 여부 결정 (현재 비활성)
+- [ ] 시스템/운영 전용 테이블(`E_ops_actions` 등) admin-only 정책 명시
+- [ ] anon 접근은 `is_public = true`만 허용하는지 재확인 (필요 시 `is_active = true` 추가)
+
+## 실행 체크리스트 (옵션 2 기준, 최신화)
+- [x] 공통 컬럼 4종 추가 (created/owner/allowed/is_public)
+- [x] created_user_id/owner_user_ids 기본값 백필
+- [x] created_user_id FK 추가
+- [x] owner_user_ids/allowed_user_ids GIN 인덱스 추가
+- [x] is_public btree 인덱스 추가
+- [x] owner_user_ids contains created_user_id 체크 제약 추가
+- [x] org_id 컬럼 및 FK/인덱스 제거 (대부분)
+- [x] RLS 정책 전면 교체 (공통 규칙 적용)
+- [ ] `E_ops_notification_messages.org_id` 제거
+- [ ] API/쿼리 레이어에서 org_id 완전 제거
+
+## 2026-02-25 RLS 업데이트
+- RLS 활성화 완료: `A_iam_user_profiles`, `B_bot_agent_access`, `B_chat_settings`, `B_chat_widgets`, `E_ops_notification_messages`, `F_widget_events`, `G_com_product_aliases`, `G_com_product_rules`, `H_auth_otp_verifications`, `H_auth_otp_verifications_guest`, `I_runtime_policy_files`
+- 위젯/게스트 플로우는 여전히 API 레이어에서 `agent_id` 스코프 강제 필요
+
+### RLS 정책 체크리스트 (업데이트)
+- [x] `B_chat_widgets` RLS 활성화
+- [x] `F_widget_events` RLS 활성화
+- [x] `A_iam_user_profiles` RLS 활성화
+- [x] `B_bot_agent_access` RLS 활성화
+- [x] `B_chat_settings` RLS 활성화
+- [x] `E_ops_notification_messages` RLS 활성화
+- [x] `G_com_product_aliases` RLS 활성화
+- [x] `G_com_product_rules` RLS 활성화
+- [x] `H_auth_otp_verifications` RLS 활성화
+- [x] `H_auth_otp_verifications_guest` RLS 활성화
+- [x] `I_runtime_policy_files` RLS 활성화
+
+## 2026-02-25 org_id 제거 완료
+- `E_ops_notification_messages.org_id` 제거 완료
+
+## 2026-02-25 API/쿼리 레이어 org_id 제거
+- 클라이언트/문서 내 org_id 참조 제거 완료
+- `/api/user-profile` 기반 접근 판단은 `agent_access` 기준으로 전환
+
+### 실행 체크리스트 업데이트
+- [x] API/쿼리 레이어에서 org_id 완전 제거
+
+## 2026-02-25 추가 작업
+- `D_conv_sessions.agent_id` 타입 `uuid`로 정규화 완료 (text -> uuid)
+- 위젯/게스트 API에서 `agent_id` 필수 검증 추가
+- `npm run build` 실행 시도했으나 PowerShell 실행 정책으로 실패
+
+### 실행 체크리스트 업데이트
+- [x] `D_conv_sessions.agent_id` 타입 정규화
+- [x] 위젯/게스트 `agent_id` 강제 검증
+- [ ] `npm run build` (PowerShell 실행 정책으로 미실행)

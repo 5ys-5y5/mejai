@@ -70,16 +70,15 @@ function isSameIdList(a?: string[] | null, b?: string[] | null) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function buildScopedQuery(client: SupabaseClient, id: string, orgId: string) {
-  return client.from("B_bot_agents").select("*").eq("id", id).or(`org_id.eq.${orgId},org_id.is.null`);
+function buildScopedQuery(client: SupabaseClient, id: string) {
+  return client.from("B_bot_agents").select("*").eq("id", id);
 }
 
-function buildParentQuery(client: SupabaseClient, parentId: string, orgId: string) {
+function buildParentQuery(client: SupabaseClient, parentId: string) {
   return client
     .from("B_bot_agents")
     .select("*")
     .eq("parent_id", parentId)
-    .or(`org_id.eq.${orgId},org_id.is.null`)
     .order("is_active", { ascending: false })
     .order("created_at", { ascending: false });
 }
@@ -100,11 +99,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "INVALID_ID" }, { status: 400 });
   }
 
-  const { data: scopedData, error } = await buildScopedQuery(
-    serverContext.supabase,
-    id,
-    serverContext.orgId
-  ).maybeSingle();
+  const { data: scopedData, error } = await buildScopedQuery(serverContext.supabase, id).maybeSingle();
   let data = scopedData;
 
   if (error) {
@@ -112,7 +107,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
   }
 
   if (!data) {
-    const parentResult = await buildParentQuery(serverContext.supabase, id, serverContext.orgId).limit(1).maybeSingle();
+    const parentResult = await buildParentQuery(serverContext.supabase, id).limit(1).maybeSingle();
     if (parentResult.error) {
       return NextResponse.json({ error: parentResult.error.message }, { status: 400 });
     }
@@ -180,11 +175,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const rawId = routeId;
   const urlId = req.nextUrl.pathname.split("/").pop() || "";
   const id = normalizeId(rawId && rawId !== "undefined" ? rawId : urlId);
-  const { data: fetched, error: fetchError } = await buildScopedQuery(
-    serverContext.supabase,
-    id,
-    serverContext.orgId
-  ).maybeSingle();
+  const { data: fetched, error: fetchError } = await buildScopedQuery(serverContext.supabase, id).maybeSingle();
   let existing = fetched;
 
   if (fetchError) {
@@ -192,7 +183,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   }
 
   if (!existing) {
-    const parentResult = await buildParentQuery(serverContext.supabase, id, serverContext.orgId).limit(1).maybeSingle();
+    const parentResult = await buildParentQuery(serverContext.supabase, id).limit(1).maybeSingle();
     if (parentResult.error) {
       return NextResponse.json({ error: parentResult.error.message }, { status: 400 });
     }
@@ -239,8 +230,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       const { error: deactivateError } = await serverContext.supabase
         .from("B_bot_agents")
         .update({ is_active: false })
-        .eq("parent_id", parentId)
-        .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+        .eq("parent_id", parentId);
       if (deactivateError) {
         return NextResponse.json({ error: deactivateError.message }, { status: 400 });
       }
@@ -259,7 +249,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       goal: nextGoal,
       version: bumpVersion(existing.version),
       is_active: nextIsActive,
-      org_id: existing.org_id ?? serverContext.orgId,
       created_by: existing.created_by ?? serverContext.user.id,
     };
 
@@ -287,8 +276,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       const { error: deactivateError } = await serverContext.supabase
         .from("B_bot_agents")
         .update({ is_active: false })
-        .eq("parent_id", parentId)
-        .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
+        .eq("parent_id", parentId);
       if (deactivateError) {
         return NextResponse.json({ error: deactivateError.message }, { status: 400 });
       }
@@ -299,7 +287,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
         .from("B_bot_agents")
         .update(updatePayload)
         .eq("id", existing.id)
-        .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)
         .select("*")
         .maybeSingle();
       data = updated as typeof existing;
@@ -334,7 +321,6 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
     .from("B_bot_agents")
     .delete()
     .eq("id", id)
-    .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)
     .select("*")
     .maybeSingle();
 

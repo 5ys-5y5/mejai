@@ -1,0 +1,39 @@
+[HMR] connected
+matrix-rain-background.tsx:211 [MatrixRain] mount with colors {headColor: {…}, tailColor: {…}} {"headColor":{"red":0,"green":0,"blue":0},"tailColor":{"red":0,"green":0,"blue":0}}
+matrix-rain-background.tsx:186 [MatrixRain] sample pixel {canvasMid: {…}, canvasRegion: {…}, headSample: {…}, tailSample: {…}, headColor: {…}, …} {"canvasMid":{"r":0,"g":0,"b":0,"a":0},"canvasRegion":{"maxColor":{"r":0,"g":0,"b":0,"a":0},"avgColor":null,"count":0},"headSample":{"r":0,"g":0,"b":0,"a":148},"tailSample":{"r":0,"g":0,"b":0,"a":148},"headColor":{"red":0,"green":0,"blue":0},"tailColor":{"red":0,"green":0,"blue":0}}
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 120ms
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 110ms
+laboratoryTransport.ts:36 [laboratory/client][timing] {trace_id: 'labc_mm242cuf_jcodze', phase: 'request_start', is_first_turn: true, has_agent_id: false, message_len: 6}
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 219ms
+laboratoryTransport.ts:65 [laboratory/client][timing] {trace_id: 'labc_mm242cuf_jcodze', phase: 'request_done', total_ms: 6155.6, session_id: 'baee69a4-5b79-4363-a871-28b99a09ebd3', turn_id: '99e53cd2-c308-498f-8ffe-12ff74d75fa4'}
+laboratoryTransport.ts:36 [laboratory/client][timing] {trace_id: 'labc_mm242jj1_w2ev6m', phase: 'request_start', is_first_turn: false, has_agent_id: false, message_len: 24}
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 1781ms
+laboratoryTransport.ts:65 [laboratory/client][timing] {trace_id: 'labc_mm242jj1_w2ev6m', phase: 'request_done', total_ms: 7141.9, session_id: 'baee69a4-5b79-4363-a871-28b99a09ebd3', turn_id: 'd91bed85-9ef5-4e35-a668-69871e4539ef'}
+laboratoryTransport.ts:36 [laboratory/client][timing] {trace_id: 'labc_mm242q7h_kmb8wz', phase: 'request_start', is_first_turn: false, has_agent_id: false, message_len: 1}
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 403ms
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 459ms
+laboratoryTransport.ts:65 [laboratory/client][timing] {trace_id: 'labc_mm242q7h_kmb8wz', phase: 'request_done', total_ms: 4536.7, session_id: 'baee69a4-5b79-4363-a871-28b99a09ebd3', turn_id: '3a758ab8-253a-4abf-8c63-c0db3c8f8886'}
+laboratoryTransport.ts:36 [laboratory/client][timing] {trace_id: 'labc_mm242umf_ir1gjk', phase: 'request_start', is_first_turn: false, has_agent_id: false, message_len: 1}
+laboratoryTransport.ts:65 [laboratory/client][timing] {trace_id: 'labc_mm242umf_ir1gjk', phase: 'request_done', total_ms: 5504.7, session_id: 'baee69a4-5b79-4363-a871-28b99a09ebd3', turn_id: '8cddd67c-0bb5-4c9c-919b-6956c64fc5b5'}
+laboratoryTransport.ts:36 [laboratory/client][timing] {trace_id: 'labc_mm24317x_oki202', phase: 'request_start', is_first_turn: false, has_agent_id: false, message_len: 11}
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 414ms
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 345ms
+laboratoryTransport.ts:65 [laboratory/client][timing] {trace_id: 'labc_mm24317x_oki202', phase: 'request_done', total_ms: 4486.4, session_id: 'baee69a4-5b79-4363-a871-28b99a09ebd3', turn_id: '19b5cc19-8ccb-4ed7-8884-f810b4b7ddec'}
+laboratoryTransport.ts:36 [laboratory/client][timing] {trace_id: 'labc_mm2435nj_brqawh', phase: 'request_start', is_first_turn: false, has_agent_id: false, message_len: 1}
+laboratoryTransport.ts:65 [laboratory/client][timing] {trace_id: 'labc_mm2435nj_brqawh', phase: 'request_done', total_ms: 13089.4, session_id: 'baee69a4-5b79-4363-a871-28b99a09ebd3', turn_id: 'a68a015a-133d-463a-9f65-ad781d7301dd'}
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 465ms
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 500ms
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 472ms
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 451ms

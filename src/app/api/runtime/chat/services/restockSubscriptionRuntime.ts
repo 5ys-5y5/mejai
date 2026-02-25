@@ -1,7 +1,8 @@
 import { createHmac, randomBytes } from "crypto";
 
 type RestockSubscriptionInput = {
-  orgId: string | null;
+  agentId: string | null;
+  agentId?: string | null;
   sessionId: string;
   channel: string;
   phone?: string | null;
@@ -159,7 +160,8 @@ export async function saveRestockSubscriptionLite(
   const productName = input.productName ? String(input.productName) : null;
 
   const rows = leadDaysToSchedule.map((leadDay) => ({
-    org_id: input.orgId || null,
+    agent_id: input.agentId || null,
+    agent_id: input.agentId || null,
     mall_id: input.cafe24MallId || null,
     session_id: sessionId,
     channel,

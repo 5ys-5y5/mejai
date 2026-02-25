@@ -64,12 +64,7 @@ const SUMMARY_BY_FILE: Record<string, string> = {
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
   if ("error" in context) return { ok: false, status: 401, error: context.error };
-  const { data: access } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  if (!access?.is_admin) {
+  if (!context.isAdmin) {
     return { ok: false, status: 403, error: "FORBIDDEN" };
   }
   return { ok: true as const };
@@ -578,7 +573,7 @@ async function refreshPolicies(onProgress?: (payload: RefreshProgress) => void) 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
-  const context = await getServerContext(authHeader, cookieHeader);
+  const context = await getServerContext(authHeader, cookieHeader, null, { requireAgent: false });
   if ("error" in context) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }
@@ -608,7 +603,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
-  const context = await getServerContext(authHeader, cookieHeader);
+  const context = await getServerContext(authHeader, cookieHeader, null, { requireAgent: false });
   if ("error" in context) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }

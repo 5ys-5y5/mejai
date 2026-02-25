@@ -1,0 +1,25 @@
+[Fast Refresh] done in 194ms
+laboratoryTransport.ts:36 [laboratory/client][timing] {trace_id: 'labc_mm268fkh_43gra0', phase: 'request_start', is_first_turn: true, has_agent_id: false, message_len: 6}
+runtimeClient.ts:30  POST http://localhost:3000/api/laboratory/run 500 (Internal Server Error)
+runConversation @ runtimeClient.ts:30
+await in runConversation
+sendLaboratoryMessage @ laboratoryTransport.ts:46
+await in sendLaboratoryMessage
+useLaboratoryConversationActions.useCallback[submitMessage] @ useLaboratoryConversationActions.ts:238
+onSubmitMessage @ ConversationUI.parts.tsx:2873
+onSubmit @ ConversationUI.parts.tsx:2091
+executeDispatch @ react-dom-client.development.js:20543
+runWithFiberInDEV @ react-dom-client.development.js:986
+processDispatchQueue @ react-dom-client.development.js:20593
+(anonymous) @ react-dom-client.development.js:21164
+batchedUpdates$1 @ react-dom-client.development.js:3377
+dispatchEventForPluginEventSystem @ react-dom-client.development.js:20747
+dispatchEvent @ react-dom-client.development.js:25693
+dispatchDiscreteEvent @ react-dom-client.development.js:25661Understand this error
+laboratoryTransport.ts:77 [laboratory/client][timing] {trace_id: 'labc_mm268fkh_43gra0', phase: 'request_failed', total_ms: 138.3, error: '{"error":"CHAT_POLICY_MISSING"}'}
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 1473ms
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 648ms
+forward-logs-shared.ts:95 [Fast Refresh] rebuilding
+forward-logs-shared.ts:95 [Fast Refresh] done in 566ms

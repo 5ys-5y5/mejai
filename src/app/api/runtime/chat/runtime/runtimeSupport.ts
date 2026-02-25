@@ -35,7 +35,7 @@ export type DebugPayload = {
   mcpLogs?: string[];
   providerConfig?: Record<string, string | null>;
   userId?: string | null;
-  orgId?: string | null;
+  agentId?: string | null;
   userPlan?: string | null;
   userIsAdmin?: boolean | null;
   userRole?: string | null;
@@ -331,11 +331,11 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
           },
         }
       : {}),
-    ...(payload.userId || payload.orgId || payload.userPlan || payload.userRole || payload.userIsAdmin !== undefined
+    ...(payload.userId || payload.agentId || payload.userPlan || payload.userRole || payload.userIsAdmin !== undefined
       ? {
           user: {
             ...(payload.userId ? { id: payload.userId } : {}),
-            ...(payload.orgId ? { org_id: payload.orgId } : {}),
+            ...(payload.agentId ? { agent_id: payload.agentId } : {}),
             ...(payload.userPlan ? { plan: payload.userPlan } : {}),
             ...(payload.userRole ? { role: payload.userRole } : {}),
             ...(payload.userIsAdmin !== undefined && payload.userIsAdmin !== null ? { is_admin: payload.userIsAdmin } : {}),
@@ -393,7 +393,7 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
             ...(payload.widgetName ? { name: payload.widgetName } : {}),
             ...(payload.widgetPublicKey ? { public_key: payload.widgetPublicKey } : {}),
             ...(payload.widgetAgentId ? { agent_id: payload.widgetAgentId } : {}),
-            ...(payload.widgetOrgId ? { org_id: payload.widgetOrgId } : {}),
+            ...(payload.widgetOrgId ? { agent_id: payload.widgetOrgId } : {}),
             ...(Array.isArray(payload.widgetAllowedDomains) && payload.widgetAllowedDomains.length > 0
               ? { allowed_domains: payload.widgetAllowedDomains }
               : {}),
@@ -414,7 +414,7 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
             ...(payload.requestDomain ? { domain: payload.requestDomain } : {}),
             ...(payload.requestOrigin ? { origin: payload.requestOrigin } : {}),
             ...(payload.requestWidgetOrgIdPresent !== undefined
-              ? { widget_org_id_present: payload.requestWidgetOrgIdPresent }
+              ? { widget_agent_id_present: payload.requestWidgetOrgIdPresent }
               : {}),
             ...(payload.requestWidgetUserIdPresent !== undefined
               ? { widget_user_id_present: payload.requestWidgetUserIdPresent }
@@ -643,7 +643,7 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
       }))
       : [{ key: "MCP.logs", value: "-" }]),
     { key: "USER.id", value: payload.userId || "-" },
-    { key: "ORG.id", value: payload.orgId || "-" },
+    { key: "ORG.id", value: payload.agentId || "-" },
     { key: "USER.plan", value: payload.userPlan || "-" },
     {
       key: "USER.is_admin",
@@ -684,11 +684,11 @@ function buildDebugEntries(payload: DebugPayload): DebugEntry[] {
     { key: "WIDGET.name", value: payload.widgetName || "-" },
     { key: "WIDGET.public_key", value: payload.widgetPublicKey || "-" },
     { key: "WIDGET.agent_id", value: payload.widgetAgentId || "-" },
-    { key: "WIDGET.org_id", value: payload.widgetOrgId || "-" },
+    { key: "WIDGET.agent_id", value: payload.widgetOrgId || "-" },
     { key: "REQUEST.domain", value: payload.requestDomain || "-" },
     { key: "REQUEST.origin", value: payload.requestOrigin || "-" },
     {
-      key: "REQUEST.widget_org_id_present",
+      key: "REQUEST.widget_agent_id_present",
       value:
         payload.requestWidgetOrgIdPresent === undefined
           ? "-"

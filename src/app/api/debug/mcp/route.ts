@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     const result = await callAdapter(tool, params || {}, {
       supabase: context.supabase,
-      orgId: context.orgId,
+      agentId: context.agentId,
       userId: context.user.id,
     });
     return NextResponse.json(result);

@@ -97,7 +97,7 @@ export function LandingConversationHero() {
               {ctrl.loading ? (
                 <div className="flex items-center justify-center gap-3 text-sm text-slate-600">
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  <span>로딩 중... {ctrl.loadingHints.join(", ")}</span>
+                  <span>{"\uB85C\uB529 \uC911..."} {ctrl.loadingHints.join(", ")}</span>
                 </div>
               ) : null}
               {ctrl.error ? <div className="text-sm text-rose-600">{ctrl.error}</div> : null}

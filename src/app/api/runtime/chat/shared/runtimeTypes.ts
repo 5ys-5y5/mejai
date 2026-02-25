@@ -4,8 +4,9 @@ import { compilePolicy, type PolicyEvalContext } from "@/lib/policyEngine";
 export type RuntimeContext = {
   supabase: SupabaseClient;
   user: User;
-  orgId: string | null;
-  orgRole?: string | null;
+  agentId: string | null;
+  agentId: string | null;
+  agentRole?: string | null;
   runtimeTraceId?: string;
   runtimeRequestStartedAt?: string;
   runtimeTurnId?: string;

@@ -15,6 +15,7 @@ export const CHAT_PRIMITIVES = {
       "update_order_shipping_address",
     ] as const,
     forceOtpBeforeSensitiveIntentFlow: true,
+    forceOtpOnPhoneInput: true,
   },
   response: {
     uniqueAnswerCount: 1,

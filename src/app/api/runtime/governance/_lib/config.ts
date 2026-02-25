@@ -17,7 +17,7 @@ function readObject(payload: unknown) {
 
 export async function readGovernanceConfig(input: {
   supabase: SupabaseClient;
-  orgId: string;
+  agentId: string;
 }): Promise<GovernanceConfig> {
   const { data, error } = await input.supabase
     .from("F_audit_events")
@@ -37,7 +37,7 @@ export async function readGovernanceConfig(input: {
   const rows = (data || []) as Array<{ payload: Record<string, unknown> | null; created_at: string | null }>;
   const matched = rows.find((row) => {
     const payload = readObject(row.payload);
-    return String(payload.org_id || "") === input.orgId;
+    return String(payload.agent_id || "") === input.agentId;
   });
   if (!matched) {
     return {
@@ -65,7 +65,7 @@ export async function readGovernanceConfig(input: {
 
 export async function writeGovernanceConfig(input: {
   supabase: SupabaseClient;
-  orgId: string;
+  agentId: string;
   enabled: boolean;
   visibilityMode: "public" | "user" | "admin";
   updatedBy: string | null;
@@ -75,13 +75,13 @@ export async function writeGovernanceConfig(input: {
     turn_id: null,
     event_type: CONFIG_EVENT_TYPE,
     payload: {
-      org_id: input.orgId,
+      agent_id: input.agentId,
       enabled: input.enabled,
       visibility_mode: input.visibilityMode,
       updated_by: input.updatedBy,
       baseline_source: "src/app/api/runtime/chat/policies/principles.ts",
     },
     created_at: new Date().toISOString(),
-    bot_context: { org_id: input.orgId, action: "governance_config_update" },
+    bot_context: { agent_id: input.agentId, action: "governance_config_update" },
   });
 }

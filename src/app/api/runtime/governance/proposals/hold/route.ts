@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     supabase: access.supabaseAdmin,
     proposalId,
     lookback: 3000,
-    orgId: access.orgId,
+    agentId: access.agentId,
   });
   if (!proposalEvent) {
     return NextResponse.json({ error: "PROPOSAL_NOT_FOUND" }, { status: 404 });
@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       status: "not_executed",
       actor: access.actor,
     },
-    botContext: { org_id: access.orgId },
+    botContext: { agent_id: access.agentId },
   });
   await notifyAdmins({
     type: "RUNTIME_PATCH_PROPOSAL_ON_HOLD",

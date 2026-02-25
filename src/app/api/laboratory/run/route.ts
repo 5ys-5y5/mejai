@@ -134,7 +134,7 @@ async function persistProxyFailure(input: {
   stageHistory: Array<{ stage: string; at: string }>;
   lastStage: string;
   requestStartedAt: number;
-  serverContext?: { userId?: string | null; orgId?: string | null } | null;
+  serverContext?: { userId?: string | null; agentId?: string | null } | null;
 }) {
   const {
     error,
@@ -203,7 +203,7 @@ async function persistProxyFailure(input: {
     try {
       await supabaseAdmin.from("D_conv_sessions").insert({
         id: resolvedSessionId,
-        org_id: serverContext?.orgId || null,
+        agent_id: serverContext?.agentId || null,
         session_code: `lab_${Math.random().toString(36).slice(2, 8)}`,
         started_at: nowIso(),
         channel: "laboratory_proxy_error",
@@ -460,7 +460,7 @@ export async function POST(req: NextRequest) {
   let pageKey: ConversationPageKey = "/app/laboratory";
   let authHeader = "";
   let cookieHeader = "";
-  let serverContext: { userId?: string | null; orgId?: string | null } | null = null;
+  let serverContext: { userId?: string | null; agentId?: string | null } | null = null;
   let originInfo: Record<string, any> | null = null;
   try {
     const parseStartedAt = Date.now();
@@ -505,23 +505,29 @@ export async function POST(req: NextRequest) {
         pageKey = "/";
       }
     } else {
-      serverContext = { userId: serverCtx.user.id, orgId: serverCtx.orgId };
+      serverContext = { userId: serverCtx.user.id, agentId: serverCtx.agentId };
       accessRole = await resolveAccessRoleForUser({
         supabase: serverCtx.supabase,
         userId: serverCtx.user.id,
-        orgId: serverCtx.orgId,
+        agentId: serverCtx.agentId,
       });
       try {
         const adminSupabase = createAdminSupabaseClient();
-        providerValue = await fetchChatPolicy(adminSupabase, serverCtx.orgId);
+        providerValue = await fetchChatPolicy(adminSupabase, serverCtx.agentId);
       } catch {
         providerValue = null;
       }
     }
-    const featureFlags = applyConversationFeatureVisibility(
-      resolveConversationPageFeatures(pageKey, providerValue),
-      accessRole
-    );
+    let featureFlags: ReturnType<typeof applyConversationFeatureVisibility>;
+    try {
+      featureFlags = applyConversationFeatureVisibility(
+        resolveConversationPageFeatures(pageKey, providerValue),
+        accessRole
+      );
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "CHAT_POLICY_ERROR";
+      return NextResponse.json({ error: reason }, { status: 500 });
+    }
     const filteredProviderKeys = featureFlags.mcp.providerSelector
       ? requestProviderKeys
           .map((value: unknown) => String(value || "").trim())
@@ -555,6 +561,7 @@ export async function POST(req: NextRequest) {
 
     const fetchStartedAt = Date.now();
     markStage("lab.proxy.runtime.fetch.start");
+    const effectiveAgentId = String(body?.agent_id || "").trim();
     const res = await fetch(targetUrlObject.toString(), {
       method: "POST",
       headers: {
@@ -567,7 +574,7 @@ export async function POST(req: NextRequest) {
         page_key: pageKey,
         message: String(body.message || ""),
         session_id: body.session_id || undefined,
-        agent_id: body.agent_id || undefined,
+        agent_id: effectiveAgentId || undefined,
         llm: effectiveLlm,
         kb_id: effectiveKbId,
         inline_kb: effectiveInlineKb,

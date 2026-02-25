@@ -66,8 +66,7 @@ export default function DashboardPage() {
   const [reviewQueue, setReviewQueue] = useState<ReviewRow[]>([]);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [loading, setLoading] = useState(true);
-  const [orgId, setOrgId] = useState<string | null>(null);
-  const [orgPending, setOrgPending] = useState(false);
+  const [hasAgentAccess, setHasAgentAccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [simulating, setSimulating] = useState(false);
   const [simulateError, setSimulateError] = useState<string | null>(null);
@@ -102,7 +101,7 @@ export default function DashboardPage() {
       setSessions([]);
       setReviewQueue([]);
       setAgents([]);
-      setOrgId(null);
+      setHasAgentAccess(false);
       setIsAdmin(false);
       setLoading(false);
       setError("Supabase 설정이 필요합니다.");
@@ -115,7 +114,7 @@ export default function DashboardPage() {
       setSessions([]);
       setReviewQueue([]);
       setAgents([]);
-      setOrgId(null);
+      setHasAgentAccess(false);
       setIsAdmin(false);
       setLoading(false);
       loadInFlightRef.current = false;
@@ -126,15 +125,13 @@ export default function DashboardPage() {
       const profile = await apiFetch<{
         plan: string;
         is_admin: boolean;
-        org_role: string;
-        org_id: string | null;
+        agent_access?: unknown[] | null;
       }>("/api/user-profile");
-      const pending = profile.org_role === "pending";
       setIsAdmin(Boolean(profile.is_admin));
       setPlan(profile.plan || "starter");
-      setOrgPending(pending);
-      setOrgId(profile.org_id || null);
-      if (pending || !profile.org_id) {
+      const access = Array.isArray(profile.agent_access) && profile.agent_access.length > 0;
+      setHasAgentAccess(access);
+      if (!access) {
         setSessions([]);
         setReviewQueue([]);
         setAgents([]);
@@ -145,8 +142,8 @@ export default function DashboardPage() {
     } catch {
       setIsAdmin(false);
       setPlan("starter");
-      setOrgPending(false);
-      setOrgId(null);
+      setHasAgentAccess(false);
+      setHasAgentAccess(false);
       setSessions([]);
       setReviewQueue([]);
       setAgents([]);
@@ -234,8 +231,7 @@ export default function DashboardPage() {
         type?: string;
         sessions?: SessionRow[];
         reviewQueue?: ReviewRow[];
-        orgId?: string | null;
-        orgPending?: boolean;
+        hasAgentAccess?: boolean;
         isAdmin?: boolean;
         plan?: string;
       };
@@ -252,8 +248,7 @@ export default function DashboardPage() {
           }
         });
         setAgents([...agentMap.values()]);
-        setOrgId(payload.orgId || null);
-        setOrgPending(Boolean(payload.orgPending));
+        setHasAgentAccess(Boolean(payload.hasAgentAccess));
         setIsAdmin(Boolean(payload.isAdmin));
         setPlan(payload.plan || "starter");
         setLoading(false);
@@ -278,13 +273,12 @@ export default function DashboardPage() {
       ts: Date.now(),
       sessions,
       reviewQueue,
-      orgId,
-      orgPending,
+      hasAgentAccess,
       isAdmin,
       plan,
     });
     channel.close();
-  }, [isAdmin, isLeader, orgId, orgPending, plan, reviewQueue, sessions, tabId]);
+  }, [hasAgentAccess, isAdmin, isLeader, plan, reviewQueue, sessions, tabId]);
 
   const handleSimulate = useCallback(async () => {
     setSimulating(true);
@@ -304,7 +298,7 @@ export default function DashboardPage() {
   }, [loadData]);
 
   const refreshCafe24ProviderState = useCallback(async () => {
-    if (!isAdmin || !orgId) {
+    if (!isAdmin) {
       setCafe24IssueDetected(false);
       setCafe24Issue(null);
       return;
@@ -348,7 +342,7 @@ export default function DashboardPage() {
       setCafe24IssueDetected(false);
       setCafe24Issue(null);
     }
-  }, [isAdmin, orgId]);
+  }, [isAdmin]);
 
   const startCafe24Reconnect = useCallback(async () => {
     setCafe24ReconnectNotice("");
@@ -569,7 +563,7 @@ export default function DashboardPage() {
             </div>
           ) : null}
 
-          {orgPending ? (
+          {false ? (
             <CardShell className="p-5">
               <div className="text-sm font-semibold text-slate-900">사업체 승인 대기 중입니다.</div>
               <div className="mt-2 text-sm text-slate-600">
@@ -578,7 +572,7 @@ export default function DashboardPage() {
             </CardShell>
           ) : null}
 
-          {!orgId ? (
+          {!hasAgentAccess ? (
             <CardShell className="bg-amber-50 p-5">
               <div className="text-sm font-semibold text-slate-900">조직 정보가 없습니다.</div>
               <div className="mt-2 text-sm text-slate-600">
@@ -592,7 +586,7 @@ export default function DashboardPage() {
             </CardShell>
           ) : null}
 
-          {isAdmin && orgId && cafe24IssueDetected ? (
+          {isAdmin && cafe24IssueDetected ? (
             <CardShell className="bg-rose-50 p-5">
               <div className="text-sm font-semibold text-slate-900">Cafe24 토큰 갱신 이슈가 감지되었습니다.</div>
               <ul className="mt-2 list-disc pl-5 text-xs text-slate-700">

@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
   const contextRes = await getServerContext(authHeader, cookieHeader);
-  let context: { supabase: SupabaseClient; orgId: string | null; user: User };
+  let context: { supabase: SupabaseClient; agentId: string | null; user: User };
   let publicOnly = false;
   if ("error" in contextRes) {
     publicOnly = true;
@@ -34,10 +34,11 @@ export async function POST(req: NextRequest) {
       supabase = createServerSupabaseClient();
     }
     const user = { id: "00000000-0000-0000-0000-000000000000" } as User;
-    context = { supabase, orgId: null, user };
+    context = { supabase, agentId: null, user };
   } else {
     context = contextRes;
   }
+  const agentId = String(req.headers.get("x-agent-id") || "").trim() || null;
 
   const body = (await req.json().catch(() => null)) as ToolCallBody | null;
   if (!body) {
@@ -127,7 +128,7 @@ export async function POST(req: NextRequest) {
   }
 
   const applyOrgRateLimitFilter = (query: any) =>
-    context.orgId ? query.eq("org_id", context.orgId) : query.is("org_id", null);
+    context.agentId ? query.eq("agent_id", context.agentId) : query.is("agent_id", null);
   if (tool.rate_limit_per_min && tool.rate_limit_per_min > 0) {
     const since = new Date(Date.now() - 60_000).toISOString();
     const { count } = await applyOrgRateLimitFilter(
@@ -139,7 +140,8 @@ export async function POST(req: NextRequest) {
     );
     if ((count || 0) >= tool.rate_limit_per_min) {
       await context.supabase.from("F_audit_mcp_tools").insert({
-        org_id: context.orgId,
+        agent_id: context.agentId,
+        agent_id: agentId,
         session_id: body.session_id ?? null,
         tool_id: tool.id,
         tool_version: tool.version ?? null,
@@ -162,7 +164,8 @@ export async function POST(req: NextRequest) {
     resolvedParams,
     {
       supabase: context.supabase,
-      orgId: context.orgId,
+      agentId: context.agentId,
+      agentId,
       userId: context.user.id,
     },
     { toolName: tool.name }
@@ -176,7 +179,8 @@ export async function POST(req: NextRequest) {
   );
 
   await context.supabase.from("F_audit_mcp_tools").insert({
-    org_id: context.orgId,
+    agent_id: context.agentId,
+    agent_id: agentId,
     session_id: body.session_id ?? null,
     tool_id: tool.id,
     tool_version: tool.version ?? null,

@@ -45,8 +45,7 @@ export async function GET(req: NextRequest) {
     .from("B_bot_agents")
     .select("*", { count: "exact" })
     .order(field, { ascending })
-    .range(offset, offset + limit - 1)
-    .or(`org_id.eq.${context.orgId},org_id.is.null`);
+    .range(offset, offset + limit - 1);
 
   if (isActive !== null) {
     if (isActive === "true") query = query.eq("is_active", true);
@@ -101,7 +100,6 @@ export async function POST(req: NextRequest) {
     goal: body.goal ?? null,
     version: body.version ?? "1.0",
     is_active: body.is_active ?? true,
-    org_id: context.orgId,
     created_by: context.user.id,
   };
 

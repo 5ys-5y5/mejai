@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     supabase: access.supabaseAdmin,
     proposalId,
     lookback: 3000,
-    orgId: access.orgId,
+    agentId: access.agentId,
   });
   if (!proposalEvent) {
     return NextResponse.json({ error: "PROPOSAL_NOT_FOUND" }, { status: 404 });
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       apply_requested: false,
       apply_mode: "manual_external_cli",
     },
-    botContext: { org_id: access.orgId },
+    botContext: { agent_id: access.agentId },
   });
 
   await insertAuditEvent({
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
       mode: "manual_external_cli",
       actor: access.actor,
     },
-    botContext: { org_id: access.orgId },
+    botContext: { agent_id: access.agentId },
   });
 
   await insertAuditEvent({
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
       mode: "manual_external_cli",
       actor: access.actor,
     },
-    botContext: { org_id: access.orgId },
+    botContext: { agent_id: access.agentId },
   });
 
   await notifyAdmins({

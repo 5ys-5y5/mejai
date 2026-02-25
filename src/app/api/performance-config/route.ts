@@ -7,15 +7,23 @@ import {
 } from "@/lib/performanceConfig";
 
 export async function GET(req: NextRequest) {
-  const context = await getServerContext(req.headers.get("authorization") || "", req.headers.get("cookie") || "");
+  const context = await getServerContext(
+    req.headers.get("authorization") || "",
+    req.headers.get("cookie") || "",
+    null,
+    { requireAgent: false }
+  );
   if ("error" in context) {
     return NextResponse.json({ error: context.error }, { status: 401 });
+  }
+  if (!context.agentId) {
+    return NextResponse.json({ config: DEFAULT_PERFORMANCE_CONFIG });
   }
 
   const { data, error } = await context.supabase
     .from("A_iam_auth_settings")
     .select("providers, updated_at")
-    .eq("org_id", context.orgId)
+    .eq("agent_id", context.agentId)
     .order("updated_at", { ascending: false })
     .limit(20);
 

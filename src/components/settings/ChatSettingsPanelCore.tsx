@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, CircleHelp, GripVertical } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -1512,6 +1512,48 @@ export function ChatSettingsPanelCore({ authToken }: ChatSettingsPanelProps) {
                   );
                 };
 
+                const renderSetupGateInputs = (
+                  title: string,
+                  gateKey: "llms" | "kbIds" | "adminKbIds" | "routes",
+                  placeholder: string
+                ) => {
+                  const gate = (draft.setup[gateKey] || {}) as { allowlist?: string[]; denylist?: string[] };
+                  const disabled = isHeader;
+                  const updateGate = (field: "allowlist" | "denylist", value: string[]) =>
+                    updatePage(page, (prev) => ({
+                      ...prev,
+                      setup: {
+                        ...prev.setup,
+                        [gateKey]: { ...(prev.setup[gateKey] as any), [field]: value },
+                      },
+                    }));
+                  return (
+                    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="text-[11px] font-semibold text-slate-600">{title}</div>
+                      <label className="block">
+                        <div className="mb-1 text-[11px] font-semibold text-slate-600">Allowlist</div>
+                        <Input
+                          disabled={disabled}
+                          value={toCsv(gate.allowlist)}
+                          onChange={(e) => updateGate("allowlist", parseCsv(e.target.value))}
+                          className="config-input h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                          placeholder={placeholder}
+                        />
+                      </label>
+                      <label className="block">
+                        <div className="mb-1 text-[11px] font-semibold text-slate-600">Denylist</div>
+                        <Input
+                          disabled={disabled}
+                          value={toCsv(gate.denylist)}
+                          onChange={(e) => updateGate("denylist", parseCsv(e.target.value))}
+                          className="config-input h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                          placeholder={placeholder}
+                        />
+                      </label>
+                    </div>
+                  );
+                };
+
                 const renderDetailBlock = (show: boolean, children: ReactNode, disabled = false) =>
                   show ? (
                     <fieldset
@@ -2266,7 +2308,9 @@ export function ChatSettingsPanelCore({ authToken }: ChatSettingsPanelProps) {
                       {renderDetailBlock(
                         true,
                         <>
-                          {adminPanelBaseToggles.map((def) => renderToggle(def))}
+                          {adminPanelBaseToggles.map((def) => (
+                            <Fragment key={def.path}>{renderToggle(def)}</Fragment>
+                          ))}
                           {adminPanelCopyToggle ? (
                             <div className="rounded-lg border border-slate-200 bg-white p-2">
                               {renderToggle(adminPanelCopyToggle)}
@@ -2350,7 +2394,9 @@ export function ChatSettingsPanelCore({ authToken }: ChatSettingsPanelProps) {
                             <div className="text-[11px] font-semibold text-slate-600">
                               {isHeader ? "interaction.threePhasePromptDisplay" : "3-Phase Display"}
                             </div>
-                            {THREE_PHASE_TOGGLES.map((def) => renderToggle(def))}
+                            {THREE_PHASE_TOGGLES.map((def) => (
+                              <Fragment key={def.path}>{renderToggle(def)}</Fragment>
+                            ))}
                           </div>
                         </div>
                       ) : null}
@@ -2660,6 +2706,38 @@ export function ChatSettingsPanelCore({ authToken }: ChatSettingsPanelProps) {
                                 })}
                               </div>
                             ) : null}
+                          <div className="rounded-lg border border-slate-200 bg-white p-2">
+                            <div className="text-[11px] font-semibold text-slate-600">Setup Defaults</div>
+                            {renderSelectField(
+                              isHeader ? "setup.defaultSetupMode" : "Default Mode",
+                              draft.setup.defaultSetupMode,
+                              [
+                                { id: "existing", label: "Existing" },
+                                { id: "new", label: "New" },
+                              ],
+                              (value) =>
+                                updateFeatureByPath(page, "setup.defaultSetupMode", value as "existing" | "new"),
+                              isHeader
+                            )}
+                            {renderSelectField(
+                              isHeader ? "setup.defaultLlm" : "Default LLM",
+                              draft.setup.defaultLlm,
+                              [
+                                { id: "chatgpt", label: "ChatGPT" },
+                                { id: "gemini", label: "Gemini" },
+                              ],
+                              (value) =>
+                                updateFeatureByPath(page, "setup.defaultLlm", value as "chatgpt" | "gemini"),
+                              isHeader
+                            )}
+                          </div>
+                          <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                            <div className="text-[11px] font-semibold text-slate-600">Setup Gates</div>
+                            {renderSetupGateInputs("LLM Gate", "llms", "chatgpt, gemini")}
+                            {renderSetupGateInputs("KB Gate", "kbIds", "kb_id_1, kb_id_2")}
+                            {renderSetupGateInputs("Admin KB Gate", "adminKbIds", "kb_id_1, kb_id_2")}
+                            {renderSetupGateInputs("Route Gate", "routes", "route_1, route_2")}
+                          </div>
                           </div>
                         </div>,
                         !setupDetailsOpen
@@ -2677,7 +2755,9 @@ export function ChatSettingsPanelCore({ authToken }: ChatSettingsPanelProps) {
                   >
                     <div className="text-xs font-semibold text-slate-900">MCP</div>
                     <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
-                      {MCP_TOGGLES.map((def) => renderToggle(def))}
+                      {MCP_TOGGLES.map((def) => (
+                        <Fragment key={def.path}>{renderToggle(def)}</Fragment>
+                      ))}
                       {renderDetailBlock(
                         true,
                         <div className="space-y-2">
@@ -2825,7 +2905,11 @@ export function ChatSettingsPanelCore({ authToken }: ChatSettingsPanelProps) {
                           />
                           {renderDetailBlock(
                             true,
-                            <div className="space-y-2">{WIDGET_HEADER_TOGGLES.map((def) => renderToggle(def))}</div>,
+                            <div className="space-y-2">
+                              {WIDGET_HEADER_TOGGLES.map((def) => (
+                                <Fragment key={def.path}>{renderToggle(def)}</Fragment>
+                              ))}
+                            </div>,
                             !isHeader && !draft.widget.header.enabled
                           )}
                         </div>
@@ -2842,7 +2926,11 @@ export function ChatSettingsPanelCore({ authToken }: ChatSettingsPanelProps) {
                           />
                           {renderDetailBlock(
                             true,
-                            <div className="space-y-2">{WIDGET_TAB_TOGGLES.map((def) => renderToggle(def))}</div>,
+                            <div className="space-y-2">
+                              {WIDGET_TAB_TOGGLES.map((def) => (
+                                <Fragment key={def.path}>{renderToggle(def)}</Fragment>
+                              ))}
+                            </div>,
                             !isHeader && !draft.widget.tabBar.enabled
                           )}
                         </div>

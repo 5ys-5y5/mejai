@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     supabase: access.supabaseAdmin,
     proposalId,
     lookback: 5000,
-    orgId: access.orgId,
+    agentId: access.agentId,
   });
   if (!sourceProposal) {
     return NextResponse.json({ error: "PROPOSAL_NOT_FOUND" }, { status: 404 });
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
   const exceptionStats = await fetchExceptionStats({
     supabase: access.supabaseAdmin,
     fingerprint: exceptionFingerprint,
-    orgId: access.orgId,
+    agentId: access.agentId,
   });
   const proposal = await buildPatchProposal({
     violation,
@@ -119,11 +119,11 @@ export async function POST(req: NextRequest) {
     eventType: "RUNTIME_PATCH_PROPOSAL_CREATED",
     payload: {
       ...(proposal as unknown as Record<string, unknown>),
-      org_id: access.orgId,
+      agent_id: access.agentId,
       trigger: "manual_reassess",
       source_proposal_id: proposalId,
     },
-    botContext: { org_id: access.orgId, actor: "runtime_self_update_manual_reassess" },
+    botContext: { agent_id: access.agentId, actor: "runtime_self_update_manual_reassess" },
   });
 
   return NextResponse.json({

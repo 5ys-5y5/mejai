@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   const escalated = Boolean(body.escalated);
 
   const sessionPayload = {
-    org_id: context.orgId,
+    agent_id: context.agentId,
     session_code: body.session_code ?? makeSessionCode(),
     started_at: body.started_at ?? startedAt,
     ended_at: body.ended_at ?? endedAt,

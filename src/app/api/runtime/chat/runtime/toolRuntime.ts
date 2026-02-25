@@ -707,7 +707,8 @@ export async function flushMcpSkipLogsWithAudit(input: {
     const toolVersion = allowedToolVersionByName.get(skip.tool) || null;
     try {
       await context.supabase.from("F_audit_mcp_tools").insert({
-        org_id: context.orgId,
+        agent_id: context.agentId,
+        agent_id: context.agentId,
         session_id: sessionId,
         turn_id: latestTurnId,
         tool_id: toolId || null,

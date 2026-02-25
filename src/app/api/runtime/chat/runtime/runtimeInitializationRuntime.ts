@@ -1,6 +1,6 @@
 import { createRuntimePipelineState, type RuntimePipelineState } from "./runtimePipelineState";
 import {
-  resolveInputContractSnapshot,
+  resolveInputContractBinding,
   resetInputContractOnMessage,
   type InputContractConfig,
 } from "./inputContractRuntime";
@@ -144,17 +144,18 @@ export function initializeRuntimeState(input: {
   const botContextExpectedInput =
     typeof prevBotContext.expected_input === "string" ? String(prevBotContext.expected_input).trim() : null;
   const derivedExpectedInput = botContextExpectedInput || deriveExpectedInputFromAnswer(lastAnswer);
-  let contractSnapshot = resolveInputContractSnapshot({
+  let contractSnapshot = resolveInputContractBinding({
     botContext: prevBotContext,
     derivedExpectedInput,
     contractConfig: input.inputContractConfig,
+    intent: prevIntent,
   });
   contractSnapshot = resetInputContractOnMessage({
     message,
     snapshot: contractSnapshot,
     reason: "reset_by_message_keyword",
   });
-  if (isRestockInquiry(message) || isRestockSubscribe(message)) {
+  if ((isRestockInquiry(message) || isRestockSubscribe(message)) && !contractSnapshot.expectedInput) {
     contractSnapshot = {
       expectedInputs: [],
       expectedInput: null,

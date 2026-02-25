@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/apiClient";
+import { apiFetch, getAccessToken } from "@/lib/apiClient";
 import type { LogBundle, DebugTranscriptOptions } from "@/lib/debugTranscript";
 import type { RuntimeRunResponseLike } from "@/lib/runtimeResponseTranscript";
 import { resolvePageConversationDebugOptions, type CopyPageKey } from "@/lib/transcriptCopyPolicy";
@@ -45,26 +45,45 @@ export async function runConversation(
 
 export async function fetchSessionLogs(sessionId: string, limit = 30) {
   const path = `/api/laboratory/logs?session_id=${encodeURIComponent(sessionId)}&limit=${Math.max(1, limit)}`;
-  try {
-    return await apiFetch<{
-      mcp_logs: NonNullable<LogBundle["mcp_logs"]>;
-      event_logs: NonNullable<LogBundle["event_logs"]>;
-      debug_logs: NonNullable<LogBundle["debug_logs"]>;
-    }>(path);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "";
-    if (message !== "UNAUTHORIZED") throw err;
-    const res = await fetch(path, { cache: "no-store" });
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(text || res.statusText || "REQUEST_FAILED");
-    }
+  const empty = {
+    mcp_logs: [],
+    event_logs: [],
+    debug_logs: [],
+  };
+  const token = await getAccessToken();
+  const res = await fetch(path, {
+    cache: "no-store",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  });
+  if (res.ok) {
     return res.json() as Promise<{
       mcp_logs: NonNullable<LogBundle["mcp_logs"]>;
       event_logs: NonNullable<LogBundle["event_logs"]>;
       debug_logs: NonNullable<LogBundle["debug_logs"]>;
     }>;
   }
+  const text = await res.text().catch(() => "");
+  if (
+    res.status === 404 &&
+    text.includes("SESSION_NOT_FOUND")
+  ) {
+    return empty;
+  }
+  if (
+    res.status === 401 &&
+    (text.includes("SESSION_NOT_FOUND") || text.includes("UNAUTHORIZED"))
+  ) {
+    return empty;
+  }
+  if (res.status === 401 && !token) {
+    // Fall back to apiFetch only when we expect authenticated access.
+    return await apiFetch<{
+      mcp_logs: NonNullable<LogBundle["mcp_logs"]>;
+      event_logs: NonNullable<LogBundle["event_logs"]>;
+      debug_logs: NonNullable<LogBundle["debug_logs"]>;
+    }>(path);
+  }
+  throw new Error(text || res.statusText || "REQUEST_FAILED");
 }
 
 export async function fetchWidgetSessionLogs(sessionId: string, widgetToken: string, limit = 30) {

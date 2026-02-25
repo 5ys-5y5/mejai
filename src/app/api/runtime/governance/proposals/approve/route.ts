@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     supabase: access.supabaseAdmin,
     proposalId,
     lookback: 2000,
-    orgId: access.orgId,
+    agentId: access.agentId,
   });
   if (!proposalEvent) {
     return NextResponse.json({ error: "PROPOSAL_NOT_FOUND" }, { status: 404 });
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
         reviewer_note: reviewerNote || null,
         actor: access.actor,
       },
-      botContext: { org_id: access.orgId },
+      botContext: { agent_id: access.agentId },
     });
     await notifyAdmins({
       type: "RUNTIME_PATCH_PROPOSAL_REJECTED",
@@ -86,7 +86,7 @@ export async function POST(req: NextRequest) {
       actor: access.actor,
       apply_requested: apply,
     },
-    botContext: { org_id: access.orgId },
+    botContext: { agent_id: access.agentId },
   });
 
   let applyResult: ApplyResult = { applied: false, reason: "APPLY_NOT_REQUESTED" };
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
         proposal_id: proposalId,
         ...applyResult,
       },
-      botContext: { org_id: access.orgId },
+      botContext: { agent_id: access.agentId },
     });
     const applied = Boolean(applyResult.applied);
     await insertAuditEvent({
@@ -119,7 +119,7 @@ export async function POST(req: NextRequest) {
         status: applied ? "completed" : "execution_failed",
         apply_result: applyResult,
       },
-      botContext: { org_id: access.orgId },
+      botContext: { agent_id: access.agentId },
     });
   }
 

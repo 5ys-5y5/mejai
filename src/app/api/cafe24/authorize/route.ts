@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await context.supabase
       .from("A_iam_auth_settings")
       .select("providers")
-      .eq("org_id", context.orgId)
+      .eq("agent_id", context.agentId)
       .eq("user_id", context.user.id)
       .maybeSingle();
     if (error || !data) {
@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
   const statePayload = JSON.stringify({
     mall_id: mallId,
     scope,
-    org_id: context.orgId,
+    agent_id: context.agentId,
     user_id: context.user.id,
     origin,
     ts: Date.now(),

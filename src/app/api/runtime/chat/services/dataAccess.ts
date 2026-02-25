@@ -24,35 +24,35 @@ function readGroupValue(group: Record<string, any> | null, path: string) {
   }, group as unknown);
 }
 
-function applyOrgFilter(query: any, orgId: string | null | undefined) {
-  if (orgId) {
-    return query.or(`org_id.eq.${orgId},org_id.is.null`);
+function applyOrgFilter(query: any, agentId: string | null | undefined) {
+  if (agentId) {
+    return query.or(`agent_id.eq.${agentId},agent_id.is.null`);
   }
-  return query.is("org_id", null);
+  return query.is("agent_id", null);
 }
 
-function applyKbScopeFilter(query: any, orgId: string | null | undefined) {
-  if (orgId) {
-    return query.or(`org_id.eq.${orgId},org_id.is.null`);
+function applyKbScopeFilter(query: any, agentId: string | null | undefined) {
+  if (agentId) {
+    return query.or(`agent_id.eq.${agentId},agent_id.is.null`);
   }
-  return query.or("org_id.is.null,is_public.eq.true");
+  return query.or("agent_id.is.null,is_public.eq.true");
 }
 
 async function fetchBestProductRule(context: RuntimeContext, productId: string) {
   const ruleRes = await applyOrgFilter(
     context.supabase
       .from("G_com_product_rules")
-      .select("org_id, product_id, answerability, restock_policy, restock_at, updated_at, source")
+      .select("agent_id, product_id, answerability, restock_policy, restock_at, updated_at, source")
       .eq("product_id", productId),
-    context.orgId
+    context.agentId
   );
   if (ruleRes.error) {
     return { rule: null as ProductRuleRow | null, error: ruleRes.error.message };
   }
   const rules = (ruleRes.data || []) as ProductRuleRow[];
   const bestRule =
-    rules.find((row) => row.org_id === context.orgId) ||
-    rules.find((row) => row.org_id === null) ||
+    rules.find((row) => row.agent_id === context.agentId) ||
+    rules.find((row) => row.agent_id === null) ||
     null;
   return { rule: bestRule, error: null as string | null };
 }
@@ -72,9 +72,9 @@ export async function resolveProductDecision(context: RuntimeContext, text: stri
   const aliasRes = await applyOrgFilter(
     context.supabase
       .from("G_com_product_aliases")
-      .select("org_id, alias, product_id, match_type, priority, is_active")
+      .select("agent_id, alias, product_id, match_type, priority, is_active")
       .eq("is_active", true),
-    context.orgId
+    context.agentId
   );
   if (aliasRes.error) {
     return { decision: null as ProductDecision | null, alias: null as ProductAliasRow | null, error: aliasRes.error.message };
@@ -111,34 +111,40 @@ export async function resolveProductDecision(context: RuntimeContext, text: stri
 }
 
 export async function fetchAgent(context: RuntimeContext, agentId: string) {
-  const { data, error } = await applyOrgFilter(
-    context.supabase.from("B_bot_agents").select("*").eq("id", agentId),
-    context.orgId
-  ).maybeSingle();
+  let query = context.supabase
+    .from("B_bot_agents")
+    .select("*")
+    .eq("id", agentId);
+  if (context.agentRole === "guest") {
+    query = query.eq("is_public", true);
+  }
+  const { data, error } = await query.maybeSingle();
   if (error) return { error: error.message };
   if (data) return { data: data as AgentRow };
 
-  const { data: parent, error: parentError } = await applyOrgFilter(
-    context.supabase
-      .from("B_bot_agents")
-      .select("*")
-      .eq("parent_id", agentId)
-      .eq("is_active", true),
-    context.orgId
-  ).maybeSingle();
+  let parentQuery = context.supabase
+    .from("B_bot_agents")
+    .select("*")
+    .eq("parent_id", agentId)
+    .eq("is_active", true);
+  if (context.agentRole === "guest") {
+    parentQuery = parentQuery.eq("is_public", true);
+  }
+  const { data: parent, error: parentError } = await parentQuery.maybeSingle();
   if (parentError) return { error: parentError.message };
   return { data: parent as AgentRow | null };
 }
 
 export async function fetchActiveAgentByParent(context: RuntimeContext, parentId: string) {
-  const { data, error } = await applyOrgFilter(
-    context.supabase
-      .from("B_bot_agents")
-      .select("*")
-      .eq("parent_id", parentId)
-      .eq("is_active", true),
-    context.orgId
-  ).maybeSingle();
+  let query = context.supabase
+    .from("B_bot_agents")
+    .select("*")
+    .eq("parent_id", parentId)
+    .eq("is_active", true);
+  if (context.agentRole === "guest") {
+    query = query.eq("is_public", true);
+  }
+  const { data, error } = await query.maybeSingle();
   if (error) return { error: error.message };
   return { data: data as AgentRow | null };
 }
@@ -149,7 +155,7 @@ export async function fetchKb(context: RuntimeContext, kbId: string) {
       .from("B_bot_knowledge_bases")
       .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
       .eq("id", kbId),
-    context.orgId
+    context.agentId
   ).maybeSingle();
   if (result.error) return { error: result.error.message };
   return { data: result.data as KbRow | null };
@@ -162,14 +168,14 @@ export async function fetchAdminKbs(context: RuntimeContext) {
       .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
       .eq("is_admin", true)
       .eq("is_active", true),
-    context.orgId
+    context.agentId
   );
   if (result.error) return { error: result.error.message };
   return { data: (result.data || []) as KbRow[] };
 }
 
 export async function fetchDefaultUserKb(context: RuntimeContext) {
-  if (!context.orgId) {
+  if (!context.agentId) {
     return { data: null as KbRow | null };
   }
   const result = await context.supabase
@@ -177,7 +183,7 @@ export async function fetchDefaultUserKb(context: RuntimeContext) {
     .select("id, title, content, is_active, version, is_admin, apply_groups, apply_groups_mode, content_json")
     .eq("is_admin", false)
     .eq("is_active", true)
-    .eq("org_id", context.orgId)
+    .eq("agent_id", context.agentId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -208,11 +214,10 @@ export async function createSession(
 ) {
   const sessionCode = `p_${Math.random().toString(36).slice(2, 8)}`;
   const payload = {
-    org_id: context.orgId || null,
+    agent_id: agentId || null,
     session_code: sessionCode,
     started_at: new Date().toISOString(),
     channel: "runtime",
-    agent_id: agentId,
     metadata: metadata && typeof metadata === "object" ? metadata : {},
   };
   const { data, error } = await context.supabase.from("D_conv_sessions").insert(payload).select("*").single();

@@ -44,19 +44,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }
 
-  const { data: access } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  if (!access?.is_admin) {
+  if (!context.isAdmin) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
   const { data: sessions, error: sessionError } = await context.supabase
     .from("D_conv_sessions")
     .select("id")
-    .eq("org_id", context.orgId)
+    .eq("agent_id", context.agentId)
     .order("started_at", { ascending: false })
     .limit(30);
   if (sessionError) {

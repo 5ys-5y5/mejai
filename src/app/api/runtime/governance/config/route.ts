@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     }
     const config = await readGovernanceConfig({
       supabase: access.supabaseAdmin,
-      orgId: access.orgId,
+      agentId: access.agentId,
     });
     return NextResponse.json({ ok: true, config, viewer: { is_admin: access.isAdmin } });
   } catch (err) {
@@ -41,18 +41,18 @@ export async function POST(req: NextRequest) {
     }
     const current = await readGovernanceConfig({
       supabase: access.supabaseAdmin,
-      orgId: access.orgId,
+      agentId: access.agentId,
     });
     await writeGovernanceConfig({
       supabase: access.supabaseAdmin,
-      orgId: access.orgId,
+      agentId: access.agentId,
       enabled: body.enabled,
       visibilityMode: body.visibility_mode || current.visibility_mode,
       updatedBy: access.actor.userId,
     });
     const config = await readGovernanceConfig({
       supabase: access.supabaseAdmin,
-      orgId: access.orgId,
+      agentId: access.agentId,
     });
     return NextResponse.json({ ok: true, config });
   } catch (err) {

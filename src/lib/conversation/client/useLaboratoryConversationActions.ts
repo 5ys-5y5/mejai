@@ -98,6 +98,20 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
   pageKey?: ConversationPageKey;
 }) {
   const { models, updateModel, ensureEditableSession, isAdminUser, pageKey = "/app/laboratory" } = params;
+  const resolveFailureMessage = useCallback((error: unknown) => {
+    const policyMessage = "답변 출력 정책을 불러오지 못해 답변을 제공할 수 없습니다.";
+    if (!error) return "응답 실패";
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message) return "응답 실패";
+    if (message.includes("CHAT_POLICY_") || message.includes("chat_policy")) return policyMessage;
+    try {
+      const parsed = JSON.parse(message) as { error?: string };
+      if (parsed?.error && String(parsed.error).includes("CHAT_POLICY_")) return policyMessage;
+    } catch {
+      // ignore
+    }
+    return "응답 실패";
+  }, []);
 
   const loadLogs = useCallback(
     async (id: string, messageId: string, sessionIdOverride?: string | null, turnIdOverride?: string | null) => {
@@ -297,6 +311,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           }
           succeeded = true;
         } else {
+          const failureMessage = resolveFailureMessage(result.reason);
           updateModel(modelId, (model) => ({
             ...model,
             messages: model.messages.map((msg) =>
@@ -304,18 +319,19 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
                 ? {
                     ...msg,
                     isLoading: false,
-                    content: "응답 실패",
+                    content: failureMessage,
                     loadingLogs: isAdminUser
-                      ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} 응답 실패`].slice(-20)
+                      ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} ${failureMessage}`].slice(-20)
                       : undefined,
                   }
                 : msg
             ),
             sending: false,
           }));
-          toast.error("응답에 실패했습니다.");
+          toast.error(failureMessage);
         }
       } catch (err) {
+        const failureMessage = resolveFailureMessage(err);
         updateModel(modelId, (model) => ({
           ...model,
           messages: model.messages.map((msg) =>
@@ -323,7 +339,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
               ? {
                   ...msg,
                   isLoading: false,
-                  content: err instanceof Error ? `응답 실패: ${err.message}` : "응답 실패",
+                  content: failureMessage,
                   loadingLogs: isAdminUser
                     ? [...(msg.loadingLogs || []), `${new Date().toLocaleTimeString("ko-KR")} 예외 발생`].slice(-20)
                     : undefined,
@@ -332,7 +348,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
           ),
           sending: false,
         }));
-        toast.error("응답에 실패했습니다.");
+        toast.error(failureMessage);
       } finally {
         if (loadingTicker) {
           window.clearInterval(loadingTicker);
@@ -340,7 +356,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
       }
       return succeeded;
     },
-    [ensureEditableSession, isAdminUser, loadLogs, models, pageKey, updateModel]
+    [ensureEditableSession, isAdminUser, loadLogs, models, pageKey, resolveFailureMessage, updateModel]
   );
 
   const copyConversation = useCallback(

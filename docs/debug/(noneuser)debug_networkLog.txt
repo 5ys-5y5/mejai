@@ -1,0 +1,62 @@
+Request URL
+http://localhost:3000/api/laboratory/run
+Request Method
+POST
+Status Code
+500 Internal Server Error
+Remote Address
+[::1]:3000
+Referrer Policy
+strict-origin-when-cross-origin
+connection
+keep-alive
+content-type
+application/json
+date
+Wed, 25 Feb 2026 15:10:25 GMT
+keep-alive
+timeout=5
+transfer-encoding
+chunked
+vary
+rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7
+cache-control
+no-cache
+connection
+keep-alive
+content-length
+543
+content-type
+application/json
+cookie
+__next_hmr_refresh_hash__=734
+host
+localhost:3000
+origin
+http://localhost:3000
+pragma
+no-cache
+referer
+http://localhost:3000/
+sec-ch-ua
+"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"Windows"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-origin
+user-agent
+Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+x-runtime-trace-id
+labc_mm268fkh_43gra0

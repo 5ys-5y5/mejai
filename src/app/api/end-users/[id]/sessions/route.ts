@@ -32,7 +32,7 @@ export async function GET(
   const { data, error, count } = await contextAuth.supabase
     .from("A_end_user_sessions")
     .select("*", { count: "exact" })
-    .eq("org_id", contextAuth.orgId)
+    .eq("agent_id", contextAuth.agentId)
     .eq("end_user_id", id)
     .order(field, { ascending })
     .range(offset, offset + limit - 1);

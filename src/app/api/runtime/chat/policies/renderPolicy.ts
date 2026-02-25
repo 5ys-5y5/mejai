@@ -6,6 +6,8 @@ import { RENDER_POLICY } from "./uiPolicy";
 export type QuickReplySourceType = "explicit" | "config" | "fallback" | "none";
 
 export type PromptKind =
+  | "otp_code"
+  | "otp_phone"
   | "lead_day"
   | "intent_disambiguation"
   | "restock_product_choice"
@@ -166,12 +168,13 @@ export function buildRenderPlan(input: {
   quickReplyConfig: RuntimeQuickReplyConfig | null;
   cards: RuntimeCard[];
   quickReplySource: RenderPlan["quick_reply_source"];
+  promptKindOverride?: PromptKind | null;
 }): RenderPlan {
   const message = String(input.message || "");
   const quickReplies = Array.isArray(input.quickReplies) ? input.quickReplies : [];
   const cards = Array.isArray(input.cards) ? input.cards : [];
 
-  const promptKind = resolvePromptKind(message, quickReplies, input.quickReplyConfig);
+  const promptKind = input.promptKindOverride ?? resolvePromptKind(message, quickReplies, input.quickReplyConfig);
   const promptSuggestsMulti = promptKind === "lead_day" || promptKind === "intent_disambiguation";
 
   const selectionMode = input.quickReplyConfig?.selection_mode || (promptSuggestsMulti ? "multi" : "single");
@@ -225,4 +228,22 @@ export function buildRenderPlan(input: {
       submit_format_source: submitFormatSource,
     },
   };
+}
+
+export function resolvePromptKindFromContract(input: {
+  expectedInputStage?: string | null;
+  expectedInput?: string | null;
+}): PromptKind {
+  const stage = String(input.expectedInputStage || "").trim();
+  if (!stage) return null;
+  if (stage === "auth_gate.otp.awaiting_phone") return "otp_phone";
+  if (stage === "auth_gate.otp.awaiting_code") return "otp_code";
+  if (stage === "restock.awaiting_subscribe_lead_days") return "lead_day";
+  if (stage === "restock.awaiting_subscribe_phone") return "restock_subscribe_phone";
+  if (stage === "restock.awaiting_confirm") return "restock_subscribe_confirm";
+  if (stage === "restock.awaiting_product") return "restock_product_choice";
+  if (stage === "restock.awaiting_product_choice") return "restock_product_choice";
+  const expected = String(input.expectedInput || "").trim();
+  if (expected === "choice") return "intent_disambiguation";
+  return null;
 }

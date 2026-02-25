@@ -40,10 +40,10 @@ function parsePageKey(value: unknown): ConversationPageKey {
   return pageKey;
 }
 
-async function loadOrgChatPolicy(orgId: string) {
+async function loadOrgChatPolicy(agentId: string) {
   try {
     const supabaseAdmin = createAdminSupabaseClient();
-    return await fetchChatPolicy(supabaseAdmin, orgId);
+    return await fetchChatPolicy(supabaseAdmin, agentId);
   } catch {
     return null;
   }
@@ -192,7 +192,7 @@ export async function POST(req: NextRequest) {
   const widgetPayload = token ? verifyWidgetToken(token) : null;
   let providerValue: ConversationFeaturesProviderShape | null = null;
   let supabase: ReturnType<typeof createAdminSupabaseClient> | null = null;
-  let orgId: string | null = null;
+  let agentId: string | null = null;
   let sessionId = sessionOverride;
   let filterWidgetProxyEvents = false;
 
@@ -209,14 +209,14 @@ export async function POST(req: NextRequest) {
     supabase = supabaseAdmin;
     const { data: widget } = await supabaseAdmin
       .from("B_chat_widgets")
-      .select("id, org_id, is_active")
+      .select("id, agent_id, is_active")
       .eq("id", widgetPayload.widget_id)
       .maybeSingle();
     if (!widget || !widget.is_active) {
       return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
     }
-    orgId = String(widget.org_id || "");
-    if (!orgId) {
+    agentId = String(widget.agent_id || "");
+    if (!agentId) {
       return NextResponse.json({ error: "ORG_NOT_FOUND" }, { status: 404 });
     }
 
@@ -226,9 +226,9 @@ export async function POST(req: NextRequest) {
 
     const { data: session } = await supabaseAdmin
       .from("D_conv_sessions")
-      .select("id, org_id, metadata")
+      .select("id, agent_id, metadata")
       .eq("id", sessionOverride)
-      .eq("org_id", orgId)
+      .eq("agent_id", agentId)
       .maybeSingle();
     if (!session) {
       return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 });
@@ -246,10 +246,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "SESSION_VISITOR_MISMATCH" }, { status: 403 });
     }
     sessionId = sessionOverride;
-    if (!orgId) {
+    if (!agentId) {
       return NextResponse.json({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 });
     }
-    providerValue = await loadOrgChatPolicy(orgId);
+    providerValue = await loadOrgChatPolicy(agentId);
     filterWidgetProxyEvents = true;
   } else {
     const cookieHeader = req.headers.get("cookie") || "";
@@ -258,13 +258,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: context.error }, { status: 401 });
     }
     supabase = context.supabase as ReturnType<typeof createAdminSupabaseClient>;
-    orgId = context.orgId || null;
-    const { data: sessionRow, error: sessionError } = await context.supabase
+    agentId = context.agentId || null;
+    let sessionQuery = context.supabase
       .from("D_conv_sessions")
-      .select("id, org_id")
-      .eq("id", sessionOverride)
-      .eq("org_id", orgId)
-      .maybeSingle();
+      .select("id, agent_id")
+      .eq("id", sessionOverride);
+    if (agentId) {
+      sessionQuery = sessionQuery.or(`agent_id.eq.${agentId},agent_id.is.null`);
+    } else {
+      sessionQuery = sessionQuery.is("agent_id", null);
+    }
+    const { data: sessionRow, error: sessionError } = await sessionQuery.maybeSingle();
     if (sessionError) {
       return NextResponse.json({ error: sessionError.message }, { status: 400 });
     }
@@ -272,13 +276,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 });
     }
     sessionId = sessionRow.id;
-    if (!orgId) {
-      return NextResponse.json({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 });
-    }
-    providerValue = await loadOrgChatPolicy(orgId);
+    providerValue = agentId ? await loadOrgChatPolicy(agentId) : null;
   }
 
-  if (!supabase || !orgId) {
+  if (!supabase) {
     return NextResponse.json({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 });
   }
 
@@ -294,16 +295,22 @@ export async function POST(req: NextRequest) {
 
   const [mcpRes, eventRes, debugRes] = await Promise.all([
     fetchAllRows(
-      async (from, to) =>
-        await supabase!
+      async (from, to) => {
+        let query = supabase!
           .from("F_audit_mcp_tools")
           .select(
             "id, tool_name, tool_version, status, request_payload, response_payload, policy_decision, latency_ms, created_at, session_id, turn_id"
           )
-          .eq("org_id", orgId)
           .eq("session_id", sessionId)
           .order("created_at", { ascending: false })
-          .range(from, to),
+          .range(from, to);
+        if (agentId) {
+          query = query.or(`agent_id.eq.${agentId},agent_id.is.null`);
+        } else {
+          query = query.is("agent_id", null);
+        }
+        return await query;
+      },
       limit
     ),
     fetchAllRows(

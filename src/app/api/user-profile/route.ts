@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerUser } from "@/lib/serverAuth";
+import { resolveAccessRoleForUser } from "@/lib/conversation/accessRole";
 
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
@@ -10,21 +11,35 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: profile, error } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("plan, is_admin, org_role, org_id")
+    .from("A_iam_user_profiles")
+    .select("plan, is_admin, group")
     .eq("user_id", context.user.id)
     .maybeSingle();
+
+  const { data: agentAccess } = await context.supabase
+    .from("B_bot_agent_access")
+    .select("agent_id, role")
+    .eq("user_id", context.user.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
+  const accessRole = await resolveAccessRoleForUser({
+    supabase: context.supabase,
+    userId: context.user.id,
+    agentId: context.agentId,
+  });
+
   return NextResponse.json({
     user_id: context.user.id,
     plan: profile?.plan || "starter",
     is_admin: profile?.is_admin || false,
-    access_role: profile?.is_admin ? "admin" : profile ? "user" : "public",
-    org_role: profile?.org_role || "operator",
-    org_id: profile?.org_id || null,
+    group: profile?.group || null,
+    access_role: accessRole,
+    agent_access: (agentAccess || []).map((row) => ({
+      agent_id: row.agent_id,
+      role: row.role,
+    })),
   });
 }

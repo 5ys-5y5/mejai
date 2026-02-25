@@ -37,7 +37,7 @@ type KbItem = {
   created_at?: string | null;
   is_admin?: boolean | string | null;
   is_public?: boolean | null;
-  org_id?: string | null;
+  agent_id?: string | null;
   content?: string | null;
 };
 
@@ -222,7 +222,6 @@ export default function AgentDetailPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeUpdateId, setActiveUpdateId] = useState<string | null>(null);
-  const [userOrgId, setUserOrgId] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [kbInfoOpen, setKbInfoOpen] = useState(false);
   const [mcpInfoOpen, setMcpInfoOpen] = useState(false);
@@ -292,16 +291,13 @@ export default function AgentDetailPage() {
           apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
           apiFetch<{ items: MpcTool[] }>("/api/mcp/tools").catch(() => ({ items: [] })),
           apiFetch<{ items: SessionRow[] }>("/api/sessions?limit=500").catch(() => ({ items: [] })),
-          apiFetch<{ is_admin?: boolean; org_id?: string | null }>("/api/user-profile").catch(
-            () => ({ is_admin: false, org_id: null })
-          ),
+          apiFetch<{ is_admin?: boolean }>("/api/user-profile").catch(() => ({ is_admin: false })),
         ]);
         if (!mounted) return;
         setAllAgents(agentRes.items || []);
         setKbItems(kbRes.items || []);
         setMcpTools(toolRes.items || []);
         setSessions(sessionRes.items || []);
-        setUserOrgId(profileRes.org_id ?? null);
         setIsAdmin(Boolean(profileRes.is_admin));
       } catch {
         if (!mounted) return;
@@ -309,7 +305,6 @@ export default function AgentDetailPage() {
         setKbItems([]);
         setMcpTools([]);
         setSessions([]);
-        setUserOrgId(null);
         setIsAdmin(false);
       }
     }
@@ -326,14 +321,14 @@ export default function AgentDetailPage() {
   }, [kbItems]);
 
   const scopedKbItems = useMemo(() => {
-    if (!userOrgId) return [];
-    return kbItems.filter((item) => !isAdminKbValue(item.is_admin) && item.org_id === userOrgId);
-  }, [kbItems, userOrgId]);
+    if (!agentId) return [];
+    return kbItems.filter((item) => !isAdminKbValue(item.is_admin) && item.agent_id === agentId);
+  }, [kbItems, agentId]);
 
   const adminKbItems = useMemo(() => {
-    if (!isAdmin || !userOrgId) return [];
-    return kbItems.filter((item) => isAdminKbValue(item.is_admin) && item.org_id === userOrgId);
-  }, [kbItems, isAdmin, userOrgId]);
+    if (!isAdmin || !agentId) return [];
+    return kbItems.filter((item) => isAdminKbValue(item.is_admin) && item.agent_id === agentId);
+  }, [kbItems, isAdmin, agentId]);
 
   const assignedAdminKbItems = useMemo(
     () => adminKbItems.filter((item) => adminKbIds.includes(item.id)),

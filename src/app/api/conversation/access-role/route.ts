@@ -26,11 +26,11 @@ export async function GET(req: NextRequest) {
   const widgetPayload = verifyWidgetToken(token);
   if (widgetPayload) {
     const adminUserId = String(widgetPayload.admin_user_id || "").trim();
-    const orgId = String(widgetPayload.org_id || "").trim();
+    const agentId = String(widgetPayload.agent_id || "").trim();
     const resolvedSessionId = sessionId || String(widgetPayload.session_id || "").trim();
     const accessRole = await resolveAccessRoleForSession({
       supabase: supabaseAdmin,
-      orgId,
+      agentId,
       sessionId: resolvedSessionId,
       adminUserId,
     });
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
   const accessRole = await resolveAccessRoleForUser({
     supabase: context.supabase,
     userId: context.user.id,
-    orgId: context.orgId,
+    agentId: context.agentId,
   });
   return NextResponse.json({ access_role: accessRole });
 }

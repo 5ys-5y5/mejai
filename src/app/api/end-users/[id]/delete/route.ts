@@ -6,12 +6,7 @@ async function requireAdmin(authHeader: string, cookieHeader: string) {
   if ("error" in context) {
     return { ok: false as const, status: 401, error: context.error };
   }
-  const { data: access, error } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  if (error || !access?.is_admin) {
+  if (!context.isAdmin) {
     return { ok: false as const, status: 403, error: "ADMIN_ONLY" };
   }
   return { ok: true as const, context };
@@ -29,13 +24,13 @@ export async function POST(
   }
 
   const { id } = await context.params;
-  const orgId = admin.context.orgId;
+  const agentId = admin.context.agentId;
   const now = new Date().toISOString();
 
   const { data: user } = await admin.context.supabase
     .from("A_end_users")
     .select("id")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
@@ -46,7 +41,7 @@ export async function POST(
   await admin.context.supabase
     .from("A_end_users")
     .update({ deleted_at: now, updated_at: now })
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("id", id);
 
   await admin.context.supabase.from("F_audit_events").insert({
@@ -55,7 +50,7 @@ export async function POST(
     event_type: "END_USER_MANUAL_DELETE",
     payload: { end_user_id: id },
     created_at: now,
-    bot_context: { org_id: orgId },
+    bot_context: { agent_id: agentId },
   });
 
   return NextResponse.json({ deleted: true, end_user_id: id });

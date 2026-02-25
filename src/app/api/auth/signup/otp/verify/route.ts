@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   const result = await callAdapter(
     "solapi",
     { otp_ref: otpRef, code },
-    { supabase: supabaseAdmin, orgId: null, userId: null },
+    { supabase: supabaseAdmin, agentId: null, userId: null },
     { toolName: "verify_otp_guest" }
   );
 

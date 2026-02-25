@@ -40,13 +40,7 @@ export async function GET(req: NextRequest) {
   const headerMallId = (req.headers.get("x-cafe24-mall-id") || "").trim();
   const headerAccessToken = (req.headers.get("x-cafe24-access-token") || "").trim();
 
-  const { data: access } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-
-  if (!access?.is_admin) {
+  if (!context.isAdmin) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
@@ -59,7 +53,7 @@ export async function GET(req: NextRequest) {
     const { data, error } = await context.supabase
       .from("A_iam_auth_settings")
       .select("id, providers")
-      .eq("org_id", context.orgId)
+      .eq("agent_id", context.agentId)
       .eq("user_id", context.user.id)
       .maybeSingle();
 

@@ -8,11 +8,24 @@ type ServerUserSuccess = { supabase: SupabaseClient; user: User };
 
 type ServerContextError =
   | ServerUserError
-  | { error: "ORG_LOOKUP_FAILED" }
-  | { error: "ORG_NOT_FOUND" }
-  | { error: "ORG_PENDING" };
+  | { error: "AGENT_LOOKUP_FAILED" }
+  | { error: "AGENT_NOT_FOUND" };
 
-export type ServerContextSuccess = ServerUserSuccess & { orgId: string; orgRole: string };
+export type ServerContextSuccess = ServerUserSuccess & {
+  agentId: string;
+  agentRole: string | null;
+  isAdmin: boolean;
+  plan: string;
+  group: Record<string, unknown> | null;
+};
+
+export type ServerContextSuccessOptionalAgent = ServerUserSuccess & {
+  agentId: string | null;
+  agentRole: string | null;
+  isAdmin: boolean;
+  plan: string;
+  group: Record<string, unknown> | null;
+};
 
 function isUuid(value: string | null | undefined) {
   if (!value) return false;
@@ -121,8 +134,22 @@ export async function getServerUser(
 
 export async function getServerContext(
   authHeader: string,
-  cookieHeader?: string
-): Promise<ServerContextSuccess | ServerContextError> {
+  cookieHeader?: string,
+  agentId?: string | null,
+  options?: { requireAgent?: true }
+): Promise<ServerContextSuccess | ServerContextError>;
+export async function getServerContext(
+  authHeader: string,
+  cookieHeader: string | undefined,
+  agentId: string | null | undefined,
+  options: { requireAgent: false }
+): Promise<ServerContextSuccessOptionalAgent | ServerContextError>;
+export async function getServerContext(
+  authHeader: string,
+  cookieHeader?: string,
+  agentId?: string | null,
+  options?: { requireAgent?: boolean }
+): Promise<ServerContextSuccess | ServerContextSuccessOptionalAgent | ServerContextError> {
   const userContext = await getServerUser(authHeader, cookieHeader);
   if ("error" in userContext) {
     return userContext;
@@ -130,33 +157,89 @@ export async function getServerContext(
 
   const { supabase, user } = userContext;
 
-  const { data: access, error: accessError } = await supabase
-    .from("A_iam_user_access_maps")
-    .select("org_id, org_role")
+  const { data: profile, error: profileError } = await supabase
+    .from("A_iam_user_profiles")
+    .select("plan, is_admin, group")
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (accessError) {
-    return { error: "ORG_LOOKUP_FAILED" as const };
+  if (profileError) {
+    return { error: "AGENT_LOOKUP_FAILED" as const };
   }
 
-  if (!access?.org_id) {
-    return { error: "ORG_NOT_FOUND" as const };
+  let resolvedAgentId = agentId || null;
+  let resolvedAgentRole: string | null = null;
+  const isAdmin = Boolean(profile?.is_admin);
+
+  if (resolvedAgentId && !isUuid(resolvedAgentId)) {
+    resolvedAgentId = null;
   }
 
-  if (access.org_role === "pending") {
-    return { error: "ORG_PENDING" as const };
-  }
-
-  if (!isUuid(access.org_id)) {
-    if (process.env.NODE_ENV !== "production") {
-      console.error("[serverAuth] invalid org_id", { org_id: access.org_id, user_id: user.id });
+  if (resolvedAgentId) {
+    const { data: accessRow } = await supabase
+      .from("B_bot_agent_access")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("agent_id", resolvedAgentId)
+      .maybeSingle();
+    if (accessRow?.role) {
+      resolvedAgentRole = accessRow.role;
+    } else {
+      const { data: agentRow } = await supabase
+        .from("B_bot_agents")
+        .select("is_public")
+        .eq("id", resolvedAgentId)
+        .maybeSingle();
+      if (agentRow?.is_public) {
+        resolvedAgentRole = "viewer";
+      }
     }
-    return { error: "ORG_NOT_FOUND" as const };
+  } else {
+    const { data: accessRow } = await supabase
+      .from("B_bot_agent_access")
+      .select("agent_id, role")
+      .eq("user_id", user.id)
+      .order("role", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (accessRow?.agent_id && isUuid(accessRow.agent_id)) {
+      resolvedAgentId = accessRow.agent_id;
+      resolvedAgentRole = accessRow.role || null;
+    }
+  }
+
+  const requireAgent = options?.requireAgent !== false;
+
+  if (!resolvedAgentId && isAdmin) {
+    const { data: anyAgent } = await supabase
+      .from("B_bot_agents")
+      .select("id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (anyAgent?.id && isUuid(anyAgent.id)) {
+      resolvedAgentId = anyAgent.id;
+      resolvedAgentRole = "owner";
+    }
+  }
+
+  if (!resolvedAgentId) {
+    if (requireAgent) {
+      return { error: "AGENT_NOT_FOUND" as const };
+    }
+    return {
+      supabase,
+      user,
+      agentId: null,
+      agentRole: null,
+      isAdmin,
+      plan: profile?.plan || "starter",
+      group: (profile?.group as Record<string, unknown> | null) || null,
+    };
   }
 
   try {
-    await applyManagedEnvOverrides(access.org_id);
+    await applyManagedEnvOverrides(resolvedAgentId);
   } catch {
     // Ignore managed env failures; fall back to process.env.
   }
@@ -164,7 +247,10 @@ export async function getServerContext(
   return {
     supabase,
     user,
-    orgId: access.org_id,
-    orgRole: access.org_role || "operator",
+    agentId: resolvedAgentId,
+    agentRole: resolvedAgentRole,
+    isAdmin,
+    plan: profile?.plan || "starter",
+    group: (profile?.group as Record<string, unknown> | null) || null,
   };
 }

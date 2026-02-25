@@ -7,7 +7,7 @@ import {
 } from "../shared/confirmedEntity";
 import type { RuntimeContext } from "../shared/runtimeTypes";
 
-export type EndUserSyncContext = Pick<RuntimeContext, "supabase" | "orgId" | "runtimeEndUser">;
+export type EndUserSyncContext = Pick<RuntimeContext, "supabase" | "agentId" | "agentId" | "runtimeEndUser">;
 
 type EndUserProfile = {
   display_name?: string | null;
@@ -400,10 +400,10 @@ function buildConfirmedEntityFromRows(rows: Array<Record<string, any>>) {
 
 async function resolveVerifiedPhoneByToken(input: {
   context: EndUserSyncContext;
-  orgId: string;
+  agentId: string;
   token: string | null;
 }) {
-  const { context, orgId, token } = input;
+  const { context, agentId, token } = input;
   if (!token) return null;
   const { data } = await context.supabase
     .from("H_auth_otp_verifications")
@@ -417,71 +417,56 @@ async function resolveVerifiedPhoneByToken(input: {
 
 async function linkAccessMapByPhone(input: {
   context: EndUserSyncContext;
-  orgId: string;
+  agentId: string;
   endUserId: string;
   verifiedPhone: string | null;
 }) : Promise<boolean> {
-  const { context, orgId, endUserId, verifiedPhone } = input;
+  const { context, verifiedPhone } = input;
   if (!verifiedPhone) return false;
-  const { data: accessRow } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("id, end_user_id, verified_phone")
-    .eq("org_id", orgId)
+  const { data: profileRow } = await context.supabase
+    .from("A_iam_user_profiles")
+    .select("user_id")
     .eq("verified_phone", verifiedPhone)
+    .eq("is_admin", true)
     .maybeSingle();
-  if (!accessRow?.id) return false;
-  const updates: Record<string, any> = {};
-  const currentEndUserId = readString((accessRow as Record<string, any>).end_user_id);
-  if (!currentEndUserId || currentEndUserId !== endUserId) {
-    updates.end_user_id = endUserId;
-  }
-  if (Object.keys(updates).length === 0) return false;
-  await context.supabase.from("A_iam_user_access_maps").update(updates).eq("id", accessRow.id);
-  return true;
+  return Boolean(profileRow?.user_id);
 }
 
 async function linkAdminUserToEndUser(input: {
   context: EndUserSyncContext;
-  orgId: string;
+  agentId: string;
   adminUserId: string | null;
   endUserId: string;
   adminEmail?: string | null;
   verifiedPhone?: string | null;
 }) : Promise<{ linkedEndUser: boolean; verifiedPhoneUpdated: boolean }> {
-  const { context, orgId, adminUserId, endUserId, adminEmail, verifiedPhone } = input;
+  const { context, adminUserId, endUserId, adminEmail, verifiedPhone } = input;
   const result = { linkedEndUser: false, verifiedPhoneUpdated: false };
   if (!adminUserId || !endUserId) return result;
-  const { data: accessRow } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin, end_user_id, verified_phone")
-    .eq("org_id", orgId)
+  const { data: profileRow } = await context.supabase
+    .from("A_iam_user_profiles")
+    .select("is_admin, verified_phone")
     .eq("user_id", adminUserId)
     .maybeSingle();
-  if (!accessRow?.is_admin) return result;
-  const currentEndUserId = readString((accessRow as Record<string, any>).end_user_id);
+  if (!profileRow?.is_admin) return result;
   const updates: Record<string, any> = {};
-  if (!currentEndUserId || currentEndUserId !== endUserId) {
-    updates.end_user_id = endUserId;
-    result.linkedEndUser = true;
-  }
   if (verifiedPhone) {
-    if (readString((accessRow as Record<string, any>).verified_phone) !== verifiedPhone) {
+    if (readString((profileRow as Record<string, any>).verified_phone) !== verifiedPhone) {
       updates.verified_phone = verifiedPhone;
       result.verifiedPhoneUpdated = true;
     }
   }
   if (Object.keys(updates).length > 0) {
     await context.supabase
-      .from("A_iam_user_access_maps")
+      .from("A_iam_user_profiles")
       .update(updates)
-      .eq("org_id", orgId)
       .eq("user_id", adminUserId);
   }
 
   const { data: endUserRow } = await context.supabase
     .from("A_end_users")
     .select("email")
-    .eq("org_id", orgId)
+    .eq("agent_id", input.agentId)
     .eq("id", endUserId)
     .maybeSingle();
   const endUserEmail = readString((endUserRow as Record<string, any> | null)?.email);
@@ -500,7 +485,7 @@ async function linkAdminUserToEndUser(input: {
   await context.supabase
     .from("A_end_users")
     .update({ email: normalizeEmail(resolvedAdminEmail), updated_at: nowIso() })
-    .eq("org_id", orgId)
+    .eq("agent_id", input.agentId)
     .eq("id", endUserId);
   return result;
 }
@@ -513,8 +498,8 @@ export async function fetchEndUserMemoryEntity(input: {
   entity?: Record<string, any> | null;
 }) {
   const { context, sessionId, runtimeEndUser, entity } = input;
-  const orgId = String(context.orgId || "").trim();
-  if (!orgId) return null;
+  const agentId = String(context.agentId || "").trim();
+  if (!agentId) return null;
 
   let endUserId: string | null = null;
   try {
@@ -540,7 +525,7 @@ export async function fetchEndUserMemoryEntity(input: {
       const { data: identityRows } = await context.supabase
         .from("A_end_user_identities")
         .select("end_user_id, identity_hash, is_primary")
-        .eq("org_id", orgId)
+        .eq("agent_id", agentId)
         .in("identity_hash", hashes);
       const matched = (identityRows || [])
         .map((row) => ({
@@ -560,7 +545,7 @@ export async function fetchEndUserMemoryEntity(input: {
   const { data: memoryRows } = await context.supabase
     .from("A_end_user_memories")
     .select("memory_key, content, value_json, updated_at")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", endUserId)
     .eq("is_active", true)
     .in("memory_key", ["phone", "email", "member_id", "name", "address", "zipcode", "order_id"])
@@ -569,7 +554,7 @@ export async function fetchEndUserMemoryEntity(input: {
   const { data: confirmedRows } = await context.supabase
     .from("A_end_user_memories")
     .select("memory_key, content, value_json, updated_at")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", endUserId)
     .eq("memory_type", "confirmed")
     .eq("is_active", true)
@@ -607,7 +592,7 @@ function buildUserSummary(input: { intent?: string | null; userText?: string | n
 
 async function upsertMemory(input: {
   context: EndUserSyncContext;
-  orgId: string;
+  agentId: string;
   endUserId: string;
   memoryType: string;
   memoryKey: string;
@@ -619,7 +604,7 @@ async function upsertMemory(input: {
 }) {
   const {
     context,
-    orgId,
+    agentId,
     endUserId,
     memoryType,
     memoryKey,
@@ -631,7 +616,8 @@ async function upsertMemory(input: {
   } = input;
   const now = nowIso();
   const payload = {
-    org_id: orgId,
+    agent_id: agentId,
+    agent_id: context.agentId || null,
     end_user_id: endUserId,
     memory_type: memoryType,
     memory_key: memoryKey,
@@ -656,7 +642,7 @@ async function upsertMemory(input: {
   const { data: existing, error: fetchError } = await context.supabase
     .from("A_end_user_memories")
     .select("id")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", endUserId)
     .eq("memory_type", memoryType)
     .eq("memory_key", memoryKey)
@@ -674,35 +660,35 @@ async function upsertMemory(input: {
 
 async function reassignSessionEndUser(input: {
   context: EndUserSyncContext;
-  orgId: string;
+  agentId: string;
   sessionId: string;
   fromEndUserId: string;
   toEndUserId: string;
 }) {
-  const { context, orgId, sessionId, fromEndUserId, toEndUserId } = input;
+  const { context, agentId, sessionId, fromEndUserId, toEndUserId } = input;
   if (!fromEndUserId || !toEndUserId || fromEndUserId === toEndUserId) return;
   await Promise.allSettled([
     context.supabase
       .from("A_end_user_sessions")
       .update({ end_user_id: toEndUserId })
-      .eq("org_id", orgId)
+      .eq("agent_id", agentId)
       .eq("session_id", sessionId),
     context.supabase
       .from("A_end_user_messages")
       .update({ end_user_id: toEndUserId })
-      .eq("org_id", orgId)
+      .eq("agent_id", agentId)
       .eq("session_id", sessionId)
       .eq("end_user_id", fromEndUserId),
     context.supabase
       .from("A_end_user_response_materials")
       .update({ end_user_id: toEndUserId })
-      .eq("org_id", orgId)
+      .eq("agent_id", agentId)
       .eq("session_id", sessionId)
       .eq("end_user_id", fromEndUserId),
     context.supabase
       .from("A_end_user_session_resources")
       .update({ end_user_id: toEndUserId })
-      .eq("org_id", orgId)
+      .eq("agent_id", agentId)
       .eq("session_id", sessionId)
       .eq("end_user_id", fromEndUserId),
   ]);
@@ -710,17 +696,17 @@ async function reassignSessionEndUser(input: {
 
 async function migrateSessionMemories(input: {
   context: EndUserSyncContext;
-  orgId: string;
+  agentId: string;
   sessionId: string;
   fromEndUserId: string;
   toEndUserId: string;
 }) {
-  const { context, orgId, sessionId, fromEndUserId, toEndUserId } = input;
+  const { context, agentId, sessionId, fromEndUserId, toEndUserId } = input;
   if (!fromEndUserId || !toEndUserId || fromEndUserId === toEndUserId) return;
   const { data: memoryRows } = await context.supabase
     .from("A_end_user_memories")
     .select("memory_type, memory_key, content, value_json, source_session_id, source_turn_id")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("end_user_id", fromEndUserId)
     .eq("source_session_id", sessionId)
     .eq("is_active", true)
@@ -733,7 +719,7 @@ async function migrateSessionMemories(input: {
     const valueJson = readRecord((row as Record<string, any>).value_json) || {};
     await upsertMemory({
       context,
-      orgId,
+      agentId,
       endUserId: toEndUserId,
       memoryType,
       memoryKey,
@@ -753,15 +739,17 @@ export async function syncEndUserFromTurn(input: {
 }) {
   const { context, sessionId, turnId, turnPayload } = input;
   const startedAt = Date.now();
-  const orgId = String(context.orgId || "").trim();
-  if (!orgId) return;
+  const agentId = String(context.agentId || "").trim();
+  if (!agentId) return;
   try {
     const { data: sessionRow } = await context.supabase
       .from("D_conv_sessions")
-      .select("id, org_id, agent_id, channel, started_at, ended_at, satisfaction, outcome, metadata")
+      .select("id, agent_id, agent_id, channel, started_at, ended_at, satisfaction, outcome, metadata")
       .eq("id", sessionId)
       .maybeSingle();
     if (!sessionRow) return;
+    const sessionAgentId = readString((sessionRow as Record<string, any>).agent_id);
+    const agentId = sessionAgentId || context.agentId || null;
 
     const metadata = readRecord(sessionRow.metadata) || null;
     const metadataProfile = extractProfileFromMetadata(metadata);
@@ -792,7 +780,7 @@ export async function syncEndUserFromTurn(input: {
       confirmedProfile.member_id = String(confirmedEntity.member_id).trim();
     }
     const mergedProfileFinal = mergeProfiles(mergedProfile, confirmedProfile);
-    const verifiedPhone = await resolveVerifiedPhoneByToken({ context, orgId, token: verificationToken });
+    const verifiedPhone = await resolveVerifiedPhoneByToken({ context, agentId, token: verificationToken });
     if (verifiedPhone && !mergedProfileFinal.phone) {
       mergedProfileFinal.phone = verifiedPhone;
     }
@@ -821,7 +809,7 @@ export async function syncEndUserFromTurn(input: {
       const { data: identityRows } = await context.supabase
         .from("A_end_user_identities")
         .select("end_user_id, identity_type, identity_hash, is_primary")
-        .eq("org_id", orgId)
+        .eq("agent_id", agentId)
         .in("identity_hash", hashes);
       const matched = (identityRows || [])
         .map((row) => ({
@@ -844,7 +832,7 @@ export async function syncEndUserFromTurn(input: {
       const { data: phoneMatch } = await context.supabase
         .from("A_end_users")
         .select("id")
-        .eq("org_id", orgId)
+        .eq("agent_id", agentId)
         .eq("phone", verifiedPhone)
         .is("deleted_at", null)
         .order("created_at", { ascending: true })
@@ -868,14 +856,14 @@ export async function syncEndUserFromTurn(input: {
       endUserId = matchedIdentity.end_user_id;
       await reassignSessionEndUser({
         context,
-        orgId,
+        agentId,
         sessionId,
         fromEndUserId: reassignedFrom,
         toEndUserId: endUserId,
       });
       await migrateSessionMemories({
         context,
-        orgId,
+        agentId,
         sessionId,
         fromEndUserId: reassignedFrom,
         toEndUserId: endUserId,
@@ -888,7 +876,8 @@ export async function syncEndUserFromTurn(input: {
 
     if (!endUserId) {
       const insertPayload = {
-        org_id: orgId,
+        agent_id: agentId,
+        agent_id: agentId,
         display_name: mergedProfileFinal.display_name || null,
         email: normalizeEmail(mergedProfileFinal.email || null),
         phone: normalizePhone(mergedProfileFinal.phone || null),
@@ -923,7 +912,7 @@ export async function syncEndUserFromTurn(input: {
     let adminLinkResult: { linkedEndUser: boolean; verifiedPhoneUpdated: boolean } | null = null;
     if (adminUserId && verifiedPhone) {
       const adminEmail = readString((context as Record<string, any>)?.user?.email || null);
-      adminLinkResult = await linkAdminUserToEndUser({ context, orgId, adminUserId, endUserId, adminEmail, verifiedPhone });
+      adminLinkResult = await linkAdminUserToEndUser({ context, agentId, adminUserId, endUserId, adminEmail, verifiedPhone });
     }
     if (adminLinkResult?.verifiedPhoneUpdated) {
       await insertEndUserAuditEvent({
@@ -932,21 +921,21 @@ export async function syncEndUserFromTurn(input: {
         turnId,
         eventType: "VERIFIED_PHONE_RECORDED",
         payload: {
-          org_id: orgId,
+          agent_id: agentId,
           end_user_id: endUserId,
           admin_user_id: adminUserId,
           verified_phone_masked: maskPhone(verifiedPhone || ""),
           source: "admin_login",
         },
         botContext: {
-          org_id: orgId,
+          agent_id: agentId,
           end_user_id: endUserId,
           verified_phone_masked: maskPhone(verifiedPhone || ""),
         },
       });
     }
     if (intentName === "admin_login" && verifiedPhone) {
-      const linked = await linkAccessMapByPhone({ context, orgId, endUserId, verifiedPhone });
+      const linked = await linkAccessMapByPhone({ context, agentId, endUserId, verifiedPhone });
       if (linked && !adminLinkResult?.verifiedPhoneUpdated) {
         await insertEndUserAuditEvent({
           context,
@@ -954,13 +943,13 @@ export async function syncEndUserFromTurn(input: {
           turnId,
           eventType: "VERIFIED_PHONE_RECORDED",
           payload: {
-            org_id: orgId,
+            agent_id: agentId,
             end_user_id: endUserId,
             verified_phone_masked: maskPhone(verifiedPhone || ""),
             source: "admin_login_intent",
           },
           botContext: {
-            org_id: orgId,
+            agent_id: agentId,
             end_user_id: endUserId,
             verified_phone_masked: maskPhone(verifiedPhone || ""),
           },
@@ -982,7 +971,7 @@ export async function syncEndUserFromTurn(input: {
           matched: matchHit,
         },
         botContext: {
-          org_id: orgId,
+          agent_id: agentId,
           end_user_id: endUserId,
           identity_types: identityTypes,
         },
@@ -1023,7 +1012,7 @@ export async function syncEndUserFromTurn(input: {
       eventType: "END_USER_CONTEXT_RESOLVED",
       payload: contextPayload,
       botContext: {
-        org_id: orgId,
+        agent_id: agentId,
         end_user_id: endUserId,
         resolution_source: resolutionSource,
       },
@@ -1064,7 +1053,8 @@ export async function syncEndUserFromTurn(input: {
 
     if (identities.length > 0) {
       const identityRows = identities.map((identity) => ({
-        org_id: orgId,
+        agent_id: agentId,
+        agent_id: agentId,
         end_user_id: endUserId,
         identity_type: identity.identity_type,
         identity_value: identity.identity_value,
@@ -1074,7 +1064,7 @@ export async function syncEndUserFromTurn(input: {
       }));
       try {
         await context.supabase.from("A_end_user_identities").upsert(identityRows, {
-          onConflict: "org_id,identity_type,identity_hash",
+          onConflict: "agent_id,identity_type,identity_hash",
         });
       } catch (error) {
         console.warn("[runtime/chat_mk2] end user identity upsert failed", {
@@ -1096,11 +1086,11 @@ export async function syncEndUserFromTurn(input: {
 
     await context.supabase.from("A_end_user_sessions").upsert(
       {
-        org_id: orgId,
+        agent_id: agentId,
         end_user_id: endUserId,
         session_id: sessionId,
         channel: readString(sessionRow.channel),
-        agent_id: readString(sessionRow.agent_id),
+        agent_id: agentId,
         llm: null,
         mode: null,
         started_at: sessionRow.started_at || null,
@@ -1118,7 +1108,8 @@ export async function syncEndUserFromTurn(input: {
     const messageRows: Array<Record<string, any>> = [];
     if (userContent) {
       messageRows.push({
-        org_id: orgId,
+        agent_id: agentId,
+        agent_id: agentId,
         end_user_id: endUserId,
         session_id: sessionId,
         turn_id: turnId,
@@ -1133,7 +1124,8 @@ export async function syncEndUserFromTurn(input: {
     }
     if (assistantContent) {
       messageRows.push({
-        org_id: orgId,
+        agent_id: agentId,
+        agent_id: agentId,
         end_user_id: endUserId,
         session_id: sessionId,
         turn_id: turnId,
@@ -1153,7 +1145,8 @@ export async function syncEndUserFromTurn(input: {
     if (assistantContent) {
       const botContext = readRecord(turnPayload.bot_context) || {};
       await context.supabase.from("A_end_user_response_materials").insert({
-        org_id: orgId,
+        agent_id: agentId,
+        agent_id: agentId,
         end_user_id: endUserId,
         session_id: sessionId,
         turn_id: turnId,
@@ -1169,13 +1162,14 @@ export async function syncEndUserFromTurn(input: {
     if (sessionSummary) {
       await context.supabase.from("A_end_user_summaries").upsert(
         {
-          org_id: orgId,
+          agent_id: agentId,
+          agent_id: agentId,
           end_user_id: endUserId,
           summary_text: sessionSummary,
           source_session_id: sessionId,
           updated_at: now,
         },
-        { onConflict: "org_id,end_user_id" }
+        { onConflict: "agent_id,end_user_id" }
       );
     }
 
@@ -1211,7 +1205,7 @@ export async function syncEndUserFromTurn(input: {
     const { data: existingResource } = await context.supabase
       .from("A_end_user_session_resources")
       .select("id, mcp_tool_ids, kb_ids, kb_parent_ids, mcp_calls_count, kb_hits_count")
-      .eq("org_id", orgId)
+      .eq("agent_id", agentId)
       .eq("end_user_id", endUserId)
       .eq("session_id", sessionId)
       .maybeSingle();
@@ -1225,10 +1219,10 @@ export async function syncEndUserFromTurn(input: {
     );
 
     const resourcePayload = {
-      org_id: orgId,
+      agent_id: agentId,
       end_user_id: endUserId,
       session_id: sessionId,
-      agent_id: readString(sessionRow.agent_id),
+      agent_id: agentId,
       mcp_tool_ids: mergedMcpToolIds,
       kb_ids: mergedKbIds,
       kb_parent_ids: mergedKbParentIds,
@@ -1259,7 +1253,7 @@ export async function syncEndUserFromTurn(input: {
       if (!target.value) continue;
       await upsertMemory({
         context,
-        orgId,
+        agentId,
         endUserId,
         memoryType: target.type,
         memoryKey: target.key,
@@ -1292,7 +1286,7 @@ export async function syncEndUserFromTurn(input: {
       }
       await upsertMemory({
         context,
-        orgId,
+        agentId,
         endUserId,
         memoryType: "confirmed",
         memoryKey: key,
@@ -1318,7 +1312,7 @@ export async function syncEndUserFromTurn(input: {
           flow_id: flowId || null,
         },
         botContext: {
-          org_id: orgId,
+          agent_id: agentId,
           end_user_id: endUserId,
           flow_id: flowId || null,
         },
@@ -1336,7 +1330,7 @@ export async function syncEndUserFromTurn(input: {
           duration_ms: elapsedMs,
         },
         botContext: {
-          org_id: orgId,
+          agent_id: agentId,
           end_user_id: endUserId,
         },
       });

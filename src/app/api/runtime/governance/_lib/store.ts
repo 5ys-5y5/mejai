@@ -7,11 +7,11 @@ function nowIso() {
 
 export async function fetchRecentTurns(input: {
   supabase: SupabaseClient;
-  orgId: string;
+  agentId: string;
   sessionId?: string | null;
   limit: number;
 }) {
-  void input.orgId;
+  void input.agentId;
   const query = input.supabase
     .from("D_conv_turns")
     .select("id, session_id, seq, transcript_text, answer_text, final_answer, bot_context, created_at")
@@ -87,7 +87,7 @@ export async function fetchProposalById(input: {
   supabase: SupabaseClient;
   proposalId: string;
   lookback: number;
-  orgId?: string | null;
+  agentId?: string | null;
 }) {
   const { data, error } = await input.supabase
     .from("F_audit_events")
@@ -100,11 +100,11 @@ export async function fetchProposalById(input: {
   return (
     rows.find((row) => {
       if (String((row.payload || {}).proposal_id || "") !== input.proposalId) return false;
-      if (!input.orgId) return true;
-      const payloadOrg = String(((row.payload || {}) as Record<string, unknown>).org_id || "");
-      const contextOrg = String((row.bot_context || {}).org_id || "");
-      if (payloadOrg && payloadOrg !== input.orgId) return false;
-      if (!payloadOrg && contextOrg && contextOrg !== input.orgId) return false;
+      if (!input.agentId) return true;
+      const payloadOrg = String(((row.payload || {}) as Record<string, unknown>).agent_id || "");
+      const contextOrg = String((row.bot_context || {}).agent_id || "");
+      if (payloadOrg && payloadOrg !== input.agentId) return false;
+      if (!payloadOrg && contextOrg && contextOrg !== input.agentId) return false;
       return true;
     }) || null
   );
@@ -119,7 +119,7 @@ export async function fetchExceptionStats(input: {
   supabase: SupabaseClient;
   fingerprint: string;
   now?: Date;
-  orgId?: string | null;
+  agentId?: string | null;
 }) {
   const now = input.now ?? new Date();
   const since7d = new Date(now.getTime() - 7 * 24 * 3600 * 1000).toISOString();
@@ -136,13 +136,13 @@ export async function fetchExceptionStats(input: {
     bot_context?: Record<string, unknown> | null;
     created_at?: string | null;
   }>;
-  const orgId = String(input.orgId || "").trim();
-  const scopedRows = orgId
+  const agentId = String(input.agentId || "").trim();
+  const scopedRows = agentId
     ? rows.filter((row) => {
-        const payloadOrg = String((row.payload || {}).org_id || "").trim();
-        const contextOrg = String((row.bot_context || {}).org_id || "").trim();
-        if (payloadOrg) return payloadOrg === orgId;
-        if (contextOrg) return contextOrg === orgId;
+        const payloadOrg = String((row.payload || {}).agent_id || "").trim();
+        const contextOrg = String((row.bot_context || {}).agent_id || "").trim();
+        if (payloadOrg) return payloadOrg === agentId;
+        if (contextOrg) return contextOrg === agentId;
         return false;
       })
     : rows;

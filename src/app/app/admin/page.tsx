@@ -57,7 +57,7 @@ export default function AdminPage() {
         setAuthToken(sessionData.session.access_token);
       }
       const { data: access } = await supabase
-        .from("A_iam_user_access_maps")
+        .from("A_iam_user_profiles")
         .select("is_admin")
         .eq("user_id", data.user.id)
         .maybeSingle();

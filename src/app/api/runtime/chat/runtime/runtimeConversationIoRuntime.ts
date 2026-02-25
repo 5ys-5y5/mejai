@@ -15,7 +15,7 @@ type RuntimeStateSnapshot = {
   providerAvailable: string[];
   authSettingsId: string | null;
   userId: string;
-  orgId: string | null;
+  agentId: string | null;
   userPlan: string | null;
   userIsAdmin: boolean | null;
   userRole: string | null;
@@ -80,7 +80,7 @@ export function createRuntimeConversationIo(input: {
     debugPrefixJson: Record<string, any>
   ) => Promise<Record<string, any>>;
   pendingIntentQueue: string[];
-  orgId?: string | null;
+  agentId?: string | null;
   getSnapshot: (llmModel: string | null, tools: string[]) => RuntimeStateSnapshot;
   getFallbackSnapshot: () => RuntimeStateSnapshot;
   getToolResults: () => Array<{ name: string; ok: boolean; data?: Record<string, any>; error?: unknown }>;
@@ -96,7 +96,7 @@ export function createRuntimeConversationIo(input: {
     context,
     insertFinalTurn,
     pendingIntentQueue,
-    orgId,
+    agentId,
     getSnapshot,
     getFallbackSnapshot,
     getToolResults,
@@ -140,7 +140,7 @@ export function createRuntimeConversationIo(input: {
       pendingIntentQueue,
       insertFinalTurn,
       context,
-      orgId,
+      agentId,
     });
     setLastDebugPrefixJson(inserted.lastDebugPrefixJson);
     setLatestTurnId(inserted.latestTurnId);

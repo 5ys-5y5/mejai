@@ -19,9 +19,9 @@ export async function POST(req: NextRequest) {
   if (!body) {
     return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
   }
-  const orgId = String(body.org_id || "").trim();
+  const agentId = String(body.agent_id || "").trim();
   const phone = String(body.phone || "").trim();
-  if (!orgId || !isUuidLike(orgId)) {
+  if (!agentId || !isUuidLike(agentId)) {
     return NextResponse.json({ error: "ORG_ID_REQUIRED" }, { status: 400 });
   }
   if (!phone) {
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
   const { data: orgRow } = await supabaseAdmin
     .from("A_iam_organizations")
     .select("id, owner_id, registrant_id")
-    .eq("id", orgId)
+    .eq("id", agentId)
     .maybeSingle();
   if (!orgRow) {
     return NextResponse.json({ error: "ORG_NOT_FOUND" }, { status: 404 });
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   const result = await callAdapter(
     "solapi",
     { destination: phone },
-    { supabase: supabaseAdmin, orgId, userId: context.user.id },
+    { supabase: supabaseAdmin, agentId, userId: context.user.id },
     { toolName: "send_otp" }
   );
   if (result.status !== "success") {

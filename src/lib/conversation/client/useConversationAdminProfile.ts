@@ -6,24 +6,24 @@ import { apiFetch } from "@/lib/apiClient";
 type AdminProfile = {
   is_admin?: boolean;
   user_id?: string | null;
-  org_id?: string | null;
-  org_role?: string | null;
+  agent_id?: string | null;
+  agent_role?: string | null;
   plan?: string | null;
 };
 
 type AdminProfileState = {
   isAdminUser: boolean;
   userId: string;
-  orgId: string | null;
-  orgRole: string | null;
+  agentId: string | null;
+  agentRole: string | null;
   plan: string | null;
 };
 
 const EMPTY_STATE: AdminProfileState = {
   isAdminUser: false,
   userId: "",
-  orgId: null,
-  orgRole: null,
+  agentId: null,
+  agentRole: null,
   plan: null,
 };
 
@@ -39,8 +39,8 @@ export function useConversationAdminProfile() {
         setState({
           isAdminUser: Boolean(res?.is_admin),
           userId,
-          orgId: res?.org_id ?? null,
-          orgRole: res?.org_role ?? null,
+          agentId: res?.agent_id ?? null,
+          agentRole: res?.agent_role ?? null,
           plan: res?.plan ?? null,
         });
       })

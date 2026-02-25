@@ -1,5 +1,5 @@
 export type ProductAliasRow = {
-  org_id: string | null;
+  agent_id: string | null;
   alias: string;
   product_id: string;
   match_type: "exact" | "contains" | "regex";
@@ -33,7 +33,7 @@ export type KbRow = {
 };
 
 export type ProductRuleRow = {
-  org_id: string | null;
+  agent_id: string | null;
   product_id: string;
   answerability: "ALLOW" | "DENY" | "UNKNOWN";
   restock_policy: "NO_RESTOCK" | "RESTOCK_AT" | "UNKNOWN";

@@ -308,6 +308,49 @@ const DEFAULT_WIDGET_VISIBILITY: ConversationFeatureVisibility["widget"] = {
   },
 };
 
+const DEFAULT_PAGE_VISIBILITY: ConversationFeatureVisibility = {
+  widget: DEFAULT_WIDGET_VISIBILITY,
+  mcp: {
+    providerSelector: "user",
+    actionSelector: "user",
+  },
+  adminPanel: {
+    enabled: "admin",
+    selectionToggle: "admin",
+    messageSelection: "admin",
+    logsToggle: "admin",
+    messageMeta: "admin",
+    copyConversation: "admin",
+    copyIssue: "admin",
+  },
+  interaction: {
+    quickReplies: "user",
+    productCards: "user",
+    threePhasePrompt: "user",
+    threePhasePromptShowConfirmed: "user",
+    threePhasePromptShowConfirming: "user",
+    threePhasePromptShowNext: "user",
+    threePhasePromptHideLabels: "user",
+    prefill: "user",
+    inputSubmit: "user",
+    widgetHeaderAgentAction: "user",
+    widgetHeaderNewConversation: "user",
+    widgetHeaderClose: "user",
+  },
+  setup: {
+    modelSelector: "user",
+    agentSelector: "user",
+    llmSelector: "user",
+    kbSelector: "user",
+    adminKbSelector: "user",
+    modeExisting: "user",
+    sessionIdSearch: "user",
+    modeNew: "user",
+    routeSelector: "user",
+    inlineUserKbInput: "user",
+  },
+};
+
 function normalizeSetupOrder(order?: SetupFieldKey[]) {
   const seen = new Set<SetupFieldKey>();
   const normalized: SetupFieldKey[] = [];
@@ -565,13 +608,28 @@ export function resolveConversationPageFeatures(
   page: ConversationPageKey,
   providerValue?: ConversationFeaturesProviderShape | null
 ): ConversationPageFeatures {
-  const resolvedPage = resolveRegisteredPageKey(page, providerValue);
+  if (!providerValue) {
+    throw new Error("CHAT_POLICY_MISSING");
+  }
+  const resolvedPage = normalizeConversationPageKey(page);
+  const registry = Array.isArray(providerValue.page_registry)
+    ? providerValue.page_registry.map((entry) => normalizeConversationPageKey(entry))
+    : [];
+  if (!registry.includes(resolvedPage)) {
+    throw new Error("CHAT_POLICY_PAGE_NOT_REGISTERED");
+  }
+  const override = providerValue.pages?.[resolvedPage];
+  if (!override) {
+    throw new Error("CHAT_POLICY_PAGE_SETTINGS_MISSING");
+  }
   const base = getDefaultConversationPageFeatures(resolvedPage);
-  const override = providerValue?.pages?.[resolvedPage];
   let merged = mergeConversationPageFeatures(base, override);
   if (merged.interaction.prefill && resolvedPage !== "/") {
+    const rootOverride = providerValue.pages?.["/"];
+    if (!rootOverride) {
+      throw new Error("CHAT_POLICY_PAGE_SETTINGS_MISSING");
+    }
     const rootBase = getDefaultConversationPageFeatures("/");
-    const rootOverride = providerValue?.pages?.["/"];
     const rootMerged = mergeConversationPageFeatures(rootBase, rootOverride);
     merged = {
       ...merged,
@@ -857,58 +915,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
-    visibility: {
-      widget: {
-        ...DEFAULT_WIDGET_VISIBILITY,
-        header: {
-          ...DEFAULT_WIDGET_VISIBILITY.header,
-          close: "user",
-        },
-        tabBar: {
-          ...DEFAULT_WIDGET_VISIBILITY.tabBar,
-          policy: "admin",
-        },
-      },
-      mcp: {
-        providerSelector: "user",
-        actionSelector: "user",
-      },
-      adminPanel: {
-        enabled: "user",
-        selectionToggle: "user",
-        messageSelection: "user",
-        logsToggle: "user",
-        messageMeta: "user",
-        copyConversation: "user",
-        copyIssue: "user",
-      },
-      interaction: {
-        quickReplies: "user",
-        productCards: "user",
-        threePhasePrompt: "user",
-        threePhasePromptShowConfirmed: "user",
-        threePhasePromptShowConfirming: "user",
-        threePhasePromptShowNext: "user",
-        threePhasePromptHideLabels: "user",
-        prefill: "user",
-        inputSubmit: "user",
-        widgetHeaderAgentAction: "user",
-        widgetHeaderNewConversation: "user",
-        widgetHeaderClose: "user",
-      },
-      setup: {
-        modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "user",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
-      },
-    },
+    visibility: DEFAULT_PAGE_VISIBILITY,
   },
   "/app/laboratory": {
     widget: {
@@ -978,7 +985,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         ...DEFAULT_WIDGET_VISIBILITY,
         header: {
           ...DEFAULT_WIDGET_VISIBILITY.header,
-          close: "user",
+          close: "public",
         },
         tabBar: {
           ...DEFAULT_WIDGET_VISIBILITY.tabBar,
@@ -986,8 +993,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         },
       },
       mcp: {
-        providerSelector: "user",
-        actionSelector: "user",
+        providerSelector: "public",
+        actionSelector: "public",
       },
       adminPanel: {
         enabled: "admin",
@@ -999,30 +1006,30 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         copyIssue: "admin",
       },
       interaction: {
-        quickReplies: "user",
-        productCards: "user",
-        threePhasePrompt: "user",
-        threePhasePromptShowConfirmed: "user",
-        threePhasePromptShowConfirming: "user",
-        threePhasePromptShowNext: "user",
-        threePhasePromptHideLabels: "user",
-        prefill: "user",
-        inputSubmit: "user",
-        widgetHeaderAgentAction: "user",
-        widgetHeaderNewConversation: "user",
-        widgetHeaderClose: "user",
+        quickReplies: "public",
+        productCards: "public",
+        threePhasePrompt: "public",
+        threePhasePromptShowConfirmed: "public",
+        threePhasePromptShowConfirming: "public",
+        threePhasePromptShowNext: "public",
+        threePhasePromptHideLabels: "public",
+        prefill: "public",
+        inputSubmit: "public",
+        widgetHeaderAgentAction: "public",
+        widgetHeaderNewConversation: "public",
+        widgetHeaderClose: "public",
       },
       setup: {
-        modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "user",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
+        modelSelector: "public",
+        agentSelector: "public",
+        llmSelector: "public",
+        kbSelector: "public",
+        adminKbSelector: "public",
+        modeExisting: "public",
+        sessionIdSearch: "public",
+        modeNew: "public",
+        routeSelector: "public",
+        inlineUserKbInput: "public",
       },
     },
   },
@@ -1090,58 +1097,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
-    visibility: {
-      widget: {
-        ...DEFAULT_WIDGET_VISIBILITY,
-        header: {
-          ...DEFAULT_WIDGET_VISIBILITY.header,
-          close: "user",
-        },
-        tabBar: {
-          ...DEFAULT_WIDGET_VISIBILITY.tabBar,
-          policy: "admin",
-        },
-      },
-      mcp: {
-        providerSelector: "user",
-        actionSelector: "user",
-      },
-      adminPanel: {
-        enabled: "user",
-        selectionToggle: "user",
-        messageSelection: "user",
-        logsToggle: "user",
-        messageMeta: "user",
-        copyConversation: "user",
-        copyIssue: "user",
-      },
-      interaction: {
-        quickReplies: "user",
-        productCards: "user",
-        threePhasePrompt: "user",
-        threePhasePromptShowConfirmed: "user",
-        threePhasePromptShowConfirming: "user",
-        threePhasePromptShowNext: "user",
-        threePhasePromptHideLabels: "user",
-        prefill: "user",
-        inputSubmit: "user",
-        widgetHeaderAgentAction: "user",
-        widgetHeaderNewConversation: "user",
-        widgetHeaderClose: "user",
-      },
-      setup: {
-        modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "user",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
-      },
-    },
+    visibility: DEFAULT_PAGE_VISIBILITY,
   },
   "/demo": {
     widget: {
@@ -1207,58 +1163,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
-    visibility: {
-      widget: {
-        ...DEFAULT_WIDGET_VISIBILITY,
-        header: {
-          ...DEFAULT_WIDGET_VISIBILITY.header,
-          close: "user",
-        },
-        tabBar: {
-          ...DEFAULT_WIDGET_VISIBILITY.tabBar,
-          policy: "admin",
-        },
-      },
-      mcp: {
-        providerSelector: "user",
-        actionSelector: "user",
-      },
-      adminPanel: {
-        enabled: "user",
-        selectionToggle: "user",
-        messageSelection: "user",
-        logsToggle: "user",
-        messageMeta: "user",
-        copyConversation: "user",
-        copyIssue: "user",
-      },
-      interaction: {
-        quickReplies: "user",
-        productCards: "user",
-        threePhasePrompt: "user",
-        threePhasePromptShowConfirmed: "user",
-        threePhasePromptShowConfirming: "user",
-        threePhasePromptShowNext: "user",
-        threePhasePromptHideLabels: "user",
-        prefill: "user",
-        inputSubmit: "user",
-        widgetHeaderAgentAction: "user",
-        widgetHeaderNewConversation: "user",
-        widgetHeaderClose: "user",
-      },
-      setup: {
-        modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "user",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
-      },
-    },
+    visibility: DEFAULT_PAGE_VISIBILITY,
   },
   "/call": {
     widget: {
@@ -1324,68 +1229,30 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
-    visibility: {
-      widget: {
-        ...DEFAULT_WIDGET_VISIBILITY,
-        header: {
-          ...DEFAULT_WIDGET_VISIBILITY.header,
-          close: "user",
-        },
-        tabBar: {
-          ...DEFAULT_WIDGET_VISIBILITY.tabBar,
-          policy: "admin",
-        },
-      },
-      mcp: {
-        providerSelector: "user",
-        actionSelector: "user",
-      },
-      adminPanel: {
-        enabled: "user",
-        selectionToggle: "user",
-        messageSelection: "user",
-        logsToggle: "user",
-        messageMeta: "user",
-        copyConversation: "user",
-        copyIssue: "user",
-      },
-      interaction: {
-        quickReplies: "user",
-        productCards: "user",
-        threePhasePrompt: "user",
-        threePhasePromptShowConfirmed: "user",
-        threePhasePromptShowConfirming: "user",
-        threePhasePromptShowNext: "user",
-        threePhasePromptHideLabels: "user",
-        prefill: "user",
-        inputSubmit: "user",
-        widgetHeaderAgentAction: "user",
-        widgetHeaderNewConversation: "user",
-        widgetHeaderClose: "user",
-      },
-      setup: {
-        modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "user",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
-      },
-    },
+    visibility: DEFAULT_PAGE_VISIBILITY,
   },
 };
 
-export function getConversationPageBaseKey(page: ConversationPageKey): "/" | "/app/laboratory" | typeof WIDGET_PAGE_KEY | "/demo" | "/call" {
+export function normalizeConversationPageKey(page: ConversationPageKey): ConversationPageKey {
   const normalized = String(page || "").trim();
+  if (!normalized) return "/";
   if (normalized === "/") return "/";
   if (normalized === "/app/laboratory") return "/app/laboratory";
   if (normalized === "/demo") return "/demo";
   if (normalized === "/call" || normalized.startsWith("/call/")) return "/call";
   if (normalized === WIDGET_PAGE_KEY || normalized.startsWith(`${WIDGET_PAGE_KEY}/`)) return WIDGET_PAGE_KEY;
+  return normalized;
+}
+
+export function getConversationPageBaseKey(
+  page: ConversationPageKey
+): "/" | "/app/laboratory" | typeof WIDGET_PAGE_KEY | "/demo" | "/call" {
+  const normalized = normalizeConversationPageKey(page);
+  if (normalized === "/") return "/";
+  if (normalized === "/app/laboratory") return "/app/laboratory";
+  if (normalized === "/demo") return "/demo";
+  if (normalized === "/call") return "/call";
+  if (normalized === WIDGET_PAGE_KEY) return WIDGET_PAGE_KEY;
   return "/";
 }
 
@@ -1399,7 +1266,7 @@ export function resolveRegisteredPageKey(
   page: ConversationPageKey,
   providerValue?: ConversationFeaturesProviderShape | null
 ): ConversationPageKey {
-  const normalized = String(page || "").trim();
+  const normalized = normalizeConversationPageKey(page);
   if (!normalized) return "/";
   if (providerValue?.pages?.[normalized]) return normalized;
   if (providerValue?.settings_ui?.setup_fields?.[normalized]) return normalized;

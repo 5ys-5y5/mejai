@@ -60,7 +60,7 @@ async function handleStream(
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, agent_id, is_active")
+    .select("id, agent_id, agent_id, is_active")
     .eq("id", payload.widget_id)
     .maybeSingle();
   if (!widget || !widget.is_active) {
@@ -69,23 +69,38 @@ async function handleStream(
       headers: { "Content-Type": "text/event-stream" },
     });
   }
+  if (!widget.agent_id) {
+    return new Response(encodeEvent("error", { error: "WIDGET_AGENT_REQUIRED" }), {
+      status: 400,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
 
   let providerValue: ConversationFeaturesProviderShape | null = null;
   try {
-    providerValue = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || ""));
+    providerValue = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.agent_id || ""));
   } catch {
     providerValue = null;
   }
   const accessRole = await resolveAccessRoleForSession({
     supabase: supabaseAdmin,
-    orgId: String(widget.org_id || ""),
+    agentId: String(widget.agent_id || ""),
     sessionId,
     adminUserId: String(payload.admin_user_id || "").trim(),
   });
-  const featureFlags = applyConversationFeatureVisibility(
-    resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
-    accessRole
-  );
+  let featureFlags: ReturnType<typeof applyConversationFeatureVisibility>;
+  try {
+    featureFlags = applyConversationFeatureVisibility(
+      resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
+      accessRole
+    );
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "CHAT_POLICY_ERROR";
+    return new Response(encodeEvent("error", { error: reason }), {
+      status: 500,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
   const requestToolIds: unknown[] = Array.isArray(extras?.mcp_tool_ids) ? extras!.mcp_tool_ids! : [];
   const requestProviderKeys: unknown[] = Array.isArray(extras?.mcp_provider_keys)
     ? extras!.mcp_provider_keys!
@@ -143,7 +158,7 @@ async function handleStream(
           headers: {
             "Content-Type": "application/json",
             "x-widget-secret": secret,
-            "x-widget-org-id": String(widget.org_id),
+            "x-widget-agent-id": String(widget.agent_id),
           },
           body: JSON.stringify({
             message,

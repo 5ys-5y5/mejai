@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
 
   const config = await readGovernanceConfig({
     supabase: access.supabaseAdmin,
-    orgId: access.orgId,
+    agentId: access.agentId,
   });
 
   const limit = Math.max(10, Math.min(500, Number(req.nextUrl.searchParams.get("limit") || 100)));
@@ -96,7 +96,7 @@ export async function GET(req: NextRequest) {
 
   const byProposal = new Map<string, {
     proposal_id: string;
-    org_id: string | null;
+    agent_id: string | null;
     session_id: string | null;
     turn_id: string | null;
     created_at: string | null;
@@ -148,7 +148,7 @@ export async function GET(req: NextRequest) {
       const rawChangePlan = Array.isArray(payload.change_plan) ? payload.change_plan : [];
       byProposal.set(proposalId, {
         proposal_id: proposalId,
-        org_id: String(payload.org_id || "") || null,
+        agent_id: String(payload.agent_id || "") || null,
         session_id: row.session_id,
         turn_id: row.turn_id,
         created_at: row.created_at,

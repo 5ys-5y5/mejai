@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await context.supabase
     .from("D_conv_sessions")
     .select("*", { count: "exact" })
-    .eq("org_id", context.orgId)
+    .eq("agent_id", context.agentId)
     .order(field, { ascending })
     .range(offset, offset + limit - 1);
 
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
 
   const now = new Date().toISOString();
   const payload = {
-    org_id: context.orgId,
+    agent_id: context.agentId,
     session_code: body.session_code ?? makeSessionCode(),
     started_at: body.started_at ?? now,
     ended_at: body.ended_at ?? null,

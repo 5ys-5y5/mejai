@@ -17,7 +17,7 @@ export async function GET(
     .from("D_conv_sessions")
     .select("*")
     .eq("id", id)
-    .eq("org_id", contextAuth.orgId)
+    .eq("agent_id", contextAuth.agentId)
     .maybeSingle();
 
   if (error) {
@@ -45,9 +45,9 @@ export async function DELETE(
 
   const { data: session, error: sessionError } = await contextAuth.supabase
     .from("D_conv_sessions")
-    .select("id, org_id")
+    .select("id, agent_id")
     .eq("id", id)
-    .eq("org_id", contextAuth.orgId)
+    .eq("agent_id", contextAuth.agentId)
     .maybeSingle();
 
   if (sessionError) {
@@ -70,7 +70,7 @@ export async function DELETE(
     .from("D_conv_sessions")
     .delete()
     .eq("id", id)
-    .eq("org_id", contextAuth.orgId);
+    .eq("agent_id", contextAuth.agentId);
 
   if (deleteError) {
     return NextResponse.json({ error: deleteError.message }, { status: 400 });

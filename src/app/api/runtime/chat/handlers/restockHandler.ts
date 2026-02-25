@@ -1508,7 +1508,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
 
       if ((allowRestockLite || subscribeFallbackReason || !restockProductId) && restockDisplayName) {
         const liteRes = await saveRestockSubscriptionLite(context, {
-          orgId: context.orgId,
+          agentId: context.agentId,
+          agentId: context.agentId,
           sessionId,
           channel: restockChannel,
           phone: subscribePhone || null,

@@ -97,9 +97,12 @@ export async function POST(req: NextRequest) {
   if (!widget) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
+  if (!widget.agent_id) {
+    return NextResponse.json({ error: "WIDGET_AGENT_REQUIRED" }, { status: 400 });
+  }
 
   try {
-    await applyManagedEnvOverrides(String(widget.org_id));
+    await applyManagedEnvOverrides(String(widget.agent_id));
   } catch {
     // Ignore managed env failures; fall back to process.env.
   }
@@ -139,9 +142,8 @@ export async function POST(req: NextRequest) {
   let adminUserId = "";
   if (requestedAdminUserId && isUuidLike(requestedAdminUserId)) {
     const { data: accessRow } = await supabaseAdmin
-      .from("A_iam_user_access_maps")
+      .from("A_iam_user_profiles")
       .select("user_id, is_admin")
-      .eq("org_id", widget.org_id)
       .eq("user_id", requestedAdminUserId)
       .maybeSingle();
     if (accessRow?.user_id && accessRow.is_admin) {
@@ -154,9 +156,9 @@ export async function POST(req: NextRequest) {
   if (sessionId) {
     const { data: existing } = await supabaseAdmin
       .from("D_conv_sessions")
-      .select("id, org_id, metadata")
+      .select("id, agent_id, metadata")
       .eq("id", sessionId)
-      .eq("org_id", widget.org_id)
+      .eq("agent_id", widget.agent_id)
       .maybeSingle();
     if (!existing) {
       sessionId = "";
@@ -172,7 +174,7 @@ export async function POST(req: NextRequest) {
             metadata: { ...prevMeta, admin_user_id: adminUserId },
           })
           .eq("id", sessionId)
-          .eq("org_id", widget.org_id);
+          .eq("agent_id", widget.agent_id);
       }
     }
   }
@@ -190,7 +192,6 @@ export async function POST(req: NextRequest) {
     };
     const payload = {
       id: sessionId,
-      org_id: widget.org_id,
       session_code: makeSessionCode(),
       started_at: now,
       channel: "web_widget",
@@ -206,7 +207,7 @@ export async function POST(req: NextRequest) {
   let widgetToken: string;
   try {
     widgetToken = issueWidgetToken({
-      org_id: String(widget.org_id),
+      agent_id: String(widget.agent_id),
       widget_id: String(widget.id),
       session_id: sessionId,
       visitor_id: visitorId || null,
@@ -220,7 +221,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null);
+  const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.agent_id || "")).catch(() => null);
   if (sessionId) {
     const settingsSource = resolveWidgetUiSettingsSource(chatPolicy);
     void (async () => {
@@ -231,7 +232,7 @@ export async function POST(req: NextRequest) {
           event_type: "UI_SETTINGS_SOURCE",
           payload: {
             widget_id: widget.id,
-            org_id: widget.org_id,
+            agent_id: widget.agent_id,
             page_key: settingsSource.pageKey,
             source: settingsSource.source,
             has_page_override: settingsSource.hasPageOverride,

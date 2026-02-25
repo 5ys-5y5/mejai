@@ -3,7 +3,7 @@ import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { getServerContext } from "@/lib/serverAuth";
 
 type AggregateBody = {
-  org_id?: string;
+  agent_id?: string;
   limit?: number;
   offset?: number;
   dry_run?: boolean;
@@ -24,12 +24,12 @@ async function resolveAccess(req: NextRequest, body: AggregateBody) {
   const expected = readCronSecret();
   const provided = readProvidedSecret(req);
   if (expected && provided && provided === expected) {
-    const headerOrg = String(req.headers.get("x-org-id") || "").trim();
-    const orgId = headerOrg || String(body.org_id || "").trim();
-    if (!orgId) {
-      return { ok: false as const, status: 400, error: "ORG_ID_REQUIRED" };
+    const headerOrg = String(req.headers.get("x-agent-id") || "").trim();
+    const agentId = headerOrg || String(body.agent_id || "").trim();
+    if (!agentId) {
+      return { ok: false as const, status: 400, error: "AGENT_ID_REQUIRED" };
     }
-    return { ok: true as const, orgId };
+    return { ok: true as const, agentId };
   }
 
   const authHeader = req.headers.get("authorization") || "";
@@ -39,16 +39,11 @@ async function resolveAccess(req: NextRequest, body: AggregateBody) {
     return { ok: false as const, status: 401, error: context.error };
   }
 
-  const { data: access, error } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  if (error || !access?.is_admin) {
+  if (!context.isAdmin) {
     return { ok: false as const, status: 403, error: "ADMIN_ONLY" };
   }
 
-  return { ok: true as const, orgId: context.orgId };
+  return { ok: true as const, agentId: context.agentId };
 }
 
 function parseTime(value: string | null) {
@@ -81,8 +76,8 @@ export async function POST(req: NextRequest) {
 
   const { data: users, error: userError } = await supabase
     .from("A_end_users")
-    .select("id, org_id")
-    .eq("org_id", access.orgId)
+    .select("id, agent_id")
+    .eq("agent_id", access.agentId)
     .is("deleted_at", null)
     .order("last_seen_at", { ascending: false })
     .range(offset, offset + limit - 1);
@@ -91,7 +86,7 @@ export async function POST(req: NextRequest) {
   }
 
   const summary = {
-    org_id: access.orgId,
+    agent_id: access.agentId,
     dry_run: dryRun,
     users_scanned: users?.length || 0,
     users_processed: 0,
@@ -108,7 +103,7 @@ export async function POST(req: NextRequest) {
       const { data: latestSession } = await supabase
         .from("A_end_user_sessions")
         .select("session_id, started_at, ended_at, summary_text")
-        .eq("org_id", access.orgId)
+        .eq("agent_id", access.agentId)
         .eq("end_user_id", endUserId)
         .order("started_at", { ascending: false })
         .limit(1)
@@ -117,7 +112,7 @@ export async function POST(req: NextRequest) {
       const { count: sessionsCount } = await supabase
         .from("A_end_user_sessions")
         .select("id", { count: "exact", head: true })
-        .eq("org_id", access.orgId)
+        .eq("agent_id", access.agentId)
         .eq("end_user_id", endUserId);
 
       const lastSeenTime = parseTime(latestSession?.ended_at || null) ?? parseTime(latestSession?.started_at || null);
@@ -132,19 +127,19 @@ export async function POST(req: NextRequest) {
             last_session_id: latestSession?.session_id || null,
             updated_at: new Date().toISOString(),
           })
-          .eq("org_id", access.orgId)
+          .eq("agent_id", access.agentId)
           .eq("id", endUserId);
 
         if (latestSession?.summary_text) {
           await supabase.from("A_end_user_summaries").upsert(
             {
-              org_id: access.orgId,
+              agent_id: access.agentId,
               end_user_id: endUserId,
               summary_text: latestSession.summary_text,
               source_session_id: latestSession.session_id || null,
               updated_at: new Date().toISOString(),
             },
-            { onConflict: "org_id,end_user_id" }
+            { onConflict: "agent_id,end_user_id" }
           );
           summary.summaries_updated += 1;
         }
@@ -169,11 +164,11 @@ export async function POST(req: NextRequest) {
       event_type: "END_USER_AGGREGATE_SUMMARY",
       payload: summary,
       created_at: new Date().toISOString(),
-      bot_context: { org_id: access.orgId, source: "end_user_aggregate" },
+      bot_context: { agent_id: access.agentId, source: "end_user_aggregate" },
     });
   } catch (error) {
     console.warn("[end-users/aggregate] failed to insert audit summary", {
-      org_id: access.orgId,
+      agent_id: access.agentId,
       error: error instanceof Error ? error.message : String(error),
     });
   }

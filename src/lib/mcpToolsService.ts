@@ -125,10 +125,10 @@ function buildToolKey(provider: McpProviderKey, name: string) {
 
 export async function loadMcpToolsForOrg(
   supabase: SupabaseClient,
-  orgId: string,
+  agentId: string,
   options?: { publicOnly?: boolean }
 ): Promise<McpToolItem[]> {
-  void orgId;
+  void agentId;
   let query = supabase
     .from("C_mcp_tools")
     .select(

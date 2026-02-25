@@ -29,9 +29,9 @@ export async function POST(
 
   const { data: session, error: sessionError } = await contextAuth.supabase
     .from("D_conv_sessions")
-    .select("id, org_id")
+    .select("id, agent_id")
     .eq("id", id)
-    .eq("org_id", contextAuth.orgId)
+    .eq("agent_id", contextAuth.agentId)
     .maybeSingle();
 
   if (sessionError || !session) {

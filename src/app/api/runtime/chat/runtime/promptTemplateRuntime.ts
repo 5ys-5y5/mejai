@@ -77,6 +77,10 @@ type ThreePhaseLabels = {
 type ThreePhaseConfig = {
   enabled?: boolean;
   labels?: ThreePhaseLabels | null;
+  showConfirmed?: boolean;
+  showConfirming?: boolean;
+  showNext?: boolean;
+  hideLabels?: boolean;
 };
 
 type ThreePhaseContext = {
@@ -116,6 +120,15 @@ function resolveThreePhaseEnabled(config?: ThreePhaseConfig | null) {
 
 function resolveThreePhaseLabels(config?: ThreePhaseConfig | null) {
   return config?.labels && typeof config.labels === "object" ? config.labels : getThreePhasePromptLabels();
+}
+
+function resolveThreePhaseVisibility(config?: ThreePhaseConfig | null) {
+  return {
+    showConfirmed: typeof config?.showConfirmed === "boolean" ? config.showConfirmed : true,
+    showConfirming: typeof config?.showConfirming === "boolean" ? config.showConfirming : true,
+    showNext: typeof config?.showNext === "boolean" ? config.showNext : true,
+    hideLabels: Boolean(config?.hideLabels),
+  };
 }
 
 function isThreePhasePrompt(text: string) {
@@ -426,6 +439,7 @@ export function decorateWithThreePhasePrompt(input: ThreePhasePromptContext) {
     confirming,
     next,
     labels,
+    threePhaseConfig: input.threePhaseConfig,
   });
 }
 
@@ -461,14 +475,22 @@ export function buildThreePhasePrompt(input: {
   threePhaseConfig?: ThreePhaseConfig | null;
 }) {
   const labels = input.labels && typeof input.labels === "object" ? input.labels : resolveThreePhaseLabels(input.threePhaseConfig);
+  const { showConfirmed, showConfirming, showNext, hideLabels } = resolveThreePhaseVisibility(input.threePhaseConfig);
   const confirmed = normalizePhaseValue(input.confirmed);
   const confirming = String(input.confirming || "").trim();
   const next = normalizePhaseValue(input.next);
-  return [
-    `${labels.confirmed}: ${confirmed}`,
-    `${labels.confirming}: ${confirming}`,
-    `${labels.next}: ${next}`,
-  ].join("\n");
+  const lines: string[] = [];
+  if (showConfirmed) {
+    lines.push(hideLabels ? confirmed : `${labels.confirmed}: ${confirmed}`);
+  }
+  if (showConfirming) {
+    lines.push(hideLabels ? confirming : `${labels.confirming}: ${confirming}`);
+  }
+  if (showNext) {
+    lines.push(hideLabels ? next : `${labels.next}: ${next}`);
+  }
+  if (lines.length === 0) return confirming;
+  return lines.join("\n");
 }
 
 export function buildYesNoConfirmationPrompt(
@@ -499,7 +521,7 @@ export function buildYesNoConfirmationPrompt(
       ? (input.botContext as Record<string, any>).three_phase_next
       : null);
   const labels = phase?.labels || resolveThreePhaseLabels(input?.threePhaseConfig);
-  return buildThreePhasePrompt({ confirmed, confirming, next, labels });
+  return buildThreePhasePrompt({ confirmed, confirming, next, labels, threePhaseConfig: input?.threePhaseConfig });
 }
 
 export function resolveRuntimeTemplateOverridesFromPolicy(templates: Record<string, any> | null | undefined) {

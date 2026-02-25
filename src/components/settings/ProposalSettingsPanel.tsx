@@ -11,7 +11,6 @@ type ProposalAction = "apply" | "reject" | "hold" | "repropose";
 
 type ProposalItem = {
   proposal_id: string;
-  org_id: string | null;
   session_id: string | null;
   turn_id: string | null;
   created_at: string | null;
@@ -713,7 +712,6 @@ export function ProposalSettingsPanel({ authToken }: Props) {
       "[Runtime Proposal]",
       `proposal_id: ${proposal.proposal_id}`,
       `status: ${proposal.status} (${proposal.status_label})`,
-      `org_id: ${proposal.org_id || "-"}`,
       `session_id: ${proposal.session_id || "-"}`,
       `turn_id: ${proposal.turn_id || "-"}`,
       `principle_key: ${proposal.principle_key || "-"}`,
@@ -1180,27 +1178,7 @@ export function ProposalSettingsPanel({ authToken }: Props) {
               </button>
             </div>
             <div className="mt-1 text-xs text-slate-600">
-              org_id:{" "}
-              {proposal.org_id ? (
-                <button
-                  type="button"
-                  onClick={() => void copyText(`org_id:${proposal.proposal_id}`, proposal.org_id)}
-                  className={`${COPY_BUTTON_CLASS} group font-mono`}
-                  title="클릭하여 복사"
-                  aria-label="org ID 복사"
-                >
-                  <span>{proposal.org_id}</span>
-                  <span className="text-slate-400 group-hover:text-slate-700">
-                    <CopyIcon />
-                  </span>
-                  {copiedKey === `org_id:${proposal.proposal_id}` ? (
-                    <span className="text-[10px] text-emerald-700">복사됨</span>
-                  ) : null}
-                </button>
-              ) : (
-                <span className="font-mono">-</span>
-              )}{" "}
-              / session_id:{" "}
+              session_id:{" "}
               {proposal.session_id ? (
                 <button
                   type="button"

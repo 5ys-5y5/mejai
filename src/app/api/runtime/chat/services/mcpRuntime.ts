@@ -35,7 +35,8 @@ export async function callMcpTool(
   ) => {
     try {
       await context.supabase.from("F_audit_mcp_tools").insert({
-        org_id: context.orgId,
+        agent_id: context.agentId,
+        agent_id: context.agentId,
         session_id: sessionId,
         turn_id: turnId,
         tool_id: toolId || null,
@@ -87,7 +88,7 @@ export async function callMcpTool(
     .eq("provider_key", providerKey)
     .eq("name", toolName)
     .eq("is_active", true);
-  if (!context.orgId) {
+  if (!context.agentId) {
     toolQuery = toolQuery.eq("is_public", true);
   }
   const { data: toolRow } = await toolQuery.maybeSingle();
@@ -139,7 +140,8 @@ export async function callMcpTool(
       resolvedParams,
       {
         supabase: context.supabase,
-        orgId: context.orgId,
+        agentId: context.agentId,
+        agentId: context.agentId,
         userId: context.user.id,
       },
       { toolName: String(toolRecord.name || "") }
@@ -150,7 +152,8 @@ export async function callMcpTool(
     const message = error instanceof Error ? error.message : String(error);
     try {
       await context.supabase.from("F_audit_mcp_tools").insert({
-        org_id: context.orgId,
+        agent_id: context.agentId,
+        agent_id: context.agentId,
         session_id: sessionId,
         turn_id: turnId,
         tool_id: toolRow.id as string,
@@ -182,7 +185,8 @@ export async function callMcpTool(
       : masked.masked;
   try {
     await context.supabase.from("F_audit_mcp_tools").insert({
-      org_id: context.orgId,
+      agent_id: context.agentId,
+      agent_id: context.agentId,
       session_id: sessionId,
       turn_id: turnId,
       tool_id: toolRow.id as string,
@@ -320,7 +324,7 @@ export async function callAddressSearchWithAudit(
         const current = (await callAdapter(
           "search_address",
           { keyword: kw },
-          { supabase: context.supabase, orgId: context.orgId, userId: context.user.id }
+          { supabase: context.supabase, agentId: context.agentId, userId: context.user.id }
         )) as { status?: string; data?: Record<string, any>; error?: unknown };
         const currentData = (current?.data || {}) as Record<string, any>;
         const currentError = current?.error;
@@ -379,7 +383,8 @@ export async function callAddressSearchWithAudit(
   }
   try {
     await context.supabase.from("F_audit_mcp_tools").insert({
-      org_id: context.orgId,
+      agent_id: context.agentId,
+      agent_id: context.agentId,
       session_id: sessionId,
       turn_id: turnId,
       tool_id: null,

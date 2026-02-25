@@ -14,6 +14,7 @@ import {
 } from "@/components/design-system";
 import {
   applyConversationFeatureVisibility,
+  getDefaultConversationPageFeatures,
   isEnabledByGate,
   resolveConversationPageFeatures,
   resolveConversationSetupUi,
@@ -273,6 +274,7 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
     llm: "chatgpt",
     inlineKb: "",
   });
+  const [policyError, setPolicyError] = useState<string | null>(null);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const root = document.documentElement;
@@ -358,11 +360,21 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
     () => (config?.chat_policy ? (config.chat_policy as ConversationFeaturesProviderShape) : null),
     [config]
   );
-  const baseFeatures = useMemo(
-    () => resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerPolicy),
-    [providerPolicy]
-  );
+  const { baseFeatures, basePolicyError } = useMemo(() => {
+    try {
+      return { baseFeatures: resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerPolicy), basePolicyError: null as string | null };
+    } catch (error) {
+      return {
+        baseFeatures: getDefaultConversationPageFeatures(WIDGET_PAGE_KEY),
+        basePolicyError: error instanceof Error ? error.message : "CHAT_POLICY_ERROR",
+      };
+    }
+  }, [providerPolicy]);
   const accessRole = debugBypass ? "admin" : accessRoleState.accessRole;
+  useEffect(() => {
+    setPolicyError(basePolicyError);
+  }, [basePolicyError]);
+
   const pageFeatures = useMemo(
     () => applyConversationFeatureVisibility(baseFeatures, accessRole),
     [baseFeatures, accessRole]
@@ -544,10 +556,25 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
         }
         setStatus("대화 불러오는 중");
         const history = await fetchHistory(nextToken);
-        const resolvedFeatures = resolveConversationPageFeatures(
-          WIDGET_PAGE_KEY,
-          data.widget_config?.chat_policy ? (data.widget_config.chat_policy as ConversationFeaturesProviderShape) : null
-        );
+        let resolvedFeatures;
+        try {
+          resolvedFeatures = resolveConversationPageFeatures(
+            WIDGET_PAGE_KEY,
+            data.widget_config?.chat_policy ? (data.widget_config.chat_policy as ConversationFeaturesProviderShape) : null
+          );
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "CHAT_POLICY_ERROR";
+          setPolicyError(reason);
+          const policyMessage = "답변 출력 정책을 불러오지 못해 답변을 제공할 수 없습니다.";
+          setStatus(policyMessage);
+          appendBotNotice(policyMessage, {
+            widget_error: {
+              stage: "init",
+              error: reason,
+            },
+          });
+          return;
+        }
         const greeting =
           (data.widget_config?.theme && (data.widget_config.theme as Record<string, any>).greeting) ||
           "안녕하세요. 무엇을 도와드릴까요?";
@@ -1181,6 +1208,11 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
         paddingTop: "env(safe-area-inset-top)",
       }}
     >
+      {policyError ? (
+        <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+          답변 출력 정책을 불러오지 못해 답변을 제공할 수 없습니다: {policyError}
+        </div>
+      ) : null}
       <WidgetConversationLayout
         brandName={brandName}
         status={statusLabel}

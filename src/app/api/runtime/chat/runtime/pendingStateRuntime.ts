@@ -30,6 +30,10 @@ import type { AddressSearchResult } from "../shared/runtimeTypes";
 type ThreePhaseConfig = {
   enabled?: boolean;
   labels?: { confirmed: string; confirming: string; next: string } | null;
+  showConfirmed?: boolean;
+  showConfirming?: boolean;
+  showNext?: boolean;
+  hideLabels?: boolean;
 };
 
 type PendingStateParams = {
@@ -893,6 +897,7 @@ export async function handleAddressChangeRefundPending(params: PendingStateParam
                       confirming: promptText,
                       next: nextHint,
                       labels: params.threePhaseConfig?.labels || getThreePhasePromptLabels(),
+                      threePhaseConfig: params.threePhaseConfig,
                     })
                   : promptText
               );

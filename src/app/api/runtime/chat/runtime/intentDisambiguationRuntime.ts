@@ -18,6 +18,7 @@ type DisambiguationParams = {
   intentSupportScope: (intent: string) => string;
   parseIndexedChoices: (text: string, max: number) => number[];
   isYesText: (text: string) => boolean;
+  isExpectedAnswer?: (expectedInput: string | null, message: string) => boolean;
   makeReply: (text: string) => string;
   insertTurn: (payload: Record<string, any>) => Promise<unknown>;
   insertEvent: (
@@ -37,6 +38,11 @@ type DisambiguationResult = {
   disambiguationSelection: number[];
   intentDisambiguationSourceText: string;
   effectiveMessageForIntent: string;
+  intentSwitchDecision: {
+    reason: string;
+    candidates: string[];
+    targetIntent: string;
+  } | null;
   response: unknown | null;
 };
 
@@ -160,6 +166,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
     intentSupportScope,
     parseIndexedChoices,
     isYesText,
+    isExpectedAnswer,
     makeReply,
     insertTurn,
     insertEvent,
@@ -169,6 +176,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
   let forcedIntentQueue: string[] = [];
   let pendingIntentQueue: string[] = [];
   let disambiguationSelection: number[] = [];
+  let intentSwitchDecision: DisambiguationResult["intentSwitchDecision"] = null;
   const intentDisambiguationSourceText =
     typeof prevBotContext.intent_disambiguation_source_text === "string"
       ? String(prevBotContext.intent_disambiguation_source_text)
@@ -218,6 +226,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
         disambiguationSelection,
         intentDisambiguationSourceText,
         effectiveMessageForIntent,
+        intentSwitchDecision,
         response: respond({
           session_id: sessionId,
           step: "confirm",
@@ -304,6 +313,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
         disambiguationSelection,
         intentDisambiguationSourceText,
         effectiveMessageForIntent,
+        intentSwitchDecision,
         response: respond({
           session_id: sessionId,
           step: "confirm",
@@ -341,6 +351,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
     disambiguationSelection,
     intentDisambiguationSourceText,
     effectiveMessageForIntent,
+    intentSwitchDecision,
     response: null,
   };
 }

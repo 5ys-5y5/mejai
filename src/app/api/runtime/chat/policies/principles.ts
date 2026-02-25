@@ -21,6 +21,10 @@ export function shouldForceOtpBeforeSensitiveIntentFlow() {
   return Boolean(CHAT_PRINCIPLES.safety.forceOtpBeforeSensitiveIntentFlow);
 }
 
+export function shouldForceOtpOnPhoneInput() {
+  return Boolean(CHAT_PRINCIPLES.safety.forceOtpOnPhoneInput);
+}
+
 export function shouldEnforceIntentContractRuntime() {
   return Boolean(CHAT_PRINCIPLES.architecture.enforceIntentContractRuntime);
 }

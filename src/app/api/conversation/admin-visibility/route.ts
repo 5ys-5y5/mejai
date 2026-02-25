@@ -15,19 +15,19 @@ function normalizePhone(value: unknown) {
 
 async function resolveAdminVisibility(input: {
   supabaseAdmin: ReturnType<typeof createAdminSupabaseClient>;
-  orgId: string;
+  agentId: string;
   userId?: string | null;
   sessionId: string;
 }): Promise<VisibilityResult> {
-  const { supabaseAdmin, orgId, userId, sessionId } = input;
-  if (!orgId || !sessionId) {
+  const { supabaseAdmin, agentId, userId, sessionId } = input;
+  if (!agentId || !sessionId) {
     return { is_admin_visible: false, reason: "MISSING_CONTEXT" };
   }
 
   const { data: sessionRow } = await supabaseAdmin
     .from("A_end_user_sessions")
     .select("end_user_id")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("session_id", sessionId)
     .maybeSingle();
   const endUserId = String((sessionRow as Record<string, any> | null)?.end_user_id || "").trim();
@@ -38,7 +38,7 @@ async function resolveAdminVisibility(input: {
   const { data: endUserRow } = await supabaseAdmin
     .from("A_end_users")
     .select("phone")
-    .eq("org_id", orgId)
+    .eq("agent_id", agentId)
     .eq("id", endUserId)
     .maybeSingle();
   const endUserPhone = normalizePhone((endUserRow as Record<string, any> | null)?.phone || null);
@@ -46,17 +46,12 @@ async function resolveAdminVisibility(input: {
 
   if (resolvedUserId) {
     const { data: accessRow } = await supabaseAdmin
-      .from("A_iam_user_access_maps")
-      .select("is_admin, end_user_id, verified_phone")
-      .eq("org_id", orgId)
+      .from("A_iam_user_profiles")
+      .select("is_admin, verified_phone")
       .eq("user_id", resolvedUserId)
       .maybeSingle();
     if (!accessRow?.is_admin) {
       return { is_admin_visible: false, reason: "NOT_ADMIN" };
-    }
-    const linkedEndUserId = String((accessRow as Record<string, any> | null)?.end_user_id || "").trim();
-    if (linkedEndUserId && linkedEndUserId === endUserId) {
-      return { is_admin_visible: true };
     }
     const accessPhone = normalizePhone((accessRow as Record<string, any> | null)?.verified_phone);
     if (!endUserPhone) {
@@ -71,16 +66,7 @@ async function resolveAdminVisibility(input: {
     return { is_admin_visible: true };
   }
 
-  const { data: accessRow } = await supabaseAdmin
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("org_id", orgId)
-    .eq("end_user_id", endUserId)
-    .maybeSingle();
-  if (!accessRow?.is_admin) {
-    return { is_admin_visible: false, reason: "NOT_ADMIN" };
-  }
-  return { is_admin_visible: true };
+  return { is_admin_visible: false, reason: "ADMIN_USER_REQUIRED" };
 }
 
 export async function GET(req: NextRequest) {
@@ -102,11 +88,11 @@ export async function GET(req: NextRequest) {
   const widgetPayload = verifyWidgetToken(token);
   if (widgetPayload) {
     const userId = String(widgetPayload.admin_user_id || "").trim();
-    const orgId = String(widgetPayload.org_id || "").trim();
+    const agentId = String(widgetPayload.agent_id || "").trim();
     const resolvedSessionId = sessionId || String(widgetPayload.session_id || "").trim();
     const result = await resolveAdminVisibility({
       supabaseAdmin,
-      orgId,
+      agentId,
       userId,
       sessionId: resolvedSessionId,
     });
@@ -118,11 +104,11 @@ export async function GET(req: NextRequest) {
   if ("error" in context) {
     return NextResponse.json({ is_admin_visible: false, reason: context.error }, { status: 401 });
   }
-  const orgId = String(context.orgId || "").trim();
+  const agentId = String(context.agentId || "").trim();
   const userId = String(context.user.id || "").trim();
   const result = await resolveAdminVisibility({
     supabaseAdmin,
-    orgId,
+    agentId,
     userId,
     sessionId,
   });
