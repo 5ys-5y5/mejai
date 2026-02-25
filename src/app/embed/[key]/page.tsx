@@ -896,7 +896,7 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
   );
 
   const copyByKind = useCallback(
-    async () => {
+    async (kind: "conversation" | "issue") => {
       if (!sessionId) {
         toast.error("\ub300\ud654 \uae30\ub85d\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.");
         return false;
@@ -912,7 +912,7 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
             sessionId,
             widgetToken,
             page: "/app/laboratory",
-            kind: "conversation",
+            kind,
             limit: 500,
           });
           if (typeof serverCopy?.transcript_text === "string") {
@@ -933,10 +933,11 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
       }
       return executeTranscriptCopy({
         page: WIDGET_PAGE_KEY,
-        kind: "conversation",
+        kind,
         messages: copyMessages,
         messageLogs: mergedLogs,
-        enabledOverride: pageFeatures.adminPanel.copyConversation,
+        enabledOverride:
+          kind === "issue" ? pageFeatures.adminPanel.copyIssue : pageFeatures.adminPanel.copyConversation,
         conversationDebugOptionsOverride: effectiveDebugOptions,
         prebuiltTextOverride,
       });
@@ -1079,8 +1080,9 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
       enabled: pageFeatures.adminPanel.enabled,
       selectionToggle: pageFeatures.adminPanel.selectionToggle,
       logsToggle: pageFeatures.adminPanel.logsToggle,
-      messageMeta: pageFeatures.adminPanel.messageMeta,
+      messageSelection: pageFeatures.adminPanel.messageSelection,
       copyConversation: pageFeatures.adminPanel.copyConversation,
+      copyIssue: pageFeatures.adminPanel.copyIssue,
     },
     interactionFeatures: {
       quickReplies: pageFeatures.interaction.quickReplies,
@@ -1103,9 +1105,8 @@ const [showMessageMeta, setShowMessageMeta] = useState(false);
         return !prev;
       }),
     onToggleLogs: () => setShowAdminLogs((prev) => !prev),
-    onToggleMeta: () => setShowMessageMeta((prev) => !prev),
-    metaEnabled: showMessageMeta,
     onCopyConversation: () => copyByKind("conversation"),
+    onCopyIssue: () => copyByKind("issue"),
     onToggleMessageSelection: handleToggleMessageSelection,
     onSubmitMessage: handleSendText,
     onExpand: () => undefined,

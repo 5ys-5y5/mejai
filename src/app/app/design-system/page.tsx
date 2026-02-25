@@ -1449,6 +1449,7 @@ export function DesignSystemContent() {
       updateDemoModel((prev) => ({ ...prev, conversationMode: mode }));
     },
     onCopyConversation: () => undefined,
+    onCopyIssue: (_id) => undefined,
     onToggleMessageSelection: (_id, messageId) => {
       updateDemoModel((prev) => ({
         ...prev,
@@ -1646,9 +1647,8 @@ export function DesignSystemContent() {
               onToggleSelection={() => setConversationSelectionEnabled((prev) => !prev)}
               showLogs={conversationShowLogs}
               onToggleLogs={() => setConversationShowLogs((prev) => !prev)}
-              metaEnabled={conversationShowMeta}
-              onToggleMeta={() => setConversationShowMeta((prev) => !prev)}
               onCopyConversation={() => undefined}
+              onCopyIssue={() => undefined}
             />
           </div>
         </div>

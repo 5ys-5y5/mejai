@@ -103,12 +103,16 @@ export type ConversationPageFeatures = {
     enabled: boolean;
     /** "?좏깮 ON/OFF" ?좉? 踰꾪듉 ?몄텧 諛??숈옉 */
     selectionToggle: boolean;
+    /** 硫붿떆吏 ?좏깮 紐⑤뱶 ?쒖꽦??*/
+    messageSelection: boolean;
     /** "濡쒓렇 ON/OFF" ?좉? 踰꾪듉 ?몄텧 諛??숈옉 */
     logsToggle: boolean;
     /** 硫붿떆吏 硫뷀?(role/id/session) ?몄텧 ?щ? */
     messageMeta: boolean;
     /** "???蹂듭궗" 踰꾪듉 ?몄텧/?숈옉 */
     copyConversation: boolean;
+    /** "?쇳듃?윾뒪遺뚮ℓ??蹂듭궗" 踰꾪듉 ?몄텧/?숈옉 */
+    copyIssue: boolean;
   };
   interaction: {
     /** quick reply ?좏깮 UI ?쒖꽦??*/
@@ -233,22 +237,22 @@ const DEFAULT_SETUP_UI: ConversationSetupUi = {
     "mcpActionSelector",
   ],
   labels: {
-    inlineUserKbInput: "Inline KB input",
-    llmSelector: "LLM selector",
-    kbSelector: "KB selector",
-    adminKbSelector: "Admin KB selector",
-    routeSelector: "Runtime selector",
+    inlineUserKbInput: "user",
+    llmSelector: "user",
+    kbSelector: "user",
+    adminKbSelector: "user",
+    routeSelector: "user",
     mcpProviderSelector: "MCP provider selector",
     mcpActionSelector: "MCP action selector",
   },
   existingOrder: ["agentSelector", "versionSelector", "conversationMode", "sessionSelector", "sessionIdSearch"],
   existingLabels: {
-    modeExisting: "Existing mode",
-    modeNew: "New mode",
-    agentSelector: "Agent selector",
+    modeExisting: "user",
+    modeNew: "user",
+    agentSelector: "user",
     versionSelector: "Version selector",
     sessionSelector: "Session selector",
-    sessionIdSearch: "Session ID search",
+    sessionIdSearch: "user",
     conversationMode: "Conversation mode",
   },
 };
@@ -432,9 +436,15 @@ export function mergeConversationPageFeatures(
     adminPanel: {
       enabled: override.adminPanel?.enabled ?? base.adminPanel.enabled,
       selectionToggle: override.adminPanel?.selectionToggle ?? base.adminPanel.selectionToggle,
+      messageSelection:
+        override.adminPanel?.messageSelection ??
+        override.adminPanel?.messageMeta ??
+        base.adminPanel.messageSelection ??
+        base.adminPanel.messageMeta,
       logsToggle: override.adminPanel?.logsToggle ?? base.adminPanel.logsToggle,
       messageMeta: override.adminPanel?.messageMeta ?? base.adminPanel.messageMeta,
       copyConversation: override.adminPanel?.copyConversation ?? base.adminPanel.copyConversation,
+      copyIssue: override.adminPanel?.copyIssue ?? base.adminPanel.copyIssue ?? base.adminPanel.copyConversation,
     },
     interaction: {
       quickReplies: override.interaction?.quickReplies ?? base.interaction.quickReplies,
@@ -505,10 +515,16 @@ export function mergeConversationPageFeatures(
       adminPanel: {
         enabled: override.visibility?.adminPanel?.enabled ?? base.visibility.adminPanel.enabled,
         selectionToggle: override.visibility?.adminPanel?.selectionToggle ?? base.visibility.adminPanel.selectionToggle,
+        messageSelection:
+          override.visibility?.adminPanel?.messageSelection ??
+          override.visibility?.adminPanel?.messageMeta ??
+          base.visibility.adminPanel.messageSelection ??
+          base.visibility.adminPanel.messageMeta,
         logsToggle: override.visibility?.adminPanel?.logsToggle ?? base.visibility.adminPanel.logsToggle,
         messageMeta: override.visibility?.adminPanel?.messageMeta ?? base.visibility.adminPanel.messageMeta,
         copyConversation:
           override.visibility?.adminPanel?.copyConversation ?? base.visibility.adminPanel.copyConversation,
+        copyIssue: override.visibility?.adminPanel?.copyIssue ?? base.visibility.adminPanel.copyIssue ?? base.visibility.adminPanel.copyConversation,
       },
       interaction: {
         quickReplies: override.visibility?.interaction?.quickReplies ?? base.visibility.interaction.quickReplies,
@@ -657,6 +673,11 @@ export function applyConversationFeatureVisibility(
         features.visibility.adminPanel.selectionToggle,
         accessRole
       ),
+      messageSelection: withVisibilityFlag(
+        features.adminPanel.messageSelection,
+        features.visibility.adminPanel.messageSelection,
+        accessRole
+      ),
       logsToggle: withVisibilityFlag(
         features.adminPanel.logsToggle,
         features.visibility.adminPanel.logsToggle,
@@ -666,6 +687,11 @@ export function applyConversationFeatureVisibility(
       copyConversation: withVisibilityFlag(
         features.adminPanel.copyConversation,
         features.visibility.adminPanel.copyConversation,
+        accessRole
+      ),
+      copyIssue: withVisibilityFlag(
+        features.adminPanel.copyIssue,
+        features.visibility.adminPanel.copyIssue,
         accessRole
       ),
     },
@@ -790,9 +816,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     adminPanel: {
       enabled: true,
       selectionToggle: true,
+      messageSelection: true,
       logsToggle: true,
       messageMeta: true,
       copyConversation: true,
+      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -848,9 +876,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       adminPanel: {
         enabled: "user",
         selectionToggle: "user",
+        messageSelection: "user",
         logsToggle: "user",
         messageMeta: "user",
         copyConversation: "user",
+        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",
@@ -868,15 +898,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       setup: {
         modelSelector: "user",
-        agentSelector: "Agent selector",
-        llmSelector: "LLM selector",
-        kbSelector: "KB selector",
-        adminKbSelector: "Admin KB selector",
-        modeExisting: "Existing mode",
-        sessionIdSearch: "Session ID search",
-        modeNew: "New mode",
-        routeSelector: "Runtime selector",
-        inlineUserKbInput: "Inline KB input",
+        agentSelector: "user",
+        llmSelector: "user",
+        kbSelector: "user",
+        adminKbSelector: "user",
+        modeExisting: "user",
+        sessionIdSearch: "user",
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
       },
     },
   },
@@ -902,9 +932,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     adminPanel: {
       enabled: true,
       selectionToggle: true,
+      messageSelection: true,
       logsToggle: true,
       messageMeta: true,
       copyConversation: true,
+      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -960,9 +992,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       adminPanel: {
         enabled: "admin",
         selectionToggle: "admin",
+        messageSelection: "admin",
         logsToggle: "admin",
         messageMeta: "admin",
         copyConversation: "admin",
+        copyIssue: "admin",
       },
       interaction: {
         quickReplies: "user",
@@ -980,15 +1014,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       setup: {
         modelSelector: "user",
-        agentSelector: "Agent selector",
-        llmSelector: "LLM selector",
-        kbSelector: "KB selector",
-        adminKbSelector: "Admin KB selector",
-        modeExisting: "Existing mode",
-        sessionIdSearch: "Session ID search",
-        modeNew: "New mode",
-        routeSelector: "Runtime selector",
-        inlineUserKbInput: "Inline KB input",
+        agentSelector: "user",
+        llmSelector: "user",
+        kbSelector: "user",
+        adminKbSelector: "user",
+        modeExisting: "user",
+        sessionIdSearch: "user",
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
       },
     },
   },
@@ -1015,9 +1049,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     adminPanel: {
       enabled: true,
       selectionToggle: true,
+      messageSelection: true,
       logsToggle: true,
       messageMeta: true,
       copyConversation: true,
+      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -1073,9 +1109,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       adminPanel: {
         enabled: "user",
         selectionToggle: "user",
+        messageSelection: "user",
         logsToggle: "user",
         messageMeta: "user",
         copyConversation: "user",
+        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",
@@ -1093,15 +1131,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       setup: {
         modelSelector: "user",
-        agentSelector: "Agent selector",
-        llmSelector: "LLM selector",
-        kbSelector: "KB selector",
-        adminKbSelector: "Admin KB selector",
-        modeExisting: "Existing mode",
-        sessionIdSearch: "Session ID search",
-        modeNew: "New mode",
-        routeSelector: "Runtime selector",
-        inlineUserKbInput: "Inline KB input",
+        agentSelector: "user",
+        llmSelector: "user",
+        kbSelector: "user",
+        adminKbSelector: "user",
+        modeExisting: "user",
+        sessionIdSearch: "user",
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
       },
     },
   },
@@ -1128,9 +1166,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     adminPanel: {
       enabled: true,
       selectionToggle: true,
+      messageSelection: true,
       logsToggle: true,
       messageMeta: true,
       copyConversation: true,
+      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -1186,9 +1226,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       adminPanel: {
         enabled: "user",
         selectionToggle: "user",
+        messageSelection: "user",
         logsToggle: "user",
         messageMeta: "user",
         copyConversation: "user",
+        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",
@@ -1206,15 +1248,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       setup: {
         modelSelector: "user",
-        agentSelector: "Agent selector",
-        llmSelector: "LLM selector",
-        kbSelector: "KB selector",
-        adminKbSelector: "Admin KB selector",
-        modeExisting: "Existing mode",
-        sessionIdSearch: "Session ID search",
-        modeNew: "New mode",
-        routeSelector: "Runtime selector",
-        inlineUserKbInput: "Inline KB input",
+        agentSelector: "user",
+        llmSelector: "user",
+        kbSelector: "user",
+        adminKbSelector: "user",
+        modeExisting: "user",
+        sessionIdSearch: "user",
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
       },
     },
   },
@@ -1241,9 +1283,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     adminPanel: {
       enabled: true,
       selectionToggle: true,
+      messageSelection: true,
       logsToggle: true,
       messageMeta: true,
       copyConversation: true,
+      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -1299,9 +1343,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       adminPanel: {
         enabled: "user",
         selectionToggle: "user",
+        messageSelection: "user",
         logsToggle: "user",
         messageMeta: "user",
         copyConversation: "user",
+        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",
@@ -1319,15 +1365,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       setup: {
         modelSelector: "user",
-        agentSelector: "Agent selector",
-        llmSelector: "LLM selector",
-        kbSelector: "KB selector",
-        adminKbSelector: "Admin KB selector",
-        modeExisting: "Existing mode",
-        sessionIdSearch: "Session ID search",
-        modeNew: "New mode",
-        routeSelector: "Runtime selector",
-        inlineUserKbInput: "Inline KB input",
+        agentSelector: "user",
+        llmSelector: "user",
+        kbSelector: "user",
+        adminKbSelector: "user",
+        modeExisting: "user",
+        sessionIdSearch: "user",
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
       },
     },
   },

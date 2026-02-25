@@ -246,6 +246,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "SESSION_VISITOR_MISMATCH" }, { status: 403 });
     }
     sessionId = sessionOverride;
+    if (!orgId) {
+      return NextResponse.json({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 });
+    }
     providerValue = await loadOrgChatPolicy(orgId);
     filterWidgetProxyEvents = true;
   } else {
@@ -269,6 +272,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 });
     }
     sessionId = sessionRow.id;
+    if (!orgId) {
+      return NextResponse.json({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 });
+    }
     providerValue = await loadOrgChatPolicy(orgId);
   }
 

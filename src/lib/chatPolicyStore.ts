@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
+import type { ConversationFeaturesProviderShape, ConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
 
 type ChatSettingsRow = {
   id: string;
@@ -26,7 +26,7 @@ function stripUserKbIds(
       nextPages[pageKey as keyof typeof nextPages] = override;
       return;
     }
-    const setup = (override as { setup?: Record<string, unknown> }).setup;
+    const setup = (override as { setup?: ConversationPageFeatures["setup"] }).setup;
     if (!setup || !Object.prototype.hasOwnProperty.call(setup, "kbIds")) {
       nextPages[pageKey as keyof typeof nextPages] = override;
       return;
@@ -34,7 +34,7 @@ function stripUserKbIds(
     const { kbIds: _kbIds, ...restSetup } = setup;
     const nextOverride = {
       ...override,
-      setup: restSetup,
+      setup: restSetup as ConversationPageFeatures["setup"],
     };
     nextPages[pageKey as keyof typeof nextPages] = nextOverride;
     changed = true;

@@ -172,8 +172,8 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const expectedWidgetSecret = String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
   const isWidgetRequest = Boolean(widgetSecret && expectedWidgetSecret && widgetSecret === expectedWidgetSecret);
   let isWidgetGuestUser = false;
-  let context: ServerContextSuccess | null = null;
-  let authContext: ServerContextSuccess | null = null;
+  let context: RuntimeContextAny | null = null;
+  let authContext: RuntimeContextAny | null = null;
   const authStartedAt = Date.now();
 
   const parseBodyStartedAt = Date.now();
@@ -671,7 +671,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           .eq("is_active", true)
           .in("scope_key", legacyScopes)
       );
-      (expanded || []).forEach((t) => {
+      (expanded || []).forEach((t: Record<string, any>) => {
         resolvedTools.set(String(t.id), {
           id: String(t.id),
           name: String(t.name || ""),

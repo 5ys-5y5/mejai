@@ -28,10 +28,6 @@ function toE164Phone(value: string) {
   return `+${digits}`;
 }
 
-function readSignupOtpOrgId() {
-  return String(process.env.SIGNUP_OTP_ORG_ID || "").trim();
-}
-
 function logStep(step: string, detail?: Record<string, unknown>) {
   const payload = detail ? JSON.stringify(detail) : "";
   console.info(`[signup_proxy] ${step}${payload ? ` ${payload}` : ""}`);
@@ -124,11 +120,6 @@ async function checkAuthHealth(env: { url: string; anonKey: string }) {
 }
 
 async function verifySignupPhone(params: { phone: string; verificationToken: string }) {
-  const orgId = readSignupOtpOrgId();
-  if (!orgId || !isUuidLike(orgId)) {
-    return { ok: false, error: "SIGNUP_OTP_ORG_ID_MISSING" };
-  }
-
   let supabaseAdmin;
   try {
     supabaseAdmin = createAdminSupabaseClient();
@@ -137,9 +128,8 @@ async function verifySignupPhone(params: { phone: string; verificationToken: str
   }
 
   const { data, error } = await supabaseAdmin
-    .from("H_auth_otp_verifications")
+    .from("H_auth_otp_verifications_guest")
     .select("destination, verified_at")
-    .eq("org_id", orgId)
     .eq("verification_token", params.verificationToken)
     .maybeSingle();
 

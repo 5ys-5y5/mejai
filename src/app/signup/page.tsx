@@ -21,10 +21,16 @@ function resolveSignupErrorMessage(err: unknown) {
       console.warn("[signup_debug] rate limit", raw);
       return "요청이 많아 처리되지 않았습니다. 잠시 후 다시 시도해주세요.";
     }
+    if (upper.includes("OTP_SEND_FAILED")) {
+      return "인증번호 전송에 실패했습니다. 잠시 후 다시 시도해주세요.";
+    }
+    if (upper.includes("OTP_VERIFY_FAILED")) {
+      return "인증번호 확인에 실패했습니다. 다시 시도해주세요.";
+    }
     if (upper.includes("PHONE_VERIFICATION_REQUIRED") || upper.includes("PHONE_VERIFICATION_FAILED")) {
       return "휴대폰 인증을 완료해주세요.";
     }
-    return raw;
+    return "요청을 처리할 수 없습니다. 잠시 후 다시 시도해주세요.";
   }
   if (typeof err === "object") {
     const record = err as Record<string, any>;
@@ -40,7 +46,18 @@ function resolveSignupErrorMessage(err: unknown) {
     if (status === 504 || /gateway timeout/i.test(message)) {
       return "회원가입 요청이 지연되었습니다. 잠시 후 다시 시도해주세요.";
     }
-    if (message) return message;
+    if (message) {
+      const upper = message.toUpperCase();
+      if (upper.includes("OTP_SEND_FAILED")) {
+        return "인증번호 전송에 실패했습니다. 잠시 후 다시 시도해주세요.";
+      }
+      if (upper.includes("OTP_VERIFY_FAILED")) {
+        return "인증번호 확인에 실패했습니다. 다시 시도해주세요.";
+      }
+      if (upper.includes("PHONE_VERIFICATION_REQUIRED") || upper.includes("PHONE_VERIFICATION_FAILED")) {
+        return "휴대폰 인증을 완료해주세요.";
+      }
+    }
   }
   return "회원가입에 실패했습니다. 잠시 후 다시 시도해주세요.";
 }

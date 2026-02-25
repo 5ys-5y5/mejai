@@ -12,12 +12,13 @@ import {
 } from "@/lib/conversation/pageFeaturePolicy";
 
 export type CopyPageKey = ConversationPageKey;
-export type CopyKind = "conversation";
+export type CopyKind = "conversation" | "issue";
 export type CopyDestination = "clipboard";
 
 type CopyRule = {
   enabled: boolean;
   disabledReason?: string;
+  formatter?: string;
   useSelectedMessages: boolean;
   debugOptions?: DebugTranscriptOptions;
 };
@@ -26,6 +27,7 @@ export type PageCopyPolicy = {
   page: CopyPageKey;
   destinations: CopyDestination[];
   conversation: CopyRule;
+  issue: CopyRule;
   note: string;
 };
 
@@ -261,6 +263,12 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
       useSelectedMessages: true,
       debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
     },
+    issue: {
+      enabled: PAGE_CONVERSATION_FEATURES["/"].adminPanel.copyIssue,
+      formatter: "debug_transcript_v1",
+      useSelectedMessages: true,
+      debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
+    },
     note: "\uB79C\uB529/\uC2E4\uD5D8\uC2E4 \uB300\uD654 \uBCF5\uC0AC \uC815\uCC45",
   },
   "/app/laboratory": {
@@ -272,6 +280,12 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
       useSelectedMessages: true,
       debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
     },
+    issue: {
+      enabled: PAGE_CONVERSATION_FEATURES["/app/laboratory"].adminPanel.copyIssue,
+      formatter: "debug_transcript_v1",
+      useSelectedMessages: true,
+      debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
+    },
     note: "\uB79C\uB529/\uC2E4\uD5D8\uC2E4 \uB300\uD654 \uBCF5\uC0AC \uC815\uCC45",
   },
   [WIDGET_PAGE_KEY]: {
@@ -279,6 +293,12 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
     destinations: ["clipboard"],
     conversation: {
       enabled: PAGE_CONVERSATION_FEATURES[WIDGET_PAGE_KEY].adminPanel.copyConversation,
+      formatter: "debug_transcript_v1",
+      useSelectedMessages: true,
+      debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
+    },
+    issue: {
+      enabled: PAGE_CONVERSATION_FEATURES[WIDGET_PAGE_KEY].adminPanel.copyIssue,
       formatter: "debug_transcript_v1",
       useSelectedMessages: true,
       debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
@@ -306,7 +326,7 @@ export function buildCopyPayload(input: {
   const policy = PAGE_COPY_POLICY[input.page];
   const selectedIds = input.selectedMessageIds || [];
   const logs = input.messageLogs || {};
-  const rule = policy.conversation;
+  const rule = input.kind === "issue" ? policy.issue : policy.conversation;
   const enabled = input.enabledOverride ?? rule.enabled;
   if (!enabled) {
     return {

@@ -11,6 +11,7 @@ import {
   type WidgetConversationTab,
 } from "@/components/design-system";
 import { useConversationPageController } from "@/lib/conversation/client/useConversationPageController";
+import type { ConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
 
 export default function LaboratoryPage() {
   const ctrl = useConversationPageController("/app/laboratory");
@@ -19,7 +20,7 @@ export default function LaboratoryPage() {
     index,
     modelCount: ctrl.models.length,
     model,
-    pageFeatures: ctrl.pageFeatures,
+    pageFeatures: ctrl.pageFeatures as ConversationPageFeatures,
     setupUi: ctrl.setupUi,
     isAdminUser: ctrl.isAdminUser,
     latestAdminKbId: ctrl.latestAdminKbId,
@@ -53,6 +54,7 @@ export default function LaboratoryPage() {
     onSearchSessionById: ctrl.handleSearchSessionById,
     onChangeConversationMode: ctrl.handleChangeConversationMode,
     onCopyConversation: ctrl.handleCopyTranscript,
+    onCopyIssue: ctrl.handleCopyIssueTranscript,
     onToggleMessageSelection: ctrl.toggleMessageSelection,
     onSubmitMessage: ctrl.submitMessage,
     onExpand: ctrl.expandModelLayout,

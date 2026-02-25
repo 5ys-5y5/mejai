@@ -24,6 +24,13 @@ export default function LoginClient() {
     if (raw === "signup_verify") return next || "/app";
     return raw ?? "/app";
   });
+  const resolveNextPath = () => (from && from.trim().length > 0 ? from : "/app");
+  const navigateToNext = (nextPath: string) => {
+    router.replace(nextPath);
+    window.setTimeout(() => {
+      window.location.assign(nextPath);
+    }, 300);
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -71,7 +78,7 @@ export default function LoginClient() {
           return;
         }
         window.localStorage.removeItem(PENDING_SIGNUP_KEY);
-        router.replace(next);
+        navigateToNext(next);
       })
       .catch((err) => {
         setError(err instanceof Error ? err.message : "로그인에 실패했습니다.");
@@ -105,7 +112,7 @@ export default function LoginClient() {
       return;
     }
 
-    router.replace(from);
+    navigateToNext(resolveNextPath());
   };
 
   return (

@@ -1902,65 +1902,76 @@ const adapters: Record<string, ToolAdapter> = {
     const codeHash = crypto.createHash("sha256").update(code + otpRef).digest("hex");
     const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
     const recordId = crypto.randomUUID();
-    const { error } = await ctx.supabase.from("H_auth_otp_verifications").insert({
+    const otpRow: Record<string, any> = {
       id: recordId,
-      org_id: ctx.orgId,
-      user_id: ctx.userId || null,
       destination,
       otp_ref: otpRef,
       code_hash: codeHash,
       expires_at: expiresAt,
-    });
+    };
+    if (ctx.orgId) {
+      otpRow.org_id = ctx.orgId;
+    } else {
+      otpRow.org_id = null;
+    }
+    if (ctx.userId) {
+      otpRow.user_id = ctx.userId;
+    }
+    const { error } = await ctx.supabase.from("H_auth_otp_verifications").insert(otpRow);
     if (error) {
       return { status: "error", error: { code: "DB_ERROR", message: error.message } };
     }
     const otpNowIso = new Date().toISOString();
-    const { data: notifData, error: notifError } = await ctx.supabase
-      .from("E_ops_notification_messages")
-      .insert({
-        org_id: ctx.orgId,
-        mall_id: null,
-        session_id: String(params.session_id || "") || null,
-        channel: "sms",
-        phone: destination,
-        category: "auth_otp",
-        topic_type: "auth",
-        topic_key: otpRef,
-        topic_label: null,
-        product_id: null,
-        product_name: null,
-        restock_at: null,
-        lead_day: 0,
-        scheduled_for: null,
-        template_key: "auth_otp",
-        template_vars: {
-          destination,
+    let notifData: Record<string, unknown> | null = null;
+    if (ctx.orgId) {
+      const { data, error: notifError } = await ctx.supabase
+        .from("E_ops_notification_messages")
+        .insert({
+          org_id: ctx.orgId,
+          mall_id: null,
+          session_id: String(params.session_id || "") || null,
           channel: "sms",
-          otp_ref: otpRef,
-        },
-        message_text: text,
-        status: sendOk ? "sent" : "failed",
-        attempts: 1,
-        last_error: sendOk ? (bypassSms ? "SOLAPI_BYPASS" : null) : sendError,
-        sent_at: sendOk ? otpNowIso : null,
-        solapi_message_id: solapiMessageId,
-        solapi_registered: sendOk && !bypassSms,
-        solapi_register_error: sendOk ? (bypassSms ? "SOLAPI_BYPASS" : null) : sendError,
-        schedule_tz: "Asia/Seoul",
-        schedule_hour_local: 17,
-        intent_name: "auth_otp",
-        metadata: {
-          flow: "auth_otp",
-          source: "otp_runtime",
-        },
-        created_at: otpNowIso,
-        updated_at: otpNowIso,
-        source_turn_id: params.source_turn_id || null,
-      })
-      .select("id")
-      .maybeSingle();
-    if (notifError) {
-      return { status: "error", error: { code: "DB_ERROR", message: notifError.message } };
+          phone: destination,
+          category: "auth_otp",
+          topic_type: "auth",
+          topic_key: otpRef,
+          topic_label: null,
+          product_id: null,
+          product_name: null,
+          restock_at: null,
+          lead_day: 0,
+          scheduled_for: null,
+          template_key: "auth_otp",
+          template_vars: {
+            destination,
+            channel: "sms",
+            otp_ref: otpRef,
+          },
+          message_text: text,
+          status: sendOk ? "sent" : "failed",
+          attempts: 1,
+          last_error: sendOk ? (bypassSms ? "SOLAPI_BYPASS" : null) : sendError,
+          sent_at: sendOk ? otpNowIso : null,
+          solapi_message_id: solapiMessageId,
+          solapi_registered: sendOk && !bypassSms,
+          solapi_register_error: sendOk ? (bypassSms ? "SOLAPI_BYPASS" : null) : sendError,
+          schedule_tz: "Asia/Seoul",
+          schedule_hour_local: 17,
+          intent_name: "auth_otp",
+          metadata: {
+            flow: "auth_otp",
+            source: "otp_runtime",
+          },
+          created_at: otpNowIso,
+          updated_at: otpNowIso,
+          source_turn_id: params.source_turn_id || null,
+        })
+        .select("id")
+        .maybeSingle();
+      if (notifError) {
+        return { status: "error", error: { code: "DB_ERROR", message: notifError.message } };
+      }
+      notifData = data as Record<string, unknown> | null;
     }
     if (!sendOk) {
       return {
@@ -1971,6 +1982,94 @@ const adapters: Record<string, ToolAdapter> = {
           detail: {
             otp_ref: otpRef,
             notification_id: notifData ? String((notifData as Record<string, unknown>).id || "") : null,
+          },
+        },
+      };
+    }
+    return {
+      status: "success",
+      data: {
+        delivery: "sms",
+        destination: maskValue(destination),
+        otp_ref: otpRef,
+        expires_at: expiresAt,
+        test_mode: testMode,
+        test_code: testMode ? code : undefined,
+      },
+    };
+  },
+  send_otp_guest: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const destination = String(params.destination || "").trim();
+    if (!destination) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "destination is required" } };
+    }
+    const bypassSms = isEnvTrue("SOLAPI_BYPASS");
+    const tempCode = readEnv("SOLAPI_TEMP");
+    if (bypassSms && !tempCode) {
+      return {
+        status: "error",
+        error: {
+          code: "CONFIG_ERROR",
+          message: "SOLAPI_BYPASS is enabled, but SOLAPI_TEMP is missing",
+        },
+      };
+    }
+    const code = tempCode ? tempCode : String(Math.floor(100000 + Math.random() * 900000));
+    const testMode = bypassSms || Boolean(tempCode);
+    const otpRef = crypto.randomUUID();
+    const from = readEnv("SOLAPI_FROM");
+    const text = String(params.text || `인증번호는 ${code} 입니다.`);
+    let sendOk = false;
+    let sendError: string | null = null;
+    let solapiMessageId: string | null = null;
+    if (bypassSms) {
+      sendOk = true;
+      sendError = "SOLAPI_BYPASS";
+    } else if (!from) {
+      const processKeys = Object.keys(process.env || {}).filter((key) => key.startsWith("SOLAPI_"));
+      const fallbackKeys = Object.keys(loadEnvFromFiles() || {}).filter((key) => key.startsWith("SOLAPI_"));
+      const envKeys = Array.from(new Set([...processKeys, ...fallbackKeys])).sort();
+      sendError = "SOLAPI_FROM_MISSING";
+      // continue to record OTP/notification even when from is missing
+      void envKeys;
+    } else {
+      const sendResult = await solapiSendMessage({ to: destination, from, text });
+      if (!sendResult.ok) {
+        sendError = sendResult.error;
+      } else {
+        sendOk = true;
+        solapiMessageId = extractSolapiMessageId((sendResult.data || {}) as Record<string, unknown>);
+      }
+    }
+    const codeHash = crypto.createHash("sha256").update(code + otpRef).digest("hex");
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const recordId = crypto.randomUUID();
+    const nowIso = new Date().toISOString();
+    const { error } = await ctx.supabase.from("H_auth_otp_verifications_guest").insert({
+      id: recordId,
+      destination,
+      otp_ref: otpRef,
+      code_hash: codeHash,
+      expires_at: expiresAt,
+      created_at: nowIso,
+      solapi_message_id: solapiMessageId,
+      send_status: sendOk ? "sent" : "failed",
+      send_error: sendOk ? (bypassSms ? "SOLAPI_BYPASS" : null) : sendError,
+    });
+    if (error) {
+      return { status: "error", error: { code: "DB_ERROR", message: error.message } };
+    }
+    if (!sendOk) {
+      return {
+        status: "error",
+        error: {
+          code: "SOLAPI_ERROR",
+          message: sendError || "SOLAPI_SEND_FAILED",
+          detail: {
+            otp_ref: otpRef,
           },
         },
       };
@@ -2020,6 +2119,46 @@ const adapters: Record<string, ToolAdapter> = {
     const verificationToken = crypto.randomUUID();
     await ctx.supabase
       .from("H_auth_otp_verifications")
+      .update({ verified_at: new Date().toISOString(), verification_token: verificationToken })
+      .eq("id", data.id);
+    return {
+      status: "success",
+      data: { verified: true, customer_verification_token: verificationToken },
+    };
+  },
+  verify_otp_guest: async (params, ctx) => {
+    if (!ctx) {
+      return { status: "error", error: { code: "MISSING_CONTEXT", message: "context required" } };
+    }
+    const code = String(params.code || "").trim();
+    const otpRef = String(params.otp_ref || "").trim();
+    if (!code) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "code is required" } };
+    }
+    if (!otpRef) {
+      return { status: "error", error: { code: "INVALID_INPUT", message: "otp_ref is required" } };
+    }
+    const { data, error } = await ctx.supabase
+      .from("H_auth_otp_verifications_guest")
+      .select("id, code_hash, expires_at, verified_at")
+      .eq("otp_ref", otpRef)
+      .maybeSingle();
+    if (error || !data) {
+      return { status: "error", error: { code: "OTP_NOT_FOUND", message: "otp_ref not found" } };
+    }
+    if (data.verified_at) {
+      return { status: "error", error: { code: "OTP_ALREADY_USED", message: "otp already verified" } };
+    }
+    if (data.expires_at && new Date(data.expires_at).getTime() < Date.now()) {
+      return { status: "error", error: { code: "OTP_EXPIRED", message: "otp expired" } };
+    }
+    const codeHash = crypto.createHash("sha256").update(code + otpRef).digest("hex");
+    if (codeHash !== data.code_hash) {
+      return { status: "error", error: { code: "OTP_INVALID", message: "invalid code" } };
+    }
+    const verificationToken = crypto.randomUUID();
+    await ctx.supabase
+      .from("H_auth_otp_verifications_guest")
       .update({ verified_at: new Date().toISOString(), verification_token: verificationToken })
       .eq("id", data.id);
     return {
@@ -2094,6 +2233,8 @@ export async function callAdapter(
   if (!adapter && normalizedKey === "solapi") {
     if (normalizedToolName === "send_otp") adapter = adapters.send_otp;
     if (normalizedToolName === "verify_otp") adapter = adapters.verify_otp;
+    if (normalizedToolName === "send_otp_guest") adapter = adapters.send_otp_guest;
+    if (normalizedToolName === "verify_otp_guest") adapter = adapters.verify_otp_guest;
     if (!adapter) {
       return {
         status: "error",

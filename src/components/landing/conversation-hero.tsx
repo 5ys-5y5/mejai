@@ -10,6 +10,7 @@ import {
   type WidgetConversationTab,
 } from "@/components/design-system";
 import { useConversationPageController } from "@/lib/conversation/client/useConversationPageController";
+import type { ConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
 
 export function LandingConversationHero() {
   const ctrl = useConversationPageController("/");
@@ -18,7 +19,7 @@ export function LandingConversationHero() {
     index,
     modelCount: ctrl.models.length,
     model,
-    pageFeatures: ctrl.pageFeatures,
+    pageFeatures: ctrl.pageFeatures as ConversationPageFeatures,
     setupUi: ctrl.setupUi,
     isAdminUser: ctrl.isAdminUser,
     latestAdminKbId: ctrl.latestAdminKbId,
@@ -52,6 +53,7 @@ export function LandingConversationHero() {
     onSearchSessionById: ctrl.handleSearchSessionById,
     onChangeConversationMode: ctrl.handleChangeConversationMode,
     onCopyConversation: ctrl.handleCopyTranscript,
+    onCopyIssue: ctrl.handleCopyIssueTranscript,
     onToggleMessageSelection: ctrl.toggleMessageSelection,
     onSubmitMessage: ctrl.submitMessage,
     onExpand: ctrl.expandModelLayout,

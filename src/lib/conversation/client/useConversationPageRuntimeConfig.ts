@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import {
   deriveConversationDataLoadPlan,
   resolveConversationSetupUi,
+  type ConversationPageFeatures,
   type ConversationPageKey,
 } from "@/lib/conversation/pageFeaturePolicy";
 import { useConversationAccessRole, useConversationAccessRoleFromProfile } from "@/lib/conversation/client/useConversationAccessRole";
@@ -19,7 +20,7 @@ export function useConversationPageRuntimeConfig(
   const accessRole = sessionId ? sessionRole.accessRole : profileRole;
   const isAdminUser = accessRole === "admin";
   const { features: resolvedFeatures, providerValue } = useConversationPageFeatures(pageKey, accessRole);
-  const pageFeatures = useMemo(() => {
+  const pageFeatures: ConversationPageFeatures = useMemo(() => {
     if (pageKey !== "/" || isAdminUser) return resolvedFeatures;
     if (resolvedFeatures.setup.inlineUserKbInput) return resolvedFeatures;
     return {
@@ -35,7 +36,7 @@ export function useConversationPageRuntimeConfig(
           inlineUserKbInput: "user",
         },
       },
-    };
+    } as ConversationPageFeatures;
   }, [isAdminUser, pageKey, resolvedFeatures]);
   const loadPlan = useMemo(() => {
     const plan = deriveConversationDataLoadPlan(pageFeatures);

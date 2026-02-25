@@ -187,7 +187,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const { data: fetched, error: fetchError } = await buildScopedQuery(
     serverContext.supabase,
     id,
-    serverContext.orgId
+    serverContext.orgId,
+    false
   ).maybeSingle();
   let existing = fetched;
 
@@ -196,7 +197,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   }
 
   if (!existing) {
-    const parentResult = await buildParentQuery(serverContext.supabase, id, serverContext.orgId).limit(1).maybeSingle();
+    const parentResult = await buildParentQuery(serverContext.supabase, id, serverContext.orgId, false).limit(1).maybeSingle();
     if (parentResult.error) {
       return NextResponse.json({ error: parentResult.error.message }, { status: 400 });
     }

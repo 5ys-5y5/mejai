@@ -1,4 +1,4 @@
-﻿import { DEFAULT_TOOL_PROVIDER_MAP } from "./mcpToolRegistry";
+import { DEFAULT_TOOL_PROVIDER_MAP } from "./mcpToolRegistry";
 
 export type AnswerMode = "action" | "info" | "handoff";
 
@@ -43,16 +43,16 @@ const CAPABILITY_TOOL_MAP: Record<string, string[]> = {
 };
 
 const CAPABILITY_LABELS: Record<string, string> = {
-  order_lookup: "二쇰Ц踰덊샇 議고쉶",
-  order_update: "諛곗넚吏 蹂寃?,
-  otp_gate: "蹂몄씤 ?몄쬆",
-  shipment_tracking: "諛곗넚 議고쉶",
-  refund_ticket: "?섎텋/諛섑뭹 ?묒닔",
-  product_catalog_read: "?곹뭹 議고쉶",
-  restock_subscription_provider: "?ъ엯怨??뚮┝ ?좎껌",
-  address_search: "二쇱냼 寃??,
-  kb_access: "FAQ/?뺤콉 ?듬?",
-  handoff: "?곷떞 ?곌껐",
+  order_lookup: "주문번호 조회",
+  order_update: "배송지 변경",
+  otp_gate: "본인 인증",
+  shipment_tracking: "배송 조회",
+  refund_ticket: "환불/반품 접수",
+  product_catalog_read: "상품 조회",
+  restock_subscription_provider: "재입고 알림 신청",
+  address_search: "주소 검색",
+  kb_access: "FAQ/지식 검색",
+  handoff: "상담 연결",
 };
 
 const INTENT_CAPABILITY_CONTRACTS: Record<string, CapabilityContract> = {
@@ -62,8 +62,8 @@ const INTENT_CAPABILITY_CONTRACTS: Record<string, CapabilityContract> = {
     optionalCapabilities: ["product_catalog_read", "kb_access"],
     requiredTools: [],
     optionalTools: ["resolve_product", "read_product"],
-    unsupportedFeatureLabel: "?ъ엯怨??곹뭹 議고쉶",
-    supportedAlternatives: ["?ㅻⅨ 臾몄쓽", "愿由ъ옄 ?곌껐"],
+    unsupportedFeatureLabel: "재입고 상품 조회",
+    supportedAlternatives: ["다른 문의", "관리자 연결"],
     answerModes: ["info", "handoff"],
   },
   restock_subscribe: {
@@ -72,8 +72,8 @@ const INTENT_CAPABILITY_CONTRACTS: Record<string, CapabilityContract> = {
     optionalCapabilities: ["restock_subscription_provider", "otp_gate"],
     requiredTools: [],
     optionalTools: ["subscribe_restock", "send_otp", "verify_otp"],
-    unsupportedFeatureLabel: "?ъ엯怨??뚮┝ ?좎껌",
-    supportedAlternatives: ["?ㅻⅨ 臾몄쓽", "愿由ъ옄 ?곌껐"],
+    unsupportedFeatureLabel: "재입고 알림 신청",
+    supportedAlternatives: ["다른 문의", "관리자 연결"],
     answerModes: ["action", "handoff"],
   },
   order_change: {
@@ -82,8 +82,8 @@ const INTENT_CAPABILITY_CONTRACTS: Record<string, CapabilityContract> = {
     optionalCapabilities: ["address_search"],
     requiredTools: [],
     optionalTools: ["search_address"],
-    unsupportedFeatureLabel: "二쇰Ц踰덊샇 議고쉶, 諛곗넚吏 蹂寃?,
-    supportedAlternatives: ["愿由ъ옄 ?곌껐", "?ㅻⅨ 梨꾨꼸 ?덈궡"],
+    unsupportedFeatureLabel: "주문번호 조회, 배송지 변경",
+    supportedAlternatives: ["관리자 연결", "다른 채널 안내"],
     answerModes: ["action", "handoff"],
   },
   shipping_inquiry: {
@@ -92,8 +92,8 @@ const INTENT_CAPABILITY_CONTRACTS: Record<string, CapabilityContract> = {
     optionalCapabilities: [],
     requiredTools: [],
     optionalTools: [],
-    unsupportedFeatureLabel: "諛곗넚 議고쉶",
-    supportedAlternatives: ["愿由ъ옄 ?곌껐", "?ㅻⅨ 梨꾨꼸 ?덈궡"],
+    unsupportedFeatureLabel: "배송 조회",
+    supportedAlternatives: ["관리자 연결", "다른 채널 안내"],
     answerModes: ["action", "handoff"],
   },
   refund_request: {
@@ -102,8 +102,8 @@ const INTENT_CAPABILITY_CONTRACTS: Record<string, CapabilityContract> = {
     optionalCapabilities: [],
     requiredTools: [],
     optionalTools: [],
-    unsupportedFeatureLabel: "?섎텋/諛섑뭹 ?묒닔",
-    supportedAlternatives: ["愿由ъ옄 ?곌껐", "?ㅻⅨ 梨꾨꼸 ?덈궡"],
+    unsupportedFeatureLabel: "환불/반품 접수",
+    supportedAlternatives: ["관리자 연결", "다른 채널 안내"],
     answerModes: ["action", "handoff"],
   },
   admin_login: {
@@ -113,7 +113,7 @@ const INTENT_CAPABILITY_CONTRACTS: Record<string, CapabilityContract> = {
     requiredTools: [],
     optionalTools: [],
     unsupportedFeatureLabel: "관리자 로그인",
-    supportedAlternatives: ["?ã…»â…¨ è‡¾ëª„ì“½"],
+    supportedAlternatives: ["관리자 연결"],
     answerModes: ["action", "handoff"],
   },
   faq: {
@@ -122,8 +122,8 @@ const INTENT_CAPABILITY_CONTRACTS: Record<string, CapabilityContract> = {
     optionalCapabilities: [],
     requiredTools: [],
     optionalTools: [],
-    unsupportedFeatureLabel: "FAQ/?뺤콉 ?듬?",
-    supportedAlternatives: ["?ㅻⅨ 臾몄쓽", "愿由ъ옄 ?곌껐"],
+    unsupportedFeatureLabel: "FAQ/지식 검색",
+    supportedAlternatives: ["다른 문의", "관리자 연결"],
     answerModes: ["info", "handoff"],
   },
   general: {
@@ -132,8 +132,8 @@ const INTENT_CAPABILITY_CONTRACTS: Record<string, CapabilityContract> = {
     optionalCapabilities: ["kb_access", "handoff"],
     requiredTools: [],
     optionalTools: [],
-    unsupportedFeatureLabel: "?쇰컲 臾몄쓽 ?듬?",
-    supportedAlternatives: ["愿由ъ옄 ?곌껐"],
+    unsupportedFeatureLabel: "일반 문의 응답",
+    supportedAlternatives: ["관리자 연결"],
     answerModes: ["info", "handoff"],
   },
 };
@@ -146,8 +146,8 @@ function resolveContract(intent: string): CapabilityContract {
     optionalCapabilities: [],
     requiredTools: [],
     optionalTools: [],
-    unsupportedFeatureLabel: "?붿껌?섏떊 湲곕뒫",
-    supportedAlternatives: ["愿由ъ옄 ?곌껐"],
+    unsupportedFeatureLabel: "요청하신 기능",
+    supportedAlternatives: ["관리자 연결"],
     answerModes: ["info", "handoff"],
   };
 }
@@ -179,7 +179,7 @@ function buildUnsupportedLabel(fallback: string, missingCaps: string[]) {
 }
 
 function buildMissingReason(missingTools: string[]) {
-  if (missingTools.length === 0) return "?꾩닔 ?곕룞???ㅼ젙?섏뼱 ?덉? ?딆뒿?덈떎.";
+  if (missingTools.length === 0) return "필수 연동 설정이 되어 있지 않습니다.";
   const providers = Array.from(
     new Set(
       missingTools
@@ -188,9 +188,9 @@ function buildMissingReason(missingTools: string[]) {
     )
   );
   if (providers.length > 0) {
-    return `${providers.join(", ")} ?곕룞???ㅼ젙?섏뼱 ?덉? ?딆뒿?덈떎.`;
+    return `${providers.join(", ")} 연동 설정이 되어 있지 않습니다.`;
   }
-  return `?꾩닔 ?꾧뎄媛 ?덉슜?섏? ?딆븯?듬땲?? ${missingTools.join(", ")}`;
+  return `필수 도구가 활성화되지 않았습니다: ${missingTools.join(", ")}`;
 }
 
 export function evaluateIntentCapabilityGate(input: CapabilityGateInput): CapabilityGateResult {
@@ -221,11 +221,11 @@ export function evaluateIntentCapabilityGate(input: CapabilityGateInput): Capabi
   const missingCaps = buildMissingCapabilities(contract.requiredCapabilities, missingTools);
   const unsupportedLabel = buildUnsupportedLabel(contract.unsupportedFeatureLabel, missingCaps);
   const reason = buildMissingReason(missingTools);
-  const fallback = contract.supportedAlternatives[0] || "愿由ъ옄 ?곌껐";
+  const fallback = contract.supportedAlternatives[0] || "관리자 연결";
   const message = [
-    `?꾩옱 ??梨꾨꼸?먯꽌??${unsupportedLabel} 湲곕뒫??吏?먰븯吏 ?딆뒿?덈떎.`,
-    `?댁쑀: ${reason}`,
-    `?먰븯?쒕㈃ ${fallback}??瑜? ?꾩??쒕┫源뚯슂?`,
+    `현재 이 채널에서는 ${unsupportedLabel} 기능을 지원하지 않습니다.`,
+    `사유: ${reason}`,
+    `원하시면 ${fallback}로 안내해 드릴까요?`,
   ].join("\n");
 
   return {

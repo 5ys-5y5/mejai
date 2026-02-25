@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
   const { data: row } = await supabaseAdmin
     .from("H_auth_otp_verifications")
     .select("destination, verified_at")
-    .eq("org_id", orgId)
+    .eq("user_id", context.user.id)
     .eq("verification_token", verificationToken)
     .maybeSingle();
   if (!row?.verified_at) {

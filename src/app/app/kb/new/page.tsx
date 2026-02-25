@@ -166,7 +166,7 @@ function buildKeywordSet(text: string) {
   return new Set(
     text
       .toLowerCase()
-      .split(/[^a-z0-9가-??+/g)
+      .split(/[^a-z0-9가-힣]+/g)
       .filter((token) => token.length >= 2)
   );
 }
@@ -176,8 +176,8 @@ function extractBulletLines(content?: string | null) {
   return content
     .split("\n")
     .map((line) => line.trim())
-    .filter((line) => line.startsWith("-") || line.startsWith("*") || line.startsWith("??))
-    .map((line) => line.replace(/^[-*??\s*/, "").trim())
+    .filter((line) => line.startsWith("-") || line.startsWith("*") || line.startsWith("•"))
+    .map((line) => line.replace(/^[-*•\s]*/, "").trim())
     .filter(Boolean);
 }
 
@@ -190,33 +190,33 @@ function buildRecommendations(
   const recos: Recommendation[] = [
     {
       id: "scope",
-      title: "?�용 범위/?�외 조건",
-      detail: "?�책???�용 ?�?�과 ?�외�?명확???�여 모호?�을 줄입?�다.",
-      insertText: "## ?�용 범위/?�외\n- ?�용 ?�??n- ?�외 조건\n",
+      title: "적용 범위/예외 조건",
+      detail: "정책의 적용 범위와 예외를 명확히 해 모호함을 줄입니다.",
+      insertText: "## 적용 범위/예외\n- 적용 대상\n- 예외 조건\n",
     },
     {
       id: "process",
-      title: "처리 ?�차/?�인 ?�름",
-      detail: "고객 ?�내 ?�계?� ?��? ?�인 ?�름??분리???�내?�니??",
-      insertText: "## 처리 ?�차\n- 고객 ?�내 ?�계\n- ?��? ?�인/검???�계\n",
+      title: "처리 절차/확인 흐름",
+      detail: "고객 안내 단계와 확인 흐름을 분리해 설명합니다.",
+      insertText: "## 처리 절차\n- 고객 안내 단계\n- 확인/검증 단계\n",
     },
     {
       id: "limits",
-      title: "?�한?�항/?�계",
-      detail: "불�? ??���??�한 조건??미리 고�????�슈�?줄입?�다.",
-      insertText: "## ?�한?�항\n- 불�? ??��\n- ?�한 조건\n",
+      title: "제한 사항/한계",
+      detail: "불가 조건과 제한 사항을 미리 고지해 이슈를 줄입니다.",
+      insertText: "## 제한 사항\n- 불가 조건\n- 제한 기준\n",
     },
     {
       id: "evidence",
-      title: "증빙/?�수 ?�인 ??��",
-      detail: "?�수 ?�출 ?�료?� ?�인 ?�차�?명시?�니??",
-      insertText: "## ?�요 증빙\n- ?�수 ?�출 ?�료\n- ?�인 ?�차\n",
+      title: "증빙/필수 확인 문서",
+      detail: "필수 제출 서류와 확인 절차를 명시합니다.",
+      insertText: "## 필요 증빙\n- 필수 제출 서류\n- 확인 절차\n",
     },
     {
       id: "escalation",
-      title: "?�스컬레?�션 기�?",
-      detail: "?�위 ?��? 기�?�??�락 채널??구분?�니??",
-      insertText: "## ?�스컬레?�션 기�?\n- 즉시 ?��? 조건\n- ?�당 부???�락 채널\n",
+      title: "에스컬레이션 기준",
+      detail: "상위 이관 기준과 연락 채널을 구분합니다.",
+      insertText: "## 에스컬레이션 기준\n- 즉시 이관 조건\n- 담당 부서 연락 채널\n",
     },
   ];
 
@@ -246,9 +246,9 @@ function buildRecommendations(
   if (topBullets.length > 0) {
     recos.push({
       id: "faq",
-      title: "?�사 문서 기반 FAQ 보강",
-      detail: "?�사 문서?�서 ?�주 ?�장??질문/?�내�?추�??�니??",
-      insertText: `## ?�주 묻는 질문\n${topBullets.map((line) => `- ${line}`).join("\n")}\n`,
+      title: "?�사 문서 기반 FAQ 보강",
+      detail: "?�사 문서?�서 ?�주 ?�장??질문/?�내�?추�??�니??",
+      insertText: `## ?�주 묻는 질문\n${topBullets.map((line) => `- ${line}`).join("\n")}\n`,
     });
   }
 
@@ -256,7 +256,7 @@ function buildRecommendations(
   return recos.filter((item) => !normalizedContent.includes(item.title.toLowerCase()));
 }
 
-const RECO_SEPARATOR = "\n\n--- 추천 지�?---\n\n";
+const RECO_SEPARATOR = "\n\n--- 추천 지�?---\n\n";
 
 export default function NewKbPage() {
   const router = useRouter();
@@ -348,152 +348,152 @@ export default function NewKbPage() {
 
   const rulePresets = useMemo<PolicyRulePreset[]>(
     () => [
-    {
-      id: "abuse",
-      title: "?�설 ?�??,
-      summary: "?�력???�설???�함?�면 ?�과 ?�플�?강제 + ??차단",
-      rule: {
-        id: "R001_abuse",
-        stage: "input",
-        priority: 1000,
-        when: { any: [{ predicate: "text.contains_abuse" }] },
-        enforce: {
-          actions: [
-            { type: "set_flag", flag: "conversation.abusive", value: true },
-            { type: "force_response_template", template_id: "abuse_warn" },
-            { type: "deny_tools", tools: ["*"] },
-          ],
+      {
+        id: "abuse",
+        title: "욕설 차단",
+        summary: "욕설 입력 시 경고 템플릿 + 도구 차단",
+        rule: {
+          id: "R001_abuse",
+          stage: "input",
+          priority: 1000,
+          when: { any: [{ predicate: "text.contains_abuse" }] },
+          enforce: {
+            actions: [
+              { type: "set_flag", flag: "conversation.abusive", value: true },
+              { type: "force_response_template", template_id: "abuse_warn" },
+              { type: "deny_tools", tools: ["*"] },
+            ],
+          },
         },
       },
-    },
-    {
-      id: "repeat",
-      title: "반복 질문 차단",
-      summary: "반복 ?�수 초과 ???�내 ?�플�?강제",
-      rule: {
-        id: "R005_repeat_cooldown",
-        stage: "input",
-        priority: 900,
-        when: { any: [{ predicate: "conversation.repeat_over", args: { count: 2 } }] },
-        enforce: { actions: [{ type: "force_response_template", template_id: "repeat_block" }] },
-      },
-    },
-    {
-      id: "need_order",
-      title: "주문번호 ?�으�?조회 금�?",
-      summary: "주문번호 ?�을 ??lookup/track 차단 + ?�내 ?�플�?,
-      rule: {
-        id: "R010_need_order_id_for_lookup",
-        stage: "tool",
-        priority: 950,
-        when: {
-          all: [
-            { predicate: "intent.is_one_of", args: { values: ["shipment", "order_lookup"] } },
-            { predicate: "entity.order_id.missing" },
-          ],
-        },
-        enforce: {
-          actions: [
-            { type: "deny_tools", tools: ["lookup_order", "track_shipment"] },
-            { type: "force_response_template", template_id: "need_order_id" },
-          ],
+      {
+        id: "repeat",
+        title: "반복 질문 차단",
+        summary: "반복 횟수 초과 시 안내 템플릿 강제",
+        rule: {
+          id: "R005_repeat_cooldown",
+          stage: "input",
+          priority: 900,
+          when: { any: [{ predicate: "conversation.repeat_over", args: { count: 2 } }] },
+          enforce: { actions: [{ type: "force_response_template", template_id: "repeat_block" }] },
         },
       },
-    },
-    {
-      id: "address_ticket",
-      title: "배송지 변�??�정 ???�켓 ?�성",
-      summary: "주문번호+주소+?�정?�면 create_ticket 강제",
-      rule: {
-        id: "R020_address_change_create_ticket",
-        stage: "tool",
-        priority: 920,
-        when: {
-          all: [
-            { predicate: "intent.is", args: { value: "change" } },
-            { predicate: "entity.order_id.present" },
-            { predicate: "entity.address.present" },
-            { predicate: "user.confirmed", args: { value: true } },
-          ],
+      {
+        id: "need_order",
+        title: "주문번호 없이 조회 금지",
+        summary: "주문번호 없을 때 lookup/track 차단 + 안내 템플릿",
+        rule: {
+          id: "R010_need_order_id_for_lookup",
+          stage: "tool",
+          priority: 950,
+          when: {
+            all: [
+              { predicate: "intent.is_one_of", args: { values: ["shipment", "order_lookup"] } },
+              { predicate: "entity.order_id.missing" },
+            ],
+          },
+          enforce: {
+            actions: [
+              { type: "deny_tools", tools: ["lookup_order", "track_shipment"] },
+              { type: "force_response_template", template_id: "need_order_id" },
+            ],
+          },
         },
-        enforce: {
-          actions: [
-            {
-              type: "force_tool_call",
-              tool: "create_ticket",
-              args_template: {
-                title: "배송지 변�??�청 - {{entity.order_id}}",
-                content: "배송지 변�??�청: {{entity.address}}\n주문번호: {{entity.order_id}}\n?�청: {{input.text}}",
+      },
+      {
+        id: "address_ticket",
+        title: "배송지 변경 요청 티켓 생성",
+        summary: "주문번호+주소+확정이면 create_ticket 강제",
+        rule: {
+          id: "R020_address_change_create_ticket",
+          stage: "tool",
+          priority: 920,
+          when: {
+            all: [
+              { predicate: "intent.is", args: { value: "change" } },
+              { predicate: "entity.order_id.present" },
+              { predicate: "entity.address.present" },
+              { predicate: "user.confirmed", args: { value: true } },
+            ],
+          },
+          enforce: {
+            actions: [
+              {
+                type: "force_tool_call",
+                tool: "create_ticket",
+                args_template: {
+                  title: "배송지 변경 요청 - {{entity.order_id}}",
+                  content: "배송지 변경 요청: {{entity.address}}\n주문번호: {{entity.order_id}}\n요청: {{input.text}}",
+                },
               },
-            },
-          ],
+            ],
+          },
         },
       },
-    },
-    {
-      id: "format_output",
-      title: "출력 ?�맷 강제",
-      summary: "?�답???�약?�근거→?�세?�다???�션 ?�태�?강제",
-      rule: {
-        id: "R030_output_format",
-        stage: "output",
-        priority: 800,
-        when: { any: [{ predicate: "text.contains_pii" }] },
-        enforce: { actions: [{ type: "format_output" }] },
+      {
+        id: "format_output",
+        title: "출력 포맷 강제",
+        summary: "응답을 요약→근거→상세 구조로 강제",
+        rule: {
+          id: "R030_output_format",
+          stage: "output",
+          priority: 800,
+          when: { any: [{ predicate: "text.contains_pii" }] },
+          enforce: { actions: [{ type: "format_output" }] },
+        },
       },
-    },
     ],
     []
   );
 
   const templatePresets = useMemo<PolicyTemplatePreset[]>(
     () => [
-    {
-      id: "abuse_warn",
-      title: "?�설 경고",
-      summary: "?�설 ?�력 ???�과 + ?�보 ?�청",
-      value:
-        "불편???�려 죄송?�니?? ?�활???�내�??�해 ?�중???�현?�로 말�? 부?�드립니?? 주문번호???��???번호�??�려주시�?바로 ?�인???�리겠습?�다.",
-    },
-    {
-      id: "repeat_block",
-      title: "반복 질문 ?�내",
-      summary: "반복 질문 차단 ?�내",
-      value: "같�? 문의가 반복?�고 ?�습?�다. 주문번호/?��???번호 �??�나�??�려주시�?즉시 처리?�겠?�니??",
-    },
-    {
-      id: "need_order_id",
-      title: "주문번호 ?�청",
-      summary: "주문번호 ?�요 ?�내",
-      value: "주문 조회�??�해 주문번호가 ?�요?�니?? 주문번호�??�려주세??",
-    },
+      {
+        id: "abuse_warn",
+        title: "욕설 경고",
+        summary: "욕설 입력 경고 및 안내",
+        value:
+          "불편을 드려 죄송합니다. 원활한 안내를 위해 존중하는 표현으로 말씀 부탁드립니다. 주문번호를 알려주시면 바로 확인해 드리겠습니다.",
+      },
+      {
+        id: "repeat_block",
+        title: "반복 질문 안내",
+        summary: "반복 질문 차단 안내",
+        value: "같은 문의가 반복되고 있습니다. 주문번호 또는 문의 번호를 알려주시면 즉시 처리하겠습니다.",
+      },
+      {
+        id: "need_order_id",
+        title: "주문번호 요청",
+        summary: "주문번호 필요 안내",
+        value: "주문 조회를 위해 주문번호가 필요합니다. 주문번호를 알려주세요.",
+      },
     ],
     []
   );
 
   const toolPolicyPresets = useMemo<PolicyToolPreset[]>(
     () => [
-    {
-      id: "lookup_order",
-      title: "lookup_order ?�수 ?�자/검�?,
-      summary: "order_id ?�수 + ?�맷 검�?,
-      policy: {
-        required_args: ["order_id"],
-        arg_validators: { order_id: { regex: "^[0-9]{8}-[0-9]{7}$" } },
+      {
+        id: "lookup_order",
+        title: "lookup_order 필수 인자/검증",
+        summary: "order_id 필수 + 포맷 검증",
+        policy: {
+          required_args: ["order_id"],
+          arg_validators: { order_id: { regex: "^[0-9]{8}-[0-9]{7}$" } },
+        },
       },
-    },
-    {
-      id: "track_shipment",
-      title: "track_shipment ?�수 ?�자",
-      summary: "order_id ?�수",
-      policy: { required_args: ["order_id"] },
-    },
-    {
-      id: "create_ticket",
-      title: "create_ticket ?�수 ?�자",
-      summary: "title/content ?�수",
-      policy: { required_args: ["title", "content"] },
-    },
+      {
+        id: "track_shipment",
+        title: "track_shipment 필수 인자",
+        summary: "order_id 필수",
+        policy: { required_args: ["order_id"] },
+      },
+      {
+        id: "create_ticket",
+        title: "create_ticket 필수 인자",
+        summary: "title/content 필수",
+        policy: { required_args: ["title", "content"] },
+      },
     ],
     []
   );
@@ -582,7 +582,7 @@ export default function NewKbPage() {
     const predicate = customRulePredicate.trim();
     const action = customRuleAction.trim();
     if (!predicate || !action) {
-      toast.error("조건(predicate)�??�션(type)???�력??주세??");
+      toast.error("조건(predicate)�??�션(type)???�력??주세??");
       return;
     }
     const knownPredicates = new Set([
@@ -621,7 +621,7 @@ export default function NewKbPage() {
 
   const handleSubmit = async () => {
     if (!canSubmit) {
-      toast.error("?�목�??�용???�력??주세??");
+      toast.error("?�목�??�용???�력??주세??");
       return;
     }
     if (isAdminUser && kbType === "admin") {
@@ -629,8 +629,8 @@ export default function NewKbPage() {
         JSON.parse(policyJson);
         setPolicyError(null);
       } catch {
-        setPolicyError("Policy JSON ?�식???�바르�? ?�습?�다.");
-        toast.error("Policy JSON ?�식???�바르�? ?�습?�다.");
+        setPolicyError("Policy JSON ?�식???�바르�? ?�습?�다.");
+        toast.error("Policy JSON ?�식???�바르�? ?�습?�다.");
         return;
       }
     }
@@ -679,11 +679,11 @@ export default function NewKbPage() {
         body: JSON.stringify(payload),
       });
 
-      toast.success("문서가 ?�성?�었?�니??");
+      toast.success("문서가 ?�성?�었?�니??");
       router.push("/app/kb");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "문서 ?�성???�패?�습?�다.";
-      toast.error(message || "문서 ?�성???�패?�습?�다.");
+      const message = err instanceof Error ? err.message : "문서 ?�성???�패?�습?�다.";
+      toast.error(message || "문서 ?�성???�패?�습?�다.");
     } finally {
       setSaving(false);
     }
@@ -694,8 +694,8 @@ export default function NewKbPage() {
       <div className="mx-auto w-full max-w-6xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">문서 ?�성</h1>
-            <p className="mt-1 text-sm text-slate-500">지??베이?�에 ??문서�?추�??�니??</p>
+            <h1 className="text-2xl font-semibold text-slate-900">문서 ?�성</h1>
+            <p className="mt-1 text-sm text-slate-500">지??베이?�에 ??문서�?추�??�니??</p>
           </div>
           <div className="flex items-center gap-2">
             {isAdminUser ? (
@@ -704,7 +704,7 @@ export default function NewKbPage() {
                 onClick={() => setKbType((prev) => (prev === "admin" ? "normal" : "admin"))}
                 className="inline-flex items-center gap-2 rounded-3xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                {kbType === "admin" ? "ADMIN 모드" : "?�반 모드"}
+                {kbType === "admin" ? "ADMIN 모드" : "?�반 모드"}
               </button>
             ) : null}
             {isAdminUser && kbType === "normal" ? (
@@ -726,11 +726,11 @@ export default function NewKbPage() {
           <div className="grid items-start gap-6">
             <div className="grid gap-6">
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-slate-900">문서 ?�목 *</label>
+                <label className="text-sm font-medium text-slate-900">문서 ?�목 *</label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="?? 반품 ?�책 ?�내"
+                  placeholder="?? 반품 ?�책 ?�내"
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
@@ -740,7 +740,7 @@ export default function NewKbPage() {
                 <input
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  placeholder="?? ?�책"
+                  placeholder="?? ?�책"
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
@@ -748,7 +748,7 @@ export default function NewKbPage() {
               {isAdminUser && kbType === "admin" ? (
                 <div className="grid gap-2">
                   <label className="flex items-center justify-between gap-2 text-sm font-medium text-slate-900">
-                    <span>?�용 ?�??그룹 *</span>
+                    <span>?�용 ?�??그룹 *</span>
                     <span className="flex items-center gap-2 text-xs text-slate-700">
                       <label className="flex items-center gap-2">
                         <input
@@ -758,7 +758,7 @@ export default function NewKbPage() {
                           onChange={() => setGroupMatchMode("all")}
                           className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
                         />
-                        모두 ?�함
+                        모두 ?�함
                       </label>
                       <label className="flex items-center gap-2">
                         <input
@@ -768,15 +768,15 @@ export default function NewKbPage() {
                           onChange={() => setGroupMatchMode("any")}
                           className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
                         />
-                        ?�나?�도 ?�함
+                        ?�나?�도 ?�함
                       </label>
                     </span>
                   </label>
                   {groupOptions.length === 0 ? (
-                    <div className="text-sm text-slate-500">?�택 가?�한 그룹???�습?�다.</div>
+                    <div className="text-sm text-slate-500">?�택 가?�한 그룹???�습?�다.</div>
                   ) : (
                     <InlineGroupSelect
-                      label={`그룹 ?�택 (${groupOptions.length})`}
+                      label={`그룹 ?�택 (${groupOptions.length})`}
                       options={groupOptions}
                       selections={groupSelections}
                       onChange={(path, value, checked) =>
@@ -795,12 +795,12 @@ export default function NewKbPage() {
 
               {kbType !== "admin" ? (
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-900">?�용 *</label>
+                  <label className="text-sm font-medium text-slate-900">내용 *</label>
                   <InlineSelectBox
-                    label={`추천 지�??�택 ${Object.values(selectedRecos).filter(Boolean).length}/${recommendations.length}`}
+                    label={`추천 지침 선택 ${Object.values(selectedRecos).filter(Boolean).length}/${recommendations.length}`}
                     sections={[
                       {
-                        title: "추천 지�?,
+                        title: "추천 지침",
                         items: recommendations.map((rec) => ({
                           id: rec.id,
                           title: rec.title,
@@ -819,21 +819,21 @@ export default function NewKbPage() {
                   <textarea
                     value={userContent}
                     onChange={(e) => setUserContent(e.target.value)}
-                    placeholder="추천 지�??�의 지침을 직접 ?�력?????�습?�다."
+                    placeholder="추천 지침 외의 내용을 직접 입력할 수 있습니다."
                     className="min-h-[160px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                   />
                   <textarea
                     value={selectedRecoText}
                     readOnly
-                    placeholder="추천 지침이 ???�역???�동?�로 추�??�니??"
+                    placeholder="선택한 추천 지침이 자동으로 추가됩니다."
                     className="min-h-[160px] w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600"
                   />
                 </div>
               ) : (
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-900">?�용 *</label>
+                  <label className="text-sm font-medium text-slate-900">내용 *</label>
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
-                    <span>?�책 ?�력 방식</span>
+                    <span>정책 입력 방식</span>
                     <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1">
                       <label className="flex items-center gap-2">
                         <input
@@ -843,7 +843,7 @@ export default function NewKbPage() {
                           onChange={() => setAdminInputMode("builder")}
                           className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
                         />
-                        ?�택 ?�력
+                        선택 입력
                       </label>
                       <label className="flex items-center gap-2">
                         <input
@@ -853,13 +853,13 @@ export default function NewKbPage() {
                           onChange={() => setAdminInputMode("manual")}
                           className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
                         />
-                        ?�동 ?�력
+                        수동 입력
                       </label>
                     </div>
                   </div>
                   {adminInputMode === "builder" ? (
                     <InlineSelectBox
-                      label={`규칙/?�플�????�책 ?�택`}
+                      label={`규칙/?�플�????�책 ?�택`}
                       sections={[
                         {
                           title: `규칙 (${Object.values(selectedRules).filter(Boolean).length}/${rulePresets.length})`,
@@ -870,7 +870,7 @@ export default function NewKbPage() {
                           })),
                         },
                         {
-                          title: `?�플�?(${Object.values(selectedTemplates).filter(Boolean).length}/${templatePresets.length})`,
+                          title: `?�플�?(${Object.values(selectedTemplates).filter(Boolean).length}/${templatePresets.length})`,
                           items: templatePresets.map((item) => ({
                             id: item.id,
                             title: item.title,
@@ -878,7 +878,7 @@ export default function NewKbPage() {
                           })),
                         },
                         {
-                          title: `???�책 (${Object.values(selectedToolPolicies).filter(Boolean).length}/${toolPolicyPresets.length})`,
+                          title: `???�책 (${Object.values(selectedToolPolicies).filter(Boolean).length}/${toolPolicyPresets.length})`,
                           items: toolPolicyPresets.map((item) => ({
                             id: item.id,
                             title: item.title,
@@ -900,13 +900,13 @@ export default function NewKbPage() {
                       }}
                       footer={
                         <div className="grid gap-4">
-                          <div className="text-xs font-semibold text-slate-700">??규칙 추�?</div>
+                          <div className="text-xs font-semibold text-slate-700">??규칙 추�?</div>
                           <div className="grid gap-4 text-xs text-slate-600">
                             <div className="grid gap-4 md:grid-cols-2">
                               <input
                                 value={customRuleTitle}
                                 onChange={(e) => setCustomRuleTitle(e.target.value)}
-                                placeholder="규칙 ?�름 ?�시: R050_custom_rule"
+                                placeholder="규칙 ?�름 ?�시: R050_custom_rule"
                                 className="h-8 rounded-lg border border-slate-200 px-2"
                               />
                               <select
@@ -922,13 +922,13 @@ export default function NewKbPage() {
                             <input
                               value={customRulePredicate}
                               onChange={(e) => setCustomRulePredicate(e.target.value)}
-                              placeholder="predicate ?�시: text.contains_abuse"
+                              placeholder="predicate ?�시: text.contains_abuse"
                               className="h-8 rounded-lg border border-slate-200 px-2"
                             />
                             <input
                               value={customRuleAction}
                               onChange={(e) => setCustomRuleAction(e.target.value)}
-                              placeholder="action ?�시: force_response_template"
+                              placeholder="action ?�시: force_response_template"
                               className="h-8 rounded-lg border border-slate-200 px-2"
                             />
                             <button
@@ -937,7 +937,7 @@ export default function NewKbPage() {
                               className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
                             >
                               <Plus className="h-3 w-3" />
-                              규칙 추�?
+                              규칙 추�?
                             </button>
                             {customRules.length > 0 ? (
                               <div className="grid gap-2">
@@ -945,7 +945,7 @@ export default function NewKbPage() {
                                   <div key={rule.id} className="flex items-center gap-2 text-xs text-slate-600">
                                     {rule.needsCode ? <AlertTriangle className="h-3 w-3 text-amber-500" /> : null}
                                     <span>{rule.id}</span>
-                                    {rule.needsCode ? <span className="text-amber-600">?�드코딩 ?�요</span> : null}
+                                    {rule.needsCode ? <span className="text-amber-600">?�드코딩 ?�요</span> : null}
                                   </div>
                                 ))}
                               </div>
@@ -956,7 +956,7 @@ export default function NewKbPage() {
                     />
                   ) : (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                      규칙/?�플�????�책 ?�택 ?�이 직접 JSON???�력?�니??
+                      규칙/?�플�????�책 ?�택 ?�이 직접 JSON???�력?�니??
                     </div>
                   )}
                   <textarea
@@ -965,7 +965,7 @@ export default function NewKbPage() {
                       setPolicyJson(e.target.value);
                       setPolicyError(null);
                     }}
-                    placeholder="Policy JSON???�력?�세??"
+                    placeholder="Policy JSON???�력?�세??"
                     className={cn(
                       "min-h-[260px] w-full rounded-xl border px-3 py-2 font-mono text-xs",
                       adminInputMode === "manual"
@@ -975,9 +975,9 @@ export default function NewKbPage() {
                   />
                   {policyError ? <div className="text-xs text-rose-600">{policyError}</div> : null}
                   <div className="grid gap-2 text-xs text-slate-500">
-                    <div>?�드코딩 ?�요 ?�역:</div>
-                    <div>- ??predicate 추�? ?? matchPredicate() 구현 ?�요</div>
-                    <div>- ??action ?�??추�? ?? applyActions() 구현 ?�요</div>
+                    <div>?�드코딩 ?�요 ?�역:</div>
+                    <div>- ??predicate 추�? ?? matchPredicate() 구현 ?�요</div>
+                    <div>- ??action ?�??추�? ?? applyActions() 구현 ?�요</div>
                   </div>
                 </div>
               )}
@@ -1006,7 +1006,7 @@ export default function NewKbPage() {
                 : "bg-slate-200 text-slate-400"
             )}
           >
-            {saving ? "?�성 �?.." : "문서 ?�성"}
+            {saving ? "?�성 �?.." : "문서 ?�성"}
           </button>
         </div>
       </div>

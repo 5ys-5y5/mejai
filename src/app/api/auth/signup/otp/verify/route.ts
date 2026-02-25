@@ -2,16 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { callAdapter } from "@/lib/mcpAdapters";
 
-function isUuidLike(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
 function normalizePhone(value: string) {
   return String(value || "").replace(/[^\d]/g, "");
-}
-
-function readSignupOtpOrgId() {
-  return String(process.env.SIGNUP_OTP_ORG_ID || "").trim();
 }
 
 export async function POST(req: NextRequest) {
@@ -26,11 +18,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "CODE_AND_OTP_REF_REQUIRED" }, { status: 400 });
   }
 
-  const orgId = readSignupOtpOrgId();
-  if (!orgId || !isUuidLike(orgId)) {
-    return NextResponse.json({ error: "SIGNUP_OTP_ORG_ID_MISSING" }, { status: 500 });
-  }
-
   let supabaseAdmin;
   try {
     supabaseAdmin = createAdminSupabaseClient();
@@ -41,12 +28,16 @@ export async function POST(req: NextRequest) {
   const result = await callAdapter(
     "solapi",
     { otp_ref: otpRef, code },
-    { supabase: supabaseAdmin, orgId, userId: null },
-    { toolName: "verify_otp" }
+    { supabase: supabaseAdmin, orgId: null, userId: null },
+    { toolName: "verify_otp_guest" }
   );
 
   if (result.status !== "success") {
-    return NextResponse.json({ error: result.error?.message || "OTP_VERIFY_FAILED" }, { status: 400 });
+    console.error("[signup_otp_verify] adapter_error", {
+      code: result.error?.code || null,
+      message: result.error?.message || null,
+    });
+    return NextResponse.json({ error: "OTP_VERIFY_FAILED" }, { status: 400 });
   }
 
   const verificationToken = String(result.data?.customer_verification_token || "").trim();
@@ -55,9 +46,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { data, error } = await supabaseAdmin
-    .from("H_auth_otp_verifications")
+    .from("H_auth_otp_verifications_guest")
     .select("destination, verified_at")
-    .eq("org_id", orgId)
     .eq("verification_token", verificationToken)
     .maybeSingle();
 

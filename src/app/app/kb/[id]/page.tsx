@@ -163,17 +163,17 @@ function buildDiffLines(current?: KbItem | null, prev?: KbItem | null): DiffLine
 }
 
 function buildContentChangeSummary(current?: KbItem | null, prev?: KbItem | null) {
-  if (!current || !prev) return "?�규";
+  if (!current || !prev) return "?�규";
   const diff = buildDiffLines(current, prev);
   const added = diff.filter((line) => line.type === "add").map((line) => line.text.trim()).filter(Boolean);
   const removed = diff.filter((line) => line.type === "del").map((line) => line.text.trim()).filter(Boolean);
 
-  if (added.length === 0 && removed.length === 0) return "변�??�음";
+  if (added.length === 0 && removed.length === 0) return "변�??�음";
 
   const addedText = added.length > 0 ? `+ ${added.join(" | ")}` : "";
   const removedText = removed.length > 0 ? `- ${removed.join(" | ")}` : "";
   const combined = [addedText, removedText].filter(Boolean).join(" / ");
-  if (!combined) return "변�??�음";
+  if (!combined) return "변�??�음";
 
   const lineCount = added.length + removed.length;
   if (lineCount > 1) {
@@ -261,7 +261,7 @@ export default function EditKbPage() {
         setLoading(false);
       } catch {
         if (!mounted) return;
-        setError("문서�?불러?��? 못했?�니??");
+        setError("문서�?불러?��? 못했?�니??");
         setLoading(false);
       }
     }
@@ -325,11 +325,11 @@ export default function EditKbPage() {
   const handleSaveMeta = async () => {
     if (!kbId) return;
     if (title.trim().length === 0) {
-      toast.error("?�목???�력??주세??");
+      toast.error("?�목???�력??주세??");
       return;
     }
     if (!metaChanged) {
-      toast.error("변경된 ?�보가 ?�습?�다.");
+      toast.error("변경된 ?�보가 ?�습?�다.");
       return;
     }
     setSavingMeta(true);
@@ -348,15 +348,15 @@ export default function EditKbPage() {
         body: JSON.stringify(payload),
       });
 
-      toast.success("문서 ?�보가 ?�?�되?�습?�다.");
+      toast.success("문서 ?�보가 ?�?�되?�습?�다.");
       setBaseTitle(saved.title || "");
       setBaseCategory(saved.category ?? null);
       setTitle(saved.title || "");
       setCategory(saved.category || "");
       await refreshItems();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "문서 ?�보 ?�?�에 ?�패?�습?�다.";
-      toast.error(message || "문서 ?�보 ?�?�에 ?�패?�습?�다.");
+      const message = err instanceof Error ? err.message : "문서 ?�보 ?�?�에 ?�패?�습?�다.";
+      toast.error(message || "문서 ?�보 ?�?�에 ?�패?�습?�다.");
     } finally {
       setSavingMeta(false);
     }
@@ -365,11 +365,11 @@ export default function EditKbPage() {
   const handleSaveContent = async () => {
     if (!kbId) return;
     if (content.trim().length === 0) {
-      toast.error("?�용???�력??주세??");
+      toast.error("?�용???�력??주세??");
       return;
     }
     if (!contentChanged) {
-      toast.error("변경된 ?�용???�습?�다.");
+      toast.error("변경된 ?�용???�습?�다.");
       return;
     }
     setSavingContent(true);
@@ -386,7 +386,7 @@ export default function EditKbPage() {
         body: JSON.stringify(payload),
       });
 
-      toast.success("??버전???�성?�었?�니??");
+      toast.success("??버전???�성?�었?�니??");
       setBaseContent(saved.content || "");
       setContent(saved.content || "");
       setCurrentVersion(saved.version || "");
@@ -397,15 +397,15 @@ export default function EditKbPage() {
         router.replace(`/app/kb/${saved.id}`);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "문서 ?�용 ?�?�에 ?�패?�습?�다.";
-      toast.error(message || "문서 ?�용 ?�?�에 ?�패?�습?�다.");
+      const message = err instanceof Error ? err.message : "문서 ?�용 ?�?�에 ?�패?�습?�다.";
+      toast.error(message || "문서 ?�용 ?�?�에 ?�패?�습?�다.");
     } finally {
       setSavingContent(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("??버전????��?�까?? ??��??버전?� 복구?????�습?�다.")) {
+    if (!window.confirm("??버전????��?�까?? ??��??버전?� 복구?????�습?�다.")) {
       return;
     }
     try {
@@ -413,13 +413,13 @@ export default function EditKbPage() {
       const next = allItems.filter((item) => item.id !== id);
       setAllItems(next);
       setUsedBytes(calcRagUsageBytes(next));
-      toast.success("버전????��?�었?�니??");
+      toast.success("버전????��?�었?�니??");
       if (id === kbId) {
         router.push("/app/kb");
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "버전 ??��???�패?�습?�다.";
-      toast.error(message || "버전 ??��???�패?�습?�다.");
+      const message = err instanceof Error ? err.message : "버전 ??��???�패?�습?�다.";
+      toast.error(message || "버전 ??��???�패?�습?�다.");
     }
   };
 
@@ -436,11 +436,11 @@ export default function EditKbPage() {
         },
         body: JSON.stringify({ is_active: true }),
       });
-      toast.success("배포 버전??변경되?�습?�다.");
+      toast.success("배포 버전??변경되?�습?�다.");
       await refreshItems();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "배포 ?�태 변경에 ?�패?�습?�다.";
-      toast.error(message || "배포 ?�태 변경에 ?�패?�습?�다.");
+      const message = err instanceof Error ? err.message : "배포 ?�태 변경에 ?�패?�습?�다.";
+      toast.error(message || "배포 ?�태 변경에 ?�패?�습?�다.");
     } finally {
       setActiveUpdateId(null);
     }
@@ -483,8 +483,8 @@ export default function EditKbPage() {
       <div className="mx-auto w-full max-w-6xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">문서 ?�정</h1>
-            <p className="mt-1 text-sm text-slate-500">지??베이??문서�??�데?�트?�니??</p>
+            <h1 className="text-2xl font-semibold text-slate-900">문서 ?�정</h1>
+            <p className="mt-1 text-sm text-slate-500">지??베이??문서�??�데?�트?�니??</p>
           </div>
           <RagStorageBadge usedBytes={usedBytes} limitBytes={limitBytes} />
           <button
@@ -492,16 +492,16 @@ export default function EditKbPage() {
             onClick={() => router.push("/app/kb")}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
           >
-            목록?�로
+            목록?�로
           </button>
         </div>
 
         <Card className="mt-6 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-slate-900">문서 ?�보 (?�체 버전 공통)</div>
+              <div className="text-sm font-semibold text-slate-900">문서 ?�보 (?�체 버전 공통)</div>
               <p className="mt-1 text-xs text-slate-500">
-                ?�목/카테고리 변경�? 같�? parent_id??모든 버전??즉시 반영?�니??
+                ?�목/카테고리 변경�? 같�? parent_id??모든 버전??즉시 반영?�니??
               </p>
             </div>
             <button
@@ -513,11 +513,11 @@ export default function EditKbPage() {
                 canSaveMeta ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-400"
               )}
             >
-              {savingMeta ? "?�??�?.." : "?�보 ?�??}
+              {savingMeta ? "저장 중..." : "정보 저장"}
             </button>
           </div>
           {loading ? (
-            <div className="mt-4 text-sm text-slate-500">문서�?불러?�는 �?..</div>
+            <div className="mt-4 text-sm text-slate-500">문서를 불러오는 중입니다.</div>
           ) : error ? (
             <div className="mt-4 text-sm text-rose-600">{error}</div>
           ) : (
@@ -526,16 +526,16 @@ export default function EditKbPage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="text-sm font-semibold text-slate-900">ADMIN 공통 KB</div>
                   <div className="mt-1 text-xs text-slate-500">
-                    ?�성 ???�형/?�?��? 변경할 ???�습?�다.
+                    ?�성 ???�형/?�?��? 변경할 ???�습?�다.
                   </div>
                   <div className="mt-3 grid gap-2">
-                    <div className="text-xs font-semibold text-slate-600">?�용 ?�??그룹</div>
+                    <div className="text-xs font-semibold text-slate-600">?�용 ?�??그룹</div>
                     {applyGroups.length === 0 ? (
-                      <div className="text-xs text-slate-500">?�체 ?�용???�용</div>
+                      <div className="text-xs text-slate-500">?�체 ?�용???�용</div>
                     ) : (
                       <div className="grid gap-2 text-xs text-slate-600">
                         <div className="text-xs font-semibold text-slate-700">
-                          매칭 방식: {applyGroupsMode === "any" ? "?�나?�도 ?�함" : "모두 ?�함"}
+                          매칭 방식: {applyGroupsMode === "any" ? "?�나?�도 ?�함" : "모두 ?�함"}
                         </div>
                         <ul className="grid gap-1">
                           {applyGroups.map((group) => (
@@ -550,11 +550,11 @@ export default function EditKbPage() {
                 </div>
               ) : null}
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-slate-900">문서 ?�목 *</label>
+                <label className="text-sm font-medium text-slate-900">문서 ?�목 *</label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="?? 반품 ?�책 ?�내"
+                  placeholder="?? 반품 ?�책 ?�내"
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
@@ -564,7 +564,7 @@ export default function EditKbPage() {
                 <input
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  placeholder="?? ?�책"
+                  placeholder="?? ?�책"
                   list="kb-category-options"
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
@@ -581,10 +581,10 @@ export default function EditKbPage() {
         <Card className="mt-6 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-slate-900">버전 ?�용 (??버전 ?�성)</div>
+              <div className="text-sm font-semibold text-slate-900">버전 ?�용 (??버전 ?�성)</div>
               <p className="mt-1 text-xs text-slate-500">
-                ?�용???�?�하�???버전???�성?�고 ?�전 버전?� 그�?�??��??�니?? ?�목/카테고리???�에??
-                별도�??�?�해???�니??
+                ?�용???�?�하�???버전???�성?�고 ?�전 버전?� 그�?�??��??�니?? ?�목/카테고리???�에??
+                별도�??�?�해???�니??
               </p>
             </div>
             <button
@@ -596,31 +596,31 @@ export default function EditKbPage() {
                 canSaveContent ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-slate-200 text-slate-400"
               )}
             >
-              {savingContent ? "?�??�?.." : "?�용 ?�??}
+              {savingContent ? "저장 중..." : "내용 저장"}
             </button>
           </div>
           {loading ? (
-            <div className="mt-4 text-sm text-slate-500">문서�?불러?�는 �?..</div>
+            <div className="mt-4 text-sm text-slate-500">문서를 불러오는 중입니다.</div>
           ) : error ? (
             <div className="mt-4 text-sm text-rose-600">{error}</div>
           ) : (
             <div className="mt-4 grid gap-4">
               <div className="grid gap-2">
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-900">?�재 버전</label>
+                  <label className="text-sm font-medium text-slate-900">?�재 버전</label>
                   <input
-                    value={currentVersion ? `${currentVersion} · ?�??????버전 ?�성` : "?�??????버전 ?�성"}
+                    value={currentVersion ? `${currentVersion} · ?�??????버전 ?�성` : "?�??????버전 ?�성"}
                     disabled
                     className="h-10 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 text-xs text-slate-500 cursor-not-allowed"
                   />
                 </div>
               </div>
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-slate-900">?�용 *</label>
+                <label className="text-sm font-medium text-slate-900">?�용 *</label>
                 <textarea
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  placeholder="문서 ?�용???�력?�세??"
+                  placeholder="문서 ?�용???�력?�세??"
                   className="min-h-[220px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
@@ -628,9 +628,9 @@ export default function EditKbPage() {
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-slate-900">KB ?�데?�트 ?�용 ?�이?�트 ?�택</div>
+                      <div className="text-sm font-semibold text-slate-900">KB ?�데?�트 ?�용 ?�이?�트 ?�택</div>
                       <p className="mt-1 text-xs text-slate-500">
-                        ?�용 ?�?????�택???�이?�트�???버전?�로 ?�성?�니??
+                        ?�용 ?�?????�택???�이?�트�???버전?�로 ?�성?�니??
                       </p>
                     </div>
                     <button
@@ -645,11 +645,11 @@ export default function EditKbPage() {
                       className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 hover:bg-slate-100"
                       disabled={agentsUsingKb.length === 0}
                     >
-                      {allAgentsSelected ? "?�체 ?�제" : "?�체 ?�택"}
+                      {allAgentsSelected ? "?�체 ?�제" : "?�체 ?�택"}
                     </button>
                   </div>
                   {agentsUsingKb.length === 0 ? (
-                    <div className="mt-3 text-xs text-slate-500">??KB 버전???�용?�는 ?�이?�트가 ?�습?�다.</div>
+                    <div className="mt-3 text-xs text-slate-500">??KB 버전???�용?�는 ?�이?�트가 ?�습?�다.</div>
                   ) : (
                     <div className="mt-3 grid gap-2">
                       {agentsUsingKb.map((agent) => {
@@ -686,7 +686,7 @@ export default function EditKbPage() {
         </Card>
 
         <Card className="mt-6 p-6">
-          <div className="text-sm font-semibold text-slate-900">?�정 ?�용</div>
+          <div className="text-sm font-semibold text-slate-900">?�정 ?�용</div>
           <div className="mt-3">
             <DiffViewer lines={diffLines} />
           </div>
@@ -695,8 +695,8 @@ export default function EditKbPage() {
         <Card className="mt-6 p-6">
           <div className="text-sm font-semibold text-slate-900">버전 목록</div>
           <p className="mt-1 text-xs text-slate-500">
-            배포 ?�태??버전 목록?�서�?관리됩?�다. 배포 컬럼??on?�로 바꾸�??�당 버전�??�성?�되�?
-            ?�머지???�동?�로 off 처리?�니??
+            배포 ?�태??버전 목록?�서�?관리됩?�다. 배포 컬럼??on?�로 바꾸�??�당 버전�??�성?�되�?
+            ?�머지???�동?�로 off 처리?�니??
           </p>
           <ul className="mt-3 grid grid-cols-[80px_80px_60px_60px_60px_60px_60px_100px_minmax(0,1fr)_40px] gap-x-[6px] divide-y divide-slate-200">
             <li className="contents">
@@ -707,25 +707,25 @@ export default function EditKbPage() {
                 배포
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                ?�화??
+                ?�화??
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                ?�화?�간
+                ?�화?�간
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
                 만족??
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                ?�공�?
+                ?�공�?
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                ?��???
+                ?��???
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                ?�정??
+                ?�정??
               </span>
               <span className="flex min-h-[44px] items-center px-2 py-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">
-                ?�정 ?�용
+                ?�정 ?�용
               </span>
               <span className="flex min-h-[44px] items-center px-0 py-3 pr-2 text-left text-xs font-semibold text-slate-500">
                 
@@ -733,7 +733,7 @@ export default function EditKbPage() {
             </li>
             <li className="col-span-full border-b border-slate-200" />
             {versionItems.length === 0 ? (
-              <li className="col-span-full py-3 text-sm text-slate-500">버전 기록???�습?�다.</li>
+              <li className="col-span-full py-3 text-sm text-slate-500">버전 기록???�습?�다.</li>
             ) : (
               versionItems.map((item, index) => {
                 const isCurrent = item.id === kbId;
@@ -758,8 +758,8 @@ export default function EditKbPage() {
                       {isCurrent ? (
                         <span
                           className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500"
-                          aria-label="?�정 �?
-                          title="?�정 �?
+                          aria-label="수정"
+                          title="수정"
                         >
                           <PencilLine className="h-3.5 w-3.5" />
                         </span>
@@ -782,14 +782,14 @@ export default function EditKbPage() {
                           deployDisabled && !isActiveRow ? "cursor-not-allowed opacity-60" : ""
                         )}
                       >
-                        {activeUpdateId === item.id ? "변�?�?.." : isActiveRow ? "ON" : "OFF"}
+                        {activeUpdateId === item.id ? "변�?�?.." : isActiveRow ? "ON" : "OFF"}
                       </button>
                     </div>
                     <div className="flex min-h-[44px] items-center px-1 py-3 text-[11px] text-slate-600 whitespace-nowrap">
-                      0�?
+                      0�?
                     </div>
                     <div className="flex min-h-[44px] items-center px-1 py-3 text-[11px] text-slate-600 whitespace-nowrap">
-                      0�?
+                      0�?
                     </div>
                     <div className="flex min-h-[44px] items-center px-1 py-3 text-[11px] text-slate-600 whitespace-nowrap">
                       0.0
@@ -813,7 +813,7 @@ export default function EditKbPage() {
                           e.stopPropagation();
                           handleDelete(item.id);
                         }}
-                        aria-label="??��"
+                        aria-label="??��"
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50"
                       >
                         <Trash2 className="h-4 w-4" />

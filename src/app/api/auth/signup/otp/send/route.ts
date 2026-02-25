@@ -2,14 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { callAdapter } from "@/lib/mcpAdapters";
 
-function isUuidLike(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-}
-
-function readSignupOtpOrgId() {
-  return String(process.env.SIGNUP_OTP_ORG_ID || "").trim();
-}
-
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) {
@@ -21,11 +13,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "PHONE_REQUIRED" }, { status: 400 });
   }
 
-  const orgId = readSignupOtpOrgId();
-  if (!orgId || !isUuidLike(orgId)) {
-    return NextResponse.json({ error: "SIGNUP_OTP_ORG_ID_MISSING" }, { status: 500 });
-  }
-
   let supabaseAdmin;
   try {
     supabaseAdmin = createAdminSupabaseClient();
@@ -33,28 +20,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "ADMIN_SUPABASE_INIT_FAILED" }, { status: 500 });
   }
 
-  const { data: orgRow } = await supabaseAdmin
-    .from("A_iam_organizations")
-    .select("id, owner_id, registrant_id")
-    .eq("id", orgId)
-    .maybeSingle();
-  if (!orgRow) {
-    return NextResponse.json({ error: "ORG_NOT_FOUND" }, { status: 404 });
-  }
-  const userId = String(orgRow.owner_id || orgRow.registrant_id || "").trim();
-  if (!isUuidLike(userId)) {
-    return NextResponse.json({ error: "ORG_USER_MISSING" }, { status: 500 });
-  }
-
   const result = await callAdapter(
     "solapi",
     { destination: phone },
-    { supabase: supabaseAdmin, orgId, userId },
-    { toolName: "send_otp" }
+    { supabase: supabaseAdmin, orgId: null, userId: null },
+    { toolName: "send_otp_guest" }
   );
 
   if (result.status !== "success") {
-    return NextResponse.json({ error: result.error?.message || "OTP_SEND_FAILED" }, { status: 400 });
+    console.error("[signup_otp_send] adapter_error", {
+      code: result.error?.code || null,
+      message: result.error?.message || null,
+    });
+    return NextResponse.json({ error: "OTP_SEND_FAILED" }, { status: 400 });
   }
 
   return NextResponse.json({

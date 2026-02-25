@@ -408,7 +408,6 @@ async function resolveVerifiedPhoneByToken(input: {
   const { data } = await context.supabase
     .from("H_auth_otp_verifications")
     .select("destination, verified_at")
-    .eq("org_id", orgId)
     .eq("verification_token", token)
     .maybeSingle();
   if (!data || !data.verified_at) return null;
