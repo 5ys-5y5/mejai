@@ -530,7 +530,7 @@ export default function AgentsKbPage({ initialTab }: { initialTab?: TabKey }) {
                   onClick={(event) => event.stopPropagation()}
                 >
                   <Bot className="mr-2 inline h-4 w-4" />
-                  Laboratory
+                  Conversation
                 </Link>
               </div>
               <div className="text-xs text-slate-500">
@@ -599,7 +599,7 @@ export default function AgentsKbPage({ initialTab }: { initialTab?: TabKey }) {
                           ) : null}
                           <Link
                             href={`/app/laboratory?agentId=${encodeURIComponent(agent.id)}`}
-                            aria-label="Open laboratory"
+                            aria-label="Open conversation"
                             onClick={(event) => event.stopPropagation()}
                             className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                           >

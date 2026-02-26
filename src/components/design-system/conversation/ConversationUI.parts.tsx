@@ -15,7 +15,7 @@ import { buildIntentDisambiguationTableHtmlFromText, type RuntimeUiTypeId } from
 // (ConversationSetupPanel/ConversationSplitLayout + ConversationGrid/QuickReply/Confirm/ProductCard merged below)
 import { getDebugParts, renderBotContent } from "@/lib/conversation/messageRenderUtils";
 import type { ConversationPageFeatures, ConversationSetupUi, ExistingSetupFieldKey, ExistingSetupLabelKey } from "@/lib/conversation/pageFeaturePolicy";
-import type { ChatMessage, ModelState, SetupMode } from "@/lib/conversation/client/laboratoryPageState";
+import type { ChatMessage, ModelState, SetupMode } from "@/lib/conversation/client/conversationPageState";
 import { appendInlineKbSample, hasConflictingInlineKbSamples } from "@/lib/conversation/inlineKbSamples";
 import type { DebugTranscriptOptions, LogBundle } from "@/lib/debugTranscript";
 import { applyDebugToggleSelection, DEBUG_COPY_TOGGLE_OPTIONS, resolveDebugToggleValues } from "@/lib/debugTranscriptToggle";

@@ -25,7 +25,7 @@ function makeTraceId() {
 
 function parsePageKey(value: unknown): ConversationPageKey {
   const pageKey = String(value || "").trim();
-  if (!pageKey) return "/app/laboratory";
+  if (!pageKey) return "/app/conversation";
   return pageKey;
 }
 
@@ -99,7 +99,7 @@ async function insertLabAuditEvent(input: {
       bot_context: botContext || {},
     });
   } catch (error) {
-    console.warn("[laboratory/run] failed to insert audit event", {
+    console.warn("[conversation/run] failed to insert audit event", {
       eventType,
       session_id: sessionId,
       turn_id: turnId,
@@ -142,7 +142,7 @@ async function persistProxyFailure(input: {
   try {
     supabaseAdmin = createAdminSupabaseClient();
   } catch (err) {
-    console.warn("[laboratory/run] admin supabase init failed", {
+    console.warn("[conversation/run] admin supabase init failed", {
       trace_id: traceId,
       error: err instanceof Error ? err.message : String(err),
     });
@@ -179,7 +179,7 @@ async function persistProxyFailure(input: {
         .maybeSingle();
       sessionExists = Boolean(data?.id);
     } catch (err) {
-      console.warn("[laboratory/run] failed to check session existence", {
+      console.warn("[conversation/run] failed to check session existence", {
         trace_id: traceId,
         session_id: resolvedSessionId,
         error: err instanceof Error ? err.message : String(err),
@@ -193,7 +193,7 @@ async function persistProxyFailure(input: {
         org_id: serverContext?.orgId || null,
         session_code: `lab_${Math.random().toString(36).slice(2, 8)}`,
         started_at: nowIso(),
-        channel: "laboratory_proxy_error",
+        channel: "conversation_proxy_error",
         metadata: {
           trace_id: traceId,
           page_key: pageKey,
@@ -202,7 +202,7 @@ async function persistProxyFailure(input: {
         },
       });
     } catch (err) {
-      console.warn("[laboratory/run] failed to insert error session", {
+      console.warn("[conversation/run] failed to insert error session", {
         trace_id: traceId,
         session_id: resolvedSessionId,
         error: err instanceof Error ? err.message : String(err),
@@ -279,7 +279,7 @@ async function persistProxyFailure(input: {
     if (data?.id) persistedTurnId = String(data.id);
     persistedSeq = data?.seq ? Number(data.seq) : null;
   } catch (err) {
-    console.warn("[laboratory/run] failed to insert error turn", {
+    console.warn("[conversation/run] failed to insert error turn", {
       trace_id: traceId,
       session_id: resolvedSessionId,
       turn_id: resolvedTurnId,
@@ -315,7 +315,7 @@ async function persistProxyFailure(input: {
       }
     );
   } catch (err) {
-    console.warn("[laboratory/run] failed to upsert debug log", {
+    console.warn("[conversation/run] failed to upsert debug log", {
       trace_id: traceId,
       session_id: resolvedSessionId,
       turn_id: persistedTurnId,
@@ -444,7 +444,7 @@ export async function POST(req: NextRequest) {
   let body: Record<string, any> | null = null;
   let targetPath = "/api/runtime/chat";
   let targetUrl: string | null = null;
-  let pageKey: ConversationPageKey = "/app/laboratory";
+  let pageKey: ConversationPageKey = "/app/conversation";
   let authHeader = "";
   let cookieHeader = "";
   let serverContext: { userId?: string | null; orgId?: string | null } | null = null;
@@ -455,7 +455,7 @@ export async function POST(req: NextRequest) {
     body = await req.json().catch(() => null);
     markStage("lab.proxy.parse_body.done");
     if (!body || !body.message) {
-      console.info("[laboratory/run][timing]", {
+      console.info("[conversation/run][timing]", {
         trace_id: traceId,
         status: "invalid_body",
         parse_body_ms: Date.now() - parseStartedAt,
@@ -570,7 +570,7 @@ export async function POST(req: NextRequest) {
       productCards: featureFlags.interaction.productCards,
     });
     const parseResponseMs = Date.now() - parseResponseStartedAt;
-    console.info("[laboratory/run][timing]", {
+    console.info("[conversation/run][timing]", {
       trace_id: traceId,
       status: res.status,
       route: targetPath,
@@ -598,8 +598,8 @@ export async function POST(req: NextRequest) {
       requestStartedAt,
       serverContext,
     });
-    console.error("[laboratory/run] proxy failed", error);
-    console.info("[laboratory/run][timing]", {
+    console.error("[conversation/run] proxy failed", error);
+    console.info("[conversation/run][timing]", {
       trace_id: traceId,
       status: "proxy_failed",
       total_ms: Date.now() - requestStartedAt,

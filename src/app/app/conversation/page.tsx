@@ -10,7 +10,7 @@ import {
 } from "@/components/design-system";
 import { useConversationPageController } from "@/lib/conversation/client/useConversationPageController";
 
-export default function LaboratoryPage() {
+export default function ConversationPage() {
   const ctrl = useConversationPageController("/app/conversation");
   const createModelProps = (model: (typeof ctrl.models)[number], index: number) => ({
     index,
@@ -80,8 +80,8 @@ export default function LaboratoryPage() {
           addModelDisabled={ctrl.models.length >= ctrl.MAX_MODELS}
           leading={
             <div>
-              <h1 className="text-2xl font-semibold text-slate-900">실험실</h1>
-              <p className="mt-1 text-sm text-slate-500">LLM · KB · MCP · Route 조합을 여러 모드로 비교해서 응답을 확인하세요.</p>
+              <h1 className="text-2xl font-semibold text-slate-900">대화</h1>
+              <p className="mt-1 text-sm text-slate-500">LLM · KB · MCP · Route 조합을 여러 개 동시에 비교해 품질을 확인하세요.</p>
             </div>
           }
         />
@@ -90,13 +90,13 @@ export default function LaboratoryPage() {
           {ctrl.loading ? (
             <div className="flex items-center justify-center gap-3 text-sm text-slate-600">
               <Loader2 className="h-5 w-5 animate-spin" />
-              <span>로딩 중... {ctrl.loadingHints.join(", ")}</span>
+              <span>로딩 중: {ctrl.loadingHints.join(", ")}</span>
             </div>
           ) : null}
           {ctrl.error ? <div className="text-sm text-rose-600">{ctrl.error}</div> : null}
           {!ctrl.loading && !ctrl.error && ctrl.kbItems.length === 0 ? (
             <div className="text-sm text-slate-500">
-              비교할 KB가 없습니다. 신규 모드는 KB 없이도 실행 가능하고, 기존 모드는 KB/에이전트가 필요합니다.
+              비교할 KB가 없습니다. 신규 모델은 KB 없이도 실행할 수 있고, 기존 모델은 KB/에이전트가 필요합니다.
             </div>
           ) : null}
           {!ctrl.loading && !ctrl.error

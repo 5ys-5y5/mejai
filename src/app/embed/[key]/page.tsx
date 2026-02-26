@@ -32,7 +32,7 @@ import { buildRuntimeBotMessageFields } from "@/lib/conversation/client/runtimeM
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
 import type { LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
-import type { ChatMessage } from "@/lib/conversation/client/laboratoryPageState";
+import type { ChatMessage } from "@/lib/conversation/client/conversationPageState";
 
 type WidgetConfig = {
   id: string;
@@ -923,7 +923,7 @@ export default function WidgetEmbedPage() {
           const serverCopy = await fetchWidgetTranscriptCopy({
             sessionId,
             widgetToken,
-            page: "/app/laboratory",
+            page: "/app/conversation",
             kind,
             limit: 500,
           });

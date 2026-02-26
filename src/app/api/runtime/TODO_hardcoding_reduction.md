@@ -14,7 +14,7 @@ Updated: 2026-02-05
 - [x] UI fallback quick-reply config now uses centralized resolver
   - `src/app/api/runtime/chat/presentation/ui-responseDecorators.ts`
 - [x] Added rule source trace fields (`source_function`, `source_module`)
-  - emitted and copied in Laboratory transcript
+  - emitted and copied in Conversation transcript
 - [x] Added decision `call_chain` capture in audit events/debug logs
   - `src/app/api/runtime/chat/services/auditRuntime.ts`
 - [x] Order choices quick-reply rule switched to centralized resolver

@@ -84,7 +84,7 @@ export function useConversationController(options: ControllerOptions) {
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [messageLogs, setMessageLogs] = useState<Record<string, LogBundleWithState>>({});
 
-  const runEndpoint = options.runEndpoint || "/api/laboratory/run";
+  const runEndpoint = options.runEndpoint || "/api/conversation/run";
   const traceIdPrefix = options.traceIdPrefix || "conv";
 
   const loadTurnLogs = useCallback(async (messageId: string, targetSessionId?: string | null, turnId?: string | null) => {

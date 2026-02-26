@@ -37,7 +37,7 @@ export type ConversationSetupUi = {
  *
  * 적용 범위:
  * - "/" (랜딩 체험)
- * - "/app/laboratory" (실험실)
+ * - "/app/conversation" (대화)
  * - "/embed" (위젯)
  */
 type IdGate = {
@@ -720,11 +720,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
     },
   },
-  "/app/laboratory": {
+  "/app/conversation": {
     mcp: {
       providerSelector: true,
       actionSelector: true,
-      // 실험실은 기본 전체 허용
+      // 대화은 기본 전체 허용
       providers: {},
       tools: {},
     },
@@ -909,204 +909,12 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
     },
   },
-  "/demo": {
-    mcp: {
-      providerSelector: true,
-      actionSelector: true,
-      providers: {
-        denylist: ["cafe24"],
-      },
-      tools: {},
-    },
-    adminPanel: {
-      enabled: true,
-      selectionToggle: true,
-      logsToggle: true,
-      messageSelection: true,
-      messageMeta: true,
-      copyConversation: true,
-      copyIssue: true,
-    },
-    interaction: {
-      quickReplies: true,
-      productCards: true,
-      threePhasePrompt: true,
-      threePhasePromptLabels: DEFAULT_THREE_PHASE_LABELS,
-      threePhasePromptShowConfirmed: true,
-      threePhasePromptShowConfirming: true,
-      threePhasePromptShowNext: true,
-      threePhasePromptHideLabels: false,
-      inputPlaceholder: "",
-      prefill: true,
-      prefillMessages: DEFAULT_PREFILL_MESSAGES,
-      inputSubmit: true,
-      widgetHeaderAgentAction: false,
-      widgetHeaderNewConversation: true,
-      widgetHeaderClose: true,
-    },
-    setup: {
-      modelSelector: false,
-      agentSelector: false,
-      llmSelector: true,
-      llms: {},
-      kbSelector: false,
-      kbIds: {},
-      adminKbSelector: false,
-      adminKbIds: {},
-      modeExisting: false,
-      sessionIdSearch: false,
-      modeNew: true,
-      routeSelector: false,
-      routes: {},
-      inlineUserKbInput: true,
-      defaultSetupMode: "new",
-      defaultLlm: "chatgpt",
-    },
-    visibility: {
-      mcp: {
-        providerSelector: "user",
-        actionSelector: "user",
-      },
-      adminPanel: {
-        enabled: "user",
-        selectionToggle: "user",
-        logsToggle: "user",
-        messageSelection: "user",
-        messageMeta: "user",
-        copyConversation: "user",
-        copyIssue: "user",
-      },
-      interaction: {
-        quickReplies: "user",
-        productCards: "user",
-        threePhasePrompt: "user",
-        threePhasePromptShowConfirmed: "user",
-        threePhasePromptShowConfirming: "user",
-        threePhasePromptShowNext: "user",
-        threePhasePromptHideLabels: "user",
-        prefill: "user",
-        inputSubmit: "user",
-        widgetHeaderAgentAction: "user",
-        widgetHeaderNewConversation: "user",
-        widgetHeaderClose: "user",
-      },
-      setup: {
-        modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "admin",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
-      },
-    },
-  },
-  "/call": {
-    mcp: {
-      providerSelector: true,
-      actionSelector: true,
-      providers: {
-        denylist: ["cafe24"],
-      },
-      tools: {},
-    },
-    adminPanel: {
-      enabled: true,
-      selectionToggle: true,
-      logsToggle: true,
-      messageSelection: true,
-      messageMeta: true,
-      copyConversation: true,
-      copyIssue: true,
-    },
-    interaction: {
-      quickReplies: true,
-      productCards: true,
-      threePhasePrompt: true,
-      threePhasePromptLabels: DEFAULT_THREE_PHASE_LABELS,
-      threePhasePromptShowConfirmed: true,
-      threePhasePromptShowConfirming: true,
-      threePhasePromptShowNext: true,
-      threePhasePromptHideLabels: false,
-      inputPlaceholder: "",
-      prefill: true,
-      prefillMessages: DEFAULT_PREFILL_MESSAGES,
-      inputSubmit: true,
-      widgetHeaderAgentAction: false,
-      widgetHeaderNewConversation: true,
-      widgetHeaderClose: true,
-    },
-    setup: {
-      modelSelector: false,
-      agentSelector: false,
-      llmSelector: true,
-      llms: {},
-      kbSelector: false,
-      kbIds: {},
-      adminKbSelector: false,
-      adminKbIds: {},
-      modeExisting: false,
-      sessionIdSearch: false,
-      modeNew: true,
-      routeSelector: false,
-      routes: {},
-      inlineUserKbInput: true,
-      defaultSetupMode: "new",
-      defaultLlm: "chatgpt",
-    },
-    visibility: {
-      mcp: {
-        providerSelector: "user",
-        actionSelector: "user",
-      },
-      adminPanel: {
-        enabled: "user",
-        selectionToggle: "user",
-        logsToggle: "user",
-        messageSelection: "user",
-        messageMeta: "user",
-        copyConversation: "user",
-        copyIssue: "user",
-      },
-      interaction: {
-        quickReplies: "user",
-        productCards: "user",
-        threePhasePrompt: "user",
-        threePhasePromptShowConfirmed: "user",
-        threePhasePromptShowConfirming: "user",
-        threePhasePromptShowNext: "user",
-        threePhasePromptHideLabels: "user",
-        prefill: "user",
-        inputSubmit: "user",
-        widgetHeaderAgentAction: "user",
-        widgetHeaderNewConversation: "user",
-        widgetHeaderClose: "user",
-      },
-      setup: {
-        modelSelector: "user",
-        agentSelector: "user",
-        llmSelector: "user",
-        kbSelector: "user",
-        adminKbSelector: "admin",
-        modeExisting: "user",
-        sessionIdSearch: "user",
-        modeNew: "user",
-        routeSelector: "user",
-        inlineUserKbInput: "user",
-      },
-    },
-  },
 };
 
-export function getConversationPageBaseKey(page: ConversationPageKey): "/" | "/app/laboratory" | typeof WIDGET_PAGE_KEY | "/demo" | "/call" {
+export function getConversationPageBaseKey(page: ConversationPageKey): "/" | "/app/conversation" | typeof WIDGET_PAGE_KEY {
   const normalized = String(page || "").trim();
   if (normalized === "/") return "/";
-  if (normalized === "/app/laboratory") return "/app/laboratory";
-  if (normalized === "/demo") return "/demo";
-  if (normalized === "/call" || normalized.startsWith("/call/")) return "/call";
+  if (normalized === "/app/conversation") return "/app/conversation";
   if (normalized === WIDGET_PAGE_KEY || normalized.startsWith(`${WIDGET_PAGE_KEY}/`)) return WIDGET_PAGE_KEY;
   return "/";
 }

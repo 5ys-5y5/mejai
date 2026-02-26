@@ -3,7 +3,11 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { buildRuntimeBotMessageFields } from "@/lib/conversation/client/runtimeMessageMapping";
-import { loadLaboratoryLogs, sendLaboratoryMessage, type LaboratoryRunConfig } from "@/lib/conversation/client/laboratoryTransport";
+import {
+  loadConversationLogs,
+  sendConversationMessage,
+  type ConversationRunConfig,
+} from "@/lib/conversation/client/conversationTransport";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 import {
   fetchConversationDebugOptions,
@@ -39,7 +43,7 @@ type BaseLogBundle = LogBundle & {
 
 type BaseModel<TMessage extends BaseMessage> = {
   id: string;
-  config: LaboratoryRunConfig;
+  config: ConversationRunConfig;
   sessionId: string | null;
   messages: TMessage[];
   selectedMessageIds: string[];
@@ -90,14 +94,14 @@ function resolveSnapshotTurnId<TMessage extends BaseMessage>(
   return fromAll?.turnId ? String(fromAll.turnId).trim() : null;
 }
 
-export function useLaboratoryConversationActions<TMessage extends BaseMessage, TModel extends BaseModel<TMessage>>(params: {
+export function useConversationActions<TMessage extends BaseMessage, TModel extends BaseModel<TMessage>>(params: {
   models: TModel[];
   updateModel: (id: string, updater: (model: TModel) => TModel) => void;
   ensureEditableSession: (target: TModel) => Promise<string | null>;
   isAdminUser: boolean;
   pageKey?: ConversationPageKey;
 }) {
-  const { models, updateModel, ensureEditableSession, isAdminUser, pageKey = "/app/laboratory" } = params;
+  const { models, updateModel, ensureEditableSession, isAdminUser, pageKey = "/app/conversation" } = params;
 
   const loadLogs = useCallback(
     async (id: string, messageId: string, sessionIdOverride?: string | null, turnIdOverride?: string | null) => {
@@ -119,7 +123,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         },
       }));
       try {
-        const loaded = await loadLaboratoryLogs(sessionId, target?.lastLogAt, 30);
+        const loaded = await loadConversationLogs(sessionId, target?.lastLogAt, 30);
         const mcpLogs =
           turnId.length > 0
             ? loaded.mcpLogs.filter((log) => String(log.turn_id || "") === turnId)
@@ -235,7 +239,7 @@ export function useLaboratoryConversationActions<TMessage extends BaseMessage, T
         const activeSessionId = target.conversationMode === "new" ? target.sessionId : await ensureEditableSession(target);
         appendLoadingLog(activeSessionId ? `\uAE30\uC874 \uC138\uC158 \uC0AC\uC6A9: ${activeSessionId}` : "\uC2E0\uADDC \uC138\uC158\uC73C\uB85C \uC694\uCCAD");
 
-        const result = await sendLaboratoryMessage(target.config, activeSessionId, text, target.selectedAgentId, {
+        const result = await sendConversationMessage(target.config, activeSessionId, text, target.selectedAgentId, {
           onProgress: appendLoadingLog,
         }, pageKey).then(
           (value) => ({ status: "fulfilled" as const, value }),

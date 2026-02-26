@@ -2,7 +2,7 @@ import { fetchSessionLogs, runConversation, type RuntimeRunResponse } from "@/li
 import { resolveServiceEndUserPayload } from "@/lib/conversation/client/endUserContext";
 import { resolveRuntimeFlags } from "@/lib/runtimeFlags";
 
-export type LaboratoryRunConfig = {
+export type ConversationRunConfig = {
   route: string;
   llm: string;
   kbId: string;
@@ -22,18 +22,18 @@ function toTimestamp(value?: string | null) {
   return Number.isNaN(ts) ? 0 : ts;
 }
 
-export async function sendLaboratoryMessage(
-  config: LaboratoryRunConfig,
+export async function sendConversationMessage(
+  config: ConversationRunConfig,
   sessionId: string | null,
   message: string,
   selectedAgentId?: string,
   hooks?: { onProgress?: (line: string) => void },
-  pageKey: string = "/app/laboratory"
+  pageKey: string = "/app/conversation"
 ): Promise<RuntimeRunResponse> {
-  const traceId = makeTraceId("labc");
+  const traceId = makeTraceId("conv");
   const startedAt = performance.now();
   hooks?.onProgress?.(`\uC694\uCCAD \uC2DC\uC791 (trace=${traceId})`);
-  console.info("[laboratory/client][timing]", {
+  console.info("[conversation/client][timing]", {
     trace_id: traceId,
     phase: "request_start",
     is_first_turn: !sessionId,
@@ -44,7 +44,7 @@ export async function sendLaboratoryMessage(
     const endUserPayload = await resolveServiceEndUserPayload();
     const runtimeFlags = resolveRuntimeFlags();
     const res = await runConversation(
-      "/api/laboratory/run",
+      "/api/conversation/run",
       {
         page_key: pageKey,
         route: config.route,
@@ -62,7 +62,7 @@ export async function sendLaboratoryMessage(
       },
       traceId
     );
-    console.info("[laboratory/client][timing]", {
+    console.info("[conversation/client][timing]", {
       trace_id: traceId,
       phase: "request_done",
       total_ms: Number((performance.now() - startedAt).toFixed(1)),
@@ -74,7 +74,7 @@ export async function sendLaboratoryMessage(
     );
     return res;
   } catch (error) {
-    console.info("[laboratory/client][timing]", {
+    console.info("[conversation/client][timing]", {
       trace_id: traceId,
       phase: "request_failed",
       total_ms: Number((performance.now() - startedAt).toFixed(1)),
@@ -85,7 +85,7 @@ export async function sendLaboratoryMessage(
   }
 }
 
-export async function loadLaboratoryLogs(
+export async function loadConversationLogs(
   sessionId: string,
   sinceIso?: string | null,
   limit = 30

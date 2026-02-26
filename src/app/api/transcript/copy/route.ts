@@ -36,7 +36,7 @@ type LogsByTurn = Map<string, LogBundle>;
 
 function parsePageKey(value: unknown): ConversationPageKey {
   const pageKey = String(value || "").trim();
-  if (!pageKey) return "/app/laboratory";
+  if (!pageKey) return "/app/conversation";
   return pageKey;
 }
 

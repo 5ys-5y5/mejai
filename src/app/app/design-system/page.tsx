@@ -79,7 +79,7 @@ import {
   createDefaultModel,
   type ChatMessage,
   type ModelState,
-} from "@/lib/conversation/client/laboratoryPageState";
+} from "@/lib/conversation/client/conversationPageState";
 import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
 
 type CategoryKey =
@@ -139,7 +139,7 @@ const singleOptions: SelectOption[] = [
 
 const searchableSingleOptions: SelectOption[] = [
   { id: "runtime_default", label: "Runtime v1" },
-  { id: "runtime_laboratory", label: "Laboratory Runtime" },
+  { id: "runtime_conversation", label: "Conversation Runtime" },
   { id: "runtime_safe", label: "Safe Runtime" },
   { id: "runtime_fast", label: "Fast Runtime" },
 ];
@@ -193,7 +193,7 @@ const demoProviderOptions: SelectOption[] = [
 ];
 const demoRouteOptions: SelectOption[] = [
   { id: "core_runtime", label: "Core Runtime" },
-  { id: "laboratory_runtime", label: "Laboratory Runtime" },
+  { id: "conversation_runtime", label: "Conversation Runtime" },
 ];
 const demoToolOptions: SelectOption[] = [
   { id: "list_orders", label: "list_orders", description: "주문 목록 조회" },
@@ -1137,7 +1137,7 @@ export function DesignSystemContent() {
 
   const [singleValue, setSingleValue] = useState("chatgpt");
   const [inputSelectValue, setInputSelectValue] = useState("chatgpt");
-  const [searchSingleValue, setSearchSingleValue] = useState("runtime_laboratory");
+  const [searchSingleValue, setSearchSingleValue] = useState("runtime_conversation");
   const [multiValues, setMultiValues] = useState<string[]>(["cafe24", "solapi", "juso", "runtime"]);
   const [groupedValues, setGroupedValues] = useState<string[]>(groupedDefault);
   const [dateRangeValue, setDateRangeValue] = useState("last_month");
@@ -1373,7 +1373,7 @@ export function DesignSystemContent() {
     return { value, parsed: normalized };
   });
 
-  const demoPageFeatures = useMemo(() => getDefaultConversationPageFeatures("/app/laboratory"), []);
+  const demoPageFeatures = useMemo(() => getDefaultConversationPageFeatures("/app/conversation"), []);
   const { setupUi: demoSetupUi } = useConversationPageRuntimeConfig("/");
   const demoVersionOptions = useMemo(() => {
     return (demoAgentVersionsByGroup.get(demoSelectedAgentGroupId) || []).map((item) => ({
@@ -2396,7 +2396,7 @@ export function DesignSystemContent() {
               <div className="mb-2 text-sm font-semibold text-slate-900">Step / Tab Selector Pattern</div>
               <UnderlineTabs tabs={stepTabItems} activeKey={stepTab} onSelect={setStepTab} panel-lego="UnderlineTabs" />
               <div className="mt-3 text-xs text-slate-500">Active: {stepTab}</div>
-              <div className="mt-3 text-xs text-slate-500">실험실/설정 페이지에서 반복되는 세그먼트 선택 UI</div>
+              <div className="mt-3 text-xs text-slate-500">대화/설정 페이지에서 반복되는 세그먼트 선택 UI</div>
               <UsedInPages pages={["src/components/design-system/conversation/ConversationUI.parts.tsx", "src/components/settings/ChatSettingsPanel.tsx"]} />
             </Card>
 

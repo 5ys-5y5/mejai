@@ -5,7 +5,7 @@ import { getServerContext } from "@/lib/serverAuth";
 
 const SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
 type SnapshotKind = "conversation" | "issue";
-type SnapshotPage = "/" | "/app/laboratory";
+type SnapshotPage = "/" | "/app/conversation";
 
 type SnapshotPayload = {
   page?: unknown;
@@ -20,7 +20,7 @@ type SnapshotRow = {
 };
 
 function isValidPage(value: string) {
-  return value === "/" || value === "/app/laboratory";
+  return value === "/" || value === "/app/conversation";
 }
 
 function isValidKind(value: string) {

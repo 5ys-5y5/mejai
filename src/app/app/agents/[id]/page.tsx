@@ -588,7 +588,7 @@ export default function AgentDetailPage() {
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
             >
               <Bot className="h-4 w-4" />
-              실험실에서 테스트
+              대화에서 테스트
             </Link>
             <button
               type="button"

@@ -32,6 +32,8 @@ export const config = {
     "/app/settings/:path*",
     "/app/admin",
     "/app/admin/:path*",
+    "/app/conversation",
+    "/app/conversation/:path*",
     "/app/laboratory",
     "/app/laboratory/:path*",
   ],

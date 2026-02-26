@@ -14,7 +14,7 @@ import {
 } from "@/components/design-system/conversation/ConversationUI.parts";
 import { renderBotContent } from "@/lib/conversation/messageRenderUtils";
 import { cn } from "@/lib/utils";
-import type { ChatMessage } from "@/lib/conversation/client/laboratoryPageState";
+import type { ChatMessage } from "@/lib/conversation/client/conversationPageState";
 
 const globalScope = typeof globalThis !== "undefined" ? (globalThis as Record<string, any>) : undefined;
 if (globalScope && typeof globalScope.process === "undefined") {

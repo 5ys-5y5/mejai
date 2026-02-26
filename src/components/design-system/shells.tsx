@@ -126,7 +126,7 @@ export function SidebarNavigationShell({ className, ...props }: React.HTMLAttrib
             </a>
             <a className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm border border-transparent text-slate-700 hover:bg-slate-50" href="#">
               <Bot className="h-4 w-4 text-slate-500" />
-              <span className="truncate">실험실</span>
+              <span className="truncate">대화</span>
             </a>
             <a className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm border border-transparent text-slate-700 hover:bg-slate-50" href="#">
               <ClipboardCheck className="h-4 w-4 text-slate-500" />

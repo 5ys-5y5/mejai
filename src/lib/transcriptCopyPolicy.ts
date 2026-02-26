@@ -270,23 +270,23 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
       formatter: "issue_transcript_v1",
       useSelectedMessages: false,
     },
-    note: "랜딩/실험실 대화 복사 정책",
+    note: "랜딩/대화 대화 복사 정책",
   },
-  "/app/laboratory": {
-    page: "/app/laboratory",
+  "/app/conversation": {
+    page: "/app/conversation",
     destinations: ["clipboard"],
     conversation: {
-      enabled: PAGE_CONVERSATION_FEATURES["/app/laboratory"].adminPanel.copyConversation,
+      enabled: PAGE_CONVERSATION_FEATURES["/app/conversation"].adminPanel.copyConversation,
       formatter: "debug_transcript_v1",
       useSelectedMessages: true,
       debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
     },
     issue: {
-      enabled: PAGE_CONVERSATION_FEATURES["/app/laboratory"].adminPanel.copyIssue,
+      enabled: PAGE_CONVERSATION_FEATURES["/app/conversation"].adminPanel.copyIssue,
       formatter: "issue_transcript_v1",
       useSelectedMessages: false,
     },
-    note: "랜딩/실험실 대화 복사 정책",
+    note: "랜딩/대화 대화 복사 정책",
   },
   [WIDGET_PAGE_KEY]: {
     page: WIDGET_PAGE_KEY,

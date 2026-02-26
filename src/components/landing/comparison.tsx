@@ -24,8 +24,8 @@ export function Comparison({ settings }: { settings: LandingSettings }) {
           </p>
         </div>
 
-        <div className="relative overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="relative overflow-x-auto scrollbar-hide">
+          <table className="w-full text-left border-collapse scrollbar-hide">
             <thead>
               <tr className="border-b border-zinc-800">
                 <th className="py-8 text-sm font-bold tracking-widest uppercase text-zinc-500 w-1/3">

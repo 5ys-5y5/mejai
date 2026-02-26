@@ -44,10 +44,7 @@ export function Navbar() {
         </Link>
 
         <div className="hidden md:flex items-center space-x-8">
-          <Link href="/demo" className="text-sm font-medium hover:text-primary transition-colors">
-            데모
-          </Link>
-          <Link href="/pricing" className="text-sm font-medium hover:text-primary transition-colors">
+<Link href="/pricing" className="text-sm font-medium hover:text-primary transition-colors">
             요금 안내
           </Link>
           <Link href="/security" className="text-sm font-medium hover:text-primary transition-colors">
@@ -71,10 +68,7 @@ export function Navbar() {
 
       {isMobileMenuOpen && (
         <div className="md:hidden bg-background border-b absolute top-full left-0 right-0 p-4 flex flex-col space-y-4 animate-in fade-in slide-in-from-top-2">
-          <Link href="/demo" className="text-sm font-medium">
-            데모
-          </Link>
-          <Link href="/pricing" className="text-sm font-medium">
+<Link href="/pricing" className="text-sm font-medium">
             요금 안내
           </Link>
           <Link href="/security" className="text-sm font-medium">

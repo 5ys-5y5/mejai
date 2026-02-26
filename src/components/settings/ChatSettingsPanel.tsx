@@ -24,10 +24,13 @@ import {
   resolvePageConversationDebugOptions,
 } from "@/lib/transcriptCopyPolicy";
 
-const BASE_PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory", "/embed", "/demo", "/call"];
+const BASE_PAGE_KEYS: ConversationPageKey[] = ["/app/conversation", "/embed"];
+const EXCLUDED_PAGE_KEYS = new Set<ConversationPageKey>(["/"]);
 const SETTINGS_CARD_WIDTH = 300;
 function normalizePages(pages: ConversationPageKey[]) {
-  return Array.from(new Set([...BASE_PAGE_KEYS, ...pages.filter(Boolean)])).sort((a, b) => a.localeCompare(b));
+  const filtered = pages.filter((page) => page && !EXCLUDED_PAGE_KEYS.has(page));
+  const base = BASE_PAGE_KEYS.filter((page) => !EXCLUDED_PAGE_KEYS.has(page));
+  return Array.from(new Set([...base, ...filtered])).sort((a, b) => a.localeCompare(b));
 }
 function syncSetupUiOrderByHeader(
   pages: ConversationPageKey[],
@@ -597,12 +600,12 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     files: [
       "src/lib/conversation/pageFeaturePolicy.ts",
       "src/lib/conversation/client/useHeroPageController.ts",
-      "src/lib/conversation/client/useLaboratoryPageController.ts",
+      "src/lib/conversation/client/useConversationPageController.ts",
       "src/components/design-system/conversation/ConversationUI.tsx",
       "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "Provider 선택 UI 노출과 요청 payload 포함 여부를 제어합니다.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "mcp.actionSelector",
@@ -610,12 +613,12 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     files: [
       "src/lib/conversation/pageFeaturePolicy.ts",
       "src/lib/conversation/client/useHeroPageController.ts",
-      "src/lib/conversation/client/useLaboratoryPageController.ts",
+      "src/lib/conversation/client/useConversationPageController.ts",
       "src/components/design-system/conversation/ConversationUI.tsx",
       "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "Action 선택 UI 노출과 요청 payload 포함 여부를 제어합니다.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "mcp.providers.allowDeny",
@@ -623,10 +626,10 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     files: [
       "src/lib/conversation/pageFeaturePolicy.ts",
       "src/lib/conversation/client/useHeroPageController.ts",
-      "src/lib/conversation/client/useLaboratoryPageController.ts",
+      "src/lib/conversation/client/useConversationPageController.ts",
     ],
     notes: "페이지별 provider 허용/차단 필터를 적용합니다. 예: cafe24 차단.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "mcp.tools.allowDeny",
@@ -634,10 +637,10 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
     files: [
       "src/lib/conversation/pageFeaturePolicy.ts",
       "src/lib/conversation/client/useHeroPageController.ts",
-      "src/lib/conversation/client/useLaboratoryPageController.ts",
+      "src/lib/conversation/client/useConversationPageController.ts",
     ],
     notes: "페이지별 tool 허용/차단 필터를 적용합니다.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "adminPanel",
@@ -649,7 +652,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "관리자 메뉴 표시, 선택/로그 토글, 메시지 메타 노출을 제어합니다.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "adminPanel.copy",
@@ -658,10 +661,10 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/lib/conversation/pageFeaturePolicy.ts",
       "src/lib/transcriptCopyPolicy.ts",
       "src/lib/conversation/client/useConversationController.ts",
-      "src/lib/conversation/client/useLaboratoryConversationActions.ts",
+      "src/lib/conversation/client/useConversationActions.ts",
     ],
     notes: "복사 버튼 노출과 복사 허용 정책(실제 payload 생성)까지 함께 제어합니다.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "adminPanel.copy.debug",
@@ -670,10 +673,10 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/settings/ChatSettingsPanel.tsx",
       "src/lib/transcriptCopyPolicy.ts",
       "src/lib/conversation/client/useHeroPageController.ts",
-      "src/lib/conversation/client/useLaboratoryPageController.ts",
+      "src/lib/conversation/client/useConversationPageController.ts",
     ],
     notes: "페이지별 대화 복사 시 포함할 디버그 항목(debugOptions)을 제어합니다.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "interaction.quickReplies",
@@ -685,7 +688,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "퀵리플라이 렌더/선택/확정 UI를 활성/비활성합니다.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "interaction.productCards",
@@ -697,7 +700,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "카드 렌더/선택/확정 UI를 활성/비활성합니다.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "interaction.prefill",
@@ -707,7 +710,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.parts.tsx",
     ],
     notes: "초기 안내 prefill 메시지 출력 여부를 제어합니다.",
-    usedByPages: ["/", "/app/laboratory", "/embed"],
+    usedByPages: ["/", "/app/conversation", "/embed"],
   },
   {
     key: "interaction.prefillMessages",
@@ -717,7 +720,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.parts.tsx",
     ],
     notes: "초기 안내 prefill 메시지 문구를 설정합니다.",
-    usedByPages: ["/", "/app/laboratory", "/embed"],
+    usedByPages: ["/", "/app/conversation", "/embed"],
   },
   {
     key: "interaction.inputPlaceholder",
@@ -727,7 +730,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "입력 안내 문구를 설정합니다.",
-    usedByPages: ["/", "/app/laboratory", "/embed"],
+    usedByPages: ["/", "/app/conversation", "/embed"],
   },
   {
     key: "interaction.threePhasePrompt",
@@ -738,7 +741,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.parts.tsx",
     ],
     notes: "3단계 요약 메시지(Confirmed/Confirming/Next) 출력 여부를 제어합니다.",
-    usedByPages: ["/", "/app/laboratory", "/embed"],
+    usedByPages: ["/", "/app/conversation", "/embed"],
   },
   {
     key: "interaction.threePhasePromptLabels",
@@ -748,7 +751,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.parts.tsx",
     ],
     notes: "3단계 라벨 텍스트(Confirmed/Confirming/Next)를 설정합니다.",
-    usedByPages: ["/", "/app/laboratory", "/embed"],
+    usedByPages: ["/", "/app/conversation", "/embed"],
   },
   {
     key: "interaction.threePhasePromptShowConfirmed",
@@ -758,7 +761,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.parts.tsx",
     ],
     notes: "Confirmed 구간 표시 여부를 제어합니다.",
-    usedByPages: ["/", "/app/laboratory", "/embed"],
+    usedByPages: ["/", "/app/conversation", "/embed"],
   },
   {
     key: "interaction.threePhasePromptShowConfirming",
@@ -768,7 +771,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.parts.tsx",
     ],
     notes: "Confirming 구간 표시 여부를 제어합니다.",
-    usedByPages: ["/", "/app/laboratory", "/embed"],
+    usedByPages: ["/", "/app/conversation", "/embed"],
   },
   {
     key: "interaction.threePhasePromptShowNext",
@@ -778,7 +781,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.parts.tsx",
     ],
     notes: "Next 구간 표시 여부를 제어합니다.",
-    usedByPages: ["/", "/app/laboratory", "/embed"],
+    usedByPages: ["/", "/app/conversation", "/embed"],
   },
   {
     key: "interaction.threePhasePromptHideLabels",
@@ -788,7 +791,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.parts.tsx",
     ],
     notes: "라벨 텍스트 자체를 숨길지 여부를 제어합니다.",
-    usedByPages: ["/", "/app/laboratory", "/embed"],
+    usedByPages: ["/", "/app/conversation", "/embed"],
   },
   {
     key: "interaction.inputSubmit",
@@ -799,7 +802,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "입력창/전송 버튼 자체 노출을 제어합니다.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "setup",
@@ -813,7 +816,7 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
       "src/components/design-system/conversation/ConversationUI.tsx",
     ],
     notes: "페이지별 설정 영역 구성요소(모델/LLM/저장KB/임시KB/AdminKB/모드/Route) 노출과 기본값을 제어하며, 임시KB 샘플 선택 UI에도 공통 반영됩니다.",
-    usedByPages: ["/", "/app/laboratory"],
+    usedByPages: ["/", "/app/conversation"],
   },
   {
     key: "runtimeLoader",
@@ -1302,7 +1305,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
           values: {
             pages,
             debug_copy,
-            page_registry: registeredPages,
+            page_registry: pagesList,
             settings_ui: {
               setup_fields,
             },
@@ -1367,15 +1370,16 @@ export function ChatSettingsPanel({ authToken }: Props) {
         <div className="flex min-w-full gap-4">
           {columnKeys.map((column) => {
             const isHeader = column === "__header";
-            const page: ConversationPageKey = isHeader ? "/" : column;
+            const headerBasePage = registeredPages[0] || "/app/conversation";
+            const page: ConversationPageKey = isHeader ? headerBasePage : column;
             const pageLabel = page === "/embed" ? "위젯 (/embed)" : page;
-            const draft = draftByPage[page];
-            const setupUiDraft = setupUiByPage[page];
+            const draft = draftByPage[page] || getDefaultConversationPageFeatures(page);
+            const setupUiDraft = setupUiByPage[page] || resolveConversationSetupUi(page);
             const effectiveModelSelector = true;
             const setupDetailsOpen = true;
             const showSetupExistingDetails = Boolean(setupExistingDetailsOpenByPage[page]);
             const showSetupNewDetails = Boolean(setupNewDetailsOpenByPage[page]);
-            const debugCopyDraft = debugCopyDraftByPage[page];
+            const debugCopyDraft = debugCopyDraftByPage[page] || { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS };
             const debugHeader = debugCopyDraft.sections?.header;
             const debugTurn = debugCopyDraft.sections?.turn;
             const debugLogs = debugCopyDraft.sections?.logs;

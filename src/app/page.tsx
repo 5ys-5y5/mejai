@@ -7,10 +7,9 @@ import { Trust } from "@/components/landing/trust";
 import { ConsolePreview } from "@/components/landing/console-preview";
 import { CTA } from "@/components/landing/cta";
 import { Footer } from "@/components/landing/footer";
-import { LandingConversationHero } from "@/components/landing/conversation-hero";
 import { loadLandingSettings, type LandingSettings } from "@/lib/landingSettings";
 import { motion, useScroll, useSpring } from "framer-motion";
-import { Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 export default function LandingPage() {
   const { scrollYProgress } = useScroll();
@@ -37,10 +36,6 @@ export default function LandingPage() {
       style={{ fontFamily: settings.landingFontFamily || undefined }}
     >
       <motion.div className="fixed top-0 left-0 right-0 h-1 bg-black z-[100] origin-left" style={{ scaleX }} />
-
-      <Suspense fallback={null}>
-        <LandingConversationHero />
-      </Suspense>
 
       <div
         className="space-y-0"

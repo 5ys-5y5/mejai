@@ -33,11 +33,6 @@ export function Footer({ settings }: { settings: LandingSettings }) {
                 </Link>
               </li>
               <li>
-                <Link href="/demo" className="hover:text-black transition-colors">
-                  데모 보기
-                </Link>
-              </li>
-              <li>
                 <Link href="/pricing" className="hover:text-black transition-colors">
                   요금 안내
                 </Link>

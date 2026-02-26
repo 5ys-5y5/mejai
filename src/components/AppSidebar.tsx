@@ -246,6 +246,13 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
         <SidebarGroup header="구성" collapsed={collapsed}>
           <SidebarLink to="/app/agents" icon={Users} label="에이전트" collapsed={collapsed} onClick={onNavigate} />
           <SidebarLink
+            to="/app/conversation"
+            icon={Bot}
+            label="대화"
+            collapsed={collapsed}
+            onClick={onNavigate}
+          />
+          <SidebarLink
             to="/app/laboratory"
             icon={Bot}
             label="실험실"

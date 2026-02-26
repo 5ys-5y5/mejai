@@ -30,7 +30,7 @@ export async function fetchSessionLogs(sessionId: string, limit = 30) {
     mcp_logs: NonNullable<LogBundle["mcp_logs"]>;
     event_logs: NonNullable<LogBundle["event_logs"]>;
     debug_logs: NonNullable<LogBundle["debug_logs"]>;
-  }>(`/api/laboratory/logs?session_id=${encodeURIComponent(sessionId)}&limit=${Math.max(1, limit)}`);
+  }>(`/api/conversation/logs?session_id=${encodeURIComponent(sessionId)}&limit=${Math.max(1, limit)}`);
 }
 
 export async function fetchWidgetSessionLogs(sessionId: string, widgetToken: string, limit = 30) {
@@ -65,7 +65,7 @@ export async function fetchTranscriptSnapshot(
     transcript_text: string | null;
     created_at: string | null;
   }>(
-    `/api/laboratory/transcript-snapshot?session_id=${encodeURIComponent(sessionId)}&page=${encodeURIComponent(page)}&kind=${encodeURIComponent(kind)}`
+    `/api/conversation/transcript-snapshot?session_id=${encodeURIComponent(sessionId)}&page=${encodeURIComponent(page)}&kind=${encodeURIComponent(kind)}`
   );
 }
 
@@ -141,7 +141,7 @@ export async function saveTranscriptSnapshot(input: {
   transcriptText: string;
   turnId?: string | null;
 }) {
-  return apiFetch<{ ok: boolean }>("/api/laboratory/transcript-snapshot", {
+  return apiFetch<{ ok: boolean }>("/api/conversation/transcript-snapshot", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
