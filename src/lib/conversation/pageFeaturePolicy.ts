@@ -469,7 +469,11 @@ export function normalizeConversationFeatureProvider(
   const features = input.features || legacyPage || undefined;
   const debug = input.debug || legacyDebug || undefined;
   const setupUi = input.setup_ui || legacySetup || undefined;
-  const widget = input.widget ? normalizeWidgetChatPolicyConfig(input.widget) : undefined;
+  const legacyWidget =
+    (legacyPage && typeof legacyPage === "object" ? (legacyPage as { widget?: WidgetChatPolicyConfig }).widget : undefined) ||
+    undefined;
+  const widgetSource = input.widget || legacyWidget;
+  const widget = widgetSource ? normalizeWidgetChatPolicyConfig(widgetSource) : undefined;
   const normalized: ConversationFeaturesProviderShape = {};
   if (features && Object.keys(features).length > 0) normalized.features = features;
   if (debug && Object.keys(debug).length > 0) normalized.debug = debug;

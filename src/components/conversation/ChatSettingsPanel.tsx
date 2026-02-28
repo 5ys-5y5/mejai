@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
+import { CollapsibleSection } from "@/components/conversation/CollapsibleSection";
 import { Input } from "@/components/ui/Input";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import {
@@ -67,6 +69,8 @@ type RowProps = {
   tone?: FieldTone;
   editableLabel?: boolean;
   onLabelChange?: (value: string) => void;
+  onLabelClick?: () => void;
+  ariaExpanded?: boolean;
   right?: ReactNode;
   alignTop?: boolean;
 };
@@ -129,10 +133,9 @@ export function ChatSettingsPanel({
 
   const buildDraft = useCallback(
     (provider: ConversationFeaturesProviderShape | null): DraftState => {
-      const features = mergeConversationPageFeatures(
-        getDefaultConversationPageFeatures(pageKey),
-        provider?.features || provider?.pages?.[pageKey]
-      );
+      const baseFeatures = getDefaultConversationPageFeatures(pageKey);
+      const mergedGlobal = mergeConversationPageFeatures(baseFeatures, provider?.features);
+      const features = mergeConversationPageFeatures(mergedGlobal, provider?.pages?.[pageKey]);
       const widget = normalizeWidgetChatPolicyConfig(provider?.widget ?? null);
       const debug = provider?.debug ?? {};
       const setupUi = resolveConversationSetupUi(pageKey, provider || null);
@@ -262,210 +265,211 @@ export function ChatSettingsPanel({
       <div className="text-xs font-semibold text-slate-700">Widget Policy: {pageLabel}</div>
 
       <Section title="런처">
-        <ToggleRow
+        <ToggleRowGroup
           label="widget.is_active"
           checked={widget.is_active !== false}
           onToggle={(next) => updateWidget(["is_active"], next)}
-        />
-        <Row
-          label="widget.entry_mode"
-          right={
-            <SelectPopover
-              value={widget.entry_mode || "launcher"}
-              options={ENTRY_MODE_OPTIONS}
-              onChange={(value) => updateWidget(["entry_mode"], value)}
-              buttonClassName="h-7 text-[11px]"
-              className="w-[140px]"
-            />
-          }
-        />
-        <Row
-          label="widget.embed_view"
-          right={
-            <SelectPopover
-              value={widget.embed_view || "both"}
-              options={EMBED_VIEW_OPTIONS}
-              onChange={(value) => updateWidget(["embed_view"], value)}
-              buttonClassName="h-7 text-[11px]"
-              className="w-[140px]"
-            />
-          }
-        />
-        <Row
-          label="widget.name"
-          right={
-            <Input
-              value={widget.name || ""}
-              onChange={(event) => updateWidget(["name"], event.target.value)}
-              className="h-7 w-[200px] text-[11px]"
-            />
-          }
-        />
-        {agentOptions.length > 0 ? (
+        >
+          <div className="text-[11px] text-slate-600">false면 런처/임베드 모두 완전 숨김</div>
           <Row
-            label="widget.agent_id"
+            label="widget.entry_mode"
             right={
               <SelectPopover
-                value={widget.agent_id || ""}
-                options={agentOptions}
-                onChange={(value) => updateWidget(["agent_id"], value)}
+                value={widget.entry_mode || "launcher"}
+                options={ENTRY_MODE_OPTIONS}
+                onChange={(value) => updateWidget(["entry_mode"], value)}
                 buttonClassName="h-7 text-[11px]"
-                className="w-[200px]"
+                className="w-[140px]"
               />
             }
           />
-        ) : (
           <Row
-            label="widget.agent_id"
+            label="widget.embed_view"
+            right={
+              <SelectPopover
+                value={widget.embed_view || "both"}
+                options={EMBED_VIEW_OPTIONS}
+                onChange={(value) => updateWidget(["embed_view"], value)}
+                buttonClassName="h-7 text-[11px]"
+                className="w-[140px]"
+              />
+            }
+          />
+          <Row
+            label="widget.name"
             right={
               <Input
-                value={widget.agent_id || ""}
-                onChange={(event) => updateWidget(["agent_id"], event.target.value)}
+                value={widget.name || ""}
+                onChange={(event) => updateWidget(["name"], event.target.value)}
                 className="h-7 w-[200px] text-[11px]"
               />
             }
           />
-        )}
-        <Row
-          label="theme.launcher_logo_id"
-          right={
-            <Input
-              value={widget.theme?.launcher_logo_id || ""}
-              onChange={(event) => updateWidget(["theme", "launcher_logo_id"], event.target.value)}
-              className="h-7 w-[200px] text-[11px]"
+          {agentOptions.length > 0 ? (
+            <Row
+              label="widget.agent_id"
+              right={
+                <SelectPopover
+                  value={widget.agent_id || ""}
+                  options={agentOptions}
+                  onChange={(value) => updateWidget(["agent_id"], value)}
+                  buttonClassName="h-7 text-[11px]"
+                  className="w-[200px]"
+                />
+              }
             />
-          }
-        />
-        <Row
-          label="theme.primary_color | launcher_bg"
-          right={
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={widget.theme?.primary_color || "#4f46e5"}
-                onChange={(event) => updateWidget(["theme", "primary_color"], event.target.value)}
-                className="h-7 w-9 cursor-pointer rounded border border-slate-200"
-              />
+          ) : (
+            <Row
+              label="widget.agent_id"
+              right={
+                <Input
+                  value={widget.agent_id || ""}
+                  onChange={(event) => updateWidget(["agent_id"], event.target.value)}
+                  className="h-7 w-[200px] text-[11px]"
+                />
+              }
+            />
+          )}
+          <Row
+            label="theme.launcher_logo_id"
+            right={
               <Input
-                value={widget.theme?.primary_color || ""}
-                onChange={(event) => updateWidget(["theme", "primary_color"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-                placeholder="#4f46e5"
+                value={widget.theme?.launcher_logo_id || ""}
+                onChange={(event) => updateWidget(["theme", "launcher_logo_id"], event.target.value)}
+                className="h-7 w-[200px] text-[11px]"
               />
+            }
+          />
+          <Row
+            label="theme.primary_color | launcher_bg"
+            right={
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  value={widget.theme?.primary_color || "#4f46e5"}
+                  onChange={(event) => updateWidget(["theme", "primary_color"], event.target.value)}
+                  className="h-7 w-9 cursor-pointer rounded border border-slate-200"
+                />
+                <Input
+                  value={widget.theme?.primary_color || ""}
+                  onChange={(event) => updateWidget(["theme", "primary_color"], event.target.value)}
+                  className="h-7 w-[120px] text-[11px]"
+                  placeholder="#4f46e5"
+                />
+                <Input
+                  value={widget.theme?.launcher_bg || ""}
+                  onChange={(event) => updateWidget(["theme", "launcher_bg"], event.target.value)}
+                  className="h-7 w-[120px] text-[11px]"
+                  placeholder="#0f172a"
+                />
+              </div>
+            }
+          />
+          <Row
+            label="cfg.launcherLabel"
+            right={
               <Input
-                value={widget.theme?.launcher_bg || ""}
-                onChange={(event) => updateWidget(["theme", "launcher_bg"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-                placeholder="#0f172a"
+                value={widget.cfg?.launcherLabel || ""}
+                onChange={(event) => updateWidget(["cfg", "launcherLabel"], event.target.value)}
+                className="h-7 w-[200px] text-[11px]"
               />
-            </div>
-          }
-        />
-        <Row
-          label="cfg.launcherLabel"
-          right={
-            <Input
-              value={widget.cfg?.launcherLabel || ""}
-              onChange={(event) => updateWidget(["cfg", "launcherLabel"], event.target.value)}
-              className="h-7 w-[200px] text-[11px]"
-            />
-          }
-        />
-        <Row
-          label="cfg.position"
-          right={
-            <SelectPopover
-              value={widget.cfg?.position || "bottom-right"}
-              options={POSITION_OPTIONS}
-              onChange={(value) => updateWidget(["cfg", "position"], value)}
-              buttonClassName="h-7 text-[11px]"
-              className="w-[150px]"
-            />
-          }
-        />
-        <Row
-          label="launcher.container.bottom"
-          right={
-            <Input
-              value={widget.launcher?.container?.bottom || ""}
-              onChange={(event) => updateWidget(["launcher", "container", "bottom"], event.target.value)}
-              className="h-7 w-[120px] text-[11px]"
-              placeholder="16px"
-            />
-          }
-        />
-        <Row
-          label="launcher.container.left"
-          right={
-            <Input
-              value={widget.launcher?.container?.left || ""}
-              onChange={(event) => updateWidget(["launcher", "container", "left"], event.target.value)}
-              className="h-7 w-[120px] text-[11px]"
-              placeholder="auto"
-            />
-          }
-        />
-        <Row
-          label="launcher.container.right"
-          right={
-            <Input
-              value={widget.launcher?.container?.right || ""}
-              onChange={(event) => updateWidget(["launcher", "container", "right"], event.target.value)}
-              className="h-7 w-[120px] text-[11px]"
-              placeholder="16px"
-            />
-          }
-        />
-        <Row
-          label="launcher.container.gap"
-          right={
-            <Input
-              value={widget.launcher?.container?.gap || ""}
-              onChange={(event) => updateWidget(["launcher", "container", "gap"], event.target.value)}
-              className="h-7 w-[120px] text-[11px]"
-              placeholder="12px"
-            />
-          }
-        />
-        <Row
-          label="launcher.container.zIndex"
-          right={
-            <Input
-              value={widget.launcher?.container?.zIndex?.toString() || ""}
-            onChange={(event) => {
-              const raw = event.target.value.trim();
-              updateWidget(["launcher", "container", "zIndex"], raw ? Number(raw) : undefined);
-            }}
-              className="h-7 w-[120px] text-[11px]"
-              placeholder="999"
-            />
-          }
-        />
-        <Row
-          label="launcher.size"
-          right={
-            <Input
-              value={widget.launcher?.size?.toString() || ""}
-            onChange={(event) => {
-              const raw = event.target.value.trim();
-              updateWidget(["launcher", "size"], raw ? Number(raw) : undefined);
-            }}
-              className="h-7 w-[120px] text-[11px]"
-              placeholder="56"
-            />
-          }
-        />
+            }
+          />
+          <Row
+            label="cfg.position"
+            right={
+              <SelectPopover
+                value={widget.cfg?.position || "bottom-right"}
+                options={POSITION_OPTIONS}
+                onChange={(value) => updateWidget(["cfg", "position"], value)}
+                buttonClassName="h-7 text-[11px]"
+                className="w-[150px]"
+              />
+            }
+          />
+          <Row
+            label="launcher.container.bottom"
+            right={
+              <Input
+                value={widget.launcher?.container?.bottom || ""}
+                onChange={(event) => updateWidget(["launcher", "container", "bottom"], event.target.value)}
+                className="h-7 w-[120px] text-[11px]"
+                placeholder="16px"
+              />
+            }
+          />
+          <Row
+            label="launcher.container.left"
+            right={
+              <Input
+                value={widget.launcher?.container?.left || ""}
+                onChange={(event) => updateWidget(["launcher", "container", "left"], event.target.value)}
+                className="h-7 w-[120px] text-[11px]"
+                placeholder="auto"
+              />
+            }
+          />
+          <Row
+            label="launcher.container.right"
+            right={
+              <Input
+                value={widget.launcher?.container?.right || ""}
+                onChange={(event) => updateWidget(["launcher", "container", "right"], event.target.value)}
+                className="h-7 w-[120px] text-[11px]"
+                placeholder="16px"
+              />
+            }
+          />
+          <Row
+            label="launcher.container.gap"
+            right={
+              <Input
+                value={widget.launcher?.container?.gap || ""}
+                onChange={(event) => updateWidget(["launcher", "container", "gap"], event.target.value)}
+                className="h-7 w-[120px] text-[11px]"
+                placeholder="12px"
+              />
+            }
+          />
+          <Row
+            label="launcher.container.zIndex"
+            right={
+              <Input
+                value={widget.launcher?.container?.zIndex?.toString() || ""}
+                onChange={(event) => {
+                  const raw = event.target.value.trim();
+                  updateWidget(["launcher", "container", "zIndex"], raw ? Number(raw) : undefined);
+                }}
+                className="h-7 w-[120px] text-[11px]"
+                placeholder="999"
+              />
+            }
+          />
+          <Row
+            label="launcher.size"
+            right={
+              <Input
+                value={widget.launcher?.size?.toString() || ""}
+                onChange={(event) => {
+                  const raw = event.target.value.trim();
+                  updateWidget(["launcher", "size"], raw ? Number(raw) : undefined);
+                }}
+                className="h-7 w-[120px] text-[11px]"
+                placeholder="56"
+              />
+            }
+          />
+        </ToggleRowGroup>
       </Section>
 
       <Section title="위젯 헤더">
-        <ToggleRow
+        <ToggleRowGroup
           label="widget.header.enabled"
           checked={features.widget.header.enabled}
           visibility={visibility.widget.header.enabled}
           onToggle={(next) => updateFeatures(["widget", "header", "enabled"], next)}
           onVisibilityChange={(mode) => updateVisibility(["widget", "header", "enabled"], mode)}
-        />
-        <DetailBlock>
+        >
           <ToggleRow
             label="widget.header.logo"
             checked={features.widget.header.logo}
@@ -501,7 +505,7 @@ export function ChatSettingsPanel({
             onToggle={(next) => updateFeatures(["widget", "header", "close"], next)}
             onVisibilityChange={(mode) => updateVisibility(["widget", "header", "close"], mode)}
           />
-        </DetailBlock>
+        </ToggleRowGroup>
         <ToggleRow
           label="interaction.widgetHeaderAgentAction"
           checked={features.interaction.widgetHeaderAgentAction}
@@ -541,8 +545,7 @@ export function ChatSettingsPanel({
           onVisibilityChange={(mode) => updateVisibility(["widget", "historyPanel"], mode)}
         />
 
-        <DetailBlock>
-          <div className="text-[11px] font-semibold text-slate-600">대화 기본값</div>
+        <RowGroup label="대화 기본값">
           <Row
             label="theme.greeting"
             right={
@@ -563,8 +566,9 @@ export function ChatSettingsPanel({
               />
             }
           />
+        </RowGroup>
 
-          <div className="text-[11px] font-semibold text-slate-600">위젯 프레임/사이즈</div>
+        <RowGroup label="위젯 프레임/사이즈">
           <Row
             label="iframe.width"
             right={
@@ -645,7 +649,6 @@ export function ChatSettingsPanel({
                 options={[
                   { id: "fixed", label: "fixed" },
                   { id: "absolute", label: "absolute" },
-                  { id: "static", label: "static" },
                 ]}
                 onChange={(value) => updateWidget(["iframe", "layout"], value)}
                 buttonClassName="h-7 text-[11px]"
@@ -653,8 +656,9 @@ export function ChatSettingsPanel({
               />
             }
           />
+        </RowGroup>
 
-          <div className="text-[11px] font-semibold text-slate-600">Admin Panel</div>
+        <RowGroup label="Admin Panel">
           <ToggleRow
             label="adminPanel.enabled"
             checked={features.adminPanel.enabled}
@@ -704,8 +708,9 @@ export function ChatSettingsPanel({
             onToggle={(next) => updateFeatures(["adminPanel", "copyIssue"], next)}
             onVisibilityChange={(mode) => updateVisibility(["adminPanel", "copyIssue"], mode)}
           />
+        </RowGroup>
 
-          <div className="text-[11px] font-semibold text-slate-600">Debug Transcript</div>
+        <RowGroup label="Debug Transcript">
           <Row
             label="debug.outputMode"
             right={
@@ -718,65 +723,62 @@ export function ChatSettingsPanel({
               />
             }
           />
-          <ToggleRow
+          <ToggleRowGroup
             label="debug.sections.header"
             checked={getIn(debug, ["sections", "header", "enabled"], true) !== false}
             onToggle={(next) => updateDebug(["sections", "header", "enabled"], next)}
-          />
-          <DetailBlock>
+          >
             <ToggleRow
-              label="header.principle"
+              label="header.principle 대원칙"
               checked={getIn(debug, ["sections", "header", "principle"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "header", "principle"], next)}
             />
             <ToggleRow
-              label="header.expectedLists"
+              label="header.expectedLists 기대 목록"
               checked={getIn(debug, ["sections", "header", "expectedLists"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "header", "expectedLists"], next)}
             />
             <ToggleRow
-              label="header.runtimeModules"
+              label="header.runtimeModules 사용 모듈"
               checked={getIn(debug, ["sections", "header", "runtimeModules"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "header", "runtimeModules"], next)}
             />
             <ToggleRow
-              label="header.auditStatus"
+              label="header.auditStatus 점검 상태"
               checked={getIn(debug, ["sections", "header", "auditStatus"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "header", "auditStatus"], next)}
             />
-          </DetailBlock>
-          <ToggleRow
+          </ToggleRowGroup>
+          <ToggleRowGroup
             label="debug.sections.turn"
             checked={getIn(debug, ["sections", "turn", "enabled"], true) !== false}
             onToggle={(next) => updateDebug(["sections", "turn", "enabled"], next)}
-          />
-          <DetailBlock>
+          >
             <ToggleRow
-              label="turn.turnId"
+              label="turn.turnId TURN_ID"
               checked={getIn(debug, ["sections", "turn", "turnId"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "turn", "turnId"], next)}
             />
             <ToggleRow
-              label="turn.tokenUsed"
+              label="turn.tokenUsed TOKEN_USED"
               checked={getIn(debug, ["sections", "turn", "tokenUsed"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "turn", "tokenUsed"], next)}
             />
             <ToggleRow
-              label="turn.tokenUnused"
+              label="turn.tokenUnused TOKEN_UNUSED"
               checked={getIn(debug, ["sections", "turn", "tokenUnused"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "turn", "tokenUnused"], next)}
             />
             <ToggleRow
-              label="turn.responseSchemaSummary"
+              label="turn.responseSchemaSummary RESPONSE_SCHEMA(요약)"
               checked={getIn(debug, ["sections", "turn", "responseSchemaSummary"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "turn", "responseSchemaSummary"], next)}
             />
-            <ToggleRow
-              label="turn.responseSchemaDetail"
+            <ToggleRowGroup
+              label="turn.responseSchemaDetail RESPONSE_SCHEMA(상세)"
               checked={getIn(debug, ["sections", "turn", "responseSchemaDetail"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "turn", "responseSchemaDetail"], next)}
-            />
-            <DetailBlock>
+            >
               {renderDebugTree(
                 RESPONSE_SCHEMA_DETAIL_TREE,
                 (getIn(debug, ["sections", "turn", "responseSchemaDetailFields"], {}) || {}) as BooleanMap,
@@ -790,18 +792,17 @@ export function ChatSettingsPanel({
                     )
                   )
               )}
-            </DetailBlock>
+            </ToggleRowGroup>
             <ToggleRow
-              label="turn.renderPlanSummary"
+              label="turn.renderPlanSummary RENDER_PLAN(요약)"
               checked={getIn(debug, ["sections", "turn", "renderPlanSummary"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "turn", "renderPlanSummary"], next)}
             />
-            <ToggleRow
-              label="turn.renderPlanDetail"
+            <ToggleRowGroup
+              label="turn.renderPlanDetail RENDER_PLAN(상세)"
               checked={getIn(debug, ["sections", "turn", "renderPlanDetail"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "turn", "renderPlanDetail"], next)}
-            />
-            <DetailBlock>
+            >
               {renderDebugTree(
                 RENDER_PLAN_DETAIL_TREE,
                 (getIn(debug, ["sections", "turn", "renderPlanDetailFields"], {}) || {}) as BooleanMap,
@@ -815,35 +816,33 @@ export function ChatSettingsPanel({
                     )
                   )
               )}
-            </DetailBlock>
+            </ToggleRowGroup>
             <ToggleRow
-              label="turn.quickReplyRule"
+              label="turn.quickReplyRule QUICK_REPLY_RULE"
               checked={getIn(debug, ["sections", "turn", "quickReplyRule"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "turn", "quickReplyRule"], next)}
             />
-          </DetailBlock>
-          <ToggleRow
+          </ToggleRowGroup>
+          <ToggleRowGroup
             label="debug.sections.logs"
             checked={getIn(debug, ["sections", "logs", "enabled"], true) !== false}
             onToggle={(next) => updateDebug(["sections", "logs", "enabled"], next)}
-          />
-          <DetailBlock>
+          >
             <ToggleRow
-              label="logs.issueSummary"
+              label="logs.issueSummary 문제 요약"
               checked={getIn(debug, ["sections", "logs", "issueSummary"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "logs", "issueSummary"], next)}
             />
             <ToggleRow
-              label="logs.debug.enabled"
+              label="logs.debug.enabled DEBUG 로그"
               checked={getIn(debug, ["sections", "logs", "debug", "enabled"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "logs", "debug", "enabled"], next)}
             />
-            <ToggleRow
-              label="logs.debug.prefixJson"
+            <ToggleRowGroup
+              label="logs.debug.prefixJson DEBUG prefix_json"
               checked={getIn(debug, ["sections", "logs", "debug", "prefixJson"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "logs", "debug", "prefixJson"], next)}
-            />
-            <DetailBlock>
+            >
               {renderDebugTree(
                 PREFIX_JSON_SECTIONS_TREE,
                 (getIn(debug, ["sections", "logs", "debug", "prefixJsonSections"], {}) || {}) as BooleanMap,
@@ -857,13 +856,12 @@ export function ChatSettingsPanel({
                     )
                   )
               )}
-            </DetailBlock>
-            <ToggleRow
-              label="logs.mcp.enabled"
+            </ToggleRowGroup>
+            <ToggleRowGroup
+              label="logs.mcp.enabled MCP 로그"
               checked={getIn(debug, ["sections", "logs", "mcp", "enabled"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "logs", "mcp", "enabled"], next)}
-            />
-            <DetailBlock>
+            >
               <ToggleRow
                 label="logs.mcp.request"
                 checked={getIn(debug, ["sections", "logs", "mcp", "request"], true) !== false}
@@ -884,13 +882,12 @@ export function ChatSettingsPanel({
                 checked={getIn(debug, ["sections", "logs", "mcp", "includeError"], true) !== false}
                 onToggle={(next) => updateDebug(["sections", "logs", "mcp", "includeError"], next)}
               />
-            </DetailBlock>
-            <ToggleRow
+            </ToggleRowGroup>
+            <ToggleRowGroup
               label="logs.event.enabled"
               checked={getIn(debug, ["sections", "logs", "event", "enabled"], true) !== false}
               onToggle={(next) => updateDebug(["sections", "logs", "event", "enabled"], next)}
-            />
-            <DetailBlock>
+            >
               <ToggleRow
                 label="logs.event.payload"
                 checked={getIn(debug, ["sections", "logs", "event", "payload"], true) !== false}
@@ -909,8 +906,8 @@ export function ChatSettingsPanel({
                   />
                 }
               />
-            </DetailBlock>
-          </DetailBlock>
+            </ToggleRowGroup>
+          </ToggleRowGroup>
           <Row
             label="debug.auditBotScope"
             right={
@@ -923,8 +920,10 @@ export function ChatSettingsPanel({
               />
             }
           />
+          <div className="text-[11px] text-slate-500">OFF이면 대화 복사 시 해당 디버그 출력이 제외됨</div>
+        </RowGroup>
 
-          <div className="text-[11px] font-semibold text-slate-600">Interaction</div>
+        <RowGroup label="Interaction">
           <ToggleRow
             label="interaction.quickReplies"
             checked={features.interaction.quickReplies}
@@ -952,9 +951,7 @@ export function ChatSettingsPanel({
             right={
               <textarea
                 value={formatLines(features.interaction.prefillMessages)}
-                onChange={(event) =>
-                  updateFeatures(["interaction", "prefillMessages"], parseLines(event.target.value))
-                }
+                onChange={(event) => updateFeatures(["interaction", "prefillMessages"], parseLines(event.target.value))}
                 className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
               />
             }
@@ -976,14 +973,13 @@ export function ChatSettingsPanel({
             onToggle={(next) => updateFeatures(["interaction", "inputSubmit"], next)}
             onVisibilityChange={(mode) => updateVisibility(["interaction", "inputSubmit"], mode)}
           />
-          <ToggleRow
+          <ToggleRowGroup
             label="interaction.threePhasePrompt"
             checked={features.interaction.threePhasePrompt}
             visibility={visibility.interaction.threePhasePrompt}
             onToggle={(next) => updateFeatures(["interaction", "threePhasePrompt"], next)}
             onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePrompt"], mode)}
-          />
-          <DetailBlock>
+          >
             <ToggleRow
               label="interaction.threePhasePromptShowConfirmed"
               checked={features.interaction.threePhasePromptShowConfirmed}
@@ -1013,44 +1009,24 @@ export function ChatSettingsPanel({
               onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptHideLabels"], mode)}
             />
             <Row
-              label="interaction.threePhasePromptLabels.confirmed"
-              right={
-                <Input
-                  value={features.interaction.threePhasePromptLabels.confirmed || ""}
-                  onChange={(event) =>
-                    updateFeatures(["interaction", "threePhasePromptLabels", "confirmed"], event.target.value)
-                  }
-                  className="h-7 w-[200px] text-[11px]"
-                />
-              }
+              label={features.interaction.threePhasePromptLabels.confirmed || "interaction.threePhasePromptLabels.confirmed"}
+              editableLabel
+              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "confirmed"], value)}
             />
             <Row
-              label="interaction.threePhasePromptLabels.confirming"
-              right={
-                <Input
-                  value={features.interaction.threePhasePromptLabels.confirming || ""}
-                  onChange={(event) =>
-                    updateFeatures(["interaction", "threePhasePromptLabels", "confirming"], event.target.value)
-                  }
-                  className="h-7 w-[200px] text-[11px]"
-                />
-              }
+              label={features.interaction.threePhasePromptLabels.confirming || "interaction.threePhasePromptLabels.confirming"}
+              editableLabel
+              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "confirming"], value)}
             />
             <Row
-              label="interaction.threePhasePromptLabels.next"
-              right={
-                <Input
-                  value={features.interaction.threePhasePromptLabels.next || ""}
-                  onChange={(event) =>
-                    updateFeatures(["interaction", "threePhasePromptLabels", "next"], event.target.value)
-                  }
-                  className="h-7 w-[200px] text-[11px]"
-                />
-              }
+              label={features.interaction.threePhasePromptLabels.next || "interaction.threePhasePromptLabels.next"}
+              editableLabel
+              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "next"], value)}
             />
-          </DetailBlock>
+          </ToggleRowGroup>
+        </RowGroup>
 
-          <div className="text-[11px] font-semibold text-slate-600">MCP</div>
+        <RowGroup label="MCP">
           <ToggleRow
             label="mcp.providerSelector"
             checked={features.mcp.providerSelector}
@@ -1065,8 +1041,9 @@ export function ChatSettingsPanel({
             onToggle={(next) => updateFeatures(["mcp", "actionSelector"], next)}
             onVisibilityChange={(mode) => updateVisibility(["mcp", "actionSelector"], mode)}
           />
+        </RowGroup>
 
-          <div className="text-[11px] font-semibold text-slate-600">Runtime</div>
+        <RowGroup label="Runtime">
           <ToggleRow
             label="runtime.selfUpdate.enabled"
             checked={Boolean(governanceConfig?.enabled)}
@@ -1085,18 +1062,17 @@ export function ChatSettingsPanel({
             }
           />
           {governanceSaving ? <div className="text-[11px] text-slate-500">저장 중...</div> : null}
-        </DetailBlock>
+        </RowGroup>
       </Section>
 
       <Section title="위젯 탭바">
-        <ToggleRow
+        <ToggleRowGroup
           label="widget.tabBar.enabled"
           checked={features.widget.tabBar.enabled}
           visibility={visibility.widget.tabBar.enabled}
           onToggle={(next) => updateFeatures(["widget", "tabBar", "enabled"], next)}
           onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "enabled"], mode)}
-        />
-        <DetailBlock>
+        >
           <ToggleRow
             label="widget.tabBar.chat"
             checked={features.widget.tabBar.chat}
@@ -1118,7 +1094,7 @@ export function ChatSettingsPanel({
             onToggle={(next) => updateFeatures(["widget", "tabBar", "policy"], next)}
             onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "policy"], mode)}
           />
-        </DetailBlock>
+        </ToggleRowGroup>
         <ToggleRow
           label="widget.setupPanel"
           checked={features.widget.setupPanel}
@@ -1127,8 +1103,7 @@ export function ChatSettingsPanel({
           onVisibilityChange={(mode) => updateVisibility(["widget", "setupPanel"], mode)}
         />
 
-        <DetailBlock>
-          <div className="text-[11px] font-semibold text-slate-600">노출/권한</div>
+        <RowGroup label="노출/권한">
           <Row
             label="widget.allowed_domains"
             alignTop
@@ -1162,8 +1137,9 @@ export function ChatSettingsPanel({
               />
             }
           />
+        </RowGroup>
 
-          <div className="text-[11px] font-semibold text-slate-600">Setup</div>
+        <RowGroup label="Setup">
           <ToggleRow
             label="setup.modelSelector"
             checked={features.setup.modelSelector}
@@ -1171,14 +1147,13 @@ export function ChatSettingsPanel({
             onToggle={(next) => updateFeatures(["setup", "modelSelector"], next)}
             onVisibilityChange={(mode) => updateVisibility(["setup", "modelSelector"], mode)}
           />
-          <ToggleRow
+          <ToggleRowGroup
             label="setup.modeExisting"
             checked={features.setup.modeExisting}
             visibility={visibility.setup.modeExisting}
             onToggle={(next) => updateFeatures(["setup", "modeExisting"], next)}
             onVisibilityChange={(mode) => updateVisibility(["setup", "modeExisting"], mode)}
-          />
-          <DetailBlock>
+          >
             <ToggleRow
               label="setup.agentSelector"
               checked={features.setup.agentSelector}
@@ -1194,75 +1169,44 @@ export function ChatSettingsPanel({
               onVisibilityChange={(mode) => updateVisibility(["setup", "sessionIdSearch"], mode)}
             />
             <Row
-              label="setup.existingLabels.agentSelector"
-              right={
-                <Input
-                  value={setupUi.existingLabels.agentSelector || ""}
-                  onChange={(event) => updateSetupUi(["existingLabels", "agentSelector"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
+              label={setupUi.existingLabels.agentSelector || "setup.existingLabels.agentSelector"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["existingLabels", "agentSelector"], value)}
             />
             <Row
-              label="setup.existingLabels.versionSelector"
-              right={
-                <Input
-                  value={setupUi.existingLabels.versionSelector || ""}
-                  onChange={(event) => updateSetupUi(["existingLabels", "versionSelector"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
+              label={setupUi.existingLabels.versionSelector || "setup.existingLabels.versionSelector"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["existingLabels", "versionSelector"], value)}
             />
             <Row
-              label="setup.existingLabels.sessionSelector"
-              right={
-                <Input
-                  value={setupUi.existingLabels.sessionSelector || ""}
-                  onChange={(event) => updateSetupUi(["existingLabels", "sessionSelector"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
+              label={setupUi.existingLabels.sessionSelector || "setup.existingLabels.sessionSelector"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["existingLabels", "sessionSelector"], value)}
             />
             <Row
-              label="setup.existingLabels.sessionIdSearch"
-              right={
-                <Input
-                  value={setupUi.existingLabels.sessionIdSearch || ""}
-                  onChange={(event) => updateSetupUi(["existingLabels", "sessionIdSearch"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
+              label={setupUi.existingLabels.sessionIdSearch || "setup.existingLabels.sessionIdSearch"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["existingLabels", "sessionIdSearch"], value)}
             />
             <Row
-              label="setup.existingLabels.conversationMode"
-              right={
-                <Input
-                  value={setupUi.existingLabels.conversationMode || ""}
-                  onChange={(event) => updateSetupUi(["existingLabels", "conversationMode"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
+              label={setupUi.existingLabels.conversationMode || "setup.existingLabels.conversationMode"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["existingLabels", "conversationMode"], value)}
             />
             <Row
-              label="setup.existingLabels.modeExisting"
-              right={
-                <Input
-                  value={setupUi.existingLabels.modeExisting || ""}
-                  onChange={(event) => updateSetupUi(["existingLabels", "modeExisting"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
+              label={setupUi.existingLabels.modeExisting || "setup.existingLabels.modeExisting"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["existingLabels", "modeExisting"], value)}
             />
-          </DetailBlock>
+          </ToggleRowGroup>
 
-          <ToggleRow
+          <ToggleRowGroup
             label="setup.modeNew"
             checked={features.setup.modeNew}
             visibility={visibility.setup.modeNew}
             onToggle={(next) => updateFeatures(["setup", "modeNew"], next)}
             onVisibilityChange={(mode) => updateVisibility(["setup", "modeNew"], mode)}
-          />
-          <DetailBlock>
+          >
             <ToggleRow
               label="setup.inlineUserKbInput"
               checked={features.setup.inlineUserKbInput}
@@ -1291,101 +1235,41 @@ export function ChatSettingsPanel({
               onToggle={(next) => updateFeatures(["setup", "adminKbSelector"], next)}
               onVisibilityChange={(mode) => updateVisibility(["setup", "adminKbSelector"], mode)}
             />
-          </DetailBlock>
+          </ToggleRowGroup>
 
-          <ToggleRow
+          <ToggleRowGroup
             label="setup.routeSelector"
             checked={features.setup.routeSelector}
             visibility={visibility.setup.routeSelector}
             onToggle={(next) => updateFeatures(["setup", "routeSelector"], next)}
             onVisibilityChange={(mode) => updateVisibility(["setup", "routeSelector"], mode)}
-          />
-          <DetailBlock>
-            <ToggleRow
-              label="setup.mcpProviderSelector"
-              checked={features.mcp.providerSelector}
-              visibility={visibility.mcp.providerSelector}
-              onToggle={(next) => updateFeatures(["mcp", "providerSelector"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["mcp", "providerSelector"], mode)}
-            />
-            <ToggleRow
-              label="setup.mcpActionSelector"
-              checked={features.mcp.actionSelector}
-              visibility={visibility.mcp.actionSelector}
-              onToggle={(next) => updateFeatures(["mcp", "actionSelector"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["mcp", "actionSelector"], mode)}
+          >
+            <Row
+              label={setupUi.labels.inlineUserKbInput || "setup.labels.inlineUserKbInput"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["labels", "inlineUserKbInput"], value)}
             />
             <Row
-              label="setup.labels.inlineUserKbInput"
-              right={
-                <Input
-                  value={setupUi.labels.inlineUserKbInput || ""}
-                  onChange={(event) => updateSetupUi(["labels", "inlineUserKbInput"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
+              label={setupUi.labels.llmSelector || "setup.labels.llmSelector"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["labels", "llmSelector"], value)}
             />
             <Row
-              label="setup.labels.llmSelector"
-              right={
-                <Input
-                  value={setupUi.labels.llmSelector || ""}
-                  onChange={(event) => updateSetupUi(["labels", "llmSelector"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
+              label={setupUi.labels.kbSelector || "setup.labels.kbSelector"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["labels", "kbSelector"], value)}
             />
             <Row
-              label="setup.labels.kbSelector"
-              right={
-                <Input
-                  value={setupUi.labels.kbSelector || ""}
-                  onChange={(event) => updateSetupUi(["labels", "kbSelector"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
+              label={setupUi.labels.adminKbSelector || "setup.labels.adminKbSelector"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["labels", "adminKbSelector"], value)}
             />
             <Row
-              label="setup.labels.adminKbSelector"
-              right={
-                <Input
-                  value={setupUi.labels.adminKbSelector || ""}
-                  onChange={(event) => updateSetupUi(["labels", "adminKbSelector"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
+              label={setupUi.labels.routeSelector || "setup.labels.routeSelector"}
+              editableLabel
+              onLabelChange={(value) => updateSetupUi(["labels", "routeSelector"], value)}
             />
-            <Row
-              label="setup.labels.routeSelector"
-              right={
-                <Input
-                  value={setupUi.labels.routeSelector || ""}
-                  onChange={(event) => updateSetupUi(["labels", "routeSelector"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
-            />
-            <Row
-              label="setup.labels.mcpProviderSelector"
-              right={
-                <Input
-                  value={setupUi.labels.mcpProviderSelector || ""}
-                  onChange={(event) => updateSetupUi(["labels", "mcpProviderSelector"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
-            />
-            <Row
-              label="setup.labels.mcpActionSelector"
-              right={
-                <Input
-                  value={setupUi.labels.mcpActionSelector || ""}
-                  onChange={(event) => updateSetupUi(["labels", "mcpActionSelector"], event.target.value)}
-                  className="h-7 w-[220px] text-[11px]"
-                />
-              }
-            />
-          </DetailBlock>
+          </ToggleRowGroup>
 
           <Row
             label="setup.defaultSetupMode"
@@ -1413,49 +1297,53 @@ export function ChatSettingsPanel({
           />
           <Row
             label="setup.llms"
-            alignTop
             right={
-              <textarea
+              <Input
                 value={formatCsv(features.setup.llms.allowlist)}
-                onChange={(event) => updateFeatures(["setup", "llms", "allowlist"], parseCsv(event.target.value))}
-                className="min-h-[60px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                onChange={(event) =>
+                  updateFeatures(["setup", "llms", "allowlist"], parseCsv(event.target.value))
+                }
+                className="h-7 w-[260px] text-[11px]"
+                placeholder="gpt-4o, gpt-4o-mini"
               />
             }
           />
           <Row
             label="setup.kbIds"
-            alignTop
             right={
-              <textarea
+              <Input
                 value={formatCsv(features.setup.kbIds.allowlist)}
                 onChange={(event) => updateFeatures(["setup", "kbIds", "allowlist"], parseCsv(event.target.value))}
-                className="min-h-[60px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                className="h-7 w-[260px] text-[11px]"
+                placeholder="kb_1, kb_2"
               />
             }
           />
           <Row
             label="setup.adminKbIds"
-            alignTop
             right={
-              <textarea
+              <Input
                 value={formatCsv(features.setup.adminKbIds.allowlist)}
-                onChange={(event) => updateFeatures(["setup", "adminKbIds", "allowlist"], parseCsv(event.target.value))}
-                className="min-h-[60px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                onChange={(event) =>
+                  updateFeatures(["setup", "adminKbIds", "allowlist"], parseCsv(event.target.value))
+                }
+                className="h-7 w-[260px] text-[11px]"
+                placeholder="kb_admin_1"
               />
             }
           />
           <Row
             label="setup.routes"
-            alignTop
             right={
-              <textarea
+              <Input
                 value={formatCsv(features.setup.routes.allowlist)}
                 onChange={(event) => updateFeatures(["setup", "routes", "allowlist"], parseCsv(event.target.value))}
-                className="min-h-[60px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                className="h-7 w-[260px] text-[11px]"
+                placeholder="route_a, route_b"
               />
             }
           />
-        </DetailBlock>
+        </RowGroup>
       </Section>
     </div>
   );
@@ -1538,6 +1426,8 @@ function Row({
   tone = "neutral",
   editableLabel,
   onLabelChange,
+  onLabelClick,
+  ariaExpanded,
   right,
   alignTop = false,
 }: RowProps) {
@@ -1550,9 +1440,21 @@ function Row({
       <button
         type="button"
         className="inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold"
-        aria-disabled
+        aria-disabled={!onLabelClick}
+        aria-expanded={onLabelClick ? ariaExpanded : undefined}
+        onClick={() => {
+          onLabelClick?.();
+        }}
       >
-        <span
+        <span className="inline-flex min-w-0 items-center gap-2">
+          {onLabelClick ? (
+            <ChevronDown
+              className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${
+                ariaExpanded ? "rotate-180" : ""
+              }`}
+            />
+          ) : null}
+          <span
           contentEditable={editableLabel}
           suppressContentEditableWarning={editableLabel}
           onBlur={(event) => {
@@ -1573,6 +1475,7 @@ function Row({
           className={editableLabel ? "rounded px-1 outline-none focus:ring-1 focus:ring-slate-300" : undefined}
         >
           {label}
+          </span>
         </span>
       </button>
       {right ? <div className="flex items-center gap-2">{right}</div> : null}
@@ -1588,6 +1491,8 @@ function ToggleRow({
   onVisibilityChange,
   editableLabel,
   onLabelChange,
+  onLabelClick,
+  expanded,
 }: {
   label: string;
   checked: boolean;
@@ -1596,6 +1501,8 @@ function ToggleRow({
   onVisibilityChange?: (next: FeatureVisibilityMode) => void;
   editableLabel?: boolean;
   onLabelChange?: (value: string) => void;
+  onLabelClick?: () => void;
+  expanded?: boolean;
 }) {
   return (
     <Row
@@ -1603,6 +1510,8 @@ function ToggleRow({
       tone={checked ? "enabled" : "disabled"}
       editableLabel={editableLabel}
       onLabelChange={onLabelChange}
+      onLabelClick={onLabelClick}
+      ariaExpanded={expanded}
       right={
         <span className="state-controls flex items-center gap-1">
           <button
@@ -1635,18 +1544,93 @@ function ToggleRow({
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <CollapsibleSection
+      title={title}
+      defaultOpen={defaultOpen}
+      className="space-y-2"
+      summaryClassName="text-xs font-semibold text-slate-700"
+      contentClassName="px-3 py-2"
+    >
+      <div className="space-y-2">{children}</div>
+    </CollapsibleSection>
+  );
+}
+
+function ToggleRowGroup({
+  label,
+  checked,
+  onToggle,
+  visibility,
+  onVisibilityChange,
+  editableLabel,
+  onLabelChange,
+  defaultOpen = false,
+  children,
+}: {
+  label: string;
+  checked: boolean;
+  onToggle: (next: boolean) => void;
+  visibility?: FeatureVisibilityMode;
+  onVisibilityChange?: (next: FeatureVisibilityMode) => void;
+  editableLabel?: boolean;
+  onLabelChange?: (value: string) => void;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold text-slate-700">{title}</div>
-      <div className="rounded-lg border border-slate-200 bg-white p-2">
-        <div className="space-y-2">{children}</div>
-      </div>
+      <ToggleRow
+        label={label}
+        checked={checked}
+        onToggle={onToggle}
+        visibility={visibility}
+        onVisibilityChange={onVisibilityChange}
+        editableLabel={editableLabel}
+        onLabelChange={onLabelChange}
+        onLabelClick={() => setOpen((prev) => !prev)}
+        expanded={open}
+      />
+      {open ? <DetailBlock>{children}</DetailBlock> : null}
     </div>
   );
 }
 
-function DetailBlock({ children }: { children: ReactNode }) {
+function RowGroup({
+  label,
+  defaultOpen = false,
+  children,
+}: {
+  label: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="space-y-2">
+      <Row label={label} tone="neutral" onLabelClick={() => setOpen((prev) => !prev)} ariaExpanded={open} />
+      {open ? <DetailBlock>{children}</DetailBlock> : null}
+    </div>
+  );
+}
+
+function DetailBlock({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">{children}</div>;
 }
 
@@ -1657,16 +1641,24 @@ function renderDebugTree(
 ) {
   return tree.map((node) => {
     const checked = readBooleanMap(map, node.key);
+    if (node.children && node.children.length > 0) {
+      return (
+        <ToggleRowGroup
+          key={node.key}
+          label={node.key}
+          checked={checked}
+          onToggle={(next) => onToggle(node.key, next)}
+        >
+          {renderDebugTree(node.children, map, (key, next) => onToggle(key, next))}
+        </ToggleRowGroup>
+      );
+    }
     return (
-      <div key={node.key} className="space-y-1">
-        <ToggleRow label={node.key} checked={checked} onToggle={(next) => onToggle(node.key, next)} />
-        {node.children && node.children.length > 0 ? (
-          <DetailBlock>{renderDebugTree(node.children, map, (key, next) => onToggle(key, next))}</DetailBlock>
-        ) : null}
-      </div>
+      <ToggleRow key={node.key} label={node.key} checked={checked} onToggle={(next) => onToggle(node.key, next)} />
     );
   });
 }
+
 
 
 

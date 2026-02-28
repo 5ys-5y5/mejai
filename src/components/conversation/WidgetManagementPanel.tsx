@@ -4,7 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { Eye, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 
 import { Card } from "@/components/ui/Card";
 
@@ -39,15 +39,11 @@ import {
 } from "@/lib/conversation/policyMerge";
 
 import {
-
   normalizeConversationFeatureProvider,
-
+  normalizeWidgetChatPolicyConfig,
   type ConversationFeaturesProviderShape,
-
   type WidgetChatPolicyConfig,
-
   WIDGET_PAGE_KEY,
-
 } from "@/lib/conversation/pageFeaturePolicy";
 
 import { toast } from "sonner";
@@ -104,6 +100,32 @@ const PREVIEW_OVERRIDE_QUERY = buildWidgetVisibilityQuery({
 
 });
 
+function mergeWidgetPolicyFromConfig(
+  provider: ConversationFeaturesProviderShape | null,
+  widgetConfig: WidgetConfig | null
+): ConversationFeaturesProviderShape | null {
+  if (!widgetConfig) return provider;
+  const base = provider ? { ...provider } : {};
+  const policyWidget = normalizeWidgetChatPolicyConfig((provider as { widget?: WidgetChatPolicyConfig } | null)?.widget || {});
+  const theme = { ...(policyWidget.theme || {}) };
+  const widgetTheme = widgetConfig.theme || {};
+  const launcherLogoId =
+    theme.launcher_logo_id ||
+    (widgetTheme as Record<string, unknown>).launcher_logo_id ||
+    (widgetTheme as Record<string, unknown>).launcher_icon_url;
+  if (launcherLogoId && !theme.launcher_logo_id) {
+    theme.launcher_logo_id = String(launcherLogoId);
+  }
+  const mergedWidget: WidgetChatPolicyConfig = {
+    ...policyWidget,
+    ...(policyWidget.name ? {} : { name: widgetConfig.name || undefined }),
+    ...(policyWidget.agent_id ? {} : { agent_id: widgetConfig.agent_id || undefined }),
+    ...(Object.keys(theme).length ? { theme } : {}),
+  };
+  if (Object.keys(mergedWidget).length === 0) return provider;
+  return { ...base, widget: mergedWidget };
+}
+
 
 
 export function WidgetManagementPanel() {
@@ -115,6 +137,14 @@ export function WidgetManagementPanel() {
   const [agents, setAgents] = useState<AgentItem[]>([]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const agentNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    agents.forEach((agent) => {
+      if (agent.id) map.set(agent.id, agent.name || agent.id);
+    });
+    return map;
+  }, [agents]);
 
 
 
@@ -162,7 +192,7 @@ export function WidgetManagementPanel() {
 
         apiFetch<{ items: WidgetConfig[]; item?: WidgetConfig | null }>("/api/widgets"),
 
-        apiFetch<{ items: AgentItem[] }>("/api/agents?is_active=true&limit=200"),
+        apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200"),
 
       ]);
 
@@ -257,10 +287,9 @@ export function WidgetManagementPanel() {
 
 
   useEffect(() => {
-
-    setPolicySnapshot(parsedPolicy);
-
-  }, [parsedPolicy, selectedWidget?.id]);
+    const merged = mergeWidgetPolicyFromConfig(parsedPolicy, selectedWidget);
+    setPolicySnapshot(merged);
+  }, [parsedPolicy, selectedWidget]);
 
 
 
@@ -335,6 +364,20 @@ export function WidgetManagementPanel() {
     const nextPolicy = policySnapshot ?? parsedPolicy ?? null;
 
     const payloadWithPolicy = { ...payload, chat_policy: normalizeConversationFeatureProvider(nextPolicy) };
+    const policyWidget = (nextPolicy as { widget?: WidgetChatPolicyConfig } | null)?.widget || null;
+    const nextTheme = { ...(payloadWithPolicy.theme || {}) };
+    if (policyWidget?.theme) {
+      Object.assign(nextTheme, policyWidget.theme);
+    }
+    if (policyWidget?.theme?.launcher_logo_id) {
+      nextTheme.launcher_logo_id = policyWidget.theme.launcher_logo_id;
+    }
+    const payloadWithWidgetPolicy = {
+      ...payloadWithPolicy,
+      name: policyWidget?.name ?? payloadWithPolicy.name,
+      agent_id: policyWidget?.agent_id ?? payloadWithPolicy.agent_id,
+      theme: nextTheme,
+    };
 
     const res = await apiFetch<{ item: WidgetConfig }>(targetId ? `/api/widgets/${targetId}` : "/api/widgets", {
 
@@ -342,7 +385,7 @@ export function WidgetManagementPanel() {
 
       headers: { "Content-Type": "application/json" },
 
-      body: JSON.stringify(payloadWithPolicy),
+      body: JSON.stringify(payloadWithWidgetPolicy),
 
     });
 
@@ -371,6 +414,17 @@ export function WidgetManagementPanel() {
     return res.item;
 
   };
+
+  const handleCopy = useCallback(async (value: string, label: string) => {
+    const text = String(value || "").trim();
+    if (!text) return;
+    try {
+      await navigator.clipboard?.writeText(text);
+      toast.success(`${label} copied.`);
+    } catch {
+      toast.error("Copy failed.");
+    }
+  }, []);
 
 
 
@@ -685,38 +739,15 @@ export function WidgetManagementPanel() {
 
 
   const policyPanel = (
-
-    <div className="space-y-2">
-
-      <div className="text-xs font-semibold text-slate-700">
-
-        {"위젯 정책 선택: "}{selectedWidget?.id || "선택된 위젯 없음"}
-
-
-      </div>
-
-      <ChatSettingsPanel
-
-        value={policySnapshot ?? parsedPolicy ?? null}
-
-        onChange={handlePolicyChange}
-
-        showHeader={false}
-
-        showRegistryPanel={false}
-
-        includeHeaderColumn={false}
-
-        pageLabelOverride={selectedWidget?.id || "widget"}
-
-        pageScope={[WIDGET_PAGE_KEY]}
-
-        agents={agents}
-
-      />
-
-    </div>
-
+    <ChatSettingsPanel
+      value={policySnapshot ?? parsedPolicy ?? null}
+      onChange={handlePolicyChange}
+      showHeader={false}
+      showRegistryPanel={false}
+      includeHeaderColumn={false}
+      pageLabelOverride={selectedWidget?.id || "widget"}
+      pageScope={[WIDGET_PAGE_KEY]}
+          />
   );
 
 
@@ -729,12 +760,10 @@ export function WidgetManagementPanel() {
 
         <div className="flex items-center justify-between">
 
-          <div className="text-sm font-semibold text-slate-900">{"위젯 목록"}</div>
+          <div className="text-sm font-semibold text-slate-900">Widget List</div>
 
           <Button type="button" variant="outline" onClick={() => setSelectedId(null)}>
-
-            {"선택 해제"}
-
+            New Widget
           </Button>
 
         </div>
@@ -745,7 +774,7 @@ export function WidgetManagementPanel() {
 
         ) : (
 
-          <div className="space-y-2">
+          <div className="flex flex-nowrap gap-2 overflow-x-auto">
 
             {widgets.map((item, index) => {
 
@@ -759,7 +788,12 @@ export function WidgetManagementPanel() {
 
               const displayName = widgetPolicy?.name || item.name || "Web Widget";
 
-              const allowedDomains = widgetPolicy?.allowed_domains || [];
+              const widgetId = item.id || "-";
+
+              const agentId = widgetPolicy?.agent_id || item.agent_id || "";
+              const agentName = agentId ? agentNameById.get(agentId) || "Unknown agent" : "Unassigned";
+
+              const isActive = widgetPolicy?.is_active !== false;
 
               return (
 
@@ -767,7 +801,7 @@ export function WidgetManagementPanel() {
 
                   key={rowKey}
 
-                  className={`rounded-lg border px-3 py-2 text-xs ${
+                  className={`min-w-[240px] flex-1 rounded-lg border px-3 py-2 text-xs ${
 
                     isSelected ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white"
 
@@ -787,35 +821,30 @@ export function WidgetManagementPanel() {
 
                     >
 
-                      <div className="font-semibold text-slate-900">{displayName}</div>
-
-                      <div className="text-[11px] text-slate-500">
-
-                        {allowedDomains.length ? allowedDomains.join(", ") : "도메인 없음"}
-
+                      <div
+                        className="font-semibold text-slate-900 hover:underline cursor-pointer"
+                        title="Click to copy widget_id"
+                        onClick={() => handleCopy(widgetId, "widget_id")}
+                      >
+                        {displayName}
+                      </div>
+                      <div
+                        className="mt-1 text-[11px] text-slate-600 hover:underline cursor-pointer"
+                        title="Click to copy agent_id"
+                        onClick={() => handleCopy(agentId, "agent_id")}
+                      >
+                        {agentName}
+                      </div>
+                      <div className="mt-1 text-[11px] text-slate-500">
+                        status:{" "}
+                        <span className={isActive ? "text-emerald-700" : "text-rose-600"}>
+                          {isActive ? "active" : "inactive"}
+                        </span>
                       </div>
 
                     </button>
 
                     <div className="flex items-center gap-1">
-
-                      <button
-
-                        type="button"
-
-                        className="h-8 w-8 inline-flex items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900"
-
-                        onClick={() => setSelectedId(item.id || null)}
-
-                        disabled={!item.id}
-
-                        title="미리보기"
-
-                      >
-
-                        <Eye className="h-4 w-4" />
-
-                      </button>
 
                       <button
 
@@ -859,7 +888,6 @@ export function WidgetManagementPanel() {
 
             widget={selectedWidget}
 
-            agents={agents}
 
             onSave={handleSave}
 

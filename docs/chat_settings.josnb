@@ -1,0 +1,1893 @@
+{
+  "pages": {
+    "/": {
+      "mcp": {
+        "tools": {
+          "denylist": [],
+          "allowlist": [
+            "c78fe2ef-9925-45bf-8f14-2f5954dfb00c",
+            "03b67d63-e22d-4820-b101-bf545df8e78c",
+            "c962d4b0-d96a-45f6-a985-59b8b93534c0"
+          ]
+        },
+        "providers": {
+          "denylist": [
+            "cafe24"
+          ],
+          "allowlist": [
+            "juso",
+            "solapi"
+          ]
+        },
+        "actionSelector": true,
+        "providerSelector": true
+      },
+      "setup": {
+        "llms": {},
+        "routes": {
+          "allowlist": [
+            "shipping"
+          ]
+        },
+        "modeNew": true,
+        "adminKbIds": {
+          "allowlist": [
+            "0da02c01-aad4-4286-a445-4db7a89f8ebe",
+            "878b3ffe-2e18-4820-bda6-ffeccaa4212b"
+          ]
+        },
+        "defaultLlm": "chatgpt",
+        "kbSelector": false,
+        "llmSelector": true,
+        "modeExisting": false,
+        "agentSelector": false,
+        "modelSelector": false,
+        "routeSelector": false,
+        "adminKbSelector": false,
+        "sessionIdSearch": false,
+        "defaultSetupMode": "new",
+        "inlineUserKbInput": true
+      },
+      "widget": {
+        "header": {
+          "logo": true,
+          "close": false,
+          "status": true,
+          "enabled": true,
+          "agentAction": false,
+          "newConversation": true
+        },
+        "tabBar": {
+          "chat": true,
+          "list": true,
+          "policy": true,
+          "enabled": true
+        },
+        "chatPanel": true,
+        "setupPanel": true,
+        "historyPanel": true
+      },
+      "adminPanel": {
+        "enabled": true,
+        "copyIssue": true,
+        "logsToggle": true,
+        "messageMeta": true,
+        "selectionToggle": true,
+        "copyConversation": true,
+        "messageSelection": true
+      },
+      "visibility": {
+        "mcp": {
+          "actionSelector": "public",
+          "providerSelector": "public"
+        },
+        "setup": {
+          "modeNew": "public",
+          "kbSelector": "user",
+          "llmSelector": "user",
+          "modeExisting": "public",
+          "agentSelector": "user",
+          "modelSelector": "public",
+          "routeSelector": "user",
+          "adminKbSelector": "admin",
+          "sessionIdSearch": "user",
+          "inlineUserKbInput": "user"
+        },
+        "widget": {
+          "header": {
+            "logo": "public",
+            "close": "public",
+            "status": "admin",
+            "enabled": "public",
+            "agentAction": "public",
+            "newConversation": "public"
+          },
+          "tabBar": {
+            "chat": "public",
+            "list": "public",
+            "policy": "admin",
+            "enabled": "public"
+          },
+          "chatPanel": "public",
+          "setupPanel": "public",
+          "historyPanel": "public"
+        },
+        "adminPanel": {
+          "enabled": "public",
+          "copyIssue": "user",
+          "logsToggle": "public",
+          "messageMeta": "public",
+          "selectionToggle": "public",
+          "copyConversation": "public",
+          "messageSelection": "user"
+        },
+        "interaction": {
+          "prefill": "public",
+          "inputSubmit": "public",
+          "productCards": "public",
+          "quickReplies": "public",
+          "threePhasePrompt": "admin",
+          "widgetHeaderClose": "user",
+          "widgetHeaderAgentAction": "user",
+          "threePhasePromptShowNext": "user",
+          "threePhasePromptHideLabels": "user",
+          "widgetHeaderNewConversation": "user",
+          "threePhasePromptShowConfirmed": "user",
+          "threePhasePromptShowConfirming": "user"
+        }
+      },
+      "interaction": {
+        "prefill": true,
+        "inputSubmit": true,
+        "productCards": true,
+        "quickReplies": true,
+        "prefillMessages": [
+          "기록한대로 응대하는 AI 상담사를",
+          "압도적으로 저렴하게 사용해보세요"
+        ],
+        "inputPlaceholder": "",
+        "threePhasePrompt": true,
+        "widgetHeaderClose": true,
+        "threePhasePromptLabels": {
+          "next": "그 다음으로 확인할 것",
+          "confirmed": "확인한 것",
+          "confirming": "확인할 것"
+        },
+        "widgetHeaderAgentAction": true,
+        "threePhasePromptShowNext": false,
+        "threePhasePromptHideLabels": true,
+        "widgetHeaderNewConversation": true,
+        "threePhasePromptShowConfirmed": false,
+        "threePhasePromptShowConfirming": true
+      }
+    },
+    "/call": {
+      "mcp": {
+        "tools": {},
+        "providers": {
+          "denylist": [
+            "cafe24"
+          ]
+        },
+        "actionSelector": true,
+        "providerSelector": true
+      },
+      "setup": {
+        "llms": {},
+        "routes": {},
+        "modeNew": true,
+        "adminKbIds": {},
+        "defaultLlm": "chatgpt",
+        "kbSelector": false,
+        "llmSelector": true,
+        "modeExisting": false,
+        "agentSelector": false,
+        "modelSelector": false,
+        "routeSelector": false,
+        "adminKbSelector": false,
+        "sessionIdSearch": false,
+        "defaultSetupMode": "new",
+        "inlineUserKbInput": true
+      },
+      "widget": {
+        "header": {
+          "logo": true,
+          "close": true,
+          "status": true,
+          "enabled": false,
+          "agentAction": false,
+          "newConversation": true
+        },
+        "tabBar": {
+          "chat": true,
+          "list": true,
+          "policy": false,
+          "enabled": false
+        },
+        "chatPanel": true,
+        "setupPanel": true,
+        "historyPanel": true
+      },
+      "adminPanel": {
+        "enabled": true,
+        "copyIssue": true,
+        "logsToggle": true,
+        "messageMeta": true,
+        "selectionToggle": true,
+        "copyConversation": true,
+        "messageSelection": true
+      },
+      "visibility": {
+        "mcp": {
+          "actionSelector": "public",
+          "providerSelector": "public"
+        },
+        "setup": {
+          "modeNew": "public",
+          "kbSelector": "user",
+          "llmSelector": "user",
+          "modeExisting": "public",
+          "agentSelector": "user",
+          "modelSelector": "public",
+          "routeSelector": "user",
+          "adminKbSelector": "admin",
+          "sessionIdSearch": "user",
+          "inlineUserKbInput": "user"
+        },
+        "widget": {
+          "header": {
+            "logo": "public",
+            "close": "public",
+            "status": "admin",
+            "enabled": "public",
+            "agentAction": "public",
+            "newConversation": "public"
+          },
+          "tabBar": {
+            "chat": "public",
+            "list": "public",
+            "policy": "admin",
+            "enabled": "public"
+          },
+          "chatPanel": "public",
+          "setupPanel": "public",
+          "historyPanel": "public"
+        },
+        "adminPanel": {
+          "enabled": "admin",
+          "copyIssue": "user",
+          "logsToggle": "admin",
+          "messageMeta": "admin",
+          "selectionToggle": "admin",
+          "copyConversation": "admin",
+          "messageSelection": "admin"
+        },
+        "interaction": {
+          "prefill": "public",
+          "inputSubmit": "public",
+          "productCards": "public",
+          "quickReplies": "public",
+          "threePhasePrompt": "admin",
+          "widgetHeaderClose": "user",
+          "widgetHeaderAgentAction": "user",
+          "threePhasePromptShowNext": "user",
+          "threePhasePromptHideLabels": "user",
+          "widgetHeaderNewConversation": "user",
+          "threePhasePromptShowConfirmed": "user",
+          "threePhasePromptShowConfirming": "user"
+        }
+      },
+      "interaction": {
+        "prefill": false,
+        "inputSubmit": true,
+        "productCards": true,
+        "quickReplies": true,
+        "prefillMessages": [
+          "기록한대로 응대하는 AI 상담사를",
+          "압도적으로 저렴하게 사용해보세요"
+        ],
+        "inputPlaceholder": "",
+        "threePhasePrompt": true,
+        "widgetHeaderClose": true,
+        "threePhasePromptLabels": {
+          "next": "그 다음으로 확인할 것",
+          "confirmed": "확인한 것",
+          "confirming": "확인할 것"
+        },
+        "widgetHeaderAgentAction": true,
+        "threePhasePromptShowNext": true,
+        "threePhasePromptHideLabels": false,
+        "widgetHeaderNewConversation": true,
+        "threePhasePromptShowConfirmed": true,
+        "threePhasePromptShowConfirming": true
+      }
+    },
+    "/demo": {
+      "mcp": {
+        "tools": {},
+        "providers": {
+          "denylist": [
+            "cafe24"
+          ]
+        },
+        "actionSelector": true,
+        "providerSelector": true
+      },
+      "setup": {
+        "llms": {},
+        "routes": {},
+        "modeNew": true,
+        "adminKbIds": {},
+        "defaultLlm": "chatgpt",
+        "kbSelector": false,
+        "llmSelector": true,
+        "modeExisting": false,
+        "agentSelector": false,
+        "modelSelector": false,
+        "routeSelector": false,
+        "adminKbSelector": false,
+        "sessionIdSearch": false,
+        "defaultSetupMode": "new",
+        "inlineUserKbInput": true
+      },
+      "widget": {
+        "header": {
+          "logo": true,
+          "close": true,
+          "status": true,
+          "enabled": false,
+          "agentAction": false,
+          "newConversation": true
+        },
+        "tabBar": {
+          "chat": true,
+          "list": true,
+          "policy": false,
+          "enabled": false
+        },
+        "chatPanel": true,
+        "setupPanel": true,
+        "historyPanel": true
+      },
+      "adminPanel": {
+        "enabled": true,
+        "copyIssue": true,
+        "logsToggle": true,
+        "messageMeta": true,
+        "selectionToggle": true,
+        "copyConversation": true,
+        "messageSelection": true
+      },
+      "visibility": {
+        "mcp": {
+          "actionSelector": "public",
+          "providerSelector": "public"
+        },
+        "setup": {
+          "modeNew": "public",
+          "kbSelector": "user",
+          "llmSelector": "user",
+          "modeExisting": "public",
+          "agentSelector": "user",
+          "modelSelector": "public",
+          "routeSelector": "user",
+          "adminKbSelector": "admin",
+          "sessionIdSearch": "user",
+          "inlineUserKbInput": "user"
+        },
+        "widget": {
+          "header": {
+            "logo": "public",
+            "close": "public",
+            "status": "admin",
+            "enabled": "public",
+            "agentAction": "public",
+            "newConversation": "public"
+          },
+          "tabBar": {
+            "chat": "public",
+            "list": "public",
+            "policy": "admin",
+            "enabled": "public"
+          },
+          "chatPanel": "public",
+          "setupPanel": "public",
+          "historyPanel": "public"
+        },
+        "adminPanel": {
+          "enabled": "admin",
+          "copyIssue": "user",
+          "logsToggle": "admin",
+          "messageMeta": "admin",
+          "selectionToggle": "admin",
+          "copyConversation": "admin",
+          "messageSelection": "admin"
+        },
+        "interaction": {
+          "prefill": "public",
+          "inputSubmit": "public",
+          "productCards": "public",
+          "quickReplies": "public",
+          "threePhasePrompt": "admin",
+          "widgetHeaderClose": "user",
+          "widgetHeaderAgentAction": "user",
+          "threePhasePromptShowNext": "user",
+          "threePhasePromptHideLabels": "user",
+          "widgetHeaderNewConversation": "user",
+          "threePhasePromptShowConfirmed": "user",
+          "threePhasePromptShowConfirming": "user"
+        }
+      },
+      "interaction": {
+        "prefill": false,
+        "inputSubmit": true,
+        "productCards": true,
+        "quickReplies": true,
+        "prefillMessages": [
+          "기록한대로 응대하는 AI 상담사를",
+          "압도적으로 저렴하게 사용해보세요"
+        ],
+        "inputPlaceholder": "",
+        "threePhasePrompt": true,
+        "widgetHeaderClose": true,
+        "threePhasePromptLabels": {
+          "next": "그 다음으로 확인할 것",
+          "confirmed": "확인한 것",
+          "confirming": "확인할 것"
+        },
+        "widgetHeaderAgentAction": true,
+        "threePhasePromptShowNext": true,
+        "threePhasePromptHideLabels": false,
+        "widgetHeaderNewConversation": true,
+        "threePhasePromptShowConfirmed": true,
+        "threePhasePromptShowConfirming": true
+      }
+    },
+    "/embed": {
+      "mcp": {
+        "tools": {},
+        "providers": {
+          "denylist": [
+            "cafe24"
+          ]
+        },
+        "actionSelector": true,
+        "providerSelector": true
+      },
+      "setup": {
+        "llms": {},
+        "routes": {},
+        "modeNew": false,
+        "adminKbIds": {},
+        "defaultLlm": "chatgpt",
+        "kbSelector": true,
+        "llmSelector": true,
+        "modeExisting": true,
+        "agentSelector": true,
+        "modelSelector": false,
+        "routeSelector": true,
+        "adminKbSelector": true,
+        "sessionIdSearch": true,
+        "defaultSetupMode": "new",
+        "inlineUserKbInput": false
+      },
+      "widget": {
+        "header": {
+          "logo": true,
+          "close": true,
+          "status": true,
+          "enabled": true,
+          "agentAction": false,
+          "newConversation": true
+        },
+        "tabBar": {
+          "chat": true,
+          "list": true,
+          "policy": true,
+          "enabled": true
+        },
+        "chatPanel": true,
+        "setupPanel": true,
+        "historyPanel": true
+      },
+      "adminPanel": {
+        "enabled": true,
+        "copyIssue": true,
+        "logsToggle": true,
+        "messageMeta": true,
+        "selectionToggle": true,
+        "copyConversation": true,
+        "messageSelection": true
+      },
+      "visibility": {
+        "mcp": {
+          "actionSelector": "user",
+          "providerSelector": "user"
+        },
+        "setup": {
+          "modeNew": "admin",
+          "kbSelector": "user",
+          "llmSelector": "user",
+          "modeExisting": "admin",
+          "agentSelector": "user",
+          "modelSelector": "admin",
+          "routeSelector": "user",
+          "adminKbSelector": "admin",
+          "sessionIdSearch": "user",
+          "inlineUserKbInput": "admin"
+        },
+        "widget": {
+          "header": {
+            "logo": "public",
+            "close": "public",
+            "status": "admin",
+            "enabled": "public",
+            "agentAction": "public",
+            "newConversation": "public"
+          },
+          "tabBar": {
+            "chat": "public",
+            "list": "public",
+            "policy": "admin",
+            "enabled": "public"
+          },
+          "chatPanel": "public",
+          "setupPanel": "public",
+          "historyPanel": "public"
+        },
+        "adminPanel": {
+          "enabled": "admin",
+          "copyIssue": "user",
+          "logsToggle": "admin",
+          "messageMeta": "admin",
+          "selectionToggle": "admin",
+          "copyConversation": "admin",
+          "messageSelection": "admin"
+        },
+        "interaction": {
+          "prefill": "public",
+          "inputSubmit": "public",
+          "productCards": "public",
+          "quickReplies": "public",
+          "threePhasePrompt": "admin",
+          "widgetHeaderClose": "user",
+          "widgetHeaderAgentAction": "user",
+          "threePhasePromptShowNext": "user",
+          "threePhasePromptHideLabels": "user",
+          "widgetHeaderNewConversation": "user",
+          "threePhasePromptShowConfirmed": "user",
+          "threePhasePromptShowConfirming": "user"
+        }
+      },
+      "interaction": {
+        "prefill": false,
+        "inputSubmit": true,
+        "productCards": true,
+        "quickReplies": true,
+        "prefillMessages": [],
+        "inputPlaceholder": "",
+        "threePhasePrompt": true,
+        "widgetHeaderClose": true,
+        "threePhasePromptLabels": {
+          "next": "그 다음으로 확인할 것",
+          "confirmed": "확인한 것",
+          "confirming": "확인할 것"
+        },
+        "widgetHeaderAgentAction": true,
+        "threePhasePromptShowNext": false,
+        "threePhasePromptHideLabels": true,
+        "widgetHeaderNewConversation": true,
+        "threePhasePromptShowConfirmed": false,
+        "threePhasePromptShowConfirming": true
+      }
+    },
+    "/app/laboratory": {
+      "mcp": {
+        "tools": {
+          "denylist": [],
+          "allowlist": [
+            "694329d0-cbe0-4413-9265-6b242dbf7953",
+            "db97628c-1cd9-47fb-8b82-310245f79477",
+            "b53bc98f-70a6-4801-9b33-4d1f9bcbbf6a",
+            "26a58c68-d4ef-4e13-8e07-246608f22c6f",
+            "957e0051-82ec-47cc-8bee-c5f2d3a58ea7",
+            "3a4a12cc-5738-4c9c-9df0-0b114f65f799",
+            "bbb1de7e-aba2-435d-a114-a1c9ce39fb14",
+            "99d3f8af-ec09-411e-9ed2-0b87086aa114",
+            "84e6920c-3e5e-4f57-bb14-1427e58a0b41",
+            "6f283c49-cfb9-46ce-b922-87f88f48f010",
+            "9cd7d3ca-1545-4497-8d8e-b7324adf6d02",
+            "4799df8c-71b1-4cc3-a3f9-58d4599f838e",
+            "20d2f8f3-5075-4a5d-a7c0-c951eef40982",
+            "603408f1-6558-4fe0-9139-d8646e3a7584",
+            "a1ca8526-261c-4eef-b122-40f97eb79efa",
+            "531880e2-0b95-4ce8-a87d-155ce045c7c9",
+            "2ebed5a2-3d25-49e4-b104-79d1a76d1644",
+            "f7463504-6cf8-41b5-a91d-3eed71a0ca62",
+            "31372f8b-ab1f-4bc5-9155-c0826cb1d587",
+            "469e4e8a-32c9-4a93-8ae2-2696d99165bf",
+            "2ed3a470-14b2-4fd2-b1ee-7e999d31f44d",
+            "b33ba1ac-c2d0-408b-8aba-fd7e5c7c16e3",
+            "feadde40-3498-4cf3-adbd-a11803c8fe22",
+            "38154d73-50f6-4f67-84b0-c48c383cfe57",
+            "e7bdebc4-213b-46ea-ad30-5b9d3d788081",
+            "52f29a7d-88f1-4e4d-8582-42e430230cbb",
+            "1f85404a-6bfd-4c84-8a71-a752e8e72da9",
+            "e387830f-fedd-483f-9d5c-356de5b2b52a",
+            "b4553642-8e6e-45e4-bdb2-f2a89eb7a270",
+            "7b8fde33-e56a-405f-afba-ec0e1ef2403f",
+            "cf86d7d6-8a14-4f42-9d13-754953156512",
+            "b200a2d1-1cb8-4540-b979-6b24cfd0bdff",
+            "0d608528-3316-4804-9b66-8c8ca160b746",
+            "2f0e91a2-ff5f-4ab1-b249-e157b8831ae4",
+            "630f39d4-361b-4606-b05b-609509af746e",
+            "024ec435-8370-4fef-8b3e-35b01f533939",
+            "c265d9ff-d42a-464e-9e0b-03b9c4269f7f",
+            "79cd4661-1de4-4989-adca-4242333e3078",
+            "39474a8e-cff9-4fa9-a3ae-f51ef83b7b0c",
+            "9229459b-75a1-4e68-9597-0a8346d2998f",
+            "4bbc6cea-8a91-4e2a-b97f-487a2ac194f9",
+            "74e30070-a1c6-4cce-8d29-224f29a44f45",
+            "c82cfaaf-7667-4392-8219-e36c00482217",
+            "aa247a7d-1f5b-4486-852e-fc87d81e845a",
+            "2bf22bd2-8392-4a0d-9900-dc99f015779e",
+            "423066a5-553e-4d7d-a203-ac1c7bbba31f",
+            "b6112879-c73e-41f4-9a8d-8c54dea62f1a",
+            "e16bd6fe-a5d9-4144-8451-ccd74b1a834f",
+            "e83af8e2-097d-4e77-87ac-693c58f4dd61",
+            "0d8d3405-d8c9-457c-a94a-6312f28589e6",
+            "2ece9b3c-5407-494b-be16-964f15ffc5c1",
+            "5f66bf67-97a9-4c46-a9e9-53090852ebe3",
+            "aa12d3ea-8152-4071-9eb9-8acfb79a66eb",
+            "d8698307-a2df-477f-90b9-3e2220fe840e",
+            "4949082a-8384-411e-b3ac-defbf1953797",
+            "7d4c4535-13e1-4e33-be3c-6b2b9306adc3",
+            "7986232f-915d-4b76-b877-09587f334ed0",
+            "4ed4e801-b990-470c-a0a1-a764beba1956",
+            "31bfbf77-0cb8-4957-8a83-f237fcc47b1e",
+            "759c4118-f64c-4125-bfce-86a29854c54b",
+            "e2bf353c-c545-425e-82c0-aa1a5f04566f",
+            "16a57959-2bbe-4189-aa5a-cdcb41706ae8",
+            "13001b5e-9c39-446f-9505-9ce721a20eeb",
+            "a64b00e6-7801-4f16-8765-96bd82b8e4cf",
+            "52a56e16-7535-4ae2-a150-0b15efd8b6ac",
+            "f8fea83a-2487-4d2c-993b-01c2472f9d36",
+            "10f7a5e6-3007-4071-a36b-f87e950926ff",
+            "d38580bc-606f-46ee-9897-5d35f00c4d09",
+            "3c27c3a2-6b3c-4314-a324-f620c20fccdd",
+            "af29655d-175b-4a23-ad62-1872a997874f",
+            "f146fd57-1234-41e4-a33e-741d3cb48783",
+            "a1b88797-1469-4498-91e3-08c555a5f9aa",
+            "8270b82a-fa62-456b-9cdd-2f01c4f88552",
+            "04fa8ac7-1149-43a0-9f22-a461abb2122c",
+            "c6c55a27-f930-4768-b1ca-a10fc985430d",
+            "7c934f4b-2e0c-415d-9673-011e06d4838e",
+            "39553c39-78c7-4354-8273-60fcdcb3c396",
+            "8f394392-2465-4b1d-8ce2-c52d879cc813",
+            "190957be-eb0f-472a-a498-9d1b5c5e9278",
+            "9417c39e-a46a-482f-ae10-79776f625b94",
+            "58e58879-c373-4416-86dd-98e48efebef3",
+            "f8b194b9-06b3-407e-888b-e9657bae1f3f",
+            "5c54ade4-388d-448e-bdca-9a6c4f4a9607",
+            "0267b736-3383-46dc-890b-2c67f79af52f",
+            "f26372f2-bc12-44d4-a6f0-4dc4618b72a1",
+            "b14c1a1f-c91c-4cfa-8940-1fb3fb3c483b",
+            "f095f50d-173e-4ae6-877d-2c6972f862b2",
+            "f41f3511-00c1-4fe1-a3f4-037aba79affe",
+            "8b5094c6-7ffe-46d2-a88b-d7f86690426b",
+            "ba25208d-11cd-409c-9916-f6623fe5e5fc",
+            "4bb70f3a-12fe-471c-9959-bd5f25c3a6be",
+            "0ad1b576-ed31-416e-9657-e777761e379b",
+            "89b791ea-1d13-473c-9d1a-277b225b2d76",
+            "03bed786-b027-4c53-b6a8-e9cd7c5e7b0e",
+            "51c81bf2-4dd1-4cae-8c2d-2ce44d20f1b7",
+            "3d2d66fe-105a-4054-a93d-077e7e9ec168",
+            "f02370b2-a60f-484a-849c-d5ec0bb50ef2",
+            "17ff5d38-995a-4c02-a355-71bb54e588c9",
+            "821f4d61-aed3-451f-9680-14bbbcde6628",
+            "fb241ad6-cf9c-460c-a560-222be9722e5d",
+            "689a8cd9-ce4c-401f-a866-034b9c1bd446",
+            "82039463-861f-44a3-8f1c-2e11e5a10883",
+            "12940840-6a37-4cdc-bcde-e57d50c43841",
+            "0c900a6c-b8ee-41ac-816a-b953592c144c",
+            "6c8d81b4-7a72-4d86-8d49-e72b92a73b6f",
+            "84fecac9-31b1-4438-978a-78bfb969326d",
+            "ef49e807-12c4-48ae-8486-bf54a1f57115",
+            "02d65a71-5d06-4fbb-b890-22da3449d9db",
+            "4e759717-360e-467d-9940-8ed534c4208d",
+            "bc9adf5e-e09f-4eed-9391-16aab9e3957a",
+            "c610784f-ce60-4025-8385-50728d98cffc",
+            "c4571f19-6243-4d46-9e11-cb31142b802b",
+            "85c1784a-e4b2-44dd-8192-0afda6eeb523",
+            "15d7f4b9-7ea6-4b65-8177-03a667778cd2",
+            "f9ae3688-1b7e-4e6f-87b2-64f6a37e5b5e",
+            "276fa81f-dd36-4581-b8f2-c4bb201ad2db",
+            "c24469e6-2f2b-4d3f-b8d0-173a1cdbd15f",
+            "8e4d1f4c-b031-4eed-a8f3-8dea05ef3be3",
+            "6d6a64e7-a74a-4149-87b9-8da3b07578f7",
+            "e6474e76-889c-4aa8-8240-1ac1fe24d8bd",
+            "94eebe4c-333d-4197-8c6d-ecb1fb9cdff3",
+            "cae9b50f-4d98-4f45-bbf5-38eb4260718d",
+            "ad030024-6df3-4b56-8cf2-f3836b02bd87",
+            "22b2e722-8d5e-40d6-a004-8b3eaeee459a",
+            "14c738f0-4320-4f96-8204-b1a7f20ea481",
+            "53f67687-d058-426d-8f39-c79a96135d7f",
+            "bd07725b-31ed-490f-8985-6ade9aa6c0c7",
+            "e070268b-767a-4c56-8906-40c74e60e84d",
+            "53e44973-3bc3-464e-a144-ae93f786e13e",
+            "a5691f0c-66d0-45d6-a110-9370ef4878e7",
+            "edc6862d-035d-46b0-bb5c-08f420e40627",
+            "c60d6171-f434-4d54-aabe-a3c9b31a7d48",
+            "232cdcce-fd57-46a2-8b07-adedcce07fe1",
+            "5b9010c5-e971-440b-8283-40f3da8a7b68",
+            "93b143f3-cb55-4167-9cc6-cff1dc700778",
+            "a287e90f-0b4f-414a-8c87-7755a8838f03",
+            "ac610215-415c-48b4-bba8-276425dd0d02",
+            "5eabfd64-3bcf-4266-a163-5cae671478a2",
+            "74e747fb-e929-4dbc-88a1-f93fc7fc21d8",
+            "1316c6c4-6136-41c6-b87d-744c746bcf22",
+            "7cdf6e6a-e0da-4c60-97c1-a695ab81d5c0",
+            "c6a180c0-c130-41c3-97f6-5df9ebca7ace",
+            "34a0759d-3a30-4e6f-a99f-93ca4657cc4c",
+            "058670a2-199f-4e7b-b22e-0337c4831d77",
+            "1175d926-a8f1-47ae-ade7-a2e907e5f4a1",
+            "5bf0903b-c690-47d4-b6dd-653eedf2c14d",
+            "5bdabed2-bb67-49cf-8b52-4f4b01f00aca",
+            "511c0dc0-e2ec-4c86-9490-44a7c2c3f1f8",
+            "73fe7892-78ee-4d05-8d0d-7feb9fe92f4b",
+            "65a91979-54e1-49f2-a305-fb5c656b8b75",
+            "63d10011-154d-4a90-9ddf-6c1a8339831e",
+            "84d93733-944a-4f66-bedb-5bffdaef73f2",
+            "f9f1fcb9-fd23-4a4a-a19f-c6d8a286b13f",
+            "bc80e8e0-289e-4da6-bcb0-385e32e12fc9",
+            "323592dc-9b75-4d3b-90d0-49fa83a98c27",
+            "dee69025-0682-472b-8d70-7418c1b45106",
+            "2f050741-ba77-414b-8a26-5adfb6325a4d",
+            "30a8d1bb-507f-4f08-8e5d-7d0a22e9fbb8",
+            "3b004cd7-3079-4d45-bccd-fb160eb066c3",
+            "8c756e07-6ba7-424e-a67b-646dffd218a2",
+            "832c7da1-5255-4551-bd12-f3e2081f727d",
+            "1b04a4b8-d132-4019-8903-9b613af47c09",
+            "1a02e607-b095-4448-938d-ecc67e18a9bc",
+            "dde1db32-baff-48c8-93db-d1b641805360",
+            "9c8ec241-3913-4de6-931d-08514e6eb331",
+            "7b54f02c-fcc1-4076-b3c7-27122d8651ae",
+            "d0ae68d1-7bad-425e-896f-866c819c3cf6",
+            "bc2995ba-d7ff-4f55-91cb-2290988be04d",
+            "7da909d8-721d-40f1-acac-fff93e02ade1",
+            "02cb5adc-2b0f-43bd-a3c0-268165ffa400",
+            "b02a39c8-cdeb-48b0-bd0a-7d852f1e4bf2",
+            "1dcf26f6-3ae1-4346-81ca-1addd8d8b26b",
+            "73456071-14b9-4b28-ac73-c2731589c965",
+            "cca1ef24-2b74-412f-94e3-e9a6c63b8b62",
+            "dea2a2ab-278a-4454-a097-ab93ef364719",
+            "4da62200-b546-4dc2-94ef-92ed0a255bba",
+            "b7e9a63b-4218-4fcf-be4c-7fe8c6522735",
+            "454d72cf-ad96-452f-9043-cf82e2211581",
+            "eb6d5a1a-57f5-40a4-9942-b51aec155339",
+            "16274d09-abb2-48ff-863a-eb4b98e7da63",
+            "3f29b394-98ff-412f-b854-7f08cbd552d9",
+            "5e3c84ba-b457-457d-862a-9e6165704fa4",
+            "be8fdd4d-84cb-4135-9569-7b20349ed4d4",
+            "5de48471-8f9e-47bd-92c7-4cfa45e87aca",
+            "d6fcc163-5521-4aab-9aef-4c5103bb87de",
+            "525b1681-1e5d-4e21-ba55-57988441a55b",
+            "1fe93305-369f-4a45-9db0-b7490fdb8a2c",
+            "d76cab70-fb95-4b03-b008-16cb0e918643",
+            "e333bc64-8b65-4233-99fa-2f0dd6e22cc8",
+            "3d831565-50b5-49e4-9698-da59daca6081",
+            "1ccddad2-0774-4ce7-9c87-d2941f6a3d11",
+            "34040256-ec3f-44b7-8ce1-f48f5a1f56e3",
+            "bd1a57e4-427f-43cf-a276-86aa106a1b41",
+            "4e482af0-ce46-44ce-b323-9a5539961778",
+            "5723c5e4-b589-4996-9f5c-0f2a124e3b7d",
+            "4e14785d-818c-4977-95da-a23becfdd2a6",
+            "e29337ec-9345-4385-b94f-a2ed442c6399",
+            "7dd474ca-d72b-42c8-a5ef-3296f8e0d45b",
+            "c535b991-58f5-46cc-b67b-0395097d52b1",
+            "a3ba38c8-7350-4d94-984c-e6811d76bb7a",
+            "94ee49f4-459f-4d13-830b-2c059692b3c0",
+            "a0ce6a8c-f217-4034-9710-edfe16238a47",
+            "c056de1a-65d3-485a-857e-09de55a18976",
+            "d73c5a7f-32fe-4334-9a3b-5ec6aae3f58d",
+            "f886acc4-5785-4607-88bd-ef397953b63e",
+            "ea04d73d-f993-4c62-b020-6a134c9358aa",
+            "da74cd18-5f85-4705-8989-7b67965e3692",
+            "3e021866-e552-45b8-80c4-431b34a5908f",
+            "49dc038c-c1fc-40f9-bb0e-8af01dbb8d37",
+            "73b5f40a-694f-4349-9450-7dc8c0d9ff22",
+            "52d43e84-cdd2-42c3-8514-009f87bcae6e",
+            "ad92828e-53c1-43b2-bd06-4b3a1d5bb77b",
+            "b32abaa6-629f-4f57-9be4-bad5c8844a6d",
+            "7e941b4b-2877-4034-93a8-766334bda294",
+            "d01abe72-a996-4872-93fa-82d6f99a6213",
+            "dbe07e13-7023-4a7b-9029-24ea2ad3a778",
+            "fad11cad-d4f8-434e-aaf6-b65151d69983",
+            "5f13c9eb-b9bc-427d-8b29-958f81f4ad6d",
+            "3a80ee3d-de57-4e01-9422-8742b780378a",
+            "d716e1a5-8850-4875-9893-67cf6d11272a",
+            "c3509f88-eb0c-4986-9476-619b92814f31",
+            "24e7a4e2-1316-4dfa-8657-c429c93d10fb",
+            "9a5c1519-ffb9-4523-8b7f-33ce27d7cb64",
+            "587fc82a-9278-4b91-952a-ef589b0a93e7",
+            "4feec025-7316-4adb-92e5-3a719c88c8d4",
+            "30b0d743-301f-46b5-a9ee-118e867c867c",
+            "9c544253-3732-4dea-90ac-b86092c7fbbd",
+            "72f4ad45-ec92-42d6-a089-1de1516cda8b",
+            "2dd19b3f-ca0e-429b-ad11-feb494ab1d5e",
+            "4cdb3604-a96b-4a26-9a6c-ad9f82ed4af5",
+            "94faf540-5132-4645-86f6-34bf7539d97d",
+            "d7531bf5-5749-4369-becc-4186dafe0786",
+            "acd14272-b91c-42e8-a725-7d5fe0e5ae62",
+            "59dd08ce-39ac-40bb-a40b-f17073197f1e",
+            "cc888007-3ddd-4e4e-83ed-17794d97b69f",
+            "0a1ea356-cf87-4b96-a6ed-15ea7f0a750b",
+            "ddef1258-34f7-4b1c-85ee-7dd4ff90c9c1",
+            "329e68b0-158e-478f-81ec-c2433614fcdb",
+            "ee7e617a-2434-4de6-ba5b-f908dd7c576d",
+            "056025fe-4c84-4200-8360-7284b77d2845",
+            "ac0fa968-36f1-4fd5-b926-2a4e2c2d07cb",
+            "a01eda33-4e5c-4c08-b7ba-e088d8151772",
+            "522c239e-d7ed-4898-b399-7c3527651f7b",
+            "7ded3a01-c255-4f66-9b0e-01316848b8dc",
+            "49989c6d-b29c-4678-a9b7-674debfa693c",
+            "87640376-7f28-4c45-8e03-3a4567aade67",
+            "03cae321-3879-4581-9596-6e50c6011394",
+            "c8fde231-9396-4865-9f2b-39994a4d47ab",
+            "153a2561-3862-41fb-ac5c-8ccecf30667d",
+            "8f36ebda-ea2c-406f-b406-6bb59a8f0e80",
+            "1e363f66-facc-4549-9bcf-44bab5c955f3",
+            "7084aa78-759d-4bb2-80ef-c86db10fb367",
+            "e58296c2-7697-4e53-b915-1352d77e1180",
+            "71d5a79c-a115-4c3e-bbed-58ded165ec1a",
+            "8fc668c2-bfb9-4ba4-beb9-d8efe82cb0c5",
+            "d181103c-38c0-4bc6-89d2-d51ff87ae347",
+            "846b7abe-2d7e-4042-bd2a-82469a361b1a",
+            "372f17d4-3032-4542-a51f-532b58e5ac49",
+            "baa0c758-d31a-48f0-b88e-a1c5fa06e0de",
+            "ef0aab28-2e3e-4b97-ab33-7525877f947f",
+            "5c2c1f5d-d422-4af7-bbbc-66dccb533cf6",
+            "e9725d49-a9df-40a0-ba7c-24d763cfc664",
+            "8dfbdb09-7005-4cf1-a2f8-e931fa3c7752",
+            "141d892a-688b-4138-91f2-2d2400e15121",
+            "b820ac31-6365-4a24-9868-cd52ffc846d2",
+            "50734046-e45c-448d-bd86-39faf93d4d7f",
+            "8906d7b9-9e50-4565-acb4-676bce901707",
+            "c0b834a8-edd1-4e4a-bf05-5719937353e1",
+            "11416030-6bea-4f4d-b2dc-c54c6fc644fc",
+            "de467c40-f821-40e6-9f29-7c4d40f3158c",
+            "2119f946-e068-4204-a441-deeb825c8b7e",
+            "9df53b19-2597-444f-aa29-104bd3b7133c",
+            "14daeddb-8c2f-49f8-8b61-0e7cd5b60fb7",
+            "0b483537-43f3-4394-b751-6b68a52ca10a",
+            "32d4ccf5-ad0f-4ab7-909a-b86de44d4e96",
+            "d8ddb079-22c7-4c32-b5cd-3eb4d531f343",
+            "4a2adb11-91ea-4100-834b-6e1cdbefe36d",
+            "bd7ec1e6-bb36-4973-86f0-c726699a4de8",
+            "dd433e6d-9322-43e0-961b-9c09236a9181",
+            "3c9bfa0e-d685-459e-af0b-ea8faa3d8b4e",
+            "15f2953c-b88e-47ec-89c2-6f11a01a5069",
+            "923cda8f-2303-44d3-bf55-d02d61c4b50c",
+            "76d0de33-c819-497e-b921-56c80feee5c2",
+            "8d8cbc29-2dc7-48c5-b0eb-e2ece32ab2bf",
+            "41af19c3-629d-441b-b8a0-9e908799bd96",
+            "814082e9-5a78-4bd1-b81c-17ee6a3c9408",
+            "380c5102-c4f4-4154-b2fd-27c079d39fbc",
+            "d4a89584-610d-4ca8-956a-a133bdd53b5b",
+            "cc137a38-2ff7-41e0-b1bc-ce495c20dc58",
+            "853c4f6d-957f-4093-9b6a-8d9ef6d96a56",
+            "e51f63d5-e447-4bac-86c7-90216ee821aa",
+            "2da8207e-3b73-4a65-8659-bfa7f0d1a1e3",
+            "2c127e06-4248-4d75-9a5c-e0c92c93b05b",
+            "50e32fca-afdc-4e60-87cb-5db36a2aecb5",
+            "86fbb632-8d3d-4594-b2f6-616d6067b7ed",
+            "f81aad79-933f-4224-a084-2b373853ec12",
+            "33a13b89-f8fa-4e95-9f1e-454f206058f6",
+            "2ffbb279-98f5-456f-b44c-406de6337c44",
+            "9071871f-f45e-4828-9958-db656384699a",
+            "29277c89-7a98-4886-9323-4c2f14b0c246",
+            "7a3db13d-da1e-4d75-9187-3b6cd43bf5ce",
+            "8b5ad44a-d64d-4e29-b907-cb82ab6940f4",
+            "c75507b1-44e0-47d6-b605-86dda8b9ea74",
+            "3c880921-9452-44a0-9e08-dd485b525a4f",
+            "73c96373-b794-4b67-a087-043eb8402535",
+            "93c16f5b-910d-4f30-986a-0c656148d938",
+            "87095636-5429-461c-9b1c-14f1885ca343",
+            "393ba4fa-ee87-4ca8-b2ac-790a1cfde081",
+            "23a91173-b848-41a2-9b93-3dc62eecef66",
+            "4abe55cd-6744-4cbc-ad44-015c00d5dacb",
+            "f3ae2a6d-8c7f-420f-85ff-e5d8c5784da6",
+            "a6eb2ac6-bf15-4b18-aa5d-6f6aeab937ca",
+            "b86500ea-5a68-4130-9c8f-a5a7025f023b",
+            "d6e1b140-b5e4-44fa-ae63-cd79ef2ad400",
+            "67b2441f-02f6-40f3-b88d-3f6fdf7a5978",
+            "adea0b27-202f-49be-a6ee-14096b48f6d4",
+            "1dcd2a61-1682-4df6-aada-befa29fe01e0",
+            "ee60968a-90f8-4929-9d3c-afeff81be267",
+            "d4ddc108-56e6-4813-991f-5fd011061984",
+            "790c3d54-68fe-4439-8cb2-97c3d5da4dc5",
+            "7dc3ae99-9411-4cd6-a124-69c19753abc1",
+            "dacc53b3-0861-44cb-b332-74efcaf456f4",
+            "f7dde81c-2ff4-45a2-998a-7bd78da529a1",
+            "844b930a-919e-4e7b-bd91-dd834ccfd0ac",
+            "7824b48c-7d2f-4ada-9067-2fdcf271b36b",
+            "40ca1e5b-1ca8-40b9-927f-0ab6c3116f59",
+            "3129e759-599a-46a2-ba64-dfa5cff76535",
+            "d8ff73e0-7efa-4f45-b87c-ea228fee1de8",
+            "744b8582-0a96-47e2-924a-4d9687feb89a",
+            "ba66eef3-b317-4576-87a5-aea811c1686b",
+            "d61a846a-3e54-4bf4-af8a-a51f3f58c8b0",
+            "fb92a72a-66fb-484c-883c-f6f283f18fe6",
+            "ba09d67a-4f67-41d1-a192-7b1481fc3924",
+            "646f0110-c4fe-4f41-9054-05699167d0bc",
+            "2c6c0ef8-dfa0-43d3-b3ea-e86a17085c36",
+            "7bb951ff-c981-4eb6-973b-4d333127df9a",
+            "3716a881-af1e-44f8-bac4-f9847abc3348",
+            "f6e33354-0b5b-4b50-b225-7812e018cda0",
+            "ebbd4b60-9636-4031-b82f-cc9206943a48",
+            "9f4ef084-f77f-43a5-a6c0-e8d592b5342d",
+            "240af477-ffc6-44cd-90db-97e4c824149c",
+            "9a03727c-1497-4eb1-8c34-74b5747c4587",
+            "85565260-683b-4872-b6cd-d849f21bd283",
+            "bdca72e6-54b5-4d61-b0f9-998f724267e6",
+            "3a119a90-791b-4895-892a-c049caaf812b",
+            "7a577da4-0ba9-4347-a3e3-259267869170",
+            "1f955398-e317-427e-b447-4dfa39f42922",
+            "ae72f42a-312a-4c76-bdab-60cc3e6c67e9",
+            "4611d59e-3c6d-4d56-8aa2-e0dac147fca0",
+            "94ffb569-a43b-4d1a-8917-a826334640b7",
+            "847c8874-510f-46a2-ba82-52c0a35d7900",
+            "e8aab209-6a1c-4701-9b35-a3d5d9c813cb",
+            "2aa7ad38-619f-4ccb-8a4e-2e4eff62d2bc",
+            "df143eea-cc0e-44c2-b1dc-647da9e7bde2",
+            "8fba24ed-8b82-4c16-b876-0a15bc7ec792",
+            "1aa78875-80c5-492a-830e-ad82b4eeaa0c",
+            "d5bb761e-8e40-4d20-b6d2-388c97bc1294",
+            "430597e7-77a7-447e-8d62-143d483dea2c",
+            "b4ce6cbd-b72d-4fb7-bebc-a48dd0bd1462",
+            "68f74990-946c-4032-a373-eaa454f14c37",
+            "d417f814-caf9-4614-a869-f19f3398b234",
+            "3b2a25cc-286f-4000-9f18-f50f0286e442",
+            "8aeb9c75-6340-493c-97ba-264921a0a7c7",
+            "75160c93-651d-4ede-88ea-a2452701ab8b",
+            "1199fa24-6552-4e3a-9db0-43b96a657be8",
+            "f5624f6f-1c28-497f-acfa-2a5a3607e17a",
+            "438ce5fd-8232-4466-9999-0804dcbfd837",
+            "5d682b6d-515a-4e36-b3d5-9a2ccf66f004",
+            "85d69e31-93ba-4749-a520-9050bd4dec34",
+            "4a575092-0b1a-47c3-9f06-38c9dc62bca5",
+            "b86dee8c-1f80-4e98-92bc-e1fd372d19c0",
+            "ff6a8aa8-d5e4-47ac-8b0c-6769f0e66fd5",
+            "4b0d21d0-64df-410a-b432-e4add9d3e325",
+            "ff40d53e-d22e-4b26-829b-91694d9bce43",
+            "d09dda58-7965-4384-b335-c1b508db37a1",
+            "a22c0dfc-ee7d-4a5f-9c2c-68907613ec91",
+            "098366b0-9182-4cf7-b13c-b7bbdbd45c8c",
+            "0d510e28-f2d9-4209-8852-2a11e2d8fa9e",
+            "cfbf95e6-1843-4a60-9321-8304019aa5c4",
+            "0282588c-17e1-4265-b074-0a8c75e57dfb",
+            "7b802ee5-7b14-44ca-b117-3a69b75d7419",
+            "2dc4d89d-8ef3-44e1-b85b-f874e1da6cec",
+            "56d6307a-3a6e-49b9-bc7c-7b6bedf8ffe2",
+            "630bcba0-8e35-40e1-b382-0d796312ebfe",
+            "3cfaac2a-c981-4c3b-a2cd-8c4fb1b0e872",
+            "54a71a68-6352-4078-be83-4eccbed41bc3",
+            "c61befc5-82a9-4b1c-8e38-53c65d0d299e",
+            "dc488a33-9fcf-4ed4-a1f4-2fb52690eb97",
+            "728eaac1-7ae1-4d4a-b12d-7491d82d95ee",
+            "594b9554-70e7-46e5-ac93-6335826d7bea",
+            "aa14597d-a0ed-4726-a26d-858f36bf321f",
+            "b3a4ed8e-a86f-41f2-9ed9-068c13820381",
+            "2a317987-184a-43bd-803c-d9db9a4e6b5f",
+            "61c87dcd-8f86-48af-b622-0e293ac73efb",
+            "37e7e80e-14a9-4026-ab97-ad300d538d55",
+            "d8e90d39-3999-4e3d-ab8f-acbf99a20907",
+            "a71c65de-968e-4fe4-a336-e0181950aa28",
+            "f6f2fe01-a70b-4ee7-8e90-f6cc598ac498",
+            "b1226577-7ef9-4e8f-babe-2b7ecc0cded9",
+            "c092dbbb-1af8-4c2c-8878-a5497dec43ab",
+            "169af5f3-9d6e-4215-aa06-e84922849fe9",
+            "09f05175-e0ef-4491-a012-b19596d78664",
+            "c622fd51-6b15-4550-94b2-50a1960d26d1",
+            "c52a6f18-e791-4e1e-a4b9-06ca64937343",
+            "9e781b20-13ed-43d0-bbb6-2f7002c30993",
+            "96eb30b2-24e9-414b-8738-b0bee029909d",
+            "1e5f076b-786c-4358-b067-8ba22ef9d1d7",
+            "6dff4777-b07a-4849-b273-109924d85346",
+            "ac42423e-b77a-4907-92ad-229102d4d7fc",
+            "7093c1b8-8e6f-44fa-a104-0bfe9c6ea776",
+            "8b2b4978-1113-4525-b2e3-b4266691c550",
+            "08d1c109-2284-4c74-98bb-32a226e09617",
+            "5ad3efa8-2bc2-41e3-86df-814531a32357",
+            "0a85ae3b-6501-4e2a-bd17-7a9286b03683",
+            "d3de8ece-7eec-4d0f-8dd9-3ca844b1fc18",
+            "dbc22f52-24bd-4b41-87a9-e1b00a5d64b6",
+            "dcf9a8c5-f651-47bc-8cd7-4a6f716f0e67",
+            "b7ac4230-6777-4463-b181-37bb94a2dfb2",
+            "77cc2130-5b4b-4b38-bafb-7a3b577545be",
+            "119b927d-cb90-449b-9fac-b9174c635f8f",
+            "7527b230-f176-4fda-8189-75a195bac843",
+            "0f95d5c2-089f-46d1-8e90-59ca60343e62",
+            "0adffdd9-583e-4b50-b60c-2cb074b6675c",
+            "d1096098-935a-48b0-9776-5b308a350c1f",
+            "603df6ba-9094-46fa-9a3b-2649ab7d8534",
+            "b635fe00-46a5-4a2d-a51b-46fcf490546f",
+            "25c2a9c7-3ca8-493e-8884-9a3760a266bf",
+            "fdb78772-3f0f-4a1c-a7dc-10cda5376534",
+            "a371d697-947c-44d0-a24b-7ffc67d6ef01",
+            "10451397-12b7-444a-844c-419607ad6408",
+            "6a10cfed-9c73-4cd8-a6dc-df020e24623c",
+            "71f8aaf2-1433-40a0-9db1-1a490a70de4a",
+            "9436cba5-f2f1-40ba-af96-2b51a303482c",
+            "dda23913-9ca1-492f-a7d4-f9c69615b1ce",
+            "c291d3f2-1678-4a64-a8ed-c6398a42a9ea",
+            "756bbff9-f7a9-41c4-9ad1-3356e62d1b13",
+            "5f493d29-cef8-4901-897a-badff3f31feb",
+            "7348bebb-5211-4612-9e60-cc4d9fd79aed",
+            "457c88b3-3ed9-45ec-8010-ad272cdbcd11",
+            "323bf492-0197-41fe-b14b-f75de891357b",
+            "cefbd8dd-aaf7-4e65-9101-0481fdda2b8f",
+            "937d3de3-db69-4352-a147-d7df1c998a43",
+            "00526e2d-c9a7-4b31-a1a2-614f839e1e26",
+            "d74299ca-406b-4cee-9d54-9e204e2416b5",
+            "fad1eade-2115-48bf-a057-a9538bd92f2e",
+            "6986422f-8867-40d0-9bba-c04d24abe60e",
+            "65f55fb5-7aa3-4a3e-aa74-0eca045ddf39",
+            "99ccaf4e-177f-4384-b712-f4af5f87003c",
+            "cbf57661-f481-4bcb-a272-5fa49aef9058",
+            "42c64b78-b927-4cad-85be-ba1d1f1553b8",
+            "11ead2fb-dc8b-4981-9305-cd129ea7d92e",
+            "8776886f-f483-48d9-9c59-048461dc3a10",
+            "3073572c-4fd4-42a4-97d2-70d3112d63ab",
+            "2620fb3c-78b4-4994-aa43-f074f2d635da",
+            "72d48181-79c2-4278-beb2-efa55db6a41f",
+            "7c07f244-9a5b-484c-9b18-6c00d1f9c8c0",
+            "98fc23bb-636e-4717-be5d-4c8a8f2943e9",
+            "52097caf-c18f-4c2f-a85e-e4cf0eb52073",
+            "42cac914-71c7-433b-aadd-611f900c9135",
+            "d567fac4-50ac-40a8-a621-38fa7bf26863",
+            "0c516360-b13e-4df2-a4e3-f66160e4b15b",
+            "b58602eb-587a-435f-96b8-e225f0d3c116",
+            "8a15895e-8e9d-4a78-83b7-12adc678e0c9",
+            "f4b8415f-dc20-4d18-9a16-060e4c5ae40b",
+            "9dc2ee73-db50-4fae-bde9-ba87459aae59",
+            "95b8d061-bd53-46ed-a17c-c7b86b01e1ed",
+            "102d8e6c-e6ed-49c8-98b2-f3810daf9afd",
+            "15cbcb2c-f7b4-4103-b7e8-442566ef4667",
+            "e2d2789d-1cd1-405c-8922-6994d237bcc4",
+            "29e44f16-6220-4dbd-bf74-29ed720304c9",
+            "51caf71d-88ee-493b-9893-da5b044ff3ea",
+            "2cc86bd5-5063-43db-88bb-8d4a65290996",
+            "6bf5a330-cd09-4b21-b8ce-ad5dfc7eb0ab",
+            "ac4b5a59-f884-41dc-beeb-9750ab66c7ed",
+            "5be5bd70-62c0-42cc-8e8f-6bc8a5746fc9",
+            "fd245f6d-5b1c-465f-b6bd-da923ff77443",
+            "2c3b7462-7e9c-478b-9957-bb3ceaa9045f",
+            "c4281e65-d51b-4398-95ef-265233ea3101",
+            "c5a17256-27d6-4823-a8fe-a0b9c276f78b",
+            "229d6692-8947-4089-acce-999e9138c051",
+            "c13c02b6-24c1-4446-9a63-dafcc19da754",
+            "957a964b-4083-4451-beaa-65244761617f",
+            "30543c0e-890c-4eb2-9652-32a50773d667",
+            "834c55c1-d8c7-4e3f-8171-9ccdc8639f9d",
+            "bae057a7-81ae-408d-b5ef-981692b75e95",
+            "bcc18fdd-6158-4c6a-9d84-30fae04e62f4",
+            "403d7a31-c4a7-48ab-aa73-76188f93bd10",
+            "9c1a3c30-bd90-4833-a1ef-f8336e4a9f75",
+            "1d343ae9-5d06-4163-afa7-d74d0a3cfa44",
+            "e99cc1da-6c0d-423e-bef2-5978a2b2fc30",
+            "e21387d4-cc00-4ee0-acc8-3c9191c65958",
+            "5763bcc8-4a71-4e58-9168-33dff88c642b",
+            "e6a97bd2-c99c-4151-9fee-d4b40097c04a",
+            "0c1bea66-2081-4b28-8bda-59edf26c574d",
+            "46dcc5ca-2e2c-419e-b19f-6d8482651b98",
+            "65263088-c19f-4bea-b86d-07dc1b97e5b5",
+            "bc06a0c1-8f40-4ba8-9668-682170254b34",
+            "8581bdee-53e7-4781-9956-6be1ae3c0605",
+            "084b0a51-e836-4638-bb3d-00e559e137b1",
+            "a82ecb3c-f702-4ae4-8b10-28f54249c604",
+            "920f9a5b-d979-457e-9934-a9b107aa8212",
+            "6780420a-3574-4a0f-97d4-5ce43e7ac21e",
+            "aec3bd90-314a-4929-9fe5-6ed33888857c",
+            "a9cd0a00-59f1-43fd-97d4-5f5c1bca3c07",
+            "4b4cec22-7d1b-4c06-8579-08cdfbacc16b",
+            "11025bb2-770a-4c55-af11-83ba2caabcb8",
+            "56cef951-28f5-4b11-85f5-7624adc15862",
+            "f45fa968-4bfe-4025-a74c-8f14f241bb43",
+            "fbcf876f-b4e9-43a0-9674-88b9cb21cb09",
+            "ffb90354-4eb0-4dd8-9ba1-d6608a1ea79b",
+            "65f374e9-71db-4cea-ad64-1ca0a403fb17",
+            "0908279c-a369-4684-92ac-8a9f5af1407f",
+            "1d09fb43-4ca8-4c4c-940f-8ac1bbb43a13",
+            "c78fe2ef-9925-45bf-8f14-2f5954dfb00c",
+            "03b67d63-e22d-4820-b101-bf545df8e78c",
+            "c962d4b0-d96a-45f6-a985-59b8b93534c0",
+            "restock_lite"
+          ]
+        },
+        "providers": {
+          "denylist": [],
+          "allowlist": [
+            "cafe24",
+            "solapi",
+            "juso",
+            "runtime"
+          ]
+        },
+        "actionSelector": true,
+        "providerSelector": true
+      },
+      "setup": {
+        "llms": {},
+        "routes": {
+          "allowlist": [
+            "shipping"
+          ]
+        },
+        "modeNew": true,
+        "adminKbIds": {
+          "allowlist": [
+            "0da02c01-aad4-4286-a445-4db7a89f8ebe",
+            "878b3ffe-2e18-4820-bda6-ffeccaa4212b"
+          ]
+        },
+        "defaultLlm": "chatgpt",
+        "kbSelector": true,
+        "llmSelector": true,
+        "modeExisting": true,
+        "agentSelector": true,
+        "modelSelector": true,
+        "routeSelector": true,
+        "adminKbSelector": true,
+        "sessionIdSearch": true,
+        "defaultSetupMode": "existing",
+        "inlineUserKbInput": false
+      },
+      "widget": {
+        "header": {
+          "logo": true,
+          "close": false,
+          "status": true,
+          "enabled": false,
+          "agentAction": false,
+          "newConversation": true
+        },
+        "tabBar": {
+          "chat": true,
+          "list": true,
+          "policy": false,
+          "enabled": false
+        },
+        "chatPanel": true,
+        "setupPanel": true,
+        "historyPanel": true
+      },
+      "adminPanel": {
+        "enabled": true,
+        "copyIssue": true,
+        "logsToggle": true,
+        "messageMeta": true,
+        "selectionToggle": true,
+        "copyConversation": true,
+        "messageSelection": true
+      },
+      "visibility": {
+        "mcp": {
+          "actionSelector": "public",
+          "providerSelector": "public"
+        },
+        "setup": {
+          "modeNew": "user",
+          "kbSelector": "user",
+          "llmSelector": "user",
+          "modeExisting": "user",
+          "agentSelector": "user",
+          "modelSelector": "user",
+          "routeSelector": "user",
+          "adminKbSelector": "admin",
+          "sessionIdSearch": "user",
+          "inlineUserKbInput": "user"
+        },
+        "widget": {
+          "header": {
+            "logo": "public",
+            "close": "public",
+            "status": "admin",
+            "enabled": "public",
+            "agentAction": "public",
+            "newConversation": "public"
+          },
+          "tabBar": {
+            "chat": "public",
+            "list": "public",
+            "policy": "admin",
+            "enabled": "public"
+          },
+          "chatPanel": "public",
+          "setupPanel": "public",
+          "historyPanel": "public"
+        },
+        "adminPanel": {
+          "enabled": "admin",
+          "copyIssue": "admin",
+          "logsToggle": "admin",
+          "messageMeta": "admin",
+          "selectionToggle": "admin",
+          "copyConversation": "admin",
+          "messageSelection": "admin"
+        },
+        "interaction": {
+          "prefill": "public",
+          "inputSubmit": "public",
+          "productCards": "public",
+          "quickReplies": "public",
+          "threePhasePrompt": "user",
+          "widgetHeaderClose": "user",
+          "widgetHeaderAgentAction": "user",
+          "threePhasePromptShowNext": "user",
+          "threePhasePromptHideLabels": "user",
+          "widgetHeaderNewConversation": "user",
+          "threePhasePromptShowConfirmed": "user",
+          "threePhasePromptShowConfirming": "user"
+        }
+      },
+      "interaction": {
+        "prefill": false,
+        "inputSubmit": true,
+        "productCards": true,
+        "quickReplies": true,
+        "prefillMessages": [
+          "기록한대로 응대하는 AI 상담사를",
+          "압도적으로 저렴하게 사용해보세요"
+        ],
+        "inputPlaceholder": "",
+        "threePhasePrompt": true,
+        "widgetHeaderClose": true,
+        "threePhasePromptLabels": {
+          "next": "그 다음으로 확인할 것",
+          "confirmed": "확인한 것",
+          "confirming": "확인할 것"
+        },
+        "widgetHeaderAgentAction": true,
+        "threePhasePromptShowNext": false,
+        "threePhasePromptHideLabels": true,
+        "widgetHeaderNewConversation": true,
+        "threePhasePromptShowConfirmed": false,
+        "threePhasePromptShowConfirming": true
+      }
+    }
+  },
+  "debug_copy": {
+    "/": {
+      "sections": {
+        "logs": {
+          "mcp": {
+            "enabled": true,
+            "request": true,
+            "response": true,
+            "includeError": true,
+            "includeSuccess": true
+          },
+          "debug": {
+            "enabled": true,
+            "usedOnly": true,
+            "prefixJson": true,
+            "prefixJsonSections": {
+              "slotFlow": true,
+              "intentScope": true,
+              "requestMeta": true,
+              "kbResolution": true,
+              "resolvedAgent": true,
+              "toolAllowlist": true,
+              "modelResolution": true,
+              "policyConflicts": true,
+              "conflictResolution": true,
+              "toolAllowlistQueryError": true,
+              "toolAllowlistQueryErrorById": true,
+              "toolAllowlistToolsByIdCount": true,
+              "toolAllowlistValidToolCount": true,
+              "toolAllowlistResolvedToolIds": true,
+              "toolAllowlistAllowedToolCount": true,
+              "toolAllowlistAllowedToolNames": true,
+              "toolAllowlistResolvedToolCount": true,
+              "toolAllowlistProviderSelections": true,
+              "toolAllowlistRequestedToolCount": true,
+              "toolAllowlistMissingExpectedTools": true,
+              "toolAllowlistQueryErrorByProvider": true,
+              "toolAllowlistToolsByProviderCount": true,
+              "toolAllowlistProviderSelectionCount": true
+            },
+            "dedupeGlobalPrefixJson": true
+          },
+          "event": {
+            "enabled": true,
+            "payload": true,
+            "allowlist": []
+          },
+          "enabled": true,
+          "issueSummary": true
+        },
+        "turn": {
+          "turnId": true,
+          "enabled": true,
+          "tokenUsed": true,
+          "messageText": true,
+          "tokenUnused": true,
+          "quickReplyRule": true,
+          "renderPlanDetail": true,
+          "renderPlanSummary": true,
+          "responseSchemaDetail": true,
+          "responseSchemaSummary": true,
+          "renderPlanDetailFields": {},
+          "responseSchemaDetailFields": {}
+        },
+        "header": {
+          "enabled": false,
+          "principle": true,
+          "auditStatus": true,
+          "expectedLists": true,
+          "runtimeModules": true
+        }
+      },
+      "outputMode": "used_only",
+      "auditBotScope": "runtime_turns_only",
+      "includeTurnId": true,
+      "includeTurnLogs": true,
+      "includeRenderPlan": true,
+      "includeTokenUnused": true,
+      "includeQuickReplyRule": true,
+      "includeResponseSchema": true,
+      "includePrincipleHeader": true
+    },
+    "/call": {
+      "sections": {
+        "logs": {
+          "mcp": {
+            "enabled": true,
+            "request": true,
+            "response": true,
+            "includeError": true,
+            "includeSuccess": true
+          },
+          "debug": {
+            "enabled": true,
+            "usedOnly": false,
+            "prefixJson": true,
+            "prefixJsonSections": {
+              "slotFlow": true,
+              "intentScope": true,
+              "requestMeta": true,
+              "kbResolution": true,
+              "resolvedAgent": true,
+              "toolAllowlist": true,
+              "modelResolution": true,
+              "policyConflicts": true,
+              "conflictResolution": true,
+              "toolAllowlistQueryError": true,
+              "toolAllowlistQueryErrorById": true,
+              "toolAllowlistToolsByIdCount": true,
+              "toolAllowlistValidToolCount": true,
+              "toolAllowlistResolvedToolIds": true,
+              "toolAllowlistAllowedToolCount": true,
+              "toolAllowlistAllowedToolNames": true,
+              "toolAllowlistResolvedToolCount": true,
+              "toolAllowlistProviderSelections": true,
+              "toolAllowlistRequestedToolCount": true,
+              "toolAllowlistMissingExpectedTools": true,
+              "toolAllowlistQueryErrorByProvider": true,
+              "toolAllowlistToolsByProviderCount": true,
+              "toolAllowlistProviderSelectionCount": true
+            },
+            "dedupeGlobalPrefixJson": true
+          },
+          "event": {
+            "enabled": true,
+            "payload": true,
+            "allowlist": []
+          },
+          "enabled": true,
+          "issueSummary": true
+        },
+        "turn": {
+          "turnId": true,
+          "enabled": true,
+          "tokenUsed": true,
+          "messageText": true,
+          "tokenUnused": true,
+          "quickReplyRule": true,
+          "renderPlanDetail": true,
+          "renderPlanSummary": true,
+          "responseSchemaDetail": true,
+          "responseSchemaSummary": true,
+          "renderPlanDetailFields": {},
+          "responseSchemaDetailFields": {}
+        },
+        "header": {
+          "enabled": false,
+          "principle": true,
+          "auditStatus": true,
+          "expectedLists": true,
+          "runtimeModules": true
+        }
+      },
+      "outputMode": "full",
+      "auditBotScope": "runtime_turns_only",
+      "includeTurnId": true,
+      "includeTurnLogs": true,
+      "includeRenderPlan": true,
+      "includeTokenUnused": true,
+      "includeQuickReplyRule": true,
+      "includeResponseSchema": true,
+      "includePrincipleHeader": true
+    },
+    "/demo": {
+      "sections": {
+        "logs": {
+          "mcp": {
+            "enabled": true,
+            "request": true,
+            "response": true,
+            "includeError": true,
+            "includeSuccess": true
+          },
+          "debug": {
+            "enabled": true,
+            "usedOnly": false,
+            "prefixJson": true,
+            "prefixJsonSections": {
+              "slotFlow": true,
+              "intentScope": true,
+              "requestMeta": true,
+              "kbResolution": true,
+              "resolvedAgent": true,
+              "toolAllowlist": true,
+              "modelResolution": true,
+              "policyConflicts": true,
+              "conflictResolution": true,
+              "toolAllowlistQueryError": true,
+              "toolAllowlistQueryErrorById": true,
+              "toolAllowlistToolsByIdCount": true,
+              "toolAllowlistValidToolCount": true,
+              "toolAllowlistResolvedToolIds": true,
+              "toolAllowlistAllowedToolCount": true,
+              "toolAllowlistAllowedToolNames": true,
+              "toolAllowlistResolvedToolCount": true,
+              "toolAllowlistProviderSelections": true,
+              "toolAllowlistRequestedToolCount": true,
+              "toolAllowlistMissingExpectedTools": true,
+              "toolAllowlistQueryErrorByProvider": true,
+              "toolAllowlistToolsByProviderCount": true,
+              "toolAllowlistProviderSelectionCount": true
+            },
+            "dedupeGlobalPrefixJson": true
+          },
+          "event": {
+            "enabled": true,
+            "payload": true,
+            "allowlist": []
+          },
+          "enabled": true,
+          "issueSummary": true
+        },
+        "turn": {
+          "turnId": true,
+          "enabled": true,
+          "tokenUsed": true,
+          "messageText": true,
+          "tokenUnused": true,
+          "quickReplyRule": true,
+          "renderPlanDetail": true,
+          "renderPlanSummary": true,
+          "responseSchemaDetail": true,
+          "responseSchemaSummary": true,
+          "renderPlanDetailFields": {},
+          "responseSchemaDetailFields": {}
+        },
+        "header": {
+          "enabled": false,
+          "principle": true,
+          "auditStatus": true,
+          "expectedLists": true,
+          "runtimeModules": true
+        }
+      },
+      "outputMode": "full",
+      "auditBotScope": "runtime_turns_only",
+      "includeTurnId": true,
+      "includeTurnLogs": true,
+      "includeRenderPlan": true,
+      "includeTokenUnused": true,
+      "includeQuickReplyRule": true,
+      "includeResponseSchema": true,
+      "includePrincipleHeader": true
+    },
+    "/embed": {
+      "sections": {
+        "logs": {
+          "mcp": {
+            "enabled": true,
+            "request": true,
+            "response": true,
+            "includeError": true,
+            "includeSuccess": true
+          },
+          "debug": {
+            "enabled": true,
+            "usedOnly": true,
+            "prefixJson": true,
+            "prefixJsonSections": {
+              "slotFlow": true,
+              "intentScope": true,
+              "requestMeta": true,
+              "kbResolution": true,
+              "resolvedAgent": true,
+              "toolAllowlist": true,
+              "modelResolution": true,
+              "policyConflicts": true,
+              "conflictResolution": true,
+              "toolAllowlistQueryError": true,
+              "toolAllowlistQueryErrorById": true,
+              "toolAllowlistToolsByIdCount": true,
+              "toolAllowlistValidToolCount": true,
+              "toolAllowlistResolvedToolIds": true,
+              "toolAllowlistAllowedToolCount": true,
+              "toolAllowlistAllowedToolNames": true,
+              "toolAllowlistResolvedToolCount": true,
+              "toolAllowlistProviderSelections": true,
+              "toolAllowlistRequestedToolCount": true,
+              "toolAllowlistMissingExpectedTools": true,
+              "toolAllowlistQueryErrorByProvider": true,
+              "toolAllowlistToolsByProviderCount": true,
+              "toolAllowlistProviderSelectionCount": true
+            },
+            "dedupeGlobalPrefixJson": true
+          },
+          "event": {
+            "enabled": true,
+            "payload": true,
+            "allowlist": []
+          },
+          "enabled": true,
+          "issueSummary": true
+        },
+        "turn": {
+          "turnId": true,
+          "enabled": true,
+          "tokenUsed": true,
+          "messageText": true,
+          "tokenUnused": true,
+          "quickReplyRule": true,
+          "renderPlanDetail": true,
+          "renderPlanSummary": true,
+          "responseSchemaDetail": true,
+          "responseSchemaSummary": true,
+          "renderPlanDetailFields": {},
+          "responseSchemaDetailFields": {}
+        },
+        "header": {
+          "enabled": false,
+          "principle": true,
+          "auditStatus": true,
+          "expectedLists": true,
+          "runtimeModules": true
+        }
+      },
+      "outputMode": "used_only",
+      "auditBotScope": "runtime_turns_only",
+      "includeTurnId": true,
+      "includeTurnLogs": true,
+      "includeRenderPlan": true,
+      "includeTokenUnused": true,
+      "includeQuickReplyRule": true,
+      "includeResponseSchema": true,
+      "includePrincipleHeader": true
+    },
+    "/app/laboratory": {
+      "sections": {
+        "logs": {
+          "mcp": {
+            "enabled": true,
+            "request": true,
+            "response": true,
+            "includeError": true,
+            "includeSuccess": true
+          },
+          "debug": {
+            "enabled": true,
+            "usedOnly": true,
+            "prefixJson": true,
+            "prefixJsonSections": {
+              "slotFlow": true,
+              "intentScope": true,
+              "requestMeta": true,
+              "kbResolution": true,
+              "resolvedAgent": true,
+              "toolAllowlist": true,
+              "modelResolution": true,
+              "policyConflicts": true,
+              "conflictResolution": true,
+              "toolAllowlistQueryError": true,
+              "toolAllowlistQueryErrorById": true,
+              "toolAllowlistToolsByIdCount": true,
+              "toolAllowlistValidToolCount": true,
+              "toolAllowlistResolvedToolIds": true,
+              "toolAllowlistAllowedToolCount": true,
+              "toolAllowlistAllowedToolNames": true,
+              "toolAllowlistResolvedToolCount": true,
+              "toolAllowlistProviderSelections": true,
+              "toolAllowlistRequestedToolCount": true,
+              "toolAllowlistMissingExpectedTools": true,
+              "toolAllowlistQueryErrorByProvider": true,
+              "toolAllowlistToolsByProviderCount": true,
+              "toolAllowlistProviderSelectionCount": true
+            },
+            "dedupeGlobalPrefixJson": true
+          },
+          "event": {
+            "enabled": true,
+            "payload": true,
+            "allowlist": []
+          },
+          "enabled": true,
+          "issueSummary": true
+        },
+        "turn": {
+          "turnId": true,
+          "enabled": true,
+          "tokenUsed": true,
+          "messageText": true,
+          "tokenUnused": true,
+          "quickReplyRule": true,
+          "renderPlanDetail": true,
+          "renderPlanSummary": true,
+          "responseSchemaDetail": true,
+          "responseSchemaSummary": true,
+          "renderPlanDetailFields": {
+            "view": true,
+            "debug": true,
+            "max_select": true,
+            "min_select": true,
+            "prompt_kind": true,
+            "enable_cards": true,
+            "grid_columns": true,
+            "submit_format": true,
+            "selection_mode": true,
+            "debug.cards_count": true,
+            "interaction_scope": true,
+            "grid_columns.cards": true,
+            "quick_reply_source": true,
+            "debug.policy_version": true,
+            "enable_quick_replies": true,
+            "debug.max_select_source": true,
+            "debug.min_select_source": true,
+            "quick_reply_source.type": true,
+            "debug.quick_replies_count": true,
+            "render_plan_detail_fields": true,
+            "debug.submit_format_source": true,
+            "grid_columns.quick_replies": true,
+            "debug.selection_mode_source": true,
+            "quick_reply_source.criteria": true,
+            "quick_reply_source.source_module": true,
+            "quick_reply_source.source_function": true
+          },
+          "responseSchemaDetailFields": {
+            "cards": true,
+            "message": true,
+            "ui_hints": true,
+            "quick_replies": true,
+            "ui_hints.view": true,
+            "ui_hints.choice_mode": true,
+            "response_schema_detail_fields": true
+          }
+        },
+        "header": {
+          "enabled": false,
+          "principle": true,
+          "auditStatus": true,
+          "expectedLists": true,
+          "runtimeModules": true
+        }
+      },
+      "outputMode": "used_only",
+      "auditBotScope": "runtime_turns_only",
+      "includeTurnId": true,
+      "includeTurnLogs": true,
+      "includeRenderPlan": true,
+      "includeTokenUnused": true,
+      "includeQuickReplyRule": true,
+      "includeResponseSchema": true,
+      "includePrincipleHeader": true
+    }
+  },
+  "settings_ui": {
+    "setup_fields": {
+      "/": {
+        "order": [
+          "kbSelector",
+          "inlineUserKbInput",
+          "adminKbSelector",
+          "llmSelector",
+          "routeSelector",
+          "mcpProviderSelector",
+          "mcpActionSelector"
+        ],
+        "labels": {
+          "kbSelector": "KB 선택",
+          "llmSelector": "LLM 선택",
+          "routeSelector": "Runtime 선택",
+          "adminKbSelector": "관리자 KB 선택",
+          "inlineUserKbInput": "사용자 KB입력란",
+          "mcpActionSelector": "MCP 액션 선택",
+          "mcpProviderSelector": "MCP 프로바이더 선택"
+        },
+        "existing_order": [
+          "sessionIdSearch",
+          "agentSelector",
+          "versionSelector",
+          "conversationMode",
+          "sessionSelector"
+        ],
+        "existing_labels": {
+          "modeNew": "신규 모델",
+          "modeExisting": "기존 모델",
+          "agentSelector": "에이전트 선택",
+          "sessionIdSearch": "세션 ID 직접 조회",
+          "sessionSelector": "세션 선택",
+          "versionSelector": "버전 선택",
+          "conversationMode": "모드 선택"
+        }
+      },
+      "/call": {
+        "order": [
+          "kbSelector",
+          "inlineUserKbInput",
+          "adminKbSelector",
+          "llmSelector",
+          "routeSelector",
+          "mcpProviderSelector",
+          "mcpActionSelector"
+        ],
+        "labels": {
+          "kbSelector": "KB 선택",
+          "llmSelector": "LLM 선택",
+          "routeSelector": "Runtime 선택",
+          "adminKbSelector": "관리자 KB 선택",
+          "inlineUserKbInput": "사용자 KB입력란",
+          "mcpActionSelector": "MCP 액션 선택",
+          "mcpProviderSelector": "MCP 프로바이더 선택"
+        },
+        "existing_order": [
+          "sessionIdSearch",
+          "agentSelector",
+          "versionSelector",
+          "conversationMode",
+          "sessionSelector"
+        ],
+        "existing_labels": {
+          "modeNew": "신규 모델",
+          "modeExisting": "기존 모델",
+          "agentSelector": "에이전트 선택",
+          "sessionIdSearch": "세션 ID 직접 조회",
+          "sessionSelector": "세션 선택",
+          "versionSelector": "버전 선택",
+          "conversationMode": "모드 선택"
+        }
+      },
+      "/demo": {
+        "order": [
+          "kbSelector",
+          "inlineUserKbInput",
+          "adminKbSelector",
+          "llmSelector",
+          "routeSelector",
+          "mcpProviderSelector",
+          "mcpActionSelector"
+        ],
+        "labels": {
+          "kbSelector": "KB 선택",
+          "llmSelector": "LLM 선택",
+          "routeSelector": "Runtime 선택",
+          "adminKbSelector": "관리자 KB 선택",
+          "inlineUserKbInput": "사용자 KB입력란",
+          "mcpActionSelector": "MCP 액션 선택",
+          "mcpProviderSelector": "MCP 프로바이더 선택"
+        },
+        "existing_order": [
+          "sessionIdSearch",
+          "agentSelector",
+          "versionSelector",
+          "conversationMode",
+          "sessionSelector"
+        ],
+        "existing_labels": {
+          "modeNew": "신규 모델",
+          "modeExisting": "기존 모델",
+          "agentSelector": "에이전트 선택",
+          "sessionIdSearch": "세션 ID 직접 조회",
+          "sessionSelector": "세션 선택",
+          "versionSelector": "버전 선택",
+          "conversationMode": "모드 선택"
+        }
+      },
+      "/embed": {
+        "order": [
+          "kbSelector",
+          "inlineUserKbInput",
+          "adminKbSelector",
+          "llmSelector",
+          "routeSelector",
+          "mcpProviderSelector",
+          "mcpActionSelector"
+        ],
+        "labels": {
+          "kbSelector": "KB 선택",
+          "llmSelector": "LLM 선택",
+          "routeSelector": "Runtime 선택",
+          "adminKbSelector": "관리자 KB 선택",
+          "inlineUserKbInput": "사용자 KB입력란",
+          "mcpActionSelector": "MCP 액션 선택",
+          "mcpProviderSelector": "MCP 프로바이더 선택"
+        },
+        "existing_order": [
+          "sessionIdSearch",
+          "agentSelector",
+          "versionSelector",
+          "conversationMode",
+          "sessionSelector"
+        ],
+        "existing_labels": {
+          "modeNew": "신규 모델",
+          "modeExisting": "기존 모델",
+          "agentSelector": "에이전트 선택",
+          "sessionIdSearch": "세션 ID 직접 조회",
+          "sessionSelector": "세션 선택",
+          "versionSelector": "버전 선택",
+          "conversationMode": "모드 선택"
+        }
+      },
+      "/app/laboratory": {
+        "order": [
+          "kbSelector",
+          "inlineUserKbInput",
+          "adminKbSelector",
+          "llmSelector",
+          "routeSelector",
+          "mcpProviderSelector",
+          "mcpActionSelector"
+        ],
+        "labels": {
+          "kbSelector": "KB 선택",
+          "llmSelector": "LLM 선택",
+          "routeSelector": "Runtime 선택",
+          "adminKbSelector": "관리자 KB 선택",
+          "inlineUserKbInput": "사용자 KB입력란",
+          "mcpActionSelector": "MCP 액션 선택",
+          "mcpProviderSelector": "MCP 프로바이더 선택"
+        },
+        "existing_order": [
+          "sessionIdSearch",
+          "agentSelector",
+          "versionSelector",
+          "conversationMode",
+          "sessionSelector"
+        ],
+        "existing_labels": {
+          "modeNew": "신규 모델",
+          "modeExisting": "기존 모델",
+          "agentSelector": "에이전트 선택",
+          "sessionIdSearch": "세션 ID 직접 조회",
+          "sessionSelector": "세션 선택",
+          "versionSelector": "버전 선택",
+          "conversationMode": "모드 선택"
+        }
+      }
+    }
+  },
+  "page_registry": [
+    "/",
+    "/app/laboratory",
+    "/call",
+    "/demo",
+    "/embed"
+  ]
+}
