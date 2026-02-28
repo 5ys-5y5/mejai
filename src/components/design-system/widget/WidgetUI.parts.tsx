@@ -15,6 +15,12 @@ import {
 import { renderBotContent } from "@/lib/conversation/messageRenderUtils";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/conversation/client/conversationPageState";
+import type { WidgetChatPolicyConfig, WidgetEmbedView, WidgetEntryMode } from "@/lib/conversation/pageFeaturePolicy";
+import {
+  buildWidgetVisibilityQuery,
+  readWidgetVisibilityOverridesFromDataset,
+  type WidgetVisibilityOverrides,
+} from "@/lib/widgetInstanceOverrides";
 
 const globalScope = typeof globalThis !== "undefined" ? (globalThis as Record<string, any>) : undefined;
 if (globalScope && typeof globalScope.process === "undefined") {
@@ -30,7 +36,7 @@ export type WidgetLauncherPosition = "bottom-right" | "bottom-left";
 export type WidgetLauncherContainerProps = {
   children?: ReactNode;
   position?: WidgetLauncherPosition;
-  layout?: "fixed" | "absolute";
+  layout?: "fixed" | "absolute" | "static";
   containerId?: string;
   mountTo?: HTMLElement | null;
   bottom?: string;
@@ -122,7 +128,7 @@ export function WidgetLauncherContainer({
 }
 
 export type WidgetLauncherIconProps = {
-  src: string;
+  src?: string;
   alt: string;
   size?: number;
   hidden?: boolean;
@@ -140,6 +146,7 @@ export function WidgetLauncherIcon({
   className,
   style,
 }: WidgetLauncherIconProps) {
+  if (!src || hidden) return null;
   const sizePx = `${size}px`;
   return (
     // eslint-disable-next-line @next/next/no-img-element
@@ -154,7 +161,7 @@ export function WidgetLauncherIcon({
         height: sizePx,
         objectFit: "cover",
         borderRadius: "16px",
-        display: hidden ? "none" : "block",
+        display: "block",
         pointerEvents: "none",
         ...style,
       }}
@@ -182,7 +189,7 @@ export function WidgetLauncherLabel({
       className={className}
       parts-lego="WidgetLauncherLabel"
       style={{
-        display: hidden ? "none" : "block",
+        display: "block",
         fontSize: `${size}px`,
         pointerEvents: "none",
         ...style,
@@ -207,7 +214,7 @@ export type WidgetLauncherButtonProps = {
 export function WidgetLauncherButton({
   brandName,
   iconUrl,
-  label = "💬",
+  label = "상담",
   primaryColor = "#0f172a",
   size = 56,
   onClick,
@@ -220,7 +227,7 @@ export function WidgetLauncherButton({
     setIconFailed(false);
   }, [iconUrl]);
 
-  const resolvedIconUrl = iconUrl || "/brand/logo.png";
+  const resolvedIconUrl = iconUrl || "";
   const showIcon = Boolean(resolvedIconUrl) && !iconFailed;
   const sizePx = `${size}px`;
   const labelSize = Math.max(12, Math.round(size * 0.36));
@@ -254,7 +261,6 @@ export function WidgetLauncherButton({
         src={resolvedIconUrl}
         alt={`${brandName} Icon`}
         size={size}
-        hidden={!showIcon}
         onError={() => setIconFailed(true)}
       />
       <WidgetLauncherLabel label={label} size={labelSize} hidden={showIcon} />
@@ -264,7 +270,7 @@ export function WidgetLauncherButton({
 
 export type WidgetLauncherIframeProps = {
   position?: WidgetLauncherPosition;
-  layout?: "fixed" | "absolute";
+  layout?: "fixed" | "absolute" | "static";
   bottomOffset?: string;
   sideOffset?: string;
   width?: string;
@@ -347,7 +353,6 @@ export function WidgetLauncherIframe({
 }
 
 type WidgetLauncherWindow = Window & {
-  __mejaiWidgetLoaded?: boolean;
   mejaiWidget?: Record<string, any>;
 };
 
@@ -362,6 +367,10 @@ type WidgetLauncherRuntimeConfig = {
   brandName: string;
   launcherLabel: string;
   mountNode: HTMLElement;
+  initialTheme?: Record<string, any>;
+  initialName?: string;
+  policyWidget?: WidgetChatPolicyConfig | null;
+  visibilityOverrides?: WidgetVisibilityOverrides | null;
 };
 
 function readThemeValue(theme: Record<string, any> | null, keys: string[]) {
@@ -373,24 +382,15 @@ function readThemeValue(theme: Record<string, any> | null, keys: string[]) {
   return "";
 }
 
-function normalizeIconUrl(value: string, baseUrl: string) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  if (raw.startsWith("data:") || raw.startsWith("http://") || raw.startsWith("https://") || raw.startsWith("blob:")) {
-    return raw;
-  }
-  if (raw.startsWith("/")) {
-    return `${baseUrl}${raw}`;
-  }
-  return raw;
+function resolveLauncherLogoUrl(cfg: Record<string, any>, themeConfig: Record<string, any>, baseUrl: string) {
+  const raw =
+    readThemeValue(cfg, ["launcher_logo_id", "launcherLogoId"]) ||
+    readThemeValue(themeConfig, ["launcher_logo_id", "launcherLogoId"]);
+  const id = String(raw || "").trim();
+  if (!id) return "";
+  return `${baseUrl}/api/widget/logo?id=${encodeURIComponent(id)}`;
 }
 
-function resolveLauncherIcon(cfg: Record<string, any>, themeConfig: Record<string, any>, baseUrl: string) {
-  const raw =
-    readThemeValue(cfg, ["launcherIconUrl", "launcherIcon", "launcher_icon_url", "icon", "icon_url"]) ||
-    readThemeValue(themeConfig, ["launcher_icon_url", "launcherIconUrl", "icon_url", "iconUrl", "icon"]);
-  return normalizeIconUrl(raw, baseUrl) || `${baseUrl}/brand/logo.png`;
-}
 
 function resolveLauncherColor(cfg: Record<string, any>, themeConfig: Record<string, any>) {
   return (
@@ -399,13 +399,28 @@ function resolveLauncherColor(cfg: Record<string, any>, themeConfig: Record<stri
   );
 }
 
-function buildIframeSrc(baseUrl: string, publicKey: string, visitorId: string, sessionId: string) {
+function buildIframeSrc(
+  baseUrl: string,
+  publicKey: string,
+  visitorId: string,
+  sessionId: string,
+  embedView?: WidgetEmbedView,
+  visibilityOverrides?: WidgetVisibilityOverrides | null
+) {
   let src = `${baseUrl}/embed/${encodeURIComponent(publicKey)}?vid=${encodeURIComponent(visitorId)}`;
   if (sessionId) {
     src += `&sid=${encodeURIComponent(sessionId)}`;
   }
+  if (embedView && embedView !== "both") {
+    src += `&embed_view=${encodeURIComponent(embedView)}`;
+  }
+  if (visibilityOverrides) {
+    const query = buildWidgetVisibilityQuery(visibilityOverrides);
+    if (query) src += `&${query}`;
+  }
   return src;
 }
+
 
 function WidgetLauncherRuntime({
   cfg,
@@ -418,18 +433,22 @@ function WidgetLauncherRuntime({
   brandName,
   launcherLabel,
   mountNode,
+  initialTheme,
+  initialName,
+  policyWidget,
+  visibilityOverrides,
 }: WidgetLauncherRuntimeConfig) {
   const cfgRef = useRef(cfg);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const sessionIdRef = useRef(sessionId);
   const [isOpen, setIsOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [themeConfig, setThemeConfig] = useState<Record<string, any>>({});
-  const [resolvedName, setResolvedName] = useState(brandName);
+  const [themeConfig, setThemeConfig] = useState<Record<string, any>>(initialTheme || {});
+  const [resolvedName, setResolvedName] = useState(initialName || brandName);
   const viewportRafRef = useRef<number | null>(null);
 
   const resolvedIconUrl = useMemo(
-    () => resolveLauncherIcon(cfgRef.current, themeConfig, baseUrl),
+    () => resolveLauncherLogoUrl(cfgRef.current, themeConfig, baseUrl),
     [themeConfig, baseUrl]
   );
   const resolvedColor = useMemo(() => {
@@ -438,12 +457,23 @@ function WidgetLauncherRuntime({
   const resolvedLabel = useMemo(() => {
     const cfgLabel = cfgRef.current.launcherLabel;
     if (typeof cfgLabel === "string" && cfgLabel.trim()) return cfgLabel.trim();
-    return launcherLabel || "💬";
-  }, [launcherLabel]);
+    const policyLabel =
+      policyWidget?.cfg?.launcherLabel || policyWidget?.launcherLabel || policyWidget?.launcher?.label;
+    if (typeof policyLabel === "string" && policyLabel.trim()) return policyLabel.trim();
+    return launcherLabel || "상담";
+  }, [launcherLabel, policyWidget]);
+
+  const resolvedPosition = (policyWidget?.cfg?.position || policyWidget?.launcher?.position || position) as WidgetLauncherPosition;
+  const resolvedSize =
+    typeof policyWidget?.launcher?.size === "number" && policyWidget.launcher.size > 0
+      ? policyWidget.launcher.size
+      : undefined;
+  const resolvedContainer = policyWidget?.launcher?.container || {};
+  const resolvedIframe = policyWidget?.iframe || {};
 
   const iframeSrc = useMemo(
-    () => buildIframeSrc(baseUrl, publicKey, visitorId, sessionIdRef.current),
-    [baseUrl, publicKey, visitorId]
+    () => buildIframeSrc(baseUrl, publicKey, visitorId, sessionIdRef.current, undefined, visibilityOverrides),
+    [baseUrl, publicKey, visitorId, visibilityOverrides]
   );
 
   const notify = (eventType: "open" | "close") => {
@@ -571,65 +601,57 @@ function WidgetLauncherRuntime({
     return () => window.removeEventListener("message", handleMessage);
   }, [baseUrl]);
 
-  useEffect(() => {
-    try {
-      const url = `${baseUrl}/api/widget/config?key=${encodeURIComponent(publicKey)}`;
-      fetch(url)
-        .then((res) => {
-          if (!res || !res.ok) return null;
-          return res.json();
-        })
-        .then((data) => {
-          if (!data || !data.widget) return;
-          setThemeConfig(data.widget.theme || {});
-          if (typeof data.widget.name === "string" && data.widget.name.trim()) {
-            setResolvedName(data.widget.name.trim());
-          }
-        })
-        .catch(() => {
-          // ignore
-        });
-    } catch {
-      // ignore
-    }
-  }, [baseUrl, publicKey]);
-
-  const launcherBottom = isMobile ? "calc(16px + env(safe-area-inset-bottom))" : "24px";
-  const launcherRight = isMobile ? "calc(16px + env(safe-area-inset-right))" : "24px";
-  const launcherLeft = isMobile ? "calc(16px + env(safe-area-inset-left))" : "24px";
+  const launcherBottom =
+    resolvedContainer.bottom ||
+    (isMobile ? "calc(16px + env(safe-area-inset-bottom))" : "24px");
+  const launcherRight =
+    resolvedContainer.right ||
+    (isMobile ? "calc(16px + env(safe-area-inset-right))" : "24px");
+  const launcherLeft =
+    resolvedContainer.left ||
+    (isMobile ? "calc(16px + env(safe-area-inset-left))" : "24px");
+  const launcherGap = resolvedContainer.gap || "12px";
+  const launcherZIndex =
+    typeof resolvedContainer.zIndex === "number" && resolvedContainer.zIndex > 0
+      ? resolvedContainer.zIndex
+      : 2147483647;
 
   return (
     <WidgetLauncherContainer
       mountTo={mountNode}
-      position={position}
+      position={resolvedPosition}
       stack
       bottom={launcherBottom}
       right={launcherRight}
       left={launcherLeft}
+      gap={launcherGap}
+      zIndex={launcherZIndex}
     >
       <WidgetLauncherButton
         brandName={resolvedName}
         iconUrl={resolvedIconUrl}
         label={resolvedLabel}
         primaryColor={resolvedColor}
+        size={resolvedSize}
         onClick={handleToggle}
       />
       <WidgetLauncherIframe
-        position={position}
-        layout={isMobile ? "fixed" : "absolute"}
-        bottomOffset={isMobile ? "0" : undefined}
-        sideOffset={isMobile ? "0" : undefined}
-        width={isMobile ? "100vw" : undefined}
-        height={isMobile ? "var(--mejai-vh, 100vh)" : undefined}
-        borderRadius={isMobile ? "0" : undefined}
-        boxShadow={isMobile ? "none" : undefined}
+        position={resolvedPosition}
+        layout={isMobile ? "fixed" : resolvedIframe.layout || "absolute"}
+        bottomOffset={isMobile ? "0" : resolvedIframe.bottomOffset}
+        sideOffset={isMobile ? "0" : resolvedIframe.sideOffset}
+        width={isMobile ? "100vw" : resolvedIframe.width}
+        height={isMobile ? "var(--mejai-vh, 100vh)" : resolvedIframe.height}
+        borderRadius={isMobile ? "0" : resolvedIframe.borderRadius}
+        boxShadow={isMobile ? "none" : resolvedIframe.boxShadow}
+        background={resolvedIframe.background}
         style={
           isMobile
             ? {
-              top: "var(--mejai-vv-offset-top, 0px)",
-              left: "0",
-              right: "0",
-            }
+                top: "var(--mejai-vv-offset-top, 0px)",
+                left: "0",
+                right: "0",
+              }
             : undefined
         }
         isOpen={isOpen}
@@ -641,11 +663,256 @@ function WidgetLauncherRuntime({
   );
 }
 
+type WidgetEmbedRuntimeConfig = {
+  cfg: Record<string, any>;
+  baseUrl: string;
+  publicKey: string;
+  visitorId: string;
+  sessionId: string;
+  sessionStorageKey: string;
+  brandName: string;
+  mountNode: HTMLElement;
+  embedView?: WidgetEmbedView;
+  initialTheme?: Record<string, any>;
+  initialName?: string;
+  policyWidget?: WidgetChatPolicyConfig | null;
+  visibilityOverrides?: WidgetVisibilityOverrides | null;
+};
+
+function WidgetEmbedRuntime({
+  cfg,
+  baseUrl,
+  publicKey,
+  visitorId,
+  sessionId,
+  sessionStorageKey,
+  brandName,
+  mountNode,
+  embedView,
+  initialTheme,
+  initialName,
+  policyWidget,
+  visibilityOverrides,
+}: WidgetEmbedRuntimeConfig) {
+  const cfgRef = useRef(cfg);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const sessionIdRef = useRef(sessionId);
+  const [themeConfig, setThemeConfig] = useState<Record<string, any>>(initialTheme || {});
+  const [resolvedName, setResolvedName] = useState(initialName || brandName);
+  const resolvedIframe = policyWidget?.iframe || {};
+
+  const iframeSrc = useMemo(
+    () => buildIframeSrc(baseUrl, publicKey, visitorId, sessionIdRef.current, embedView, visibilityOverrides),
+    [baseUrl, publicKey, visitorId, embedView, visibilityOverrides]
+  );
+
+  const storeSession = (nextSessionId: string) => {
+    if (!nextSessionId) return;
+    const trimmed = String(nextSessionId || "").trim();
+    if (!trimmed) return;
+    sessionIdRef.current = trimmed;
+    try {
+      localStorage.setItem(sessionStorageKey, trimmed);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleIframeLoad = () => {
+    try {
+      iframeRef.current?.contentWindow?.postMessage(
+        {
+          type: "mejai_widget_init",
+          user: cfgRef.current.user || null,
+          origin: window.location.origin,
+          page_url: window.location.href,
+          referrer: document.referrer || "",
+          visitor_id: visitorId,
+          session_id: sessionIdRef.current || "",
+        },
+        "*"
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== baseUrl) return;
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      const data = event.data || {};
+      if (data.type === "mejai_widget_session" && data.session_id) {
+        storeSession(data.session_id);
+      }
+      if (data.type === "mejai_widget_theme" && data.theme) {
+        setThemeConfig(data.theme || {});
+        if (typeof data.name === "string" && data.name.trim()) {
+          setResolvedName(data.name.trim());
+        }
+      }
+    };
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [baseUrl]);
+
+  useEffect(() => {
+    if (!mountNode) return;
+    if (!mountNode.style.position) mountNode.style.position = "relative";
+    if (!mountNode.style.width) mountNode.style.width = "100%";
+    if (!mountNode.style.height) mountNode.style.height = "100%";
+    if (!mountNode.style.minHeight) mountNode.style.minHeight = "560px";
+  }, [mountNode]);
+
+  return (
+    <div className="h-full w-full" panel-lego="WidgetEmbedContainer">
+      <WidgetLauncherIframe
+        position="bottom-right"
+        layout={resolvedIframe.layout || "absolute"}
+        bottomOffset={"0"}
+        sideOffset={"0"}
+        width={"100%"}
+        height={"100%"}
+        borderRadius={resolvedIframe.borderRadius || "0"}
+        boxShadow={resolvedIframe.boxShadow || "none"}
+        background={resolvedIframe.background}
+        style={{ position: "absolute", inset: 0 }}
+        isOpen
+        src={iframeSrc}
+        iframeRef={iframeRef}
+        onLoad={handleIframeLoad}
+      />
+    </div>
+  );
+}
+
+type WidgetScriptBootstrapProps = {
+  cfg: Record<string, any>;
+  baseUrl: string;
+  publicKey: string;
+  visitorId: string;
+  sessionId: string;
+  sessionStorageKey: string;
+  position: WidgetLauncherPosition;
+  brandName: string;
+  launcherLabel: string;
+  mountNode: HTMLElement;
+  scriptMode?: WidgetEntryMode | null;
+  embedViewOverride?: WidgetEmbedView | null;
+  visibilityOverrides?: WidgetVisibilityOverrides | null;
+};
+
+function normalizeEntryMode(value: unknown): WidgetEntryMode | null {
+  return value === "embed" || value === "launcher" ? value : null;
+}
+
+function normalizeEmbedView(value: unknown): WidgetEmbedView | null {
+  return value === "chat" || value === "list" || value === "setup" || value === "both" ? value : null;
+}
+
+function WidgetScriptBootstrap({
+  cfg,
+  baseUrl,
+  publicKey,
+  visitorId,
+  sessionId,
+  sessionStorageKey,
+  position,
+  brandName,
+  launcherLabel,
+  mountNode,
+  scriptMode,
+  embedViewOverride,
+  visibilityOverrides,
+}: WidgetScriptBootstrapProps) {
+  const [policyWidget, setPolicyWidget] = useState<WidgetChatPolicyConfig | null>(null);
+  const [initialTheme, setInitialTheme] = useState<Record<string, any>>({});
+  const [initialName, setInitialName] = useState(brandName);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const url = `${baseUrl}/api/widget/config?key=${encodeURIComponent(publicKey)}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          if (active) {
+            setPolicyWidget({ is_active: false });
+            setReady(true);
+          }
+          return;
+        }
+        const data = await res.json();
+        if (!active) return;
+        if (data?.widget) {
+          setInitialTheme(data.widget.theme || {});
+          if (typeof data.widget.name === "string" && data.widget.name.trim()) {
+            setInitialName(data.widget.name.trim());
+          }
+          const widgetPolicy = data.widget.chat_policy?.widget || null;
+          setPolicyWidget(widgetPolicy);
+        }
+        setReady(true);
+      } catch {
+        if (active) setReady(true);
+      }
+    };
+    void load();
+    return () => {
+      active = false;
+    };
+  }, [baseUrl, publicKey]);
+
+  if (!ready) return null;
+  if (policyWidget?.is_active === false) return null;
+
+  const entryMode = scriptMode || policyWidget?.entry_mode || "launcher";
+  const embedView = embedViewOverride || policyWidget?.embed_view || "both";
+
+  if (entryMode === "embed") {
+    return (
+      <WidgetEmbedRuntime
+        cfg={cfg}
+        baseUrl={baseUrl}
+        publicKey={publicKey}
+        visitorId={visitorId}
+        sessionId={sessionId}
+        sessionStorageKey={sessionStorageKey}
+        brandName={initialName}
+        mountNode={mountNode}
+        embedView={embedView}
+        initialTheme={initialTheme}
+        initialName={initialName}
+        policyWidget={policyWidget}
+        visibilityOverrides={visibilityOverrides}
+      />
+    );
+  }
+
+  return (
+    <WidgetLauncherRuntime
+      cfg={cfg}
+      baseUrl={baseUrl}
+      publicKey={publicKey}
+      visitorId={visitorId}
+      sessionId={sessionId}
+      sessionStorageKey={sessionStorageKey}
+      position={position}
+      brandName={initialName}
+      launcherLabel={launcherLabel}
+      mountNode={mountNode}
+      initialTheme={initialTheme}
+      initialName={initialName}
+      policyWidget={policyWidget}
+      visibilityOverrides={visibilityOverrides}
+    />
+  );
+}
+
 export function mountWidgetLauncher() {
   if (typeof window === "undefined") return;
   const scopedWindow = window as WidgetLauncherWindow;
-  if (scopedWindow.__mejaiWidgetLoaded) return;
-  scopedWindow.__mejaiWidgetLoaded = true;
 
   const script =
     document.currentScript ||
@@ -656,8 +923,15 @@ export function mountWidgetLauncher() {
 
   const rawCfg = scopedWindow.mejaiWidget;
   const cfg = rawCfg && typeof rawCfg === "object" ? (rawCfg as Record<string, any>) : {};
-  const publicKey = (script && (script as HTMLScriptElement).dataset && (script as HTMLScriptElement).dataset.key) || cfg.key;
+  const dataset = (script as HTMLScriptElement | null)?.dataset || ({} as DOMStringMap);
+  const publicKey = dataset.key || cfg.key;
   if (!publicKey) return;
+
+  const scriptMode = normalizeEntryMode(dataset.mode || cfg.entry_mode);
+  const embedViewOverride = normalizeEmbedView(dataset.view || dataset.embed_view || cfg.embed_view);
+  const containerSelector = String(dataset.container || "").trim();
+  const visibilityOverrides = readWidgetVisibilityOverridesFromDataset(dataset as Record<string, string | undefined>);
+  const isEmbedRequested = scriptMode === "embed" || Boolean(containerSelector);
 
   let baseUrl = "";
   try {
@@ -694,14 +968,25 @@ export function mountWidgetLauncher() {
   const launcherLabel =
     typeof cfg.launcherLabel === "string" && cfg.launcherLabel.trim().length > 0
       ? cfg.launcherLabel.trim()
-      : "💬";
+      : "상담";
 
-  const mountNode = document.createElement("div");
-  document.body.appendChild(mountNode);
+  let mountNode: HTMLElement | null = null;
+  if (isEmbedRequested) {
+    if (containerSelector) {
+      mountNode = document.querySelector(containerSelector) as HTMLElement | null;
+    }
+    if (!mountNode && script && (script as HTMLElement).parentElement) {
+      mountNode = (script as HTMLElement).parentElement as HTMLElement;
+    }
+  }
+  if (!mountNode) {
+    mountNode = document.createElement("div");
+    document.body.appendChild(mountNode);
+  }
 
   const root = createRoot(mountNode);
   root.render(
-    <WidgetLauncherRuntime
+    <WidgetScriptBootstrap
       cfg={cfg}
       baseUrl={baseUrl}
       publicKey={String(publicKey)}
@@ -712,14 +997,20 @@ export function mountWidgetLauncher() {
       brandName={brandName}
       launcherLabel={launcherLabel}
       mountNode={mountNode}
+      scriptMode={scriptMode}
+      embedViewOverride={embedViewOverride}
+      visibilityOverrides={visibilityOverrides}
     />
   );
 }
+
 
 export type WidgetHeaderLegoProps = {
   brandName: string;
   status?: string;
   iconUrl?: string | null;
+  showLogo?: boolean;
+  showStatus?: boolean;
   headerActions?: ReactNode;
   onNewConversation?: () => void;
   showNewConversation?: boolean;
@@ -732,6 +1023,8 @@ export function WidgetHeaderLego({
   brandName,
   status,
   iconUrl,
+  showLogo = true,
+  showStatus = true,
   headerActions,
   onNewConversation,
   showNewConversation,
@@ -739,8 +1032,9 @@ export function WidgetHeaderLego({
   showClose = true,
   closeLabel = "\uB2EB\uAE30",
 }: WidgetHeaderLegoProps) {
-  const resolvedIcon = iconUrl || "/brand/logo.png";
-  const showStatus = Boolean(status && status.trim().length > 0);
+  const resolvedIcon = String(iconUrl || "").trim();
+  const fallbackLabel = (brandName || "?").trim().slice(0, 1).toUpperCase();
+  const canShowStatus = Boolean(showStatus && status && status.trim().length > 0);
   const canStartNew = Boolean(onNewConversation && showNewConversation);
   const canClose = Boolean(onClose && showClose);
 
@@ -749,16 +1043,23 @@ export function WidgetHeaderLego({
       className="flex items-center justify-between border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur"
       parts-lego="WidgetHeaderLego"
     >
-      <div className="flex items-center gap-3">
-        <div className="h-9 w-9 rounded-full border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={resolvedIcon} alt="" className="block h-full w-full object-cover" />
+        <div className="flex items-center gap-3">
+          {showLogo ? (
+            <div className="h-9 w-9 rounded-full border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {resolvedIcon ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={resolvedIcon} alt="" className="block h-full w-full object-cover" />
+              ) : (
+                <span className="text-[11px] font-semibold text-slate-500">{fallbackLabel}</span>
+              )}
+            </div>
+          ) : null}
+          <div>
+            <div className="text-sm font-semibold">{brandName}</div>
+            {canShowStatus ? <div className="text-[11px] text-slate-500">{status}</div> : null}
+          </div>
         </div>
-        <div>
-          <div className="text-sm font-semibold">{brandName}</div>
-          {showStatus ? <div className="text-[11px] text-slate-500">{status}</div> : null}
-        </div>
-      </div>
       <div className="flex items-center gap-2">
         {headerActions || null}
         {canStartNew ? (
@@ -793,41 +1094,51 @@ export type WidgetTabBarLegoProps = {
   activeTab: WidgetConversationTab;
   onTabChange: (tab: WidgetConversationTab) => void;
   showPolicyTab?: boolean;
+  showChatTab?: boolean;
+  showListTab?: boolean;
 };
 
 export function WidgetTabBarLego({
   activeTab,
   onTabChange,
   showPolicyTab = false,
+  showChatTab = true,
+  showListTab = true,
 }: WidgetTabBarLegoProps) {
-  const tabGridClass = showPolicyTab ? "grid-cols-3" : "grid-cols-2";
+  const tabCount = [showChatTab, showListTab, showPolicyTab].filter(Boolean).length;
+  if (tabCount === 0) return null;
+  const tabGridClass = tabCount === 3 ? "grid-cols-3" : tabCount === 2 ? "grid-cols-2" : "grid-cols-1";
   return (
     <div
       className={cn("grid h-[50px] items-center gap-1 border-t border-slate-200 bg-white px-2 py-1", tabGridClass)}
       parts-lego="WidgetTabBarLego"
     >
-      <button
-        type="button"
-        onClick={() => onTabChange("chat")}
-        className={cn(
-          "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
-          activeTab === "chat" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
-        )}
-      >
-        <MessageCircle className="h-4 w-4" />
-        <span>대화</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onTabChange("list")}
-        className={cn(
-          "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
-          activeTab === "list" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
-        )}
-      >
-        <List className="h-4 w-4" />
-        <span>리스트</span>
-      </button>
+      {showChatTab ? (
+        <button
+          type="button"
+          onClick={() => onTabChange("chat")}
+          className={cn(
+            "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
+            activeTab === "chat" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
+          )}
+        >
+          <MessageCircle className="h-4 w-4" />
+          <span>대화</span>
+        </button>
+      ) : null}
+      {showListTab ? (
+        <button
+          type="button"
+          onClick={() => onTabChange("list")}
+          className={cn(
+            "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
+            activeTab === "list" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
+          )}
+        >
+          <List className="h-4 w-4" />
+          <span>목록</span>
+        </button>
+      ) : null}
       {showPolicyTab ? (
         <button
           type="button"
@@ -986,17 +1297,25 @@ export type WidgetConversationLayoutProps = {
   brandName: string;
   status: string;
   iconUrl?: string | null;
+  showHeader?: boolean;
+  showLogo?: boolean;
+  showStatus?: boolean;
   headerActions?: ReactNode;
   onNewConversation?: () => void;
   showNewConversation?: boolean;
   onClose?: () => void;
   showClose?: boolean;
   closeLabel?: string;
+  showChatPanel?: boolean;
+  showHistoryPanel?: boolean;
   chatLegoProps: ConversationModelChatColumnLegoProps;
   setupLegoProps: ConversationModelSetupColumnLegoProps;
   activeTab: WidgetConversationTab;
   onTabChange: (tab: WidgetConversationTab) => void;
   showPolicyTab?: boolean;
+  showTabBar?: boolean;
+  showChatTab?: boolean;
+  showListTab?: boolean;
   policyFallback?: ReactNode;
   sessions: WidgetConversationSession[];
   sessionsLoading?: boolean;
@@ -1013,17 +1332,25 @@ export function WidgetConversationLayout({
   brandName,
   status,
   iconUrl,
+  showHeader = true,
+  showLogo,
+  showStatus,
   headerActions,
   onNewConversation,
   showNewConversation,
   onClose,
   showClose,
   closeLabel,
+  showChatPanel = true,
+  showHistoryPanel = true,
   chatLegoProps,
   setupLegoProps,
   activeTab,
   onTabChange,
   showPolicyTab = false,
+  showTabBar = true,
+  showChatTab,
+  showListTab,
   policyFallback,
   sessions,
   sessionsLoading = false,
@@ -1053,20 +1380,24 @@ export function WidgetConversationLayout({
       )}
       parts-lego="WidgetConversationLayout"
     >
-      <WidgetHeaderLego
-        brandName={brandName}
-        status={status}
-        iconUrl={iconUrl}
-        headerActions={headerActions}
-        onNewConversation={onNewConversation}
-        showNewConversation={canStartNew}
-        onClose={onClose}
-        showClose={showClose}
-        closeLabel={closeLabel}
-      />
+      {showHeader ? (
+        <WidgetHeaderLego
+          brandName={brandName}
+          status={status}
+          iconUrl={iconUrl}
+          showLogo={showLogo}
+          showStatus={showStatus}
+          headerActions={headerActions}
+          onNewConversation={onNewConversation}
+          showNewConversation={canStartNew}
+          onClose={onClose}
+          showClose={showClose}
+          closeLabel={closeLabel}
+        />
+      ) : null}
       <div className="flex-1 min-h-0 overflow-hidden" panel-lego="WidgetConversationLayout.Panel">
-        {activeTab === "chat" ? <ConversationModelChatColumnLego {...chatLegoProps} /> : null}
-        {activeTab === "list" ? (
+        {activeTab === "chat" && showChatPanel ? <ConversationModelChatColumnLego {...chatLegoProps} /> : null}
+        {activeTab === "list" && showHistoryPanel ? (
           <WidgetHistoryPanelLego
             sessions={sessions}
             sessionsLoading={sessionsLoading}
@@ -1079,7 +1410,15 @@ export function WidgetConversationLayout({
         ) : null}
         {activeTab === "policy" ? (showPolicyTab ? <ConversationModelSetupColumnLego {...setupLegoProps} /> : fallbackPanel) : null}
       </div>
-      <WidgetTabBarLego activeTab={activeTab} onTabChange={onTabChange} showPolicyTab={showPolicyTab} />
+      {showTabBar ? (
+        <WidgetTabBarLego
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          showPolicyTab={showPolicyTab}
+          showChatTab={showChatTab}
+          showListTab={showListTab}
+        />
+      ) : null}
     </div>
   );
 }

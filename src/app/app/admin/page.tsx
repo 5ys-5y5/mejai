@@ -1,26 +1,25 @@
-"use client";
+﻿"use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { getSupabaseClient } from "@/lib/supabaseClient";
-import { ChatSettingsPanel } from "@/components/settings/ChatSettingsPanel";
 import { ProposalSettingsPanel } from "@/components/settings/ProposalSettingsPanel";
 import { PerformanceSettingsPanel } from "@/components/settings/PerformanceSettingsPanel";
 import { PolicySettingsPanel } from "@/components/settings/PolicySettingsPanel";
-import { DesignSystemContent } from "@/app/app/design-system/page";
+import { DesignSystemPanel } from "@/components/settings/DesignSystemPanel";
 import { UnderlineTabs, type TabItem } from "@/components/design-system";
 
-type TabKey = "chat" | "proposal" | "performance" | "design-system" | "policies";
+type TabKey = "proposal" | "performance" | "design-system" | "policies";
 
 export default function AdminPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const rawTab = (searchParams.get("tab") || "chat").toLowerCase();
+  const rawTab = (searchParams.get("tab") || "proposal").toLowerCase();
   const tab: TabKey =
     rawTab === "proposal" || rawTab === "performance" || rawTab === "design-system" || rawTab === "policies"
       ? (rawTab as TabKey)
-      : "chat";
+      : "proposal";
 
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminReady, setAdminReady] = useState(false);
@@ -63,7 +62,6 @@ export default function AdminPage() {
 
   const tabs = useMemo<TabItem<TabKey>[]>(
     () => [
-      { key: "chat", label: "대화 설정" },
       { key: "proposal", label: "제안" },
       { key: "performance", label: "성능" },
       { key: "policies", label: "Policies" },
@@ -84,12 +82,10 @@ export default function AdminPage() {
         <div className="mt-6">
           {adminReady && !isAdmin ? (
             <Card className="p-4 text-sm text-slate-600">관리자 권한이 필요합니다.</Card>
-          ) : tab === "chat" ? (
-            <ChatSettingsPanel authToken={authToken} />
           ) : tab === "proposal" ? (
             <ProposalSettingsPanel authToken={authToken} />
           ) : tab === "design-system" ? (
-            <DesignSystemContent />
+            <DesignSystemPanel />
           ) : tab === "policies" ? (
             <PolicySettingsPanel />
           ) : (

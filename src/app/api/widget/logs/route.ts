@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { verifyWidgetToken } from "@/lib/widgetToken";
+import { readConversationFeatureProvider } from "@/lib/conversation/policyMerge";
+import type { WidgetChatPolicyConfig } from "@/lib/conversation/pageFeaturePolicy";
 
 const TRANSCRIPT_SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
 const WIDGET_PROXY_EVENT_PREFIX = "WIDGET_RUNTIME_PROXY_";
@@ -58,16 +60,21 @@ export async function GET(req: NextRequest) {
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, is_active")
+    .select("id, org_id, chat_policy")
     .eq("id", payload.widget_id)
     .maybeSingle();
-  if (!widget || !widget.is_active) {
+  if (!widget) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+  }
+  const mergedPolicy = readConversationFeatureProvider(widget.chat_policy);
+  const widgetPolicy = (mergedPolicy as { widget?: WidgetChatPolicyConfig } | null)?.widget || null;
+  if (widgetPolicy?.is_active === false) {
+    return NextResponse.json({ error: "WIDGET_INACTIVE" }, { status: 403 });
   }
 
   const { data: session } = await supabaseAdmin
     .from("D_conv_sessions")
-    .select("id, org_id, metadata")
+    .select("id, org_id, widget_id, metadata")
     .eq("id", targetSessionId)
     .eq("org_id", widget.org_id)
     .maybeSingle();
@@ -75,9 +82,13 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 });
   }
 
+  const sessionWidgetId = String((session as Record<string, any>).widget_id || "").trim();
+  if (sessionWidgetId && sessionWidgetId !== String(payload.widget_id)) {
+    return NextResponse.json({ error: "SESSION_WIDGET_MISMATCH" }, { status: 403 });
+  }
   const metadata = session.metadata && typeof session.metadata === "object" ? (session.metadata as Record<string, any>) : null;
   const metadataWidgetId = metadata ? String(metadata.widget_id || "").trim() : "";
-  if (metadataWidgetId && metadataWidgetId !== String(payload.widget_id)) {
+  if (!sessionWidgetId && metadataWidgetId && metadataWidgetId !== String(payload.widget_id)) {
     return NextResponse.json({ error: "SESSION_WIDGET_MISMATCH" }, { status: 403 });
   }
   const metadataVisitorId = metadata

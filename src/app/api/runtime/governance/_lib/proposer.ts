@@ -77,7 +77,7 @@ function qualityGateProposal(input: {
       why_failed:
         "Conversation slot semantics and MCP request/response contract were not aligned before tool execution/result projection.",
       how_to_improve:
-        "Add explicit slot↔request mapping and response↔conversation projection validation; block/repair when semantic unit mismatch is detected.",
+        "Unknown",
       rationale: `Prioritize contract-level deterministic guard over field-specific patch (tool=${toolName || "-"}, mismatch_type=${mismatchType || "-"})`,
       target_files: [
         "src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts",

@@ -501,7 +501,8 @@ export async function POST(req: NextRequest) {
         providerAvailable,
         providerConfig,
         runtimeFlags,
-        authSettings,
+      authSettings,
+      chatPolicyProvider,
       userPlan,
       userIsAdmin,
       userRole,
@@ -515,8 +516,7 @@ export async function POST(req: NextRequest) {
     } = bootstrap.state;
     markStage("bootstrap.done");
     const pageKey = typeof body?.page_key === "string" ? body.page_key : "/";
-    const chatPolicyProvider = (authSettings?.providers?.chat_policy || null) as ConversationFeaturesProviderShape | null;
-    const pageFeaturesForRuntime = resolveConversationPageFeatures(pageKey, chatPolicyProvider);
+    const pageFeaturesForRuntime = resolveConversationPageFeatures(pageKey, chatPolicyProvider || null);
     const threePhaseConfig = {
       enabled: pageFeaturesForRuntime.interaction.threePhasePrompt,
       labels: pageFeaturesForRuntime.interaction.threePhasePromptLabels,

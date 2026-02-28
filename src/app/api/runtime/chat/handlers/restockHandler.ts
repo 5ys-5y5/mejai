@@ -90,7 +90,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     (Array.isArray(items) ? items : []).filter((item) => isSchedulableEntry(Number(item.month || 0), Number(item.day || 0)));
   const reindexCandidateRows = (rows: Array<RestockCandidateRow>) =>
     rows.map((row, idx) => ({ ...row, index: idx + 1 }));
-  const noSchedulableScheduleReply = "안내 가능한 재입고 일정이 없습니다. 미래 입고 예정 상품만 안내할 수 있습니다.";
+  const noSchedulableScheduleReply = "?덈궡 媛?ν븳 ?ъ엯怨??쇱젙???놁뒿?덈떎. 誘몃옒 ?낃퀬 ?덉젙 ?곹뭹留??덈궡?????덉뒿?덈떎.";
 
   // Handle pending restock product choice even if current turn intent is misclassified (e.g. "1" -> general).
   const prevRestockCandidatesForAnyIntentRaw = Array.isArray(prevBotContextRecord.restock_candidates)
@@ -164,8 +164,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         message: reply,
         mcp_actions: mcpActions,
         quick_replies: [
-          { label: "재입고 알림 신청", value: ACTION_TOKENS.restockSubscribe },
-          { label: "대화 종료", value: ACTION_TOKENS.endConversation },
+          { label: "?ъ엯怨??뚮┝ ?좎껌", value: ACTION_TOKENS.restockSubscribe },
+          { label: "Unknown", value: ACTION_TOKENS.endConversation },
         ],
         quick_reply_config: quickReplyConfig,
         product_cards: [],
@@ -246,8 +246,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           message: reply,
           mcp_actions: mcpActions,
           quick_replies: [
-            { label: "재입고 알림 신청", value: ACTION_TOKENS.restockSubscribe },
-            { label: "대화 종료", value: ACTION_TOKENS.endConversation },
+            { label: "?ъ엯怨??뚮┝ ?좎껌", value: ACTION_TOKENS.restockSubscribe },
+            { label: "Unknown", value: ACTION_TOKENS.endConversation },
           ],
           quick_reply_config: quickReplyConfig,
           product_cards: [],
@@ -297,7 +297,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       if (hasChoiceAnswerCandidates(broadCandidates.length)) {
         const lines = broadCandidates.map((item, idx) => {
           const due = toRestockDueText(item.month, item.day);
-          return `- ${idx + 1}번 | ${item.product_name} | ${item.raw_date} (${due.dday})`;
+          return `- ${idx + 1}??| ${item.product_name} | ${item.raw_date} (${due.dday})`;
         });
         const reply = makeReply(
           buildNumberedChoicePrompt({
@@ -456,7 +456,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
               .map((candidate) => ({
                 id: `restock-${candidate.index}`,
                 title: candidate.product_name,
-                subtitle: `${candidate.raw_date} 입고 예정`,
+                subtitle: `${candidate.raw_date} ?낃퀬 ?덉젙`,
                 description: `${toRestockDueText(candidate.month, candidate.day).dday}`,
                 image_url: candidate.thumbnail_url,
                 value: String(candidate.index),
@@ -464,7 +464,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           : [];
         const lines = candidateRows.map((candidate: RestockCandidateRow) => {
           const due = toRestockDueText(candidate.month, candidate.day);
-          return `- ${candidate.index}번 | ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
+          return `- ${candidate.index}??| ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
         });
         const needsAlternativeConsent =
           Boolean(CHAT_PRINCIPLES?.response?.requireConsentBeforeAlternativeSuggestion) &&
@@ -547,7 +547,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           });
         }
       const reply = makeReply(
-        `요청하신 상품은 현재 재입고 일정 안내 대상에 없습니다.\n안내 가능한 상품은 아래와 같습니다.\n${buildNumberedChoicePrompt({
+        `?붿껌?섏떊 ?곹뭹? ?꾩옱 ?ъ엯怨??쇱젙 ?덈궡 ??곸뿉 ?놁뒿?덈떎.\n?덈궡 媛?ν븳 ?곹뭹? ?꾨옒? 媛숈뒿?덈떎.\n${buildNumberedChoicePrompt({
           titleKey: "restock_product_choice_title",
           lines,
           botContext: prevBotContext,
@@ -688,7 +688,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       }
       const lines = candidateRows.map((candidate: RestockCandidateRow) => {
         const due = toRestockDueText(candidate.month, candidate.day);
-        return `- ${candidate.index}번 | ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
+        return `- ${candidate.index}??| ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
       });
       const reply = makeReply(
         buildNumberedChoicePrompt({
@@ -703,7 +703,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         .map((candidate) => ({
           id: `restock-${candidate.index}`,
           title: candidate.product_name,
-          subtitle: `${candidate.raw_date} 입고 예정`,
+          subtitle: `${candidate.raw_date} ?낃퀬 ?덉젙`,
           description: `${toRestockDueText(candidate.month, candidate.day).dday}`,
           image_url: candidate.thumbnail_url || null,
           value: String(candidate.index),
@@ -791,7 +791,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       }
       if (!resolved.ok && String(resolved.error || "").toUpperCase().includes("SCOPE_ERROR")) {
         const reply = makeReply(
-          "상품 조회를 시도했지만 현재 연동 권한에 `mall.read_product` 스코프가 없어 진행할 수 없습니다.\n관리자에게 Cafe24 연동 권한(상품 조회)을 추가 요청해 주세요."
+          "?곹뭹 議고쉶瑜??쒕룄?덉?留??꾩옱 ?곕룞 沅뚰븳??`mall.read_product` ?ㅼ퐫?꾧? ?놁뼱 吏꾪뻾?????놁뒿?덈떎.\n愿由ъ옄?먭쾶 Cafe24 ?곕룞 沅뚰븳(?곹뭹 議고쉶)??異붽? ?붿껌??二쇱꽭??"
         );
         await insertTurn({
           session_id: sessionId,
@@ -894,8 +894,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           message: reply,
           mcp_actions: mcpActions,
           quick_replies: [
-            { label: "재입고 알림 신청", value: ACTION_TOKENS.restockSubscribe },
-            { label: "대화 종료", value: ACTION_TOKENS.endConversation },
+            { label: "?ъ엯怨??뚮┝ ?좎껌", value: ACTION_TOKENS.restockSubscribe },
+            { label: "Unknown", value: ACTION_TOKENS.endConversation },
           ],
           quick_reply_config: quickReplyConfig,
           product_cards: [],
@@ -970,7 +970,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         }
         const lines = candidateRows.map((candidate: RestockCandidateRow) => {
           const due = toRestockDueText(candidate.month, candidate.day);
-          return `- ${candidate.index}번 | ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
+          return `- ${candidate.index}??| ${candidate.product_name} | ${candidate.raw_date} (${due.dday})`;
         });
         const reply = makeReply(
           buildNumberedChoicePrompt({
@@ -985,7 +985,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           .map((candidate) => ({
             id: `restock-${candidate.index}`,
             title: candidate.product_name,
-            subtitle: `${candidate.raw_date} 입고 예정`,
+            subtitle: `${candidate.raw_date} ?낃퀬 ?덉젙`,
             description: `${toRestockDueText(candidate.month, candidate.day).dday}`,
             image_url: candidate.thumbnail_url || null,
             value: String(candidate.index),
@@ -1055,7 +1055,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         );
         return respond({ session_id: sessionId, step: "final", message: reply, mcp_actions: mcpActions });
       }
-      const reply = makeReply("확인할 상품명을 먼저 알려주세요. (예: 아드헬린 린넨 플레어 원피스)");
+      const reply = makeReply("?뺤씤???곹뭹紐낆쓣 癒쇱? ?뚮젮二쇱꽭?? (?? ?꾨뱶?щ┛ 由곕꽙 ?뚮젅???먰뵾??");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -1167,8 +1167,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         message: reply,
         mcp_actions: mcpActions,
         quick_replies: [
-          { label: "재입고 알림 신청", value: ACTION_TOKENS.restockSubscribe },
-          { label: "대화 종료", value: ACTION_TOKENS.endConversation },
+          { label: "?ъ엯怨??뚮┝ ?좎껌", value: ACTION_TOKENS.restockSubscribe },
+          { label: "Unknown", value: ACTION_TOKENS.endConversation },
         ],
         quick_reply_config: quickReplyConfig,
         product_cards: [],
@@ -1182,27 +1182,27 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     const restockDisplayName = String(productView.productName || pendingProductName || restockProductId || "").trim();
     const scheduleLine = scheduleEntry
       ? (() => {
-        return `입고 예정: ${scheduleEntry.raw_date} (${scheduleDueForEntry?.dday || "-"})`;
+        return `?낃퀬 ?덉젙: ${scheduleEntry.raw_date} (${scheduleDueForEntry?.dday || "-"})`;
       })()
-      : "입고 예정: 확인된 일정 정보 없음";
+      : "?낃퀬 ?덉젙: ?뺤씤???쇱젙 ?뺣낫 ?놁쓬";
     const policyAnswerability = String(productDecisionRes.decision?.answerability || "UNKNOWN");
     const policyRestock = String(productDecisionRes.decision?.restock_policy || "UNKNOWN");
     const policyRestockAt = String(productDecisionRes.decision?.restock_at || "").trim();
     const stockLine = productView.soldOut
-      ? "현재 상태: 품절"
+      ? "?꾩옱 ?곹깭: ?덉젅"
       : productView.qty === null
-        ? "현재 상태: 재고 수량 확인 필요"
-        : `현재 상태: 재고 ${productView.qty}개`;
+        ? "?꾩옱 ?곹깭: ?ш퀬 ?섎웾 ?뺤씤 ?꾩슂"
+        : `?꾩옱 ?곹깭: ?ш퀬 ${productView.qty}媛?;
     const policyLine =
       policyAnswerability === "UNKNOWN" && policyRestock === "UNKNOWN"
-        ? "KB 정책: 별도 재입고 정책 없음"
-        : `KB 정책: answerability=${policyAnswerability}, restock_policy=${policyRestock}${policyRestockAt ? `, restock_at=${policyRestockAt}` : ""
+        ? "KB ?뺤콉: 蹂꾨룄 ?ъ엯怨??뺤콉 ?놁쓬"
+        : `KB ?뺤콉: answerability=${policyAnswerability}, restock_policy=${policyRestock}${policyRestockAt ? `, restock_at=${policyRestockAt}` : ""
         }`;
 
     if (resolvedIntent === "restock_subscribe") {
       if (scheduleDueForEntry && scheduleDueForEntry.diffDays < 0) {
         const reply = makeReply(
-          `선택하신 상품의 입고 예정일(${scheduleDueForEntry.targetText})은 이미 지난 일정이라 예약 알림을 신청할 수 없습니다. 다른 상품의 입고 일정을 확인해 주세요.`
+          `?좏깮?섏떊 ?곹뭹???낃퀬 ?덉젙??${scheduleDueForEntry.targetText})? ?대? 吏???쇱젙?대씪 ?덉빟 ?뚮┝???좎껌?????놁뒿?덈떎. ?ㅻⅨ ?곹뭹???낃퀬 ?쇱젙???뺤씤??二쇱꽭??`
         );
         await insertTurn({
           session_id: sessionId,
@@ -1244,7 +1244,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       if (!restockSubscribeAcceptedThisTurn) {
         const reply = makeReply(
           buildYesNoConfirmationPrompt(
-            `상품 ${restockDisplayName || "-"} 정보입니다.\n${scheduleLine}\n${stockLine}\n${policyLine}\n원하시면 ${restockChannel} 채널로 재입고 알림을 신청할까요?`,
+            `?곹뭹 ${restockDisplayName || "-"} ?뺣낫?낅땲??\n${scheduleLine}\n${stockLine}\n${policyLine}\n?먰븯?쒕㈃ ${restockChannel} 梨꾨꼸濡??ъ엯怨??뚮┝???좎껌?좉퉴??`,
             { botContext: prevBotContext, entity: policyContext.entity }
           )
         );
@@ -1365,7 +1365,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
       }
 
       if (restockChannel === "sms" && !subscribePhone) {
-        const reply = makeReply("재입고 알림 신청을 위해 휴대폰 번호를 알려주세요. (예: 01012345678)");
+        const reply = makeReply("?ъ엯怨??뚮┝ ?좎껌???꾪빐 ?대???踰덊샇瑜??뚮젮二쇱꽭?? (?? 01012345678)");
         await insertTurn({
           session_id: sessionId,
           seq: nextSeq,
@@ -1432,7 +1432,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         mcpActions.push("subscribe_restock");
         if (subscribeRes.ok) {
           const reply = makeReply(
-            `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${restockDisplayName || restockProductId} / 채널 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}\n다음 선택: 대화 종료 / 다른 문의`
+            `?붿빟: ?ъ엯怨??뚮┝ ?좎껌???꾨즺?섏뿀?듬땲??\n?곸꽭: ?곹뭹 ${restockDisplayName || restockProductId} / 梨꾨꼸 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}\n?ㅼ쓬 ?좏깮: ???醫낅즺 / ?ㅻⅨ 臾몄쓽`
           );
           await insertTurn({
             session_id: sessionId,
@@ -1464,8 +1464,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             message: reply,
             mcp_actions: mcpActions,
             quick_replies: [
-              { label: "대화 종료", value: ACTION_TOKENS.endConversation },
-              { label: "다른 문의", value: ACTION_TOKENS.otherInquiry },
+              { label: "Unknown", value: ACTION_TOKENS.endConversation },
+              { label: "Unknown", value: ACTION_TOKENS.otherInquiry },
             ],
             quick_reply_config: quickReplyConfig,
           });
@@ -1479,7 +1479,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
           { intent_name: resolvedIntent }
         );
         const reply = makeReply(
-          "재입고 알림 신청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요. 문제가 반복되면 관리자에게 문의해 주세요."
+          "?ъ엯怨??뚮┝ ?좎껌 泥섎━ 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄??二쇱꽭?? 臾몄젣媛 諛섎났?섎㈃ 愿由ъ옄?먭쾶 臾몄쓽??二쇱꽭??"
         );
         await insertTurn({
           session_id: sessionId,
@@ -1526,7 +1526,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
         });
         if (liteRes.ok) {
           const reply = makeReply(
-            `요약: 재입고 알림 신청이 완료되었습니다.\n상세: 상품 ${restockDisplayName} / 채널 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}\n다음 선택: 대화 종료 / 다른 문의`
+            `?붿빟: ?ъ엯怨??뚮┝ ?좎껌???꾨즺?섏뿀?듬땲??\n?곸꽭: ?곹뭹 ${restockDisplayName} / 梨꾨꼸 ${restockChannel}\n${scheduleLine}\n${stockLine}\n${policyLine}\n?ㅼ쓬 ?좏깮: ???醫낅즺 / ?ㅻⅨ 臾몄쓽`
           );
           await insertTurn({
             session_id: sessionId,
@@ -1572,14 +1572,14 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
             message: reply,
             mcp_actions: mcpActions,
             quick_replies: [
-              { label: "대화 종료", value: ACTION_TOKENS.endConversation },
-              { label: "다른 문의", value: ACTION_TOKENS.otherInquiry },
+              { label: "Unknown", value: ACTION_TOKENS.endConversation },
+              { label: "Unknown", value: ACTION_TOKENS.otherInquiry },
             ],
             quick_reply_config: quickReplyConfig,
           });
         }
         const reply = makeReply(
-          "재입고 알림 신청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요. 문제가 반복되면 관리자에게 문의해 주세요."
+          "?ъ엯怨??뚮┝ ?좎껌 泥섎━ 以??ㅻ쪟媛 諛쒖깮?덉뒿?덈떎. ?좎떆 ???ㅼ떆 ?쒕룄??二쇱꽭?? 臾몄젣媛 諛섎났?섎㈃ 愿由ъ옄?먭쾶 臾몄쓽??二쇱꽭??"
         );
         await insertTurn({
           session_id: sessionId,
@@ -1607,7 +1607,7 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
 
       const inquiryReply = makeReply(
         buildYesNoConfirmationPrompt(
-          `요약: ${restockDisplayName || restockProductId} 재고/입고 상태를 확인했습니다.\n상세: ${scheduleLine}\n${stockLine}\n${policyLine}\n지금 ${restockChannel} 재입고 알림 신청을 진행할까요?`,
+          `?붿빟: ${restockDisplayName || restockProductId} ?ш퀬/?낃퀬 ?곹깭瑜??뺤씤?덉뒿?덈떎.\n?곸꽭: ${scheduleLine}\n${stockLine}\n${policyLine}\n吏湲?${restockChannel} ?ъ엯怨??뚮┝ ?좎껌??吏꾪뻾?좉퉴??`,
           { botContext: prevBotContext, entity: policyContext.entity }
         )
       );
@@ -1647,8 +1647,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
               {
                 id: `restock-${restockProductId}`,
                 title: restockDisplayName || restockProductId,
-                subtitle: "상품 확인",
-                description: stockLine.replace(/^현재 상태:\s*/, ""),
+                subtitle: "?곹뭹 ?뺤씤",
+                description: stockLine.replace(/^?꾩옱 ?곹깭:\s*/, ""),
                 image_url: productView.thumbnailUrl,
                 value: "1",
               },
@@ -1695,4 +1695,3 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
 
   return null;
 }
-

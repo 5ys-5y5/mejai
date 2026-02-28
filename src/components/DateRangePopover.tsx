@@ -14,9 +14,9 @@ export function DateRangePopover({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const presets = [
-    { id: "last_day", label: "어제" },
-    { id: "last_week", label: "지난 주" },
-    { id: "last_month", label: "지난 달" },
+    { id: "last_day", label: "\uC624\uB298" },
+    { id: "last_week", label: "\uC9C0\uB09C\u00207\uC77C" },
+    { id: "last_month", label: "\uC9C0\uB09C\u002030\uC77C" },
   ];
   const selected = presets.find((p) => p.id === value) || presets[2];
 
@@ -80,26 +80,26 @@ export function DateRangePopover({
               <div className="flex-1 p-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <div className="text-xs text-slate-500">시작</div>
+                    <div className="text-xs text-slate-500">\uC2DC\uC791\uC77C</div>
                     <input
                       className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                      defaultValue="2025-12-22 오후 09:46"
-                      aria-label="시작"
+                      defaultValue="2025-12-22 09:46"
+                      aria-label="\uC2DC\uC791\uC77C\u0020\uC785\uB825"
                     />
                   </div>
                   <div>
-                    <div className="text-xs text-slate-500">종료</div>
+                    <div className="text-xs text-slate-500">\uC885\uB8CC\uC77C</div>
                     <input
                       className="mt-2 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                      defaultValue="2026-01-21 오후 09:46"
-                      aria-label="종료"
+                      defaultValue="2026-01-21 09:46"
+                      aria-label="\uC885\uB8CC\uC77C\u0020\uC785\uB825"
                     />
                   </div>
                 </div>
 
                 <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="text-sm font-semibold text-slate-900">캘린더</div>
-                  <div className="mt-2 text-xs text-slate-500">날짜 범위를 선택하세요.</div>
+                  <div className="text-sm font-semibold text-slate-900">\uB0A0\uC9DC\u0020\uBC94\uC704</div>
+                  <div className="mt-2 text-xs text-slate-500">\uB2EC\uB825\uC744\u0020\uC120\uD0DD\uD558\uAC70\uB098\u0020\uC9C1\uC811\u0020\uC785\uB825\uD560\u0020\uC218\u0020\uC788\uC2B5\uB2C8\uB2E4\u002E</div>
                   <div className="mt-3 grid grid-cols-7 gap-2 text-center text-xs text-slate-700">
                     {Array.from({ length: 28 }).map((_, i) => (
                       <div key={i} className="rounded-lg border border-slate-200 py-2">
@@ -117,15 +117,14 @@ export function DateRangePopover({
                     }}
                     className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm hover:bg-slate-50"
                   >
-                    초기화
+                    \uC801\uC6A9
                   </button>
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
                     className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                   >
-                    적용
-                  </button>
+                    \uCDE8\uC18C                  </button>
                 </div>
               </div>
             </div>

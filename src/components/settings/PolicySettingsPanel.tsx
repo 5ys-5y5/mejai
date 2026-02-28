@@ -71,7 +71,7 @@ function formatDate(value: string | null | undefined) {
 function formatLineDelta(current: number, prev: number | null) {
   if (prev === null || prev === undefined) return null;
   const diff = current - prev;
-  if (diff === 0) return "±0";
+  if (diff === 0) return "0";
   return diff > 0 ? `+${diff}` : `${diff}`;
 }
 
@@ -118,7 +118,7 @@ export function PolicySettingsPanel() {
       setItems(res.items || []);
       setLastRefreshedAt(res.refreshed_at || null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "정책 정보를 불러오지 못했습니다.");
+      setError(err instanceof Error ? err.message : "\uAC80\uC0C9 \uC2E4\uD328");
     } finally {
       setLoading(false);
     }
@@ -178,14 +178,14 @@ export function PolicySettingsPanel() {
               setItems(payload.items || []);
               setLastRefreshedAt(payload.refreshed_at || null);
             } else if (payload.type === "error") {
-              setError(payload.message || "정책 새로고침에 실패했습니다.");
+              setError(payload.message || "\uC11C\uBC84 \uAC31\uC2E0\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.");
             }
           }
           newlineIdx = buffer.indexOf("\n");
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "정책 새로고침에 실패했습니다.");
+      setError(err instanceof Error ? err.message : "\uC11C\uBC84 \uAC31\uC2E0\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.");
     } finally {
       setRefreshing(false);
       setProgress(null);
@@ -203,16 +203,16 @@ export function PolicySettingsPanel() {
           <div>
             <div className="text-base font-semibold text-slate-900">Runtime Policies</div>
             <p className="mt-1 text-sm text-slate-500">
-              정책 파일을 스캔해 LIVE / MODIFIED / NEW / DELETED 상태를 표시합니다.
+              {"\uC81C\uC791 \uC911 \uC815\uCC45 \uD604\uD669\uC744 \uD45C\uC2DC\uD569\uB2C8\uB2E4. LIVE / MODIFIED / NEW / DELETED \uAD6C\uBD84\uC744 \uD3EC\uD568\uD569\uB2C8\uB2E4."}
             </p>
             <p className="mt-1 text-xs text-slate-400">
-              마지막 갱신: {formatDate(lastRefreshedAt || derivedLastSeen)}
+              {"\uCD5C\uC885 \uAC31\uC2E0"}: {formatDate(lastRefreshedAt || derivedLastSeen)}
             </p>
             {progress ? (
               <div className="mt-2 text-xs text-slate-500">
-                진행: {progress.current}/{progress.total}{" "}
+                {"\uC9C4\uD589"}: {progress.current}/{progress.total}{" "}
                 {progress.fileName ? `- ${progress.fileName}` : ""} (
-                {progress.stage === "summarize" ? "요약 생성" : "분석 중"})
+                {progress.stage === "summarize" ? "\uC694\uC57D \uC0DD\uC131" : "\uBD84\uC11D \uC911"})
                 <div className="mt-2 h-2 w-full rounded-full bg-slate-200">
                   <div
                     className="h-2 rounded-full bg-slate-800 transition-all"
@@ -223,17 +223,17 @@ export function PolicySettingsPanel() {
             ) : null}
           </div>
           <Button onClick={refresh} disabled={refreshing || loading}>
-            {refreshing ? "새로고침 중..." : "새로고침"}
+            {refreshing ? "\uAC31\uC2E0 \uC911..." : "\uAC31\uC2E0"}
           </Button>
         </div>
         {error ? <p className="mt-3 text-sm text-rose-600">{error}</p> : null}
       </Card>
 
       {loading ? (
-        <Card className="p-4 text-sm text-slate-500">정책 정보를 불러오는 중입니다...</Card>
+        <Card className="p-4 text-sm text-slate-500">{"\uB370\uC774\uD130\uB97C \uBD88\uB7EC\uC624\uB294 \uC911..."}</Card>
       ) : sortedItems.length === 0 ? (
         <Card className="p-4 text-sm text-slate-500">
-          표시할 정책이 없습니다. 상단의 새로고침으로 정책 폴더를 스캔해 주세요.
+          {"\uB4F1\uB85D\uB41C \uC815\uCC45\uC774 \uC5C6\uC2B5\uB2C8\uB2E4. \uAC31\uC2E0\uC744 \uC2E4\uD589\uD558\uC5EC \uB85C\uB4DC\uD574 \uC8FC\uC138\uC694."}
         </Card>
       ) : (
         sortedItems.map((item) => {
@@ -271,18 +271,18 @@ export function PolicySettingsPanel() {
               </div>
               <p className="mt-3 whitespace-pre-line text-sm text-slate-700">{overview}</p>
               <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
-                <span>라인 수: {item.line_count}</span>
-                {delta ? <span>변경: {delta}</span> : null}
-                <span>변경 시각: {formatDate(item.last_changed_at)}</span>
+                <span>{"\uC904 \uC218"} {item.line_count}</span>
+                {delta ? <span>{`(${delta > 0 ? "+" : ""}${delta})`}</span> : null}
+                <span>{"\uCD5C\uC885 \uC218\uC815"} {formatDate(item.updated_at)}</span>
               </div>
               <div className="mt-3 text-xs text-slate-600">
                 {detailItems.length > 0 ? (
                   <div className="space-y-2">
-                    <div className="text-[11px] font-semibold text-slate-700">기능 상세</div>
+                    <div className="text-[11px] font-semibold text-slate-700">{"\uC0C1\uC138 \uC815\uBCF4"}</div>
                     {detailItems.map((detail, idx) => {
-                      const name = detail?.name || `항목 ${idx + 1}`;
-                      const role = detail?.role || "역할 설명이 없습니다.";
-                      const impact = detail?.impact ? `영향: ${detail.impact}` : "";
+                      const name = detail?.name || `\uD56D\uBAA9 ${idx + 1}`;
+                      const role = detail?.role || "\uC124\uBA85 \uC5C6\uC74C";
+                      const impact = detail?.impact ? `?곹뼢: ${detail.impact}` : "";
                       const status = (detail as { status?: PolicyRow["status"] }).status || "LIVE";
                       return (
                         <div key={`${item.path}-${name}-${idx}`} className="rounded-md bg-slate-50 p-2">
@@ -304,11 +304,11 @@ export function PolicySettingsPanel() {
                     })}
                   </div>
                 ) : (
-                  "기능 상세가 없습니다. 새로고침을 눌러 요약을 생성해 주세요."
+                  <span>{"\uC0C1\uC138 \uC815\uBCF4\uAC00 \uC5C6\uC2B5\uB2C8\uB2E4. \uAC31\uC2E0\uC744 \uC2E4\uD589\uD558\uC5EC \uC0C8\uB85C \uBD88\uB7EC\uC624\uC138\uC694."}</span>
                 )}
               </div>
               <div className="mt-2 text-xs text-slate-600">
-                {exportsList.length > 0 ? `exports: ${exportsList.join(", ")}` : "exports: 없음"}
+                {exportsList.length > 0 ? `exports: ${exportsList.join(", ")}` : "exports: \uC5C6\uC74C"}
               </div>
             </Card>
           );

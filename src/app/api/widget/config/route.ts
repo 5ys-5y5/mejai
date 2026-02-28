@@ -1,7 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
-import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
+import { readConversationFeatureProvider } from "@/lib/conversation/policyMerge";
+import type { WidgetChatPolicyConfig } from "@/lib/conversation/pageFeaturePolicy";
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+}
+
+function readWidgetPolicy(policy: unknown): WidgetChatPolicyConfig | null {
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) return null;
+  const widget = (policy as { widget?: unknown }).widget;
+  if (!widget || typeof widget !== "object" || Array.isArray(widget)) return null;
+  return widget as WidgetChatPolicyConfig;
+}
+
+function mergeWidgetTheme(
+  baseTheme: Record<string, unknown> | null | undefined,
+  policyTheme: WidgetChatPolicyConfig["theme"]
+) {
+  const theme = baseTheme && typeof baseTheme === "object" ? baseTheme : {};
+  if (!policyTheme) return { ...theme };
+  return { ...theme, ...policyTheme };
+}
 
 function withCors(res: NextResponse, origin?: string | null) {
   res.headers.set("Access-Control-Allow-Origin", origin || "*");
@@ -39,9 +61,8 @@ export async function GET(req: NextRequest) {
 
   const { data: widget, error } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, name, theme, public_key, allowed_domains, is_active")
+    .select("id, org_id, name, agent_id, theme, public_key, chat_policy")
     .eq("public_key", publicKey)
-    .eq("is_active", true)
     .maybeSingle();
 
   if (error) {
@@ -51,23 +72,38 @@ export async function GET(req: NextRequest) {
     return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
   }
 
-  const allowedDomains = Array.isArray(widget.allowed_domains) ? widget.allowed_domains : [];
+  const mergedChatPolicy = readConversationFeatureProvider(widget.chat_policy);
+  const widgetPolicy = readWidgetPolicy(mergedChatPolicy);
+  if (widgetPolicy?.is_active === false) {
+    return withCors(NextResponse.json({ error: "WIDGET_INACTIVE" }, { status: 404 }), originHeader);
+  }
+
+  const allowedDomains = widgetPolicy?.allowed_domains || [];
   const originHost = extractHostFromUrl(originHeader || "");
   if (allowedDomains.length > 0 && originHost && !matchAllowedDomain(originHost, allowedDomains)) {
     return withCors(NextResponse.json({ error: "DOMAIN_NOT_ALLOWED" }, { status: 403 }), originHeader);
   }
 
-  const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null);
+  const allowedPaths = widgetPolicy?.allowed_paths || [];
+  const mergedTheme = mergeWidgetTheme(widget.theme as Record<string, unknown> | null, widgetPolicy?.theme);
+  const mergedName = widgetPolicy?.name || widget.name;
+  const mergedAgentId = widgetPolicy?.agent_id || widget.agent_id || null;
+  const allowedAccounts = normalizeStringArray(
+    (widgetPolicy?.theme as Record<string, any>)?.allowed_accounts ?? widgetPolicy?.allowed_accounts
+  );
 
   return withCors(
     NextResponse.json({
       widget: {
         id: widget.id,
-        name: widget.name,
-        theme: widget.theme || {},
+        name: mergedName,
+        agent_id: mergedAgentId,
+        theme: mergedTheme,
         public_key: widget.public_key,
-        allowed_domains: widget.allowed_domains || [],
-        chat_policy: chatPolicy,
+        allowed_domains: allowedDomains,
+        allowed_paths: allowedPaths,
+        allowed_accounts: allowedAccounts,
+        chat_policy: mergedChatPolicy,
       },
     }),
     originHeader

@@ -41,9 +41,9 @@ export function chooseBestAlias(text: string, aliases: ProductAliasRow[]) {
 }
 
 export function extractChannel(text: string) {
-  if (/카카오|카톡|kakao/i.test(text)) return "kakao";
+  if (/카카??카톡|kakao/i.test(text)) return "kakao";
   if (/문자|sms/i.test(text)) return "sms";
-  if (/이메일|email|메일/i.test(text)) return "email";
+  if (/?대찓??email|硫붿씪/i.test(text)) return "email";
   return null;
 }
 
@@ -84,7 +84,7 @@ export function extractOrderId(text: string) {
 export function isLikelyOrderId(value: string | null | undefined) {
   const v = String(value || "").trim();
   if (!v) return false;
-  if (/[가-힣\s]/.test(v)) return false;
+  if (/[가-??s]/.test(v)) return false;
   if (/^01\d{8,9}$/.test(v)) return false;
   // Guard against OTP/short numeric values being treated as order ids.
   if (/^\d{6,20}$/.test(v)) return v.length >= 12;
@@ -129,11 +129,11 @@ export function normalizeAddressText(text: string) {
 export function cleanAddressCandidate(text: string) {
   let v = normalizeAddressText(text);
   if (!v) return "";
-  // "배송지를", "주소를" 같은 목적격 조사 제거
-  v = v.replace(/^(?:배송지|주소)?\s*(?:를|을)\s*/g, "");
-  // "으로/로 바꾸고 싶어요" 류의 의도 표현 제거
+  // "Unknown"????? ???? ?????????? ????
+  v = v.replace(/^(?:?????|???)?\s*(?:????\s*/g, "");
+  // "?쇰줈/濡?諛붽씀怨??띠뼱?? 瑜섏쓽 ?섎룄 ?쒗쁽 ?쒓굅
   v = v.replace(
-    /\s*(?:으로|로)?\s*(?:바꿔|바꾸|변경|수정|고쳐|옮겨)(?:\S*\s*)*(?:주세요|줘요|줘|요|싶어요|싶습니다|원해요|원합니다)?[.!?~]*$/g,
+    /\s*(?:?쇰줈|濡??\s*(?:諛붽퓭|諛붽씀|蹂寃??섏젙|怨좎퀜|??꺼)(?:\S*\s*)*(?:二쇱꽭??以섏슂|以????띠뼱???띠뒿?덈떎|?먰빐???먰빀?덈떎)?[.!?~]*$/g,
     ""
   );
   v = v.replace(/[,.!?~]+$/g, "").trim();
@@ -144,7 +144,7 @@ export function hasKoreanAddressCue(text: string) {
   const v = normalizeAddressText(text);
   if (!v) return false;
   // NOTE: Avoid \b with Korean text; it can miss valid matches in JS.
-  return /[가-힣]{2,}(시|도|군|구|동|로|길|읍|면)(\s|$)/.test(v);
+  return /[??-??{2,}(??????????????????(\s|$)/.test(v);
 }
 
 export function isLikelyAddressDetailOnly(text: string) {
@@ -152,18 +152,18 @@ export function isLikelyAddressDetailOnly(text: string) {
   if (!v) return false;
   // full addresses usually contain one of these location tokens.
   if (hasKoreanAddressCue(v)) return false;
-  return /(?:[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*(?:호|층|실|동)?|\b\d{1,5}\b)/.test(v);
+  return /(?:[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*(?:?????????|\b\d{1,5}\b)/.test(v);
 }
 
 export function extractAddressDetail(text: string) {
   const v = normalizeAddressText(text);
   if (!v) return "";
   const detailMatch = v.match(
-    /((?:\d+\s*동\s*)?(?:[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*(?:호|층|실)?|\d{1,5}))$/i
+    /((?:\d+\s*??s*)?(?:[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*(?:???????|\d{1,5}))$/i
   );
   if (detailMatch) return normalizeAddressText(detailMatch[1]);
   const matches = Array.from(
-    v.matchAll(/(?:\d+\s*동\s*[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*호|\d+\s*동|[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*(?:호|층|실)?|\b\d{1,5}\b)/gi)
+    v.matchAll(/(?:\d+\s*??s*[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*??\d+\s*??[A-Za-z]?\d{1,5}(?:-[A-Za-z0-9]{1,5})?\s*(?:???????|\b\d{1,5}\b)/gi)
   );
   if (matches.length > 0) {
     return normalizeAddressText(matches[matches.length - 1][0]);
@@ -205,7 +205,7 @@ export function splitAddressForUpdate(
       ? normalizeAddressText(raw.slice(chosenBase.length))
       : "";
     const extractedDetail = normalizeAddressText(extractAddressDetail(raw) || "");
-    const hasExplicitUnitMarker = /(호|층|실|동)$/i.test(extractedDetail) || /(호|층|실|동)\b/i.test(raw);
+    const hasExplicitUnitMarker = /(????????$/i.test(extractedDetail) || /(????????\b/i.test(raw);
     const extractedLooksLikeLotOnly = /^\d{1,5}(?:-\d{1,5})?$/.test(extractedDetail);
     const detailFromParsed = isLikelyAddressDetailOnly(raw) ? normalizeAddressText(parsed.address2) : "";
     let detail = detailFromSuffix || extractedDetail || detailFromParsed;
@@ -281,7 +281,7 @@ export function extractAddress(text: string, orderId: string | null, phone: stri
 }
 
 export function extractChoiceIndex(text: string, max: number) {
-  const match = text.match(/(?:^|\s)(\d{1,2})(?:\s*번|\s*번째)?/);
+  const match = text.match(/(?:^|\s)(\d{1,2})(?:\s*??\s*��°)?/);
   if (!match) return null;
   const idx = Number(match[1]);
   if (!Number.isFinite(idx) || idx < 1 || idx > max) return null;
@@ -309,4 +309,3 @@ export function findRecentEntity(turns: Array<Record<string, any>>) {
   }
   return null;
 }
-

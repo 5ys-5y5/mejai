@@ -10,8 +10,11 @@ import {
   resolveConversationPageFeatures,
   WIDGET_PAGE_KEY,
   type ConversationFeaturesProviderShape,
+  type WidgetChatPolicyConfig,
 } from "@/lib/conversation/pageFeaturePolicy";
-import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
+import {
+  readConversationFeatureProvider,
+} from "@/lib/conversation/policyMerge";
 
 function encodeHeaderValue(input: string) {
   const value = String(input || "").trim();
@@ -130,21 +133,26 @@ export async function POST(req: NextRequest) {
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, agent_id, is_active, name, public_key, allowed_domains, allowed_paths")
+    .select("id, org_id, agent_id, name, public_key, chat_policy")
     .eq("id", payload.widget_id)
     .maybeSingle();
-  if (!widget || !widget.is_active) {
+  if (!widget) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
 
   let providerValue: ConversationFeaturesProviderShape | null = null;
-  try {
-    providerValue = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || ""));
-  } catch {
-    providerValue = null;
+  providerValue = readConversationFeatureProvider(widget.chat_policy);
+  const mergedPolicy = providerValue;
+  const widgetPolicy = (mergedPolicy as { widget?: WidgetChatPolicyConfig } | null)?.widget || null;
+  if (widgetPolicy?.is_active === false) {
+    return NextResponse.json({ error: "WIDGET_INACTIVE" }, { status: 403 });
   }
+  const effectiveWidgetName = widgetPolicy?.name || widget.name || "";
+  const effectiveAgentId = widgetPolicy?.agent_id || widget.agent_id || null;
+  const allowedDomains = widgetPolicy?.allowed_domains || [];
+  const allowedPaths = widgetPolicy?.allowed_paths || [];
   const featureFlags = applyConversationFeatureVisibility(
-    resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
+    resolveConversationPageFeatures(WIDGET_PAGE_KEY, mergedPolicy),
     false
   );
   const requestToolIds: unknown[] = Array.isArray(mcpToolIds) ? mcpToolIds : [];
@@ -202,7 +210,7 @@ export async function POST(req: NextRequest) {
     sessionId,
     widgetId: String(widget.id),
     orgId: String(widget.org_id),
-    agentId: widget.agent_id || null,
+    agentId: effectiveAgentId || null,
     eventType: "WIDGET_RUNTIME_PROXY_START",
     payload: {
       ...requestMeta,
@@ -219,16 +227,16 @@ export async function POST(req: NextRequest) {
         "x-widget-secret": secret,
         "x-widget-org-id": String(widget.org_id),
         "x-widget-id": String(widget.id || ""),
-        "x-widget-name": encodeHeaderValue(String(widget.name || "")),
+        "x-widget-name": encodeHeaderValue(String(effectiveWidgetName)),
         "x-widget-public-key": String(widget.public_key || ""),
-        "x-widget-agent-id": String(widget.agent_id || ""),
-        "x-widget-allowed-domains": encodeHeaderJson(widget.allowed_domains || []),
-        "x-widget-allowed-paths": encodeHeaderJson(widget.allowed_paths || []),
+        "x-widget-agent-id": String(effectiveAgentId || ""),
+        "x-widget-allowed-domains": encodeHeaderJson(allowedDomains),
+        "x-widget-allowed-paths": encodeHeaderJson(allowedPaths),
       },
       body: JSON.stringify({
         message,
         session_id: sessionId,
-        agent_id: widget.agent_id || undefined,
+        agent_id: effectiveAgentId || undefined,
         mode: body.mode,
         llm: effectiveLlm,
         kb_id: effectiveKbId,
@@ -239,6 +247,7 @@ export async function POST(req: NextRequest) {
         page_key: WIDGET_PAGE_KEY,
         visitor,
         runtime_flags: runtimeFlags,
+        chat_policy: mergedPolicy,
       }),
     });
   } catch (error) {
@@ -247,7 +256,7 @@ export async function POST(req: NextRequest) {
       sessionId,
       widgetId: String(widget.id),
       orgId: String(widget.org_id),
-      agentId: widget.agent_id || null,
+      agentId: effectiveAgentId || null,
       eventType: "WIDGET_RUNTIME_PROXY_FETCH_FAILED",
       payload: {
         ...requestMeta,

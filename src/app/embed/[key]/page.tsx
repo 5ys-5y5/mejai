@@ -19,7 +19,9 @@ import {
   resolveConversationSetupUi,
   WIDGET_PAGE_KEY,
   type ConversationFeaturesProviderShape,
+  type WidgetEmbedView,
 } from "@/lib/conversation/pageFeaturePolicy";
+import { mergeConversationFeatureProviders, readConversationFeatureProvider } from "@/lib/conversation/policyMerge";
 import { useConversationAdminStatus } from "@/lib/conversation/client/useConversationAdminStatus";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 import {
@@ -31,6 +33,10 @@ import {
 import { buildRuntimeBotMessageFields } from "@/lib/conversation/client/runtimeMessageMapping";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
+import {
+  applyVisibilityOverride,
+  readWidgetVisibilityOverridesFromSearchParams,
+} from "@/lib/widgetInstanceOverrides";
 import type { LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
 import type { ChatMessage } from "@/lib/conversation/client/conversationPageState";
 
@@ -42,6 +48,8 @@ type WidgetConfig = {
   public_key?: string | null;
   chat_policy?: ConversationFeaturesProviderShape | null;
   allowed_domains?: string[] | null;
+  allowed_paths?: string[] | null;
+  allowed_accounts?: string[] | null;
 };
 
 type LogMap = Record<string, LogBundle>;
@@ -203,6 +211,35 @@ function normalizeOriginList(value: unknown) {
   return normalizeThemeList(value).map((item) => item.replace(/^['"]|['"]$/g, ""));
 }
 
+function normalizeEmbedView(value: unknown): WidgetEmbedView | null {
+  return value === "chat" || value === "list" || value === "setup" || value === "both"
+    ? value
+    : null;
+}
+
+function readPolicyOverrideFromSearchParams(searchParams: URLSearchParams | null) {
+  if (!searchParams) return null;
+  const raw =
+    searchParams.get("policy") || searchParams.get("chat_policy") || searchParams.get("policy_override") || "";
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return null;
+  let jsonText = trimmed;
+  if (trimmed.startsWith("base64:") || trimmed.startsWith("b64:")) {
+    const encoded = trimmed.replace(/^base64:|^b64:/, "");
+    try {
+      jsonText = atob(encoded);
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const parsed = JSON.parse(jsonText);
+    return readConversationFeatureProvider(parsed);
+  } catch {
+    return null;
+  }
+}
+
 function normalizeAccountValue(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
@@ -241,6 +278,15 @@ export default function WidgetEmbedPage() {
   const key = useMemo(() => String(params?.key || ""), [params]);
   const visitorId = useMemo(() => String(searchParams?.get("vid") || "").trim(), [searchParams]);
   const sessionSeed = useMemo(() => String(searchParams?.get("sid") || "").trim(), [searchParams]);
+  const embedView = useMemo(
+    () => normalizeEmbedView(searchParams?.get("embed_view") || searchParams?.get("view")),
+    [searchParams]
+  );
+  const instanceVisibility = useMemo(
+    () => readWidgetVisibilityOverridesFromSearchParams(searchParams),
+    [searchParams]
+  );
+  const policyOverride = useMemo(() => readPolicyOverrideFromSearchParams(searchParams), [searchParams]);
 
   const [activeTab, setActiveTab] = useState<WidgetConversationTab>("chat");
   const [widgetToken, setWidgetToken] = useState("");
@@ -350,10 +396,10 @@ export default function WidgetEmbedPage() {
   );
   const debugBypass = debugDomainAllowed;
 
-  const providerPolicy = useMemo(
-    () => (config?.chat_policy ? (config.chat_policy as ConversationFeaturesProviderShape) : null),
-    [config]
-  );
+  const providerPolicy = useMemo(() => {
+    const base = config?.chat_policy ? (config.chat_policy as ConversationFeaturesProviderShape) : null;
+    return mergeConversationFeatureProviders(base, policyOverride);
+  }, [config, policyOverride]);
   const baseFeatures = useMemo(
     () => resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerPolicy),
     [providerPolicy]
@@ -390,16 +436,13 @@ export default function WidgetEmbedPage() {
 
   const theme = (config?.theme || {}) as Record<string, any>;
   const brandName = String(config?.name || "Mejai");
-  const launcherIconUrl = String(
-    theme.launcher_icon_url || theme.launcherIconUrl || theme.icon_url || theme.iconUrl || ""
-  );
-  const headerIcon = launcherIconUrl || "/brand/logo.png";
+  const launcherLogoId = String(theme.launcher_logo_id || "").trim();
+  const headerIcon = launcherLogoId ? `/api/widget/logo?id=${encodeURIComponent(launcherLogoId)}` : "";
   const isAdminOrDebug = isAdminUser || debugBypass;
-  const statusLabel = isAdminOrDebug ? status : "";
-  const allowedAccounts = useMemo(
-    () => normalizeThemeList(theme.allowed_accounts || theme.allowedAccounts),
-    [theme]
-  );
+  const allowedAccounts = useMemo(() => {
+    if (Array.isArray(config?.allowed_accounts)) return config!.allowed_accounts!;
+    return normalizeThemeList(theme.allowed_accounts || theme.allowedAccounts);
+  }, [config, theme]);
   const allowedAccountSet = useMemo(
     () => new Set(allowedAccounts.map(normalizeAccountValue).filter(Boolean)),
     [allowedAccounts]
@@ -409,17 +452,72 @@ export default function WidgetEmbedPage() {
 
   const allowedDomains = Array.isArray(config?.allowed_domains) ? config.allowed_domains : [];
   const domainAllowed = allowedDomains.length === 0 ? true : matchAllowedDomain(originHost, allowedDomains);
-  const showPolicyTab = debugBypass || (domainAllowed && accountAllowed);
+  const forcePolicyTab = embedView === "setup" || embedView === "both";
+  const basePolicyTabVisible = forcePolicyTab ? true : debugBypass || (domainAllowed && accountAllowed);
   const policyFeatures = useMemo(
-    () => applyConversationFeatureVisibility(baseFeatures, isAdminOrDebug || showPolicyTab),
-    [baseFeatures, isAdminOrDebug, showPolicyTab]
+    () => applyConversationFeatureVisibility(baseFeatures, isAdminOrDebug || basePolicyTabVisible),
+    [baseFeatures, isAdminOrDebug, basePolicyTabVisible]
   );
+  const widgetHeaderBase = policyFeatures.widget.header;
+  const widgetHeader = useMemo(
+    () => ({
+      ...widgetHeaderBase,
+      enabled: applyVisibilityOverride(widgetHeaderBase.enabled, instanceVisibility.showHeader),
+      logo: applyVisibilityOverride(widgetHeaderBase.logo, instanceVisibility.showLogo),
+      status: applyVisibilityOverride(widgetHeaderBase.status, instanceVisibility.showStatus),
+    }),
+    [widgetHeaderBase, instanceVisibility]
+  );
+  const statusLabel = widgetHeader.status ? status : "";
+  const chatPanelEnabled = applyVisibilityOverride(
+    policyFeatures.widget.chatPanel,
+    instanceVisibility.showChatPanel
+  );
+  const historyPanelEnabled = applyVisibilityOverride(
+    policyFeatures.widget.historyPanel,
+    instanceVisibility.showHistoryPanel
+  );
+  const tabBarConfig = policyFeatures.widget.tabBar;
+  const showPolicyTab = applyVisibilityOverride(
+    basePolicyTabVisible && policyFeatures.widget.setupPanel && tabBarConfig.policy,
+    instanceVisibility.showPolicyTab
+  );
+  const showTabBar = applyVisibilityOverride(
+    tabBarConfig.enabled && (!embedView || embedView === "both"),
+    instanceVisibility.showTabBar
+  );
+  const showChatTab = applyVisibilityOverride(
+    tabBarConfig.chat && chatPanelEnabled,
+    instanceVisibility.showChatTab
+  );
+  const showListTab = applyVisibilityOverride(
+    tabBarConfig.list && historyPanelEnabled,
+    instanceVisibility.showListTab
+  );
+  const availableTabs = useMemo(() => {
+    const tabs: WidgetConversationTab[] = [];
+    if (showChatTab) tabs.push("chat");
+    if (showListTab) tabs.push("list");
+    if (showPolicyTab) tabs.push("policy");
+    return tabs;
+  }, [showChatTab, showListTab, showPolicyTab]);
 
   useEffect(() => {
-    if (!showPolicyTab && activeTab === "policy") {
-      setActiveTab("chat");
+    if (availableTabs.length === 0) return;
+    if (!availableTabs.includes(activeTab)) {
+      setActiveTab(availableTabs[0]);
     }
-  }, [showPolicyTab, activeTab]);
+  }, [availableTabs, activeTab]);
+
+  useEffect(() => {
+    if (!embedView || embedView === "both") return;
+    const desired = embedView === "chat" ? "chat" : embedView === "list" ? "list" : "policy";
+    if (availableTabs.includes(desired)) {
+      setActiveTab(desired);
+    } else if (availableTabs.length > 0) {
+      setActiveTab(availableTabs[0]);
+    }
+  }, [embedView, availableTabs]);
 
   useEffect(() => {
     widgetTokenRef.current = widgetToken;
@@ -1074,7 +1172,7 @@ export default function WidgetEmbedPage() {
     ]
   );
 
-  const headerActions = pageFeatures.interaction.widgetHeaderAgentAction ? (
+  const headerActions = widgetHeader.agentAction && pageFeatures.interaction.widgetHeaderAgentAction ? (
     <Button variant="outline" size="sm" className="h-8 px-3 text-[11px]">
       상담원 연결
     </Button>
@@ -1197,16 +1295,24 @@ export default function WidgetEmbedPage() {
         brandName={brandName}
         status={statusLabel}
         iconUrl={headerIcon}
+        showHeader={widgetHeader.enabled}
+        showLogo={widgetHeader.logo}
+        showStatus={widgetHeader.status}
         onNewConversation={handleNewConversation}
-        showNewConversation={pageFeatures.interaction.widgetHeaderNewConversation}
+        showNewConversation={widgetHeader.newConversation && pageFeatures.interaction.widgetHeaderNewConversation}
         onClose={handleCloseWidget}
-        showClose={pageFeatures.interaction.widgetHeaderClose}
-        headerActions={pageFeatures.interaction.widgetHeaderAgentAction ? headerActions : null}
+        showClose={widgetHeader.close && pageFeatures.interaction.widgetHeaderClose}
+        headerActions={headerActions}
         fill={false}
         className="h-full"
         activeTab={activeTab}
         onTabChange={setActiveTab}
         showPolicyTab={showPolicyTab}
+        showTabBar={showTabBar}
+        showChatTab={showChatTab}
+        showListTab={showListTab}
+        showChatPanel={chatPanelEnabled}
+        showHistoryPanel={historyPanelEnabled}
         chatLegoProps={chatLegoProps}
         setupLegoProps={setupLegoProps}
         sessions={sessions}

@@ -17,7 +17,7 @@ import {
 } from "../policies/principles";
 import type { CompiledPolicy } from "../shared/runtimeTypes";
 
-type ToolCall = { name: string; args?: Record<string, any>; ok?: boolean; data?: Record<string, any>; error?: unknown };
+type ToolCall = { name: "Unknown", any>; ok?: boolean; data?: Record<string, any>; error?: unknown };
 type LookupOrderView = {
   core?: Record<string, any>;
   summary?: Record<string, any>;
@@ -68,17 +68,17 @@ function buildOrderChoiceItems(input: {
     const price = String(choice.price || "").trim();
     const fields = [
       { label: "주문번호", value: orderId || "-" },
-      { label: "상품", value: productName || "-" },
-      { label: "옵션", value: optionName || "-" },
-      { label: "수량", value: quantity || "-" },
-      { label: "가격", value: price || "-" },
+      { label: "?곹뭹", value: productName || "-" },
+      { label: "?듭뀡", value: optionName || "-" },
+      { label: "?섎웾", value: quantity || "-" },
+      { label: "Unknown", value: price || "-" },
     ];
     return {
       value: String(choice.index || ""),
-      label: String(choice.label || `${choice.index}번 주문`),
+      label: "Unknown"}?????`),
       title: productName || String(choice.label || ""),
       subtitle: orderId || "",
-      description: [optionName ? `옵션: ${optionName}` : "", quantity ? `수량: ${quantity}` : "", price ? `가격: ${price}` : ""]
+      description: [optionName ? `?듭뀡: ${optionName}` : "", quantity ? `?섎웾: ${quantity}` : "", price ? `媛寃? ${price}` : ""]
         .filter(Boolean)
         .join("\n"),
       image_url: includeImages ? String(choice.image_url || "") : "",
@@ -89,13 +89,13 @@ function buildOrderChoiceItems(input: {
 
 const TARGET_SUMMARY_LABELS: Record<string, string> = {
   order_id: "주문번호",
-  product_name: "상품",
-  option_name: "옵션",
-  price: "가격",
-  quantity: "수량",
-  jibun_address: "지번주소",
-  road_address: "도로명주소",
-  zipcode: "우편번호",
+  product_name: "?곹뭹",
+  option_name: "?듭뀡",
+  price: "????,
+  quantity: "?섎웾",
+  jibun_address: "지번주??,
+  road_address: "??????????,
+  zipcode: "?고렪踰덊샇",
 };
 
 const buildTargetSummaryLines = (
@@ -480,9 +480,9 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
                 const first = Array.isArray(itemsData) ? itemsData[0] : itemsData;
                 const firstRecord = toRecord(first);
                 const name =
-                  firstRecord.product_name || firstRecord.name || firstRecord.product_name_default || "상품 정보 없음";
+                  firstRecord.product_name || firstRecord.name || firstRecord.product_name_default || "?곹뭹 ?뺣낫 ?놁쓬";
                 const option =
-                  firstRecord.option_name || firstRecord.option_value || firstRecord.option_value_default || "옵션 없음";
+                  firstRecord.option_name || firstRecord.option_value || firstRecord.option_value_default || "?듭뀡 ?놁쓬";
                 const qty = firstRecord.quantity || firstRecord.qty || "1";
                 const priceRaw =
                   firstRecord.price ||
@@ -511,7 +511,7 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
               const id = String(entry.order_id || entry.order_no || "").trim();
               if (!id) return null;
               const date = entry.order_date || "";
-              const fallbackName = entry.first_product_name || entry.product_name || "상품 정보 없음";
+              const fallbackName = entry.first_product_name || entry.product_name || "?곹뭹 ?뺣낫 ?놁쓬";
               const actualOrderAmount = toRecord(entry.actual_order_amount);
               const fallbackPrice =
                 actualOrderAmount.order_price_amount ||
@@ -520,19 +520,19 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
                 entry.total_supply_price ||
                 "-";
               const detail = detailMap.get(id) || {
-                name: String(fallbackName || "상품 정보 없음"),
-                option: "옵션 없음",
-                qty: "수량 정보 없음",
+                name: String(fallbackName || "?곹뭹 ?뺣낫 ?놁쓬"),
+                option: "?듭뀡 ?놁쓬",
+                qty: "?섎웾 ?뺣낫 ?놁쓬",
                 price: String(fallbackPrice),
                 image_url: null,
               };
-              const label = `${idx + 1}번 주문
-  주문일: ${toOrderDateShort(date)}
+              const label = `${idx + 1}?????
+  주문?? ${toOrderDateShort(date)}
   주문번호: ${id}
-  상품: ${detail.name}
-  옵션: ${detail.option}
-  수량: ${detail.qty}
-  결제금액: ${toMoneyText(detail.price)}원`;
+  ?곹뭹: ${detail.name}
+  ?듭뀡: ${detail.option}
+  ?섎웾: ${detail.qty}
+  결제금액: ${toMoneyText(detail.price)}??;
               return {
                 index: idx + 1,
                 order_id: id,
@@ -574,7 +574,7 @@ export function summarizeToolResults(input: {
   const summaries: string[] = [];
   toolResults.forEach((tool) => {
     if (!tool.ok) {
-      summaries.push(`${tool.name}: 실패`);
+      summaries.push(`${tool.name}: ?ㅽ뙣`);
       return;
     }
     if (tool.name === "lookup_order") {
@@ -589,36 +589,36 @@ export function summarizeToolResults(input: {
       ]
         .filter(Boolean)
         .join(", ");
-      summaries.push(`lookup_order: ${orderInfo || "정보 없음"}`);
+      summaries.push(`lookup_order: ${orderInfo || "?뺣낫 ?놁쓬"}`);
       return;
     }
     if (tool.name === "track_shipment") {
       const data = toRecord(tool.data);
       const shipments = readNestedArray(data.shipments, "shipment");
       const count = Array.isArray(shipments) ? shipments.length : 0;
-      summaries.push(`track_shipment: ${count}건`);
+      summaries.push(`track_shipment: ${count}??);
       return;
     }
     if (tool.name === "create_ticket") {
       const data = toRecord(tool.data);
       const ticketId = String(data.ticket_id || data.id || "");
-      summaries.push(`create_ticket: ${ticketId || "정보 없음"}`);
+      summaries.push(`create_ticket: ${ticketId || "?뺣낫 ?놁쓬"}`);
       return;
     }
     if (tool.name === "update_order_shipping_address") {
       const data = toRecord(tool.data);
       const resultOrderId = String(data.order_id || data.order_no || "");
-      summaries.push(`update_order_shipping_address: ${resultOrderId || "정보 없음"}`);
+      summaries.push(`update_order_shipping_address: ${resultOrderId || "?뺣낫 ?놁쓬"}`);
       return;
     }
     if (tool.name === "list_orders") {
       const data = toRecord(tool.data);
       const orders = readNestedArray(data.orders, "order");
       const count = Array.isArray(orders) ? orders.length : 0;
-      summaries.push(`list_orders: ${count}건`);
+      summaries.push(`list_orders: ${count}??);
       return;
     }
-    summaries.push(`${tool.name}: 정보 없음`);
+    summaries.push(`${tool.name}: ?뺣낫 ?놁쓬`);
   });
 
   return summaries.join(" | ");
@@ -857,7 +857,7 @@ export async function handleToolForcedResponse(input: {
   });
   const shouldSubstituteZipcodePrompt = isNeedZipcodeTemplate && resolvedIntent === "order_change";
   const zipcodePrompt =
-    zipcodeSubstitution?.prompt || "도로명/지번 주소를 알려주세요.";
+    zipcodeSubstitution?.prompt || "?꾨줈紐?吏踰?二쇱냼瑜??뚮젮二쇱꽭??";
   const zipcodeExpectedInput = zipcodeSubstitution?.askSlot || "address";
   const phone = typeof policyContext.entity?.phone === "string" ? String(policyContext.entity.phone).trim() : "";
   const orderIdPlan = getSubstitutionPlan("order_id", CHAT_PRINCIPLES);
@@ -1285,7 +1285,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
     })();
     const mismatch = Boolean(phoneFromSlot) && Boolean(receiverPhoneFromLookup) && phoneFromSlot !== receiverPhoneFromLookup;
     if (mismatch) {
-      const reply = makeReply("휴대폰 정보가 주문자 정보와 일치하지 않아 자동으로 주문을 선택할 수 없어요. 주문 번호를 선택해주세요.");
+      const reply = makeReply("?대????뺣낫媛 二쇰Ц???뺣낫? ?쇱튂?섏? ?딆븘 ?먮룞?쇰줈 二쇰Ц???좏깮?????놁뼱?? 二쇰Ц 踰덊샇瑜??좏깮?댁＜?몄슂.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -1360,7 +1360,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
       (compiledPolicy as Record<string, any>)?.templates || {}
     );
     const lines = listOrdersChoices.map((choice: Record<string, any>) =>
-      choice.label ? String(choice.label) : `${choice.index}번 주문`
+      choice.label ? String(choice.label) : `${choice.index}?????`
     );
     const replyText = buildNumberedChoicePrompt({
       titleKey: "order_choice_title",
@@ -1426,7 +1426,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
       plan: orderIdPlan,
       entity: policyContext.entity as Record<string, any>,
     });
-    const prompt = substitution?.prompt || "최근 주문 내역이 없어요. 연락처를 다시 알려주세요.";
+    const prompt = substitution?.prompt || "理쒓렐 二쇰Ц ?댁뿭???놁뼱?? ?곕씫泥섎? ?ㅼ떆 ?뚮젮二쇱꽭??";
     const expectedInput = substitution?.askSlot || "phone";
     const reply = makeReply(prompt);
     await insertTurn({
@@ -1453,7 +1453,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
   if (listOrdersScopeFailure) {
     const maskedPhone = typeof policyContext.entity?.phone === "string" ? maskPhone(policyContext.entity.phone) : "-";
     const reply = makeReply(
-      `입력하신 번호(${maskedPhone})로 주문 조회를 시도했지만, 현재 'mall.read_order' 권한이 없어 조회할 수 없어요. 관리자에서 권한을 추가한 뒤 다시 시도해 주세요.`
+      `?낅젰?섏떊 踰덊샇(${maskedPhone})濡?二쇰Ц 議고쉶瑜??쒕룄?덉?留? ?꾩옱 'mall.read_order' 沅뚰븳???놁뼱 議고쉶?????놁뼱?? 愿由ъ옄?먯꽌 沅뚰븳??異붽??????ㅼ떆 ?쒕룄??二쇱꽭??`
 
     );
     await insertTurn({
@@ -1506,7 +1506,7 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
   if (listOrdersTokenRefreshFailure) {
     const maskedPhone = typeof policyContext.entity?.phone === "string" ? maskPhone(policyContext.entity.phone) : "-";
     const reply = makeReply(
-      `입력하신 번호(${maskedPhone})로 주문 조회를 시도했지만 인증이 만료되어 조회할 수 없어요. 관리자에서 Cafe24 토큰을 재연결해주세요.`
+      `?낅젰?섏떊 踰덊샇(${maskedPhone})濡?二쇰Ц 議고쉶瑜??쒕룄?덉?留??몄쬆??留뚮즺?섏뼱 議고쉶?????놁뼱?? 愿由ъ옄?먯꽌 Cafe24 ?좏겙???ъ뿰寃고빐二쇱꽭??`
 
     );
     await insertTurn({
@@ -1548,4 +1548,3 @@ export async function handleOrderSelectionAndListOrdersGuards(input: Record<stri
 
   return { response: null, resolvedOrderId, policyContext };
 }
-

@@ -4,14 +4,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { apiFetch } from "@/lib/apiClient";
+import { readConversationFeatureProvider } from "@/lib/conversation/policyMerge";
+import type { WidgetChatPolicyConfig } from "@/lib/conversation/pageFeaturePolicy";
 import { toast } from "sonner";
 
 type WidgetConfig = {
   id: string;
   name?: string | null;
   public_key?: string | null;
-  allowed_domains?: string[] | null;
-  is_active?: boolean | null;
+  chat_policy?: unknown | null;
 };
 
 export function WidgetQuickstartPanel() {
@@ -35,6 +36,10 @@ export function WidgetQuickstartPanel() {
   }, [loadWidget]);
 
   const publicKey = (widget?.public_key || "").trim();
+  const mergedPolicy = readConversationFeatureProvider(widget?.chat_policy ?? null);
+  const widgetPolicy = (mergedPolicy as { widget?: WidgetChatPolicyConfig } | null)?.widget || null;
+  const allowedDomains = widgetPolicy?.allowed_domains || [];
+  const isActive = widgetPolicy?.is_active !== false;
   const snippet = useMemo(() => {
     if (!publicKey) return "";
     return `<script async src=\"https://mejai.help/widget.js\" data-key=\"${publicKey}\"></script>`;
@@ -115,8 +120,8 @@ export function WidgetQuickstartPanel() {
         <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
           {loading ? (
             "불러오는 중..."
-          ) : widget?.allowed_domains && widget.allowed_domains.length > 0 ? (
-            widget.allowed_domains.join(", ")
+          ) : allowedDomains.length > 0 ? (
+            allowedDomains.join(", ")
           ) : (
             "허용 도메인이 등록되지 않았습니다."
           )}
@@ -132,7 +137,7 @@ export function WidgetQuickstartPanel() {
           런처 클릭 시 위젯이 열리고, `/api/widget/init`가 호출되어 토큰이 발급됩니다.
         </div>
         <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
-          {widget?.is_active ? "미확인 (최근 신호 없음)" : "비활성 상태"}
+          {isActive ? "미확인 (최근 신호 없음)" : "비활성 상태"}
         </div>
         <div className="mt-2 text-[11px] text-slate-500">
           토큰은 자동으로 발급되며 관리자 화면에 노출되지 않습니다. 위젯이 열리고 채팅이 가능하면 정상입니다.

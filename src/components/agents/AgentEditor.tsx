@@ -67,8 +67,8 @@ const llmOptions = [
   { id: "gemini", label: "GEMINI" },
 ];
 
-const resolvedSet = new Set(["해결", "Resolved", "resolved"]);
-const escalatedSet = new Set(["이관", "Escalated", "escalated"]);
+const resolvedSet = new Set(["?닿껐", "Resolved", "resolved"]);
+const escalatedSet = new Set(["?닿?", "Escalated", "escalated"]);
 
 function parseVersionParts(value?: string | null) {
   if (!value) return null;
@@ -141,9 +141,9 @@ function normalizeIds(ids?: string[] | null) {
 }
 
 function buildChangeSummary(current: AgentItem, prev?: AgentItem | null) {
-  if (!prev) return "신규";
+  if (!prev) return "?좉퇋";
   const changes: string[] = [];
-  if ((current.name || "") !== (prev.name || "")) changes.push("이름");
+  if ((current.name || "") !== (prev.name || "")) changes.push("?대쫫");
   if ((current.llm || "") !== (prev.llm || "")) changes.push("LLM");
   if ((current.kb_id || "") !== (prev.kb_id || "")) changes.push("KB");
   if (JSON.stringify(normalizeIds(current.mcp_tool_ids)) !== JSON.stringify(normalizeIds(prev.mcp_tool_ids))) {
@@ -152,19 +152,19 @@ function buildChangeSummary(current: AgentItem, prev?: AgentItem | null) {
   if (JSON.stringify(normalizeIds(current.admin_kb_ids)) !== JSON.stringify(normalizeIds(prev.admin_kb_ids))) {
     changes.push("ADMIN KB");
   }
-  if ((current.website || "") !== (prev.website || "")) changes.push("웹사이트");
+  if ((current.website || "") !== (prev.website || "")) changes.push("?뱀궗?댄듃");
   if ((current.goal || "") !== (prev.goal || "")) changes.push("목표");
-  return changes.length > 0 ? `${changes.join(", ")} 변경` : "변경 없음";
+  return changes.length > 0 ? `${changes.join(", ")} ???? : "Unknown";
 }
 
 function formatDuration(seconds?: number | null) {
   const safe = Number(seconds || 0);
-  if (!Number.isFinite(safe) || safe <= 0) return "0분";
+  if (!Number.isFinite(safe) || safe <= 0) return "0??;
   const minutes = Math.round(safe / 60);
-  if (minutes < 60) return `${minutes}분`;
+  if (minutes < 60) return `${minutes}??;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest > 0 ? `${hours}시간 ${rest}분` : `${hours}시간`;
+  return rest > 0 ? `${hours}?쒓컙 ${rest}遺? : `${hours}?쒓컙`;
 }
 
 function formatRate(value?: number | null) {
@@ -245,7 +245,7 @@ export function AgentEditor({
         setLoading(false);
       } catch {
         if (!mounted) return;
-        setError("에이전트를 불러오지 못했습니다.");
+        setError("?먯씠?꾪듃瑜?遺덈윭?ㅼ? 紐삵뻽?듬땲??");
         setLoading(false);
       }
     }
@@ -318,30 +318,30 @@ export function AgentEditor({
   const activeKb = selectedKbParentId ? activeKbByParent.get(selectedKbParentId) ?? null : null;
   const kbUpdateAvailable = Boolean(selectedKb && activeKb && activeKb.id !== selectedKb.id);
   const kbInfoText = useMemo(() => {
-    if (!selectedKb) return "선택된 KB가 없습니다.";
+    if (!selectedKb) return "?좏깮??KB媛 ?놁뒿?덈떎.";
     const adminFlag = isAdminKbValue(selectedKb.is_admin);
     return [
-      `제목: ${selectedKb.title || "-"}`,
+      `?쒕ぉ: ${selectedKb.title || "-"}`,
       `버전: ${selectedKb.version || "-"}`,
-      `상태: ${selectedKb.is_active ? "배포" : "비활성"}`,
-      `유형: ${adminFlag ? "ADMIN" : "일반"}`,
-      `내용:\n${selectedKb.content || "-"}`,
+      `?곹깭: ${selectedKb.is_active ? "諛고룷" : "鍮꾪솢??}`,
+      `?좏삎: ${adminFlag ? "ADMIN" : "?쇰컲"}`,
+      `?댁슜:\n${selectedKb.content || "-"}`,
       `ID: ${selectedKb.id}`,
     ].join("\n");
   }, [selectedKb]);
 
   const mcpInfoText = useMemo(() => {
-    if (mcpToolIds.length === 0) return "선택된 MCP 도구가 없습니다.";
+    if (mcpToolIds.length === 0) return "?좏깮??MCP ?꾧뎄媛 ?놁뒿?덈떎.";
     const byId = new Map(mcpTools.map((tool) => [tool.id, tool]));
     return mcpToolIds
       .map((id) => {
         const tool = byId.get(id);
-        if (!tool) return `알 수 없는 도구 (${id})`;
+        if (!tool) return `?????녿뒗 ?꾧뎄 (${id})`;
         const label = tool.tool_key || (tool.provider_key ? `${tool.provider_key}:${tool.name}` : tool.name);
         const lines = [
-          `도구: ${label}`,
-          `프로바이더: ${tool.provider_key || "-"}`,
-          `설명: ${tool.description || "-"}`,
+          `?꾧뎄: ${label}`,
+          `?꾨줈諛붿씠?? ${tool.provider_key || "-"}`,
+          `?ㅻ챸: ${tool.description || "-"}`,
           `ID: ${tool.id}`,
         ];
         return lines.join("\n");
@@ -361,7 +361,7 @@ export function AgentEditor({
       .map((item) => ({
         id: item.id,
         label: `${item.title}${item.version ? ` (${item.version})` : ""}`,
-        description: item.is_active ? "배포" : "비활성",
+        description: item.is_active ? "배포" : "비활??,
       }));
   }, [scopedKbItems]);
 
@@ -371,7 +371,7 @@ export function AgentEditor({
         id: tool.id,
         label: tool.tool_key || (tool.provider_key ? `${tool.provider_key}:${tool.name}` : tool.name),
         description: tool.description || undefined,
-        group: tool.provider_key || "기타",
+        group: tool.provider_key || "Unknown",
       })),
     [mcpTools]
   );
@@ -414,7 +414,7 @@ export function AgentEditor({
   const handleSave = async () => {
     if (!agentId) return;
     if (!canSave) {
-      toast.error("필수 항목을 확인해 주세요.");
+      toast.error("?꾩닔 ??ぉ???뺤씤??二쇱꽭??");
       return;
     }
     setSaving(true);
@@ -434,7 +434,7 @@ export function AgentEditor({
         body: JSON.stringify(payload),
       });
 
-      toast.success("에이전트가 저장되었습니다.");
+      toast.success("?먯씠?꾪듃媛 ??λ릺?덉뒿?덈떎.");
       setBaseName(saved.name || "");
       setBaseLlm(saved.llm === "gemini" ? "gemini" : "chatgpt");
       setBaseKbId(saved.kb_id || "");
@@ -456,8 +456,8 @@ export function AgentEditor({
         onSelectAgent(saved.id);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "에이전트 저장에 실패했습니다.";
-      toast.error(message || "에이전트 저장에 실패했습니다.");
+      const message = err instanceof Error ? err.message : "?먯씠?꾪듃 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.";
+      toast.error(message || "?먯씠?꾪듃 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.");
     } finally {
       setSaving(false);
     }
@@ -474,29 +474,29 @@ export function AgentEditor({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_active: true }),
       });
-      toast.success("배포 버전이 변경되었습니다.");
+      toast.success("諛고룷 踰꾩쟾??蹂寃쎈릺?덉뒿?덈떎.");
       await refreshAgents();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "배포 상태 변경에 실패했습니다.";
-      toast.error(message || "배포 상태 변경에 실패했습니다.");
+      const message = err instanceof Error ? err.message : "諛고룷 ?곹깭 蹂寃쎌뿉 ?ㅽ뙣?덉뒿?덈떎.";
+      toast.error(message || "諛고룷 ?곹깭 蹂寃쎌뿉 ?ㅽ뙣?덉뒿?덈떎.");
     } finally {
       setActiveUpdateId(null);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("이 버전을 삭제할까요? 삭제된 버전은 복구할 수 없습니다.")) return;
+    if (!window.confirm("??踰꾩쟾????젣?좉퉴?? ??젣??踰꾩쟾? 蹂듦뎄?????놁뒿?덈떎.")) return;
     try {
       await apiFetch(`/api/agents/${id}`, { method: "DELETE" });
       const next = allAgents.filter((item) => item.id !== id);
       setAllAgents(next);
-      toast.success("버전이 삭제되었습니다.");
+      toast.success("踰꾩쟾????젣?섏뿀?듬땲??");
       if (id === agentId) {
         onSelectAgent(null);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "버전 삭제에 실패했습니다.";
-      toast.error(message || "버전 삭제에 실패했습니다.");
+      const message = err instanceof Error ? err.message : "踰꾩쟾 ??젣???ㅽ뙣?덉뒿?덈떎.";
+      toast.error(message || "踰꾩쟾 ??젣???ㅽ뙣?덉뒿?덈떎.");
     }
   };
 
@@ -551,7 +551,7 @@ export function AgentEditor({
         <Card className="mt-6 p-6">
           <div className="text-sm font-semibold text-slate-900">버전 목록</div>
           <p className="mt-1 text-xs text-slate-500">
-            배포 상태는 버전 목록에서만 관리됩니다. 배포를 켜면 해당 버전만 활성화됩니다.
+            諛고룷 ?곹깭??踰꾩쟾 紐⑸줉?먯꽌留?愿由щ맗?덈떎. 諛고룷瑜?耳쒕㈃ ?대떦 踰꾩쟾留??쒖꽦?붾맗?덈떎.
           </p>
           <ul className="mt-3 grid grid-cols-[70px_80px_70px_70px_70px_70px_70px_120px_minmax(0,1fr)_44px] gap-x-[6px] divide-y divide-slate-200">
             <li className="contents">
@@ -562,31 +562,31 @@ export function AgentEditor({
                 배포
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                통화수
+                ?듯솕??
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                통화시간
+                ?듯솕?쒓컙
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                만족도
+                만족??
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                성공률
+                ?깃났瑜?
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                이관율
+                ?닿???
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                수정일
+                ?섏젙??
               </span>
               <span className="flex min-h-[44px] items-center px-2 py-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">
-                수정 내용
+                ?섏젙 ?댁슜
               </span>
               <span className="flex min-h-[44px] items-center px-0 py-3 pr-2 text-left text-xs font-semibold text-slate-500" />
             </li>
             <li className="col-span-full border-b border-slate-200" />
             {versionItems.length === 0 ? (
-              <li className="col-span-full py-3 text-sm text-slate-500">버전 기록이 없습니다.</li>
+              <li className="col-span-full py-3 text-sm text-slate-500">踰꾩쟾 湲곕줉???놁뒿?덈떎.</li>
             ) : (
               versionItems.map((item, index) => {
                 const isCurrent = item.id === agentId;
@@ -609,8 +609,8 @@ export function AgentEditor({
                       {isCurrent ? (
                         <span
                           className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500"
-                          aria-label="수정 중"
-                          title="수정 중"
+                          aria-label="?섏젙 以?
+                          title="?섏젙 以?
                         >
                           <PencilLine className="h-3.5 w-3.5" />
                         </span>
@@ -633,11 +633,11 @@ export function AgentEditor({
                           deployDisabled && !isActiveRow ? "cursor-not-allowed opacity-60" : ""
                         )}
                       >
-                        {activeUpdateId === item.id ? "변경 중..." : isActiveRow ? "ON" : "OFF"}
+                        {activeUpdateId === item.id ? "Unknown" : isActiveRow ? "ON" : "OFF"}
                       </button>
                     </div>
                     <div className="flex min-h-[44px] items-center px-1 py-3 text-[11px] text-slate-600 whitespace-nowrap">
-                      {metric?.call_count ?? 0}건
+                      {metric?.call_count ?? 0}??
                     </div>
                     <div className="flex min-h-[44px] items-center px-1 py-3 text-[11px] text-slate-600 whitespace-nowrap">
                       {formatDuration(metric?.call_duration_sec)}
@@ -664,7 +664,7 @@ export function AgentEditor({
                           e.stopPropagation();
                           handleDelete(item.id);
                         }}
-                        aria-label="삭제"
+                        aria-label="??젣"
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -680,9 +680,9 @@ export function AgentEditor({
 <Card id="agent-editor-root" className="mt-6 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-slate-900">에이전트 구성</div>
+              <div className="text-sm font-semibold text-slate-900">?먯씠?꾪듃 援ъ꽦</div>
               <p className="mt-1 text-xs text-slate-500">
-                현재 버전 {currentVersion || "-"} · LLM/MCP/KB 변경 시 새 버전이 생성됩니다.
+                ?꾩옱 踰꾩쟾 {currentVersion || "-"} 쨌 LLM/MCP/KB 蹂寃?????踰꾩쟾???앹꽦?⑸땲??
               </p>
             </div>
             <button
@@ -694,21 +694,21 @@ export function AgentEditor({
                 canSave ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-400"
               )}
             >
-              {saving ? "저장 중..." : "저장"}
+              {saving ? "Unknown" : "????}
             </button>
           </div>
           {loading ? (
-            <div className="mt-4 text-sm text-slate-500">에이전트를 불러오는 중...</div>
+            <div className="mt-4 text-sm text-slate-500">?먯씠?꾪듃瑜?遺덈윭?ㅻ뒗 以?..</div>
           ) : error ? (
             <div className="mt-4 text-sm text-rose-600">{error}</div>
           ) : (
             <div className="mt-5 grid gap-5">
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-slate-900">에이전트 이름 *</label>
+                <label className="text-sm font-medium text-slate-900">?먯씠?꾪듃 ?대쫫 *</label>
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="에이전트 이름"
+                  placeholder="?먯씠?꾪듃 ?대쫫"
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
@@ -741,7 +741,7 @@ export function AgentEditor({
                       value={kbId}
                       onChange={setKbId}
                       options={kbOptions}
-                      placeholder="KB 선택"
+                      placeholder="KB ?좏깮"
                       searchable
                       className="flex-1 min-w-0"
                       renderValue={(selected) => (
@@ -757,7 +757,7 @@ export function AgentEditor({
                                 )}
                               />
                             ) : null}
-                            <span className="truncate">{selected?.label || "KB 선택"}</span>
+                            <span className="truncate">{selected?.label || "KB ?좏깮"}</span>
                           </div>
                           {selected?.id ? (
                             <div className="text-[11px] text-slate-500 truncate">ID: {selected.id}</div>
@@ -790,7 +790,7 @@ export function AgentEditor({
                       type="button"
                       onClick={() => setKbInfoOpen((prev) => !prev)}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-                      aria-label="KB 정보"
+                      aria-label="KB ?뺣낫"
                     >
                       <Info className="h-4 w-4" />
                     </button>
@@ -804,7 +804,7 @@ export function AgentEditor({
                   ) : null}
                   {kbUpdateAvailable ? (
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                      최신 KB 버전이 있습니다 ({selectedKb?.version || "-"} → {activeKb?.version || "-"}).
+                      理쒖떊 KB 踰꾩쟾???덉뒿?덈떎 ({selectedKb?.version || "-"} ??{activeKb?.version || "-"}).
                       <button
                         type="button"
                         onClick={() => {
@@ -812,7 +812,7 @@ export function AgentEditor({
                         }}
                         className="ml-2 underline underline-offset-2"
                       >
-                        최신으로 선택
+                        理쒖떊?쇰줈 ?좏깮
                       </button>
                     </div>
                   ) : null}
@@ -825,7 +825,7 @@ export function AgentEditor({
                           </span>
                         </div>
                         <div className="mt-2 text-[11px] text-slate-500">
-                          Admin KB는 DB 트리거로 자동 관리됩니다. 여기서는 변경할 수 없습니다.
+                          Admin KB??DB ?몃━嫄곕줈 ?먮룞 愿由щ맗?덈떎. ?ш린?쒕뒗 蹂寃쏀븷 ???놁뒿?덈떎.
                         </div>
                         {assignedAdminKbItems.length > 0 ? (
                           <div className="mt-2 space-y-1">
@@ -840,7 +840,7 @@ export function AgentEditor({
                             ))}
                           </div>
                         ) : (
-                          <div className="mt-2 text-[11px] text-slate-500">적용된 admin KB가 없습니다.</div>
+                          <div className="mt-2 text-[11px] text-slate-500">?곸슜??admin KB媛 ?놁뒿?덈떎.</div>
                         )}
                     </div>
                   ) : null}
@@ -853,13 +853,13 @@ export function AgentEditor({
                   issueSet.has("mcp") ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-white" : ""
                 )}
               >
-                <label className="text-sm font-medium text-slate-900">MCP 도구</label>
+                <label className="text-sm font-medium text-slate-900">MCP ?꾧뎄</label>
                 <div className="flex items-center gap-2">
                   <MultiSelectPopover
                     values={mcpToolIds}
                     onChange={setMcpToolIds}
                     options={mcpOptions}
-                    placeholder="MCP 도구 선택"
+                    placeholder="MCP ?꾧뎄 ?좏깮"
                     displayMode="count"
                     showBulkActions
                     className="flex-1 min-w-0"
@@ -868,7 +868,7 @@ export function AgentEditor({
                     type="button"
                     onClick={() => setMcpInfoOpen((prev) => !prev)}
                     className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-50"
-                    aria-label="MCP 정보"
+                    aria-label="MCP ?뺣낫"
                   >
                     <Info className="h-4 w-4" />
                   </button>
@@ -883,7 +883,7 @@ export function AgentEditor({
               </div>
 
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-slate-900">웹사이트</label>
+                <label className="text-sm font-medium text-slate-900">?뱀궗?댄듃</label>
                 <input
                   value={website}
                   onChange={(e) => setWebsite(e.target.value)}
@@ -897,7 +897,7 @@ export function AgentEditor({
                 <textarea
                   value={goal}
                   onChange={(e) => setGoal(e.target.value)}
-                  placeholder="에이전트 목표를 입력하세요."
+                  placeholder="?먯씠?꾪듃 紐⑺몴瑜??낅젰?섏꽭??"
                   className="min-h-[120px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>

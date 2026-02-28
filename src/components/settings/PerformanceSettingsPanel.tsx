@@ -40,7 +40,7 @@ export function PerformanceSettingsPanel() {
         writePerformanceConfigToStorage(next);
       } catch {
         if (!mounted) return;
-        setError("성능 설정을 불러오지 못했습니다.");
+        setError("\uD658\uACBD \uC124\uC815\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -90,9 +90,9 @@ export function PerformanceSettingsPanel() {
       setDraft(sanitized);
       setLoaded(sanitized);
       writePerformanceConfigToStorage(sanitized);
-      setNotice("성능 설정이 저장되었습니다.");
+      setNotice("\uC124\uC815\uC774 \uC800\uC7A5\uB418\uC5C8\uC2B5\uB2C8\uB2E4.");
     } catch {
-      setError("저장에 실패했습니다.");
+      setError("\uC124\uC815 \uC800\uC7A5\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4.");
     } finally {
       setSaving(false);
     }
@@ -125,7 +125,7 @@ export function PerformanceSettingsPanel() {
       multi_tab_leader_lock_ttl_ms: 15_000,
     };
     setDraft(sanitizePerformanceConfig(maxPerformance));
-    setNotice("최대 성능 프리셋을 적용했습니다. 저장을 눌러 반영하세요.");
+    setNotice("\uCD5C\uB300 \uC131\uB2A5 \uC124\uC815\uC744 \uC801\uC6A9\uD588\uC2B5\uB2C8\uB2E4. \uC0C1\uD0DC\uB97C \uD655\uC778\uD574 \uC8FC\uC138\uC694.");
   }
 
   function formatValue(value: PerformanceConfig[keyof PerformanceConfig]) {
@@ -136,14 +136,14 @@ export function PerformanceSettingsPanel() {
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="text-sm font-semibold text-slate-900">성능 설정</div>
+        <div className="text-sm font-semibold text-slate-900">{"\uC131\uB2A5 \uC124\uC815"}</div>
         <div className="mt-2 text-sm text-slate-600">
-          하드코딩된 폴링 주기/조회 건수를 이 화면에서 일괄 관리합니다. 저장 후 즉시 앱 동작에 반영됩니다.
+          {"\uC11C\uBC84 \uCC98\uB9AC \uCD5C\uC801\uD654\uC640 \uAC1C\uC120 \uC124\uC815\uC744 \uC870\uC815\uD569\uB2C8\uB2E4. \uD544\uC694 \uC2DC \uC801\uC6A9 \uD6C4 \uC0C1\uD0DC\uB97C \uD655\uC778\uD574 \uC8FC\uC138\uC694."}
         </div>
       </Card>
 
       <Card className="p-4">
-        {loading ? <div className="text-sm text-slate-500">불러오는 중...</div> : null}
+        {loading ? <div className="text-sm text-slate-500">{"\uBD88\uB7EC\uC624\uB294 \uC911..."}</div> : null}
         {error ? <div className="text-sm text-rose-600">{error}</div> : null}
         {notice ? (
           <div className="mb-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
@@ -154,10 +154,10 @@ export function PerformanceSettingsPanel() {
         {!loading ? (
           <div className="space-y-1">
             <div className="grid grid-cols-[220px_1fr_220px_70px] items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold text-slate-600">
-              <div>항목</div>
-              <div>설명</div>
-              <div>값(input)</div>
-              <div>단위</div>
+              <div>{"\uD0A4"}</div>
+              <div>{"\uC124\uBA85"}</div>
+              <div>{"\uC785\uB825"}</div>
+              <div>{"\uC0C1\uD0DC"}</div>
             </div>
             {listItems.map((item) => (
               <div
@@ -166,7 +166,7 @@ export function PerformanceSettingsPanel() {
               >
                 <div className="truncate font-semibold text-slate-900">{item.label}</div>
                 <div className="truncate text-slate-500">
-                  {item.purpose} | 기본: {formatValue(DEFAULT_PERFORMANCE_CONFIG[item.key])} | 현재저장:{" "}
+                  {item.purpose} | {"\uAE30\uBCF8"} {formatValue(DEFAULT_PERFORMANCE_CONFIG[item.key])} | {"\uD604\uC7AC"} {formatValue(loaded[item.key])}
                   {formatValue(loaded[item.key])}
                 </div>
                 <div>
@@ -215,7 +215,7 @@ export function PerformanceSettingsPanel() {
             className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 hover:bg-blue-100"
             disabled={saving || loading}
           >
-            최대 성능 프리셋
+            理쒕? ?깅뒫 ?꾨━??
           </button>
           <button
             type="button"
@@ -223,7 +223,7 @@ export function PerformanceSettingsPanel() {
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 hover:bg-slate-50"
             disabled={saving}
           >
-            기본값으로 되돌리기
+            {"\uB9C8\uC9C0\uB9C9 \uC801\uC6A9 \uC81C\uAC70"}
           </button>
           <button
             type="button"
@@ -231,7 +231,7 @@ export function PerformanceSettingsPanel() {
             disabled={saving || loading}
             className="rounded-lg border border-slate-300 bg-stone-800 px-3 py-2 text-xs text-white hover:bg-stone-500 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-300"
           >
-            {saving ? "저장 중..." : "저장"}
+            {saving ? "\uC800\uC7A5 \uC911" : "\uC800\uC7A5"}
           </button>
         </div>
       </Card>

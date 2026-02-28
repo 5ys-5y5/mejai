@@ -34,7 +34,8 @@ export function getDebugParts(content: string) {
     const items = Array.from(root.children).filter((el) => el.tagName === "LI");
     items.forEach((li) => {
       const label = getLiLabel(li);
-      if (label) lines.push(`${"  ".repeat(depth)}- ${label}`);
+      const indent = Math.max(0, depth);
+      if (label) lines.push(`${"  ".repeat(indent)}- ${label}`);
       const nested = Array.from(li.children).find((child) => child.tagName === "UL");
       if (nested) lines.push(...renderList(nested, depth + 1));
     });

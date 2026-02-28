@@ -7,6 +7,7 @@ import { Trust } from "@/components/landing/trust";
 import { ConsolePreview } from "@/components/landing/console-preview";
 import { CTA } from "@/components/landing/cta";
 import { Footer } from "@/components/landing/footer";
+import { Hero } from "@/components/landing/hero";
 import { loadLandingSettings, type LandingSettings } from "@/lib/landingSettings";
 import { motion, useScroll, useSpring } from "framer-motion";
 import { useEffect, useState } from "react";
@@ -46,6 +47,7 @@ export default function LandingPage() {
           marginBottom: settings.sectionsMarginBottom,
         }}
       >
+        <Hero />
         <Features settings={settings} />
         <Process settings={settings} />
         <Comparison settings={settings} />

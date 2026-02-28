@@ -58,6 +58,13 @@ type ConversationFeatureVisibility = {
   adminPanel: VisibilityFields<ConversationPageFeatures["adminPanel"]>;
   interaction: VisibilityFields<ConversationPageFeatures["interaction"]>;
   setup: VisibilityFields<ConversationPageFeatures["setup"]>;
+  widget: {
+    header: VisibilityFields<ConversationPageFeatures["widget"]["header"]>;
+    tabBar: VisibilityFields<ConversationPageFeatures["widget"]["tabBar"]>;
+    chatPanel: FeatureVisibilityMode;
+    historyPanel: FeatureVisibilityMode;
+    setupPanel: FeatureVisibilityMode;
+  };
 };
 
 export type ConversationPageFeatures = {
@@ -150,6 +157,25 @@ export type ConversationPageFeatures = {
     /** 기본 LLM */
     defaultLlm: "chatgpt" | "gemini";
   };
+  widget: {
+    header: {
+      enabled: boolean;
+      logo: boolean;
+      status: boolean;
+      agentAction: boolean;
+      newConversation: boolean;
+      close: boolean;
+    };
+    chatPanel: boolean;
+    historyPanel: boolean;
+    tabBar: {
+      enabled: boolean;
+      chat: boolean;
+      list: boolean;
+      policy: boolean;
+    };
+    setupPanel: boolean;
+  };
   /** on/off 기능의 user/admin 가시성 제어 */
   visibility: ConversationFeatureVisibility;
 };
@@ -180,7 +206,74 @@ export function deriveConversationDataLoadPlan(features: ConversationPageFeature
 
 export type ConversationPageFeaturesOverride = Partial<ConversationPageFeatures>;
 
+export type WidgetEntryMode = "launcher" | "embed";
+export type WidgetEmbedView = "chat" | "setup" | "list" | "both";
+
+export type WidgetLauncherConfig = {
+  label?: string;
+  position?: "bottom-right" | "bottom-left";
+  container?: {
+    bottom?: string;
+    left?: string;
+    right?: string;
+    gap?: string;
+    zIndex?: number;
+  };
+  size?: number;
+};
+
+export type WidgetIframeConfig = {
+  width?: string;
+  height?: string;
+  bottomOffset?: string;
+  sideOffset?: string;
+  borderRadius?: string;
+  boxShadow?: string;
+  background?: string;
+  layout?: "fixed" | "absolute" | "static";
+};
+
+export type WidgetThemeConfig = {
+  greeting?: string;
+  input_placeholder?: string;
+  launcher_logo_id?: string;
+  primary_color?: string;
+  launcher_bg?: string;
+  allowed_accounts?: string[];
+};
+
+export type WidgetChatPolicyConfig = {
+  is_active?: boolean;
+  entry_mode?: WidgetEntryMode;
+  embed_view?: WidgetEmbedView;
+  name?: string;
+  agent_id?: string;
+  launcherLabel?: string;
+  cfg?: {
+    launcherLabel?: string;
+    position?: WidgetLauncherConfig["position"];
+  };
+  allowed_domains?: string[];
+  allowed_paths?: string[];
+  // legacy: moved to theme.allowed_accounts
+  allowed_accounts?: string[];
+  launcher?: WidgetLauncherConfig;
+  iframe?: WidgetIframeConfig;
+  theme?: WidgetThemeConfig;
+};
+
 export type ConversationFeaturesProviderShape = {
+  // widget-centric storage
+  features?: ConversationPageFeaturesOverride;
+  debug?: Partial<DebugTranscriptOptions>;
+  setup_ui?: {
+    order?: SetupFieldKey[];
+    labels?: Partial<Record<SetupFieldKey, string>>;
+    existing_order?: ExistingSetupFieldKey[];
+    existing_labels?: Partial<Record<ExistingSetupLabelKey, string>>;
+  };
+  widget?: WidgetChatPolicyConfig;
+  // legacy (page-centric) fields kept for backward compatibility
   pages?: Partial<Record<ConversationPageKey, ConversationPageFeaturesOverride>>;
   debug_copy?: Partial<Record<ConversationPageKey, Partial<DebugTranscriptOptions>>>;
   page_registry?: ConversationPageKey[];
@@ -280,7 +373,9 @@ export function resolveConversationSetupUi(
   providerValue?: ConversationFeaturesProviderShape | null
 ): ConversationSetupUi {
   const resolvedPage = resolveRegisteredPageKey(page, providerValue);
-  const override = providerValue?.settings_ui?.setup_fields?.[resolvedPage];
+  const override =
+    providerValue?.setup_ui ??
+    providerValue?.settings_ui?.setup_fields?.[resolvedPage];
   return {
     order: normalizeSetupOrder(override?.order),
     labels: {
@@ -333,6 +428,56 @@ function normalizeThreePhaseLabels(
 function normalizePrefillMessages(value: unknown, fallback: string[]) {
   if (!Array.isArray(value)) return fallback;
   return value.map((item) => String(item || "").trim()).filter(Boolean);
+}
+
+function normalizeStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const normalized = value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  return normalized.length > 0 ? normalized : [];
+}
+
+export function normalizeWidgetChatPolicyConfig(
+  input?: WidgetChatPolicyConfig | null
+): WidgetChatPolicyConfig {
+  if (!input) return {};
+  const legacyAllowedAccounts = normalizeStringArray(input.allowed_accounts);
+  const themeAllowedAccounts = normalizeStringArray(input.theme?.allowed_accounts);
+  const theme = {
+    ...(input.theme || {}),
+    ...(themeAllowedAccounts !== undefined ? { allowed_accounts: themeAllowedAccounts } : {}),
+  };
+  if (themeAllowedAccounts === undefined && legacyAllowedAccounts !== undefined) {
+    theme.allowed_accounts = legacyAllowedAccounts;
+  }
+  const { allowed_accounts: _legacy, ...rest } = input;
+  return {
+    ...rest,
+    theme,
+  };
+}
+
+export function normalizeConversationFeatureProvider(
+  input?: ConversationFeaturesProviderShape | null
+): ConversationFeaturesProviderShape | null {
+  if (!input) return null;
+  const pages = input.pages || undefined;
+  const debugCopy = input.debug_copy || undefined;
+  const settingsUi = input.settings_ui || undefined;
+  const legacyPage = pages?.[WIDGET_PAGE_KEY] || pages?.["/embed"];
+  const legacyDebug = debugCopy?.[WIDGET_PAGE_KEY] || debugCopy?.["/embed"];
+  const legacySetup = settingsUi?.setup_fields?.[WIDGET_PAGE_KEY] || settingsUi?.setup_fields?.["/embed"];
+  const features = input.features || legacyPage || undefined;
+  const debug = input.debug || legacyDebug || undefined;
+  const setupUi = input.setup_ui || legacySetup || undefined;
+  const widget = input.widget ? normalizeWidgetChatPolicyConfig(input.widget) : undefined;
+  const normalized: ConversationFeaturesProviderShape = {};
+  if (features && Object.keys(features).length > 0) normalized.features = features;
+  if (debug && Object.keys(debug).length > 0) normalized.debug = debug;
+  if (setupUi && Object.keys(setupUi).length > 0) {
+    normalized.setup_ui = setupUi;
+  }
+  if (widget && Object.keys(widget).length > 0) normalized.widget = widget;
+  return normalized;
 }
 
 export function mergeConversationPageFeatures(
@@ -397,6 +542,25 @@ export function mergeConversationPageFeatures(
       defaultSetupMode: override.setup?.defaultSetupMode ?? base.setup.defaultSetupMode,
       defaultLlm: override.setup?.defaultLlm ?? base.setup.defaultLlm,
     },
+    widget: {
+      header: {
+        enabled: override.widget?.header?.enabled ?? base.widget.header.enabled,
+        logo: override.widget?.header?.logo ?? base.widget.header.logo,
+        status: override.widget?.header?.status ?? base.widget.header.status,
+        agentAction: override.widget?.header?.agentAction ?? base.widget.header.agentAction,
+        newConversation: override.widget?.header?.newConversation ?? base.widget.header.newConversation,
+        close: override.widget?.header?.close ?? base.widget.header.close,
+      },
+      chatPanel: override.widget?.chatPanel ?? base.widget.chatPanel,
+      historyPanel: override.widget?.historyPanel ?? base.widget.historyPanel,
+      tabBar: {
+        enabled: override.widget?.tabBar?.enabled ?? base.widget.tabBar.enabled,
+        chat: override.widget?.tabBar?.chat ?? base.widget.tabBar.chat,
+        list: override.widget?.tabBar?.list ?? base.widget.tabBar.list,
+        policy: override.widget?.tabBar?.policy ?? base.widget.tabBar.policy,
+      },
+      setupPanel: override.widget?.setupPanel ?? base.widget.setupPanel,
+    },
     visibility: {
       mcp: {
         providerSelector: override.visibility?.mcp?.providerSelector ?? base.visibility.mcp.providerSelector,
@@ -443,6 +607,26 @@ export function mergeConversationPageFeatures(
         inlineUserKbInput:
           override.visibility?.setup?.inlineUserKbInput ?? base.visibility.setup.inlineUserKbInput,
       },
+      widget: {
+        header: {
+          enabled: override.visibility?.widget?.header?.enabled ?? base.visibility.widget.header.enabled,
+          logo: override.visibility?.widget?.header?.logo ?? base.visibility.widget.header.logo,
+          status: override.visibility?.widget?.header?.status ?? base.visibility.widget.header.status,
+          agentAction: override.visibility?.widget?.header?.agentAction ?? base.visibility.widget.header.agentAction,
+          newConversation:
+            override.visibility?.widget?.header?.newConversation ?? base.visibility.widget.header.newConversation,
+          close: override.visibility?.widget?.header?.close ?? base.visibility.widget.header.close,
+        },
+        tabBar: {
+          enabled: override.visibility?.widget?.tabBar?.enabled ?? base.visibility.widget.tabBar.enabled,
+          chat: override.visibility?.widget?.tabBar?.chat ?? base.visibility.widget.tabBar.chat,
+          list: override.visibility?.widget?.tabBar?.list ?? base.visibility.widget.tabBar.list,
+          policy: override.visibility?.widget?.tabBar?.policy ?? base.visibility.widget.tabBar.policy,
+        },
+        chatPanel: override.visibility?.widget?.chatPanel ?? base.visibility.widget.chatPanel,
+        historyPanel: override.visibility?.widget?.historyPanel ?? base.visibility.widget.historyPanel,
+        setupPanel: override.visibility?.widget?.setupPanel ?? base.visibility.widget.setupPanel,
+      },
     },
   };
 }
@@ -453,11 +637,11 @@ export function resolveConversationPageFeatures(
 ): ConversationPageFeatures {
   const resolvedPage = resolveRegisteredPageKey(page, providerValue);
   const base = getDefaultConversationPageFeatures(resolvedPage);
-  const override = providerValue?.pages?.[resolvedPage];
+  const override = providerValue?.features ?? providerValue?.pages?.[resolvedPage];
   let merged = mergeConversationPageFeatures(base, override);
   if (merged.interaction.prefill && resolvedPage !== "/") {
     const rootBase = getDefaultConversationPageFeatures("/");
-    const rootOverride = providerValue?.pages?.["/"];
+    const rootOverride = providerValue?.pages?.["/"] ?? providerValue?.features;
     const rootMerged = mergeConversationPageFeatures(rootBase, rootOverride);
     merged = {
       ...merged,
@@ -609,6 +793,53 @@ export function applyConversationFeatureVisibility(
         isAdminUser
       ),
     },
+    widget: {
+      header: {
+        enabled: withVisibilityFlag(
+          features.widget.header.enabled,
+          features.visibility.widget.header.enabled,
+          isAdminUser
+        ),
+        logo: withVisibilityFlag(features.widget.header.logo, features.visibility.widget.header.logo, isAdminUser),
+        status: withVisibilityFlag(features.widget.header.status, features.visibility.widget.header.status, isAdminUser),
+        agentAction: withVisibilityFlag(
+          features.widget.header.agentAction,
+          features.visibility.widget.header.agentAction,
+          isAdminUser
+        ),
+        newConversation: withVisibilityFlag(
+          features.widget.header.newConversation,
+          features.visibility.widget.header.newConversation,
+          isAdminUser
+        ),
+        close: withVisibilityFlag(features.widget.header.close, features.visibility.widget.header.close, isAdminUser),
+      },
+      chatPanel: withVisibilityFlag(features.widget.chatPanel, features.visibility.widget.chatPanel, isAdminUser),
+      historyPanel: withVisibilityFlag(
+        features.widget.historyPanel,
+        features.visibility.widget.historyPanel,
+        isAdminUser
+      ),
+      tabBar: {
+        enabled: withVisibilityFlag(
+          features.widget.tabBar.enabled,
+          features.visibility.widget.tabBar.enabled,
+          isAdminUser
+        ),
+        chat: withVisibilityFlag(features.widget.tabBar.chat, features.visibility.widget.tabBar.chat, isAdminUser),
+        list: withVisibilityFlag(features.widget.tabBar.list, features.visibility.widget.tabBar.list, isAdminUser),
+        policy: withVisibilityFlag(
+          features.widget.tabBar.policy,
+          features.visibility.widget.tabBar.policy,
+          isAdminUser
+        ),
+      },
+      setupPanel: withVisibilityFlag(
+        features.widget.setupPanel,
+        features.visibility.widget.setupPanel,
+        isAdminUser
+      ),
+    },
   };
 }
 
@@ -678,6 +909,25 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
+    widget: {
+      header: {
+        enabled: true,
+        logo: true,
+        status: true,
+        agentAction: true,
+        newConversation: true,
+        close: true,
+      },
+      chatPanel: true,
+      historyPanel: true,
+      tabBar: {
+        enabled: true,
+        chat: true,
+        list: true,
+        policy: true,
+      },
+      setupPanel: true,
+    },
     visibility: {
       mcp: {
         providerSelector: "user",
@@ -717,6 +967,25 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         modeNew: "user",
         routeSelector: "user",
         inlineUserKbInput: "user",
+      },
+      widget: {
+        header: {
+          enabled: "user",
+          logo: "user",
+          status: "user",
+          agentAction: "user",
+          newConversation: "user",
+          close: "user",
+        },
+        tabBar: {
+          enabled: "user",
+          chat: "user",
+          list: "user",
+          policy: "user",
+        },
+        chatPanel: "user",
+        historyPanel: "user",
+        setupPanel: "user",
       },
     },
   },
@@ -772,6 +1041,25 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultSetupMode: "existing",
       defaultLlm: "chatgpt",
     },
+    widget: {
+      header: {
+        enabled: true,
+        logo: true,
+        status: true,
+        agentAction: true,
+        newConversation: true,
+        close: true,
+      },
+      chatPanel: true,
+      historyPanel: true,
+      tabBar: {
+        enabled: true,
+        chat: true,
+        list: true,
+        policy: true,
+      },
+      setupPanel: true,
+    },
     visibility: {
       mcp: {
         providerSelector: "user",
@@ -811,6 +1099,25 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         modeNew: "user",
         routeSelector: "user",
         inlineUserKbInput: "user",
+      },
+      widget: {
+        header: {
+          enabled: "user",
+          logo: "user",
+          status: "user",
+          agentAction: "user",
+          newConversation: "user",
+          close: "user",
+        },
+        tabBar: {
+          enabled: "user",
+          chat: "user",
+          list: "user",
+          policy: "user",
+        },
+        chatPanel: "user",
+        historyPanel: "user",
+        setupPanel: "user",
       },
     },
   },
@@ -867,6 +1174,25 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
+    widget: {
+      header: {
+        enabled: true,
+        logo: true,
+        status: true,
+        agentAction: true,
+        newConversation: true,
+        close: true,
+      },
+      chatPanel: true,
+      historyPanel: true,
+      tabBar: {
+        enabled: true,
+        chat: true,
+        list: true,
+        policy: true,
+      },
+      setupPanel: true,
+    },
     visibility: {
       mcp: {
         providerSelector: "user",
@@ -907,6 +1233,25 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         routeSelector: "user",
         inlineUserKbInput: "user",
       },
+      widget: {
+        header: {
+          enabled: "user",
+          logo: "user",
+          status: "user",
+          agentAction: "user",
+          newConversation: "user",
+          close: "user",
+        },
+        tabBar: {
+          enabled: "user",
+          chat: "user",
+          list: "user",
+          policy: "user",
+        },
+        chatPanel: "user",
+        historyPanel: "user",
+        setupPanel: "user",
+      },
     },
   },
 };
@@ -933,6 +1278,6 @@ export function resolveRegisteredPageKey(
   if (!normalized) return "/";
   if (providerValue?.pages?.[normalized]) return normalized;
   if (providerValue?.settings_ui?.setup_fields?.[normalized]) return normalized;
-  if ((providerValue?.page_registry || []).includes(normalized)) return normalized;
+  if (providerValue?.setup_ui && normalized === WIDGET_PAGE_KEY) return normalized;
   return normalized;
 }

@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
-import { useCallback, useEffect, useMemo, useState, type DragEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { ChevronDown, ChevronRight, CircleHelp, GripVertical } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import {
@@ -24,13 +25,10 @@ import {
   resolvePageConversationDebugOptions,
 } from "@/lib/transcriptCopyPolicy";
 
-const BASE_PAGE_KEYS: ConversationPageKey[] = ["/app/conversation", "/embed"];
-const EXCLUDED_PAGE_KEYS = new Set<ConversationPageKey>(["/"]);
-const SETTINGS_CARD_WIDTH = 300;
+const BASE_PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory", "/embed", "/demo", "/call"];
+const SETTINGS_CARD_WIDTH = 400;
 function normalizePages(pages: ConversationPageKey[]) {
-  const filtered = pages.filter((page) => page && !EXCLUDED_PAGE_KEYS.has(page));
-  const base = BASE_PAGE_KEYS.filter((page) => !EXCLUDED_PAGE_KEYS.has(page));
-  return Array.from(new Set([...base, ...filtered])).sort((a, b) => a.localeCompare(b));
+  return Array.from(new Set([...BASE_PAGE_KEYS, ...pages.filter(Boolean)])).sort((a, b) => a.localeCompare(b));
 }
 function syncSetupUiOrderByHeader(
   pages: ConversationPageKey[],
@@ -65,6 +63,8 @@ const DEFAULT_LLM_OPTIONS: SelectOption[] = [
   { id: "chatgpt", label: "chatgpt" },
   { id: "gemini", label: "gemini" },
 ];
+
+
 
 type DebugFieldTree = {
   key: string;
@@ -183,82 +183,90 @@ const PREFIX_JSON_SECTIONS_TREE: DebugFieldTree[] = [
   },
 ];
 
-type Props = {
+export type ChatSettingsPanelProps = {
   authToken: string;
 };
 
 type GovernanceConfig = {
   enabled: boolean;
-  visibility_mode: "user" | "admin";
+  visibility_mode: "public" | "user" | "admin";
   source: "principles_default" | "event_override";
   updated_at: string | null;
   updated_by: string | null;
 };
 
-type SettingFileItem = {
-  key: string;
-  label: string;
-  files: string[];
-  notes: string;
-  usedByPages: ConversationPageKey[] | "common";
-};
+type FieldScope = "page" | "global";
 
 type DebugFieldExamplesPayload = {
+  sample_paths?: Record<string, unknown>;
   event_types?: string[];
   mcp_tools?: string[];
-  sample_paths?: Record<string, unknown>;
   error?: string;
 };
 
 type BooleanMap = Record<string, boolean>;
 
-function updateBooleanMap(current: BooleanMap | undefined, keys: string[], next: boolean): BooleanMap {
-  const nextMap: BooleanMap = { ...(current ?? {}) };
+function updateBooleanMap(source: BooleanMap | undefined, keys: string[], next: boolean): BooleanMap {
+  const base: BooleanMap = { ...(source || {}) };
+  if (next) {
+    keys.forEach((key) => {
+      base[key] = true;
+    });
+    return base;
+  }
   keys.forEach((key) => {
-    nextMap[key] = next;
+    delete base[key];
   });
-  return nextMap;
+  return base;
 }
-
-const SETUP_FIELD_OPTIONS: Array<{ key: SetupFieldKey; defaultLabel: string }> = [
-  { key: "inlineUserKbInput", defaultLabel: "사용자 KB입력란" },
-  { key: "llmSelector", defaultLabel: "LLM 선택" },
-  { key: "kbSelector", defaultLabel: "KB 선택" },
-  { key: "adminKbSelector", defaultLabel: "관리자 KB 선택" },
-  { key: "routeSelector", defaultLabel: "Runtime 선택" },
-  { key: "mcpProviderSelector", defaultLabel: "MCP 프로바이더 선택" },
-  { key: "mcpActionSelector", defaultLabel: "MCP 액션 선택" },
-];
-const SETUP_CODE_LABELS: Record<SetupFieldKey, string> = {
-  inlineUserKbInput: "setup.inlineUserKbInput",
-  llmSelector: "setup.llmSelector",
-  kbSelector: "setup.kbSelector",
-  adminKbSelector: "setup.adminKbSelector",
-  routeSelector: "setup.routeSelector",
-  mcpProviderSelector: "mcp.providerSelector",
-  mcpActionSelector: "mcp.actionSelector",
-};
-const SETUP_UI_CONFIGURABLE_KEYS: SetupFieldKey[] = [...SETUP_FIELD_OPTIONS.map((item) => item.key)];
-function isSetupUiConfigurableKey(key: SetupFieldKey): key is (typeof SETUP_UI_CONFIGURABLE_KEYS)[number] {
-  return SETUP_UI_CONFIGURABLE_KEYS.includes(key);
-}
-const EXISTING_SETUP_FIELDS: Array<{ key: ExistingSetupFieldKey; codeLabel: string; defaultLabel: string }> = [
-  { key: "agentSelector", codeLabel: "setup.agentSelector", defaultLabel: "에이전트 선택" },
-  { key: "versionSelector", codeLabel: "setup.versionSelector", defaultLabel: "버전 선택" },
-  { key: "sessionSelector", codeLabel: "setup.sessionSelector", defaultLabel: "세션 선택" },
-  { key: "sessionIdSearch", codeLabel: "setup.sessionIdSearch", defaultLabel: "세션 ID 직접 조회" },
-  { key: "conversationMode", codeLabel: "setup.conversationMode", defaultLabel: "모드 선택" },
-];
 
 function parseCsv(value: string) {
   return value
     .split(",")
-    .map((item) => item.trim())
+    .map((entry) => entry.trim())
     .filter(Boolean);
 }
 
-function toEventCsv(values?: string[]) {
-  return (values || []).join(", ");
+function parseLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function getByPath(obj: unknown, path: string) {
+  if (!obj || typeof obj !== "object" || !path) return undefined;
+  return path.split(".").reduce<unknown>((acc, segment) => {
+    if (!acc || typeof acc !== "object") return undefined;
+    return (acc as Record<string, unknown>)[segment];
+  }, obj);
+}
+
+function cloneContainer(value: unknown) {
+  if (Array.isArray(value)) return [...value];
+  if (value && typeof value === "object") return { ...(value as Record<string, unknown>) };
+  return {};
+}
+
+function setByPath<T extends Record<string, unknown>>(source: T, path: string, value: unknown): T {
+  if (!path) return source;
+  const segments = path.split(".");
+  const nextRoot = cloneContainer(source) as Record<string, unknown>;
+  let cursor: Record<string, unknown> = nextRoot;
+  let current: unknown = source;
+  segments.forEach((segment, index) => {
+    if (index === segments.length - 1) {
+      cursor[segment] = value;
+      return;
+    }
+    const currentValue =
+      current && typeof current === "object" ? (current as Record<string, unknown>)[segment] : undefined;
+    const nextValue = cloneContainer(currentValue) as Record<string, unknown>;
+    cursor[segment] = nextValue;
+    cursor = nextValue;
+    current = currentValue;
+  });
+  return nextRoot as T;
 }
 
 async function parseJsonBody<T>(res: Response): Promise<T | null> {
@@ -270,6 +278,111 @@ async function parseJsonBody<T>(res: Response): Promise<T | null> {
     return null;
   }
 }
+
+
+
+type ToggleDef = {
+  path: string;
+  label: string;
+  headerLabel?: string;
+  scope?: FieldScope;
+  vpath?: string;
+  dependsOn?: string[];
+  labelKey?: "confirmed" | "confirming" | "next";
+};
+
+const ADMIN_PANEL_TOGGLES: ToggleDef[] = [
+  { path: "adminPanel.enabled", label: "Admin Panel 활성화" },
+  { path: "adminPanel.selectionToggle", label: "선택 토글", dependsOn: ["adminPanel.enabled"] },
+  { path: "adminPanel.logsToggle", label: "로그 토글", dependsOn: ["adminPanel.enabled"] },
+  { path: "adminPanel.messageMeta", label: "메시지 메타", dependsOn: ["adminPanel.enabled"] },
+  { path: "adminPanel.copyConversation", label: "대화 복사", dependsOn: ["adminPanel.enabled"] },
+];
+
+const INTERACTION_TOGGLES: ToggleDef[] = [
+  { path: "interaction.quickReplies", label: "Quick Replies" },
+  { path: "interaction.productCards", label: "Product Cards" },
+  { path: "interaction.prefill", label: "Prefill" },
+  { path: "interaction.inputSubmit", label: "입력/전송" },
+];
+
+const WIDGET_PANEL_TOGGLES: ToggleDef[] = [
+  { path: "widget.chatPanel", label: "대화 패널" },
+  { path: "widget.historyPanel", label: "히스토리 패널" },
+  { path: "widget.setupPanel", label: "설정 패널" },
+];
+
+const WIDGET_HEADER_TOGGLES: ToggleDef[] = [
+  { path: "widget.header.logo", label: "Logo", dependsOn: ["widget.header.enabled"] },
+  { path: "widget.header.status", label: "Status", dependsOn: ["widget.header.enabled"] },
+  { path: "widget.header.agentAction", label: "상담원 연결", dependsOn: ["widget.header.enabled"] },
+  { path: "widget.header.newConversation", label: "새 대화", dependsOn: ["widget.header.enabled"] },
+  { path: "widget.header.close", label: "닫기 버튼", dependsOn: ["widget.header.enabled"] },
+];
+
+const WIDGET_TAB_TOGGLES: ToggleDef[] = [
+  { path: "widget.tabBar.chat", label: "대화 탭", dependsOn: ["widget.tabBar.enabled"] },
+  { path: "widget.tabBar.list", label: "리스트 탭", dependsOn: ["widget.tabBar.enabled"] },
+  { path: "widget.tabBar.policy", label: "정책 탭", dependsOn: ["widget.tabBar.enabled"] },
+];
+
+const MCP_TOGGLES: ToggleDef[] = [
+  { path: "mcp.providerSelector", label: "MCP Provider 선택" },
+  { path: "mcp.actionSelector", label: "MCP Action 선택" },
+];
+
+const THREE_PHASE_TOGGLES: ToggleDef[] = [
+  {
+    path: "interaction.threePhasePromptShowConfirmed",
+    label: "Confirmed",
+    headerLabel: "interaction.threePhasePromptShowConfirmed",
+    labelKey: "confirmed",
+    dependsOn: ["interaction.threePhasePrompt"],
+  },
+  {
+    path: "interaction.threePhasePromptShowConfirming",
+    label: "Confirming",
+    headerLabel: "interaction.threePhasePromptShowConfirming",
+    labelKey: "confirming",
+    dependsOn: ["interaction.threePhasePrompt"],
+  },
+  {
+    path: "interaction.threePhasePromptShowNext",
+    label: "Next",
+    headerLabel: "interaction.threePhasePromptShowNext",
+    labelKey: "next",
+    dependsOn: ["interaction.threePhasePrompt"],
+  },
+  {
+    path: "interaction.threePhasePromptHideLabels",
+    label: "Hide Labels",
+    headerLabel: "interaction.threePhasePromptHideLabels",
+    dependsOn: ["interaction.threePhasePrompt"],
+  },
+];
+
+const MCP_GATE_DEPENDS = ["mcp.providerSelector", "mcp.actionSelector"];
+
+const MCP_SETUP_KEYS: SetupFieldKey[] = ["mcpProviderSelector", "mcpActionSelector"];
+const SETUP_FIELD_LABELS: Record<SetupFieldKey, string> = {
+  inlineUserKbInput: "사용자 KB입력란",
+  llmSelector: "LLM 선택",
+  kbSelector: "KB 선택",
+  adminKbSelector: "관리자 KB 선택",
+  routeSelector: "Runtime 선택",
+  mcpProviderSelector: "MCP 프로바이더 선택",
+  mcpActionSelector: "MCP 액션 선택",
+};
+const EXISTING_SETUP_LABELS: Record<ExistingSetupLabelKey, string> = {
+  modeExisting: "기존 모델",
+  modeNew: "신규 모델",
+  agentSelector: "에이전트 선택",
+  versionSelector: "버전 선택",
+  sessionSelector: "세션 선택",
+  sessionIdSearch: "세션 ID 직접 조회",
+  conversationMode: "모드 선택",
+};
+const isSetupUiConfigurableKey = (key: SetupFieldKey) => !MCP_SETUP_KEYS.includes(key);
 
 type ToggleFieldProps = {
   label: string;
@@ -284,6 +397,7 @@ type ToggleFieldProps = {
   editableLabel?: boolean;
   onLabelChange?: (value: string) => void;
   showDragHandle?: boolean;
+  disabled?: boolean;
 };
 
 function ToggleField({
@@ -299,45 +413,56 @@ function ToggleField({
   editableLabel = false,
   onLabelChange,
   showDragHandle = false,
+  disabled = false,
 }: ToggleFieldProps) {
   const displayLabel = (label || "").trim() || "setup.unknown";
+  const isDisabled = Boolean(disabled);
+  const nextVisibility =
+    visibility === "public" ? "user" : visibility === "user" ? "admin" : "public";
   return (
     <div
       className={
         neutralStyle
-          ? "flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs"
+          ? `flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs${isDisabled ? " opacity-60" : ""}`
           : checked
-            ? "flex h-12 items-center justify-between gap-3 rounded-lg border border-emerald-500 bg-emerald-100 px-3 text-xs ring-1 ring-emerald-200"
-            : "flex h-12 items-center justify-between gap-3 rounded-lg border border-rose-400 bg-rose-100 px-3 text-xs ring-1 ring-rose-200"
+            ? `flex h-12 items-center justify-between gap-3 rounded-lg border border-emerald-500 bg-emerald-100 px-3 text-xs ${isDisabled ? " opacity-60" : ""}`
+            : `flex h-12 items-center justify-between gap-3 rounded-lg border border-rose-400 bg-rose-100 px-3 text-xs ${isDisabled ? " opacity-60" : ""}`
       }
     >
       <button
         type="button"
         onClick={() => {
+          if (isDisabled) return;
           if (expandable && onToggleExpanded) onToggleExpanded();
         }}
         aria-disabled={!expandable}
-        className={neutralStyle ? "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-slate-800" : checked ? "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-emerald-900" : "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-rose-900"}
+        className={
+          neutralStyle
+            ? "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-slate-800"
+            : checked
+              ? "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-emerald-900"
+              : "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-rose-900"
+        }
       >
         <span
-          contentEditable={editableLabel}
-          suppressContentEditableWarning={editableLabel}
+          contentEditable={editableLabel && !isDisabled}
+          suppressContentEditableWarning={editableLabel && !isDisabled}
           onBlur={(e) => {
-            if (!editableLabel) return;
+            if (!editableLabel || isDisabled) return;
             onLabelChange?.((e.currentTarget.textContent || "").trim());
           }}
           onKeyDown={(e) => {
-            if (!editableLabel) return;
+            if (!editableLabel || isDisabled) return;
             if (e.key === "Enter") {
               e.preventDefault();
               (e.currentTarget as HTMLSpanElement).blur();
             }
           }}
           onClick={(e) => {
-            if (!editableLabel) return;
+            if (!editableLabel || isDisabled) return;
             e.stopPropagation();
           }}
-          className={editableLabel ? "rounded px-1 outline-none focus:ring-1 focus:ring-slate-300" : undefined}
+          className={editableLabel ? "rounded px-1 outline-none" : undefined}
         >
           {displayLabel}
         </span>
@@ -345,9 +470,10 @@ function ToggleField({
       {expandable ? (
         <button
           type="button"
+          disabled={isDisabled}
           onClick={() => onToggleExpanded?.()}
           className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700"
-          aria-label={`${displayLabel} 하위 토글`}
+          aria-label={`${displayLabel} 상세 토글`}
         >
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
@@ -360,6 +486,7 @@ function ToggleField({
       <span className="state-controls flex items-center gap-1">
         <button
           type="button"
+          disabled={isDisabled}
           onClick={() => onChange(!checked)}
           className={
             checked
@@ -371,14 +498,17 @@ function ToggleField({
         </button>
         <button
           type="button"
-          onClick={() => onChangeVisibility(visibility === "user" ? "admin" : "user")}
+          disabled={isDisabled}
+          onClick={() => onChangeVisibility(nextVisibility)}
           className={
             visibility === "admin"
-              ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-amber-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
-              : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+              ? "inline-flex h-7 w-[60px] items-center justify-center rounded-md bg-amber-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+              : visibility === "public"
+                ? "inline-flex h-7 w-[60px] items-center justify-center rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+                : "inline-flex h-7 w-[60px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
           }
         >
-          {visibility === "admin" ? "ADMIN" : "USER"}
+          {visibility === "admin" ? "ADMIN" : visibility === "public" ? "PUBLIC" : "USER"}
         </button>
       </span>
     </div>
@@ -396,6 +526,7 @@ type GroupToggleFieldProps = {
   onToggleExpanded?: () => void;
   neutralStyle?: boolean;
   hideToggle?: boolean;
+  disabled?: boolean;
 };
 
 function GroupToggleField({
@@ -409,34 +540,46 @@ function GroupToggleField({
   onToggleExpanded,
   neutralStyle = false,
   hideToggle = false,
+  disabled = false,
 }: GroupToggleFieldProps) {
   const displayLabel = (label || "").trim() || "group.unknown";
+  const isDisabled = Boolean(disabled);
+  const nextVisibility =
+    visibility === "public" ? "user" : visibility === "user" ? "admin" : "public";
   return (
     <div
       className={
         neutralStyle
-          ? "flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs"
+          ? `flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs${isDisabled ? " opacity-60" : ""}`
           : checked
-            ? "flex h-12 items-center justify-between gap-3 rounded-lg border border-emerald-500 bg-emerald-100 px-3 text-xs ring-1 ring-emerald-200"
-            : "flex h-12 items-center justify-between gap-3 rounded-lg border border-rose-400 bg-rose-100 px-3 text-xs ring-1 ring-rose-200"
+            ? `flex h-12 items-center justify-between gap-3 rounded-lg border border-emerald-500 bg-emerald-100 px-3 text-xs ${isDisabled ? " opacity-60" : ""}`
+            : `flex h-12 items-center justify-between gap-3 rounded-lg border border-rose-400 bg-rose-100 px-3 text-xs ${isDisabled ? " opacity-60" : ""}`
       }
     >
       <button
         type="button"
         onClick={() => {
+          if (isDisabled) return;
           if (expandable && onToggleExpanded) onToggleExpanded();
         }}
         aria-disabled={!expandable}
-        className={neutralStyle ? "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-slate-800" : checked ? "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-emerald-900" : "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-rose-900"}
+        className={
+          neutralStyle
+            ? "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-slate-800"
+            : checked
+              ? "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-emerald-900"
+              : "inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-rose-900"
+        }
       >
         <span>{displayLabel}</span>
       </button>
       {expandable ? (
         <button
           type="button"
+          disabled={isDisabled}
           onClick={() => onToggleExpanded?.()}
           className="inline-flex h-7 items-center justify-center px-1 text-[12px] font-bold text-slate-700"
-          aria-label={`${displayLabel} 하위 토글`}
+          aria-label={`${displayLabel} 상세 토글`}
         >
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
@@ -445,6 +588,7 @@ function GroupToggleField({
         <span className="state-controls flex items-center gap-1">
           <button
             type="button"
+            disabled={isDisabled}
             onClick={() => onChange(!checked)}
             className={
               checked
@@ -457,14 +601,17 @@ function GroupToggleField({
           {visibility ? (
             <button
               type="button"
-              onClick={() => onChangeVisibility?.(visibility === "user" ? "admin" : "user")}
+              disabled={isDisabled}
+              onClick={() => onChangeVisibility?.(nextVisibility)}
               className={
                 visibility === "admin"
-                  ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-amber-600 px-2 py-1 text-[11px] font-bold text-white"
-                  : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white"
+                  ? "inline-flex h-7 w-[60px] items-center justify-center rounded-md bg-amber-600 px-2 py-1 text-[11px] font-bold text-white"
+                  : visibility === "public"
+                    ? "inline-flex h-7 w-[60px] items-center justify-center rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white"
+                    : "inline-flex h-7 w-[60px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white"
               }
             >
-              {visibility === "admin" ? "ADMIN" : "USER"}
+              {visibility === "admin" ? "ADMIN" : visibility === "public" ? "PUBLIC" : "USER"}
             </button>
           ) : null}
         </span>
@@ -476,7 +623,7 @@ function GroupToggleField({
 type InlineHelpPopupProps = {
   className?: string;
   ariaLabel?: string;
-  children: React.ReactNode;
+  children: ReactNode;
 };
 
 function InlineHelpPopup({ className, ariaLabel = "도움말", children }: InlineHelpPopupProps) {
@@ -593,245 +740,12 @@ function collectTreeKeys(node: DebugFieldTree): string[] {
   return keys;
 }
 
-const SETTING_FILE_GUIDE: SettingFileItem[] = [
-  {
-    key: "mcp.providerSelector",
-    label: "MCP > Provider 선택",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/lib/conversation/client/useHeroPageController.ts",
-      "src/lib/conversation/client/useConversationPageController.ts",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-    ],
-    notes: "Provider 선택 UI 노출과 요청 payload 포함 여부를 제어합니다.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "mcp.actionSelector",
-    label: "MCP > Action 선택",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/lib/conversation/client/useHeroPageController.ts",
-      "src/lib/conversation/client/useConversationPageController.ts",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-    ],
-    notes: "Action 선택 UI 노출과 요청 payload 포함 여부를 제어합니다.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "mcp.providers.allowDeny",
-    label: "MCP > Provider Allowlist/Denylist",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/lib/conversation/client/useHeroPageController.ts",
-      "src/lib/conversation/client/useConversationPageController.ts",
-    ],
-    notes: "페이지별 provider 허용/차단 필터를 적용합니다. 예: cafe24 차단.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "mcp.tools.allowDeny",
-    label: "MCP > Tool Allowlist/Denylist",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/lib/conversation/client/useHeroPageController.ts",
-      "src/lib/conversation/client/useConversationPageController.ts",
-    ],
-    notes: "페이지별 tool 허용/차단 필터를 적용합니다.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "adminPanel",
-    label: "Admin Panel (enabled/selection/logs/messageMeta)",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-    ],
-    notes: "관리자 메뉴 표시, 선택/로그 토글, 메시지 메타 노출을 제어합니다.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "adminPanel.copy",
-    label: "Admin Panel > 대화/문제 로그 복사",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/lib/transcriptCopyPolicy.ts",
-      "src/lib/conversation/client/useConversationController.ts",
-      "src/lib/conversation/client/useConversationActions.ts",
-    ],
-    notes: "복사 버튼 노출과 복사 허용 정책(실제 payload 생성)까지 함께 제어합니다.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "adminPanel.copy.debug",
-    label: "Admin Panel > 대화 복사 디버그 항목",
-    files: [
-      "src/components/settings/ChatSettingsPanel.tsx",
-      "src/lib/transcriptCopyPolicy.ts",
-      "src/lib/conversation/client/useHeroPageController.ts",
-      "src/lib/conversation/client/useConversationPageController.ts",
-    ],
-    notes: "페이지별 대화 복사 시 포함할 디버그 항목(debugOptions)을 제어합니다.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "interaction.quickReplies",
-    label: "Interaction > Quick Replies",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-    ],
-    notes: "퀵리플라이 렌더/선택/확정 UI를 활성/비활성합니다.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "interaction.productCards",
-    label: "Interaction > Product Cards",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-    ],
-    notes: "카드 렌더/선택/확정 UI를 활성/비활성합니다.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "interaction.prefill",
-    label: "Interaction > Prefill",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.parts.tsx",
-    ],
-    notes: "초기 안내 prefill 메시지 출력 여부를 제어합니다.",
-    usedByPages: ["/", "/app/conversation", "/embed"],
-  },
-  {
-    key: "interaction.prefillMessages",
-    label: "Interaction > Prefill Messages",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.parts.tsx",
-    ],
-    notes: "초기 안내 prefill 메시지 문구를 설정합니다.",
-    usedByPages: ["/", "/app/conversation", "/embed"],
-  },
-  {
-    key: "interaction.inputPlaceholder",
-    label: "Interaction > Input Placeholder",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-    ],
-    notes: "입력 안내 문구를 설정합니다.",
-    usedByPages: ["/", "/app/conversation", "/embed"],
-  },
-  {
-    key: "interaction.threePhasePrompt",
-    label: "Interaction > 3-Phase Prompt",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.parts.tsx",
-    ],
-    notes: "3단계 요약 메시지(Confirmed/Confirming/Next) 출력 여부를 제어합니다.",
-    usedByPages: ["/", "/app/conversation", "/embed"],
-  },
-  {
-    key: "interaction.threePhasePromptLabels",
-    label: "Interaction > 3-Phase Labels",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.parts.tsx",
-    ],
-    notes: "3단계 라벨 텍스트(Confirmed/Confirming/Next)를 설정합니다.",
-    usedByPages: ["/", "/app/conversation", "/embed"],
-  },
-  {
-    key: "interaction.threePhasePromptShowConfirmed",
-    label: "Interaction > 3-Phase Show Confirmed",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.parts.tsx",
-    ],
-    notes: "Confirmed 구간 표시 여부를 제어합니다.",
-    usedByPages: ["/", "/app/conversation", "/embed"],
-  },
-  {
-    key: "interaction.threePhasePromptShowConfirming",
-    label: "Interaction > 3-Phase Show Confirming",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.parts.tsx",
-    ],
-    notes: "Confirming 구간 표시 여부를 제어합니다.",
-    usedByPages: ["/", "/app/conversation", "/embed"],
-  },
-  {
-    key: "interaction.threePhasePromptShowNext",
-    label: "Interaction > 3-Phase Show Next",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.parts.tsx",
-    ],
-    notes: "Next 구간 표시 여부를 제어합니다.",
-    usedByPages: ["/", "/app/conversation", "/embed"],
-  },
-  {
-    key: "interaction.threePhasePromptHideLabels",
-    label: "Interaction > 3-Phase Hide Labels",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.parts.tsx",
-    ],
-    notes: "라벨 텍스트 자체를 숨길지 여부를 제어합니다.",
-    usedByPages: ["/", "/app/conversation", "/embed"],
-  },
-  {
-    key: "interaction.inputSubmit",
-    label: "Interaction > 입력/전송",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-    ],
-    notes: "입력창/전송 버튼 자체 노출을 제어합니다.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "setup",
-    label: "Setup (model/llm/kb/adminKb/mode/route/inlineUserKb/defaults)",
-    files: [
-      "src/lib/conversation/pageFeaturePolicy.ts",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-      "src/components/design-system/conversation/ConversationUI.tsx",
-    ],
-    notes: "페이지별 설정 영역 구성요소(모델/LLM/저장KB/임시KB/AdminKB/모드/Route) 노출과 기본값을 제어하며, 임시KB 샘플 선택 UI에도 공통 반영됩니다.",
-    usedByPages: ["/", "/app/conversation"],
-  },
-  {
-    key: "runtimeLoader",
-    label: "런타임 반영 로더",
-    files: [
-      "src/lib/conversation/client/useConversationPageFeatures.ts",
-      "src/app/api/auth-settings/providers/route.ts",
-      "src/components/settings/ChatSettingsPanel.tsx",
-    ],
-    notes: "설정 페이지 저장값(chat_policy)을 읽어 각 페이지 정책에 병합합니다.",
-    usedByPages: "common",
-  },
-];
+function toCsv(values?: string[]) {
+  return (values || []).join(", ");
+}
 
-export function ChatSettingsPanel({ authToken }: Props) {
+export function ChatSettingsPanelCore({ authToken }: ChatSettingsPanelProps) {
+  const mode: "chat" = "chat";
   const initialPages = useMemo(() => normalizePages([]), []);
   const buildInitialDraftByPage = useCallback(
     (pages: ConversationPageKey[]) =>
@@ -868,6 +782,14 @@ export function ChatSettingsPanel({ authToken }: Props) {
       }, {}),
     []
   );
+  const buildOpenStateByPageWithValue = useCallback(
+    (pages: ConversationPageKey[], value: boolean) =>
+      pages.reduce<Record<ConversationPageKey, boolean>>((acc, page) => {
+        acc[page] = value;
+        return acc;
+      }, {}),
+    []
+  );
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -883,6 +805,10 @@ export function ChatSettingsPanel({ authToken }: Props) {
   const [setupUiByPage, setSetupUiByPage] =
     useState<Record<ConversationPageKey, ConversationSetupUi>>(buildInitialSetupUiByPage(initialPages));
   const [registeredPages, setRegisteredPages] = useState<ConversationPageKey[]>(initialPages);
+  const [widgetChatPanelDetailsOpenByPage, setWidgetChatPanelDetailsOpenByPage] =
+    useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPageWithValue(initialPages, true));
+  const [widgetSetupPanelDetailsOpenByPage, setWidgetSetupPanelDetailsOpenByPage] =
+    useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPageWithValue(initialPages, true));
   const [setupExistingDetailsOpenByPage, setSetupExistingDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
   const [setupNewDetailsOpenByPage, setSetupNewDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
   const [debugHeaderDetailsOpenByPage, setDebugHeaderDetailsOpenByPage] = useState<Record<ConversationPageKey, boolean>>(buildOpenStateByPage(initialPages));
@@ -991,6 +917,8 @@ export function ChatSettingsPanel({ authToken }: Props) {
     setDraftByPage(next);
     setDebugCopyDraftByPage(nextDebug);
     setSetupUiByPage(nextSetupUi);
+    setWidgetChatPanelDetailsOpenByPage(buildOpenStateByPageWithValue(discoveredPages, true));
+    setWidgetSetupPanelDetailsOpenByPage(buildOpenStateByPageWithValue(discoveredPages, true));
     setSetupExistingDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
     setSetupNewDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
     setDebugHeaderDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
@@ -1004,7 +932,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
         return acc;
       }, {} as Record<ConversationPageKey, Record<string, boolean>>)
     );
-  }, [buildOpenStateByPage]);
+  }, [buildOpenStateByPage, buildOpenStateByPageWithValue]);
 
   const updatePage = useCallback(
     (page: ConversationPageKey, updater: (prev: ConversationPageFeatures) => ConversationPageFeatures) => {
@@ -1033,6 +961,52 @@ export function ChatSettingsPanel({ authToken }: Props) {
       setDebugCopyDraftByPage((prev) => ({ ...prev, [page]: updater(prev[page]) }));
     },
     []
+  );
+
+  const applyPageUpdate = useCallback(
+    (
+      page: ConversationPageKey,
+      scope: FieldScope | undefined,
+      updater: (prev: ConversationPageFeatures) => ConversationPageFeatures
+    ) => {
+      if (scope === "global") {
+        updateAllPages(updater);
+        return;
+      }
+      updatePage(page, updater);
+    },
+    [updateAllPages, updatePage]
+  );
+
+  const updateFeatureByPath = useCallback(
+    (page: ConversationPageKey, path: string, value: unknown, scope?: FieldScope) => {
+      applyPageUpdate(page, scope, (prev) => setByPath(prev, path, value));
+    },
+    [applyPageUpdate]
+  );
+
+  const updateVisibilityByPath = useCallback(
+    (page: ConversationPageKey, path: string, mode: FeatureVisibilityMode, scope?: FieldScope) => {
+      applyPageUpdate(page, scope, (prev) => setByPath(prev, path, mode));
+    },
+    [applyPageUpdate]
+  );
+
+  const updateSetupField = useCallback(
+    (page: ConversationPageKey, key: SetupFieldKey, value: boolean) => {
+      updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, [key]: value } }));
+    },
+    [updatePage]
+  );
+
+  const updateSetupVisibility = useCallback(
+    (page: ConversationPageKey, key: SetupFieldKey, mode: FeatureVisibilityMode) => {
+      updatePage(page, (prev) => ({
+        ...prev,
+        visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, [key]: mode } },
+      }));
+    },
+    [updatePage]
   );
 
   const moveSetupField = useCallback(
@@ -1191,7 +1165,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
   }, [applyProviderToDraft, authToken, loadDebugFieldExamples, loadGovernanceConfig]);
 
   const saveGovernanceConfig = useCallback(
-    async (next: { enabled: boolean; visibility_mode: "user" | "admin" }) => {
+    async (next: { enabled: boolean; visibility_mode: "public" | "user" | "admin" }) => {
       setGovernanceSaving(true);
       const res = await fetch("/api/runtime/governance/config", {
         method: "POST",
@@ -1215,7 +1189,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
   );
 
   const handleGovernanceChange = useCallback(
-    async (next: { enabled: boolean; visibility_mode: "user" | "admin" }) => {
+    async (next: { enabled: boolean; visibility_mode: "public" | "user" | "admin" }) => {
       try {
         await saveGovernanceConfig(next);
       } catch (err) {
@@ -1241,6 +1215,8 @@ export function ChatSettingsPanel({ authToken }: Props) {
     const pages = normalizePages(registeredPages);
     setDebugCopyDraftByPage(buildInitialDebugByPage(pages));
     setSetupUiByPage(buildInitialSetupUiByPage(pages, null));
+    setWidgetChatPanelDetailsOpenByPage(buildOpenStateByPageWithValue(pages, true));
+    setWidgetSetupPanelDetailsOpenByPage(buildOpenStateByPageWithValue(pages, true));
     setSetupExistingDetailsOpenByPage(buildOpenStateByPage(pages));
     setSetupNewDetailsOpenByPage(buildOpenStateByPage(pages));
     setDebugHeaderDetailsOpenByPage(buildOpenStateByPage(pages));
@@ -1305,7 +1281,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
           values: {
             pages,
             debug_copy,
-            page_registry: pagesList,
+            page_registry: registeredPages,
             settings_ui: {
               setup_fields,
             },
@@ -1327,234 +1303,310 @@ export function ChatSettingsPanel({ authToken }: Props) {
 
   return (
     <div className="space-y-4">
-      <Card className="p-4">
-        <div className="text-sm font-semibold text-slate-900">대화 설정 관리</div>
-        <div className="mt-2 text-sm text-slate-600">
-          서비스 전역 대화 정책을 폼으로 수정합니다. 저장 시 <code>A_iam_auth_settings.providers.chat_policy</code> (org 최신 값)에
-          반영됩니다.
-        </div>
-        {loading ? <div className="mt-2 text-xs text-slate-500">불러오는 중...</div> : null}
-        {error ? <div className="mt-2 text-xs text-rose-600">{error}</div> : null}
-        {savedAt ? <div className="mt-2 text-xs text-slate-500">저장됨: {savedAt}</div> : null}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" onClick={() => void load()} disabled={loading || saving}>
-            새로고침
-          </Button>
-          <Button type="button" variant="outline" onClick={handleResetToDefaults} disabled={loading || saving}>
-            기본값으로 채우기
-          </Button>
-          <Button type="button" onClick={handleSave} disabled={loading || saving}>
-            {saving ? "저장 중..." : "저장"}
-          </Button>
-        </div>
-      </Card>
-
-      <Card className="p-4">
-        <div className="text-sm font-semibold text-slate-900">자동 등록된 대화 페이지</div>
-        <div className="mt-1 text-xs text-slate-500">
-          대화 UI(설정 박스/대화 박스)가 로드되면 경로가 자동 등록됩니다.
-        </div>
-        <div className="mt-2 space-y-1">
-          {registeredPages.map((page) => (
-            <div
-              key={`registered-page-${page}`}
-              className="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] text-slate-700"
-            >
-              {page}
+      {mode === "chat" ? (
+        <>
+          <Card className="p-4">
+            <div className="text-sm font-semibold text-slate-900">대화 설정 관리</div>
+            <div className="mt-2 text-sm text-slate-600">
+              서비스 전역 대화 정책을 폼으로 수정합니다. 저장 시 <code>B_chat_settings.chat_policy</code> (org 공통 값)에
+              반영됩니다.
             </div>
-          ))}
-        </div>
-      </Card>
+            {loading ? <div className="mt-2 text-xs text-slate-500">불러오는 중...</div> : null}
+            {error ? <div className="mt-2 text-xs text-rose-600">{error}</div> : null}
+            {savedAt ? <div className="mt-2 text-xs text-slate-500">저장됨: {savedAt}</div> : null}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Button type="button" variant="outline" onClick={() => void load()} disabled={loading || saving}>
+                새로고침
+              </Button>
+              <Button type="button" variant="outline" onClick={handleResetToDefaults} disabled={loading || saving}>
+                기본값으로 채우기
+              </Button>
+              <Button type="button" onClick={handleSave} disabled={loading || saving}>
+                {saving ? "저장 중..." : "저장"}
+              </Button>
+            </div>
+          </Card>
 
-      <div className="overflow-x-auto pb-3">
-        <div className="flex min-w-full gap-4">
-          {columnKeys.map((column) => {
-            const isHeader = column === "__header";
-            const headerBasePage = registeredPages[0] || "/app/conversation";
-            const page: ConversationPageKey = isHeader ? headerBasePage : column;
-            const pageLabel = page === "/embed" ? "위젯 (/embed)" : page;
-            const draft = draftByPage[page] || getDefaultConversationPageFeatures(page);
-            const setupUiDraft = setupUiByPage[page] || resolveConversationSetupUi(page);
-            const effectiveModelSelector = true;
-            const setupDetailsOpen = true;
-            const showSetupExistingDetails = Boolean(setupExistingDetailsOpenByPage[page]);
-            const showSetupNewDetails = Boolean(setupNewDetailsOpenByPage[page]);
-            const debugCopyDraft = debugCopyDraftByPage[page] || { ...DEFAULT_CONVERSATION_DEBUG_OPTIONS };
-            const debugHeader = debugCopyDraft.sections?.header;
-            const debugTurn = debugCopyDraft.sections?.turn;
-            const debugLogs = debugCopyDraft.sections?.logs;
-            const debugLogMcp = debugLogs?.mcp;
-            const debugLogEvent = debugLogs?.event;
-            const debugLogDebug = debugLogs?.debug;
-            const debugOutputMode =
-              debugCopyDraft.outputMode === "summary"
-                ? "summary"
-                : debugLogDebug?.usedOnly
-                  ? "used_only"
-                  : "full";
-            const debugPrefixSections = debugLogDebug?.prefixJsonSections;
-            const responseSchemaDetailFields = debugTurn?.responseSchemaDetailFields;
-            const renderPlanDetailFields = debugTurn?.renderPlanDetailFields;
-            const debugTreeCollapsed = debugDetailTreeCollapsedByPage[page] || {};
-            const showDebugHeaderDetails = Boolean(debugHeaderDetailsOpenByPage[page]);
-            const showDebugTurnDetails = Boolean(debugTurnDetailsOpenByPage[page]);
-            const showDebugLogsDetails = Boolean(debugLogsDetailsOpenByPage[page]);
-            const showDebugEventDetails = Boolean(debugEventDetailsOpenByPage[page]);
-            const showThreePhaseDetails = Boolean(threePhaseDetailsOpenByPage[page]);
-            return (
-              <Card
-                key={column}
-                className={
-                  isHeader
-                    ? "shrink-0 p-4 [&_.state-controls]:hidden [&_.config-input]:pointer-events-none [&_.config-input]:opacity-70"
-                    : "shrink-0 p-4"
-                }
-                style={{ width: `${SETTINGS_CARD_WIDTH}px` }}
-              >
-                <div className="text-sm font-semibold text-slate-900">{isHeader ? "헤더" : pageLabel}</div>
-                <div className="mt-1 text-xs text-slate-500">{isHeader ? "코드 정의명/펼침 제어" : "해당 페이지에서 실제 적용될 대화 기능 설정"}</div>
+          <div className="overflow-x-auto pb-3">
+            <div className="flex min-w-full gap-4">
+              {columnKeys.map((column) => {
+                const isHeader = column === "__header";
+                const page: ConversationPageKey = isHeader ? "/" : column;
+                const pageLabel = page === "/embed" ? "위젯 (/embed)" : page;
+                const draft = draftByPage[page];
+                const setupUiDraft = setupUiByPage[page];
+                const chatPanelEnabled = Boolean(draft.widget.chatPanel);
+                const setupPanelEnabled = Boolean(draft.widget.setupPanel);
+                const adminPanelEnabled = Boolean(draft.adminPanel.enabled);
+                const widgetChatPanelExpanded = widgetChatPanelDetailsOpenByPage[page] ?? true;
+                const widgetSetupPanelExpanded = widgetSetupPanelDetailsOpenByPage[page] ?? true;
+                const chatSectionDisabled = !isHeader && !chatPanelEnabled;
+                const setupSectionDisabled = !isHeader && !setupPanelEnabled;
+                const mcpSectionDisabled = !isHeader && !setupPanelEnabled;
+                const mcpGateEnabled = MCP_GATE_DEPENDS.every((path) => Boolean(getByPath(draft, path)));
+                const showMcpGates = isHeader || mcpGateEnabled;
+                const effectiveModelSelector = isHeader || Boolean(draft.setup.modelSelector);
+                const setupDetailsOpen = effectiveModelSelector;
+                const showSetupExistingDetails = Boolean(setupExistingDetailsOpenByPage[page]);
+                const showSetupNewDetails = Boolean(setupNewDetailsOpenByPage[page]);
+                const debugCopyDraft = debugCopyDraftByPage[page];
+                const debugHeader = debugCopyDraft.sections?.header;
+                const debugTurn = debugCopyDraft.sections?.turn;
+                const debugLogs = debugCopyDraft.sections?.logs;
+                const debugLogMcp = debugLogs?.mcp;
+                const debugLogEvent = debugLogs?.event;
+                const debugLogDebug = debugLogs?.debug;
+                const debugOutputMode =
+                  debugCopyDraft.outputMode === "summary"
+                    ? "summary"
+                    : debugLogDebug?.usedOnly
+                      ? "used_only"
+                      : "full";
+                const debugPrefixSections = debugLogDebug?.prefixJsonSections;
+                const responseSchemaDetailFields = debugTurn?.responseSchemaDetailFields;
+                const renderPlanDetailFields = debugTurn?.renderPlanDetailFields;
+                const debugTreeCollapsed = debugDetailTreeCollapsedByPage[page] || {};
+                const showDebugHeaderDetails = Boolean(debugHeaderDetailsOpenByPage[page]);
+                const showDebugTurnDetails = Boolean(debugTurnDetailsOpenByPage[page]);
+                const showDebugLogsDetails = Boolean(debugLogsDetailsOpenByPage[page]);
+                const showDebugEventDetails = Boolean(debugEventDetailsOpenByPage[page]);
+                const showThreePhaseDetails = Boolean(threePhaseDetailsOpenByPage[page]);
+                const showDebugSection =
+                  isHeader || (adminPanelEnabled && draft.adminPanel.copyConversation);
+                const debugSectionDisabled = !showDebugSection;
+                const renderSelectField = (
+                  label: string,
+                  value: string,
+                  options: SelectOption[],
+                  onChange: (value: string) => void,
+                  disabled = isHeader
+                ) => (
+                  <label className="block">
+                    <div className="mb-1 text-[11px] font-semibold text-slate-600">{label}</div>
+                    <SelectPopover
+                      value={value}
+                      disabled={disabled}
+                      options={options}
+                      onChange={onChange}
+                      className="w-full"
+                      buttonClassName="h-9 text-xs"
+                    />
+                  </label>
+                );
 
-                <div className="mt-4 space-y-4">
+                const resolveToggleLabel = (def: ToggleDef) => {
+                  if (isHeader) return def.headerLabel || def.path;
+                  if (def.labelKey) {
+                    const custom = getByPath(
+                      draft,
+                      `interaction.threePhasePromptLabels.${def.labelKey}`
+                    ) as string | undefined;
+                    return (custom || "").trim() || def.label;
+                  }
+                  return def.label;
+                };
 
-                  <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs font-semibold text-slate-900">Admin Panel</div>
+                const renderToggle = (def: ToggleDef, overrides: Partial<ToggleFieldProps> = {}) => {
+                  const { disabled: overrideDisabled, ...restOverrides } = overrides;
+                  const depsMet = (def.dependsOn || []).every((path) => Boolean(getByPath(draft, path)));
+                  const disabled = !isHeader && !!def.dependsOn?.length && !depsMet;
+                  const effectiveDisabled = Boolean(overrideDisabled) || disabled;
+                  const visibilityPath = def.vpath ?? `visibility.${def.path}`;
+                  const checked = Boolean(getByPath(draft, def.path));
+                  const visibility =
+                    (getByPath(draft, visibilityPath) as FeatureVisibilityMode | undefined) || "user";
+                  const editableLabel = !isHeader && Boolean(def.labelKey);
+                  const onLabelChange =
+                    def.labelKey && !isHeader
+                      ? (value: string) =>
+                        updateFeatureByPath(
+                          page,
+                          `interaction.threePhasePromptLabels.${def.labelKey}`,
+                          value
+                        )
+                      : undefined;
+                  return (
                     <ToggleField
                       neutralStyle={isHeader}
-                      label={isHeader ? "adminPanel.enabled" : "패널 활성화"}
-                      checked={draft.adminPanel.enabled}
-                      visibility={draft.visibility.adminPanel.enabled}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, enabled: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, enabled: mode } },
-                        }))
+                      label={resolveToggleLabel(def)}
+                      checked={checked}
+                      visibility={visibility}
+                      onChange={(v: boolean) => updateFeatureByPath(page, def.path, v, def.scope)}
+                      onChangeVisibility={(mode: FeatureVisibilityMode) =>
+                        updateVisibilityByPath(page, visibilityPath, mode, def.scope)
                       }
+                      editableLabel={editableLabel}
+                      onLabelChange={onLabelChange}
+                      disabled={effectiveDisabled}
+                      {...restOverrides}
                     />
-                    <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "adminPanel.selectionToggle" : "선택 토글"}
-                      checked={draft.adminPanel.selectionToggle}
-                      visibility={draft.visibility.adminPanel.selectionToggle}
-                      onChange={(v) =>
-                        updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, selectionToggle: v } }))
-                      }
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: {
-                            ...prev.visibility,
-                            adminPanel: { ...prev.visibility.adminPanel, selectionToggle: mode },
-                          },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "adminPanel.logsToggle" : "로그 토글"}
-                      checked={draft.adminPanel.logsToggle}
-                      visibility={draft.visibility.adminPanel.logsToggle}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, logsToggle: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, logsToggle: mode } },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "adminPanel.messageSelection" : "메시지 선택"}
-                      checked={draft.adminPanel.messageSelection}
-                      visibility={draft.visibility.adminPanel.messageSelection}
-                      onChange={(v) =>
-                        updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, messageSelection: v } }))
-                      }
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: {
-                            ...prev.visibility,
-                            adminPanel: { ...prev.visibility.adminPanel, messageSelection: mode },
-                          },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "adminPanel.messageMeta" : "메시지 메타"}
-                      checked={draft.adminPanel.messageMeta}
-                      visibility={draft.visibility.adminPanel.messageMeta}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, messageMeta: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, messageMeta: mode } },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "adminPanel.copyConversation" : "대화 복사"}
-                      checked={draft.adminPanel.copyConversation}
-                      visibility={draft.visibility.adminPanel.copyConversation}
-                      onChange={(v) =>
-                        updateAllPages((prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, copyConversation: v } }))
-                      }
-                      onChangeVisibility={(mode) =>
-                        updateAllPages((prev) => ({
-                          ...prev,
-                          visibility: {
-                            ...prev.visibility,
-                            adminPanel: { ...prev.visibility.adminPanel, copyConversation: mode },
-                          },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "adminPanel.copyIssue" : "문제 로그 복사"}
-                      checked={draft.adminPanel.copyIssue}
-                      visibility={draft.visibility.adminPanel.copyIssue}
-                      onChange={(v) => updateAllPages((prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, copyIssue: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updateAllPages((prev) => ({
-                          ...prev,
-                          visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, copyIssue: mode } },
-                        }))
-                      }
-                    />
-                  </div>
+                  );
+                };
 
+                const renderWidgetPanelToggle = (
+                  def: ToggleDef,
+                  options: {
+                    expandable?: boolean;
+                    expanded?: boolean;
+                    onToggleExpanded?: () => void;
+                  } = {}
+                ) => {
+                  const depsMet = (def.dependsOn || []).every((path) => Boolean(getByPath(draft, path)));
+                  const disabled = !isHeader && !!def.dependsOn?.length && !depsMet;
+                  const visibilityPath = def.vpath ?? `visibility.${def.path}`;
+                  const checked = Boolean(getByPath(draft, def.path));
+                  const visibility =
+                    (getByPath(draft, visibilityPath) as FeatureVisibilityMode | undefined) || "user";
+                  return (
+                    <GroupToggleField
+                      neutralStyle={isHeader}
+                      label={resolveToggleLabel(def)}
+                      checked={checked}
+                      visibility={visibility}
+                      onChange={(v) => updateFeatureByPath(page, def.path, v, def.scope)}
+                      onChangeVisibility={(mode) => updateVisibilityByPath(page, visibilityPath, mode, def.scope)}
+                      expandable={Boolean(options.expandable)}
+                      expanded={Boolean(options.expanded)}
+                      onToggleExpanded={options.onToggleExpanded}
+                      disabled={disabled}
+                    />
+                  );
+                };
+
+                const renderGateInputs = (
+                  title: string,
+                  gateKey: "providers" | "tools",
+                  placeholder: string
+                ) => {
+                  const gate = draft.mcp[gateKey];
+                  const disabled = isHeader || !mcpGateEnabled;
+                  const updateGate = (field: "allowlist" | "denylist", value: string[]) =>
+                    updatePage(page, (prev) => ({
+                      ...prev,
+                      mcp: { ...prev.mcp, [gateKey]: { ...prev.mcp[gateKey], [field]: value } },
+                    }));
+                  return (
+                    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="text-[11px] font-semibold text-slate-600">{title}</div>
+                      <label className="block">
+                        <div className="mb-1 text-[11px] font-semibold text-slate-600">Allowlist</div>
+                        <Input
+                          disabled={disabled}
+                          value={toCsv(gate.allowlist)}
+                          onChange={(e) => updateGate("allowlist", parseCsv(e.target.value))}
+                          className="config-input h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                          placeholder={placeholder}
+                        />
+                      </label>
+                      <label className="block">
+                        <div className="mb-1 text-[11px] font-semibold text-slate-600">Denylist</div>
+                        <Input
+                          disabled={disabled}
+                          value={toCsv(gate.denylist)}
+                          onChange={(e) => updateGate("denylist", parseCsv(e.target.value))}
+                          className="config-input h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                          placeholder={placeholder}
+                        />
+                      </label>
+                    </div>
+                  );
+                };
+
+                const renderSetupGateInputs = (
+                  title: string,
+                  gateKey: "llms" | "kbIds" | "adminKbIds" | "routes",
+                  placeholder: string
+                ) => {
+                  const gate = (draft.setup[gateKey] || {}) as { allowlist?: string[]; denylist?: string[] };
+                  const disabled = isHeader;
+                  const updateGate = (field: "allowlist" | "denylist", value: string[]) =>
+                    updatePage(page, (prev) => ({
+                      ...prev,
+                      setup: {
+                        ...prev.setup,
+                        [gateKey]: { ...(prev.setup[gateKey] as any), [field]: value },
+                      },
+                    }));
+                  return (
+                    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="text-[11px] font-semibold text-slate-600">{title}</div>
+                      <label className="block">
+                        <div className="mb-1 text-[11px] font-semibold text-slate-600">Allowlist</div>
+                        <Input
+                          disabled={disabled}
+                          value={toCsv(gate.allowlist)}
+                          onChange={(e) => updateGate("allowlist", parseCsv(e.target.value))}
+                          className="config-input h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                          placeholder={placeholder}
+                        />
+                      </label>
+                      <label className="block">
+                        <div className="mb-1 text-[11px] font-semibold text-slate-600">Denylist</div>
+                        <Input
+                          disabled={disabled}
+                          value={toCsv(gate.denylist)}
+                          onChange={(e) => updateGate("denylist", parseCsv(e.target.value))}
+                          className="config-input h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                          placeholder={placeholder}
+                        />
+                      </label>
+                    </div>
+                  );
+                };
+
+                const renderDetailBlock = (show: boolean, children: ReactNode, disabled = false) =>
+                  show ? (
+                    <fieldset
+                      disabled={disabled}
+                      aria-disabled={disabled}
+                      className={`detail-block mt-2 space-y-2 border-0 border-l-2 border-slate-200 pl-3 m-0 p-0${disabled ? " pointer-events-none opacity-60" : ""
+                        }`}
+                    >
+                      {children}
+                    </fieldset>
+                  ) : null;
+
+                const [adminPanelEnabledToggle, ...adminPanelChildToggles] = ADMIN_PANEL_TOGGLES;
+                const adminPanelCopyToggle = adminPanelChildToggles.find(
+                  (def) => def.path === "adminPanel.copyConversation"
+                );
+                const adminPanelBaseToggles = adminPanelChildToggles.filter(
+                  (def) => def.path !== "adminPanel.copyConversation"
+                );
+                const [quickRepliesToggle, productCardsToggle, prefillToggle, inputSubmitToggle] =
+                  INTERACTION_TOGGLES;
+                const widgetChatPanelToggle = WIDGET_PANEL_TOGGLES.find((def) => def.path === "widget.chatPanel");
+                const widgetHistoryPanelToggle = WIDGET_PANEL_TOGGLES.find(
+                  (def) => def.path === "widget.historyPanel"
+                );
+                const widgetSetupPanelToggle = WIDGET_PANEL_TOGGLES.find((def) => def.path === "widget.setupPanel");
+                const showAdminPanelChildren = isHeader || adminPanelEnabled;
+                const showPrefillDetails = isHeader || Boolean(draft.interaction.prefill);
+
+                const renderDebugSection = () => (
                   <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs font-semibold text-slate-900">Debug Transcript (대화 복사)</div>
-                    <label className="block">
-                      <div className="mb-1 text-[11px] font-semibold text-slate-600">출력 모드</div>
-                      <SelectPopover
-                        value={debugOutputMode}
-                        disabled={isHeader}
-                        options={DEBUG_OUTPUT_MODE_OPTIONS}
-                        onChange={(value) =>
-                          updateDebugCopyOptions(page, (prev) => ({
-                            ...prev,
-                            outputMode:
-                              value === "summary" ? "summary" : value === "used_only" ? "used_only" : "full",
-                            sections: {
-                              ...prev.sections,
-                              logs: {
-                                ...prev.sections?.logs,
-                                debug: {
-                                  ...prev.sections?.logs?.debug,
-                                  usedOnly: value === "used_only",
-                                },
+                    {renderSelectField(
+                      "출력 모드",
+                      debugOutputMode,
+                      DEBUG_OUTPUT_MODE_OPTIONS,
+                      (value) =>
+                        updateDebugCopyOptions(page, (prev) => ({
+                          ...prev,
+                          outputMode:
+                            value === "summary" ? "summary" : value === "used_only" ? "used_only" : "full",
+                          sections: {
+                            ...prev.sections,
+                            logs: {
+                              ...prev.sections?.logs,
+                              debug: {
+                                ...prev.sections?.logs?.debug,
+                                usedOnly: value === "used_only",
                               },
                             },
-                          }))
-                        }
-                        className="w-full"
-                        buttonClassName="h-9 text-xs"
-                      />
-                    </label>
+                          },
+                        }))
+                    )}
                     <div className="rounded-lg border border-slate-200 bg-white p-2">
                       <GroupToggleField
                         neutralStyle={isHeader}
@@ -2202,7 +2254,7 @@ export function ChatSettingsPanel({ authToken }: Props) {
                                 <div className="mb-1 text-[11px] font-semibold text-slate-600">Event allowlist (CSV)</div>
                                 <input
                                   type="text"
-                                  value={toEventCsv(debugLogEvent?.allowlist)}
+                                  value={toCsv(debugLogEvent?.allowlist)}
                                   disabled={isHeader}
                                   onChange={(e) =>
                                     updateDebugCopyOptions(page, (prev) => ({
@@ -2230,99 +2282,80 @@ export function ChatSettingsPanel({ authToken }: Props) {
                       ) : null}
                     </div>
 
-                    <label className="block">
-                      <div className="mb-1 text-[11px] font-semibold text-slate-600">Audit 대상 BOT 범위</div>
-                      <SelectPopover
-                        value={debugCopyDraft.auditBotScope || "runtime_turns_only"}
-                        disabled={isHeader}
-                        options={AUDIT_BOT_SCOPE_OPTIONS}
-                        onChange={(value) =>
-                          updateDebugCopyOptions(page, (prev) => ({
-                            ...prev,
-                            auditBotScope:
-                              value === "all_bot_messages" ? "all_bot_messages" : "runtime_turns_only",
-                          }))
-                        }
-                        className="w-full"
-                        buttonClassName="h-9 text-xs"
-                      />
-                    </label>
+                    {renderSelectField(
+                      "Audit 대상 BOT 범위",
+                      debugCopyDraft.auditBotScope || "runtime_turns_only",
+                      AUDIT_BOT_SCOPE_OPTIONS,
+                      (value) =>
+                        updateDebugCopyOptions(page, (prev) => ({
+                          ...prev,
+                          auditBotScope: value === "all_bot_messages" ? "all_bot_messages" : "runtime_turns_only",
+                        }))
+                    )}
                   </div>
-                  <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs font-semibold text-slate-900">Interaction</div>
-                    <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "interaction.quickReplies" : "Quick Replies"}
-                      checked={draft.interaction.quickReplies}
-                      visibility={draft.visibility.interaction.quickReplies}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, quickReplies: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: {
-                            ...prev.visibility,
-                            interaction: { ...prev.visibility.interaction, quickReplies: mode },
-                          },
-                        }))
-                      }
-                    />
-                    <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "interaction.productCards" : "Product Cards"}
-                      checked={draft.interaction.productCards}
-                      visibility={draft.visibility.interaction.productCards}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, productCards: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: {
-                            ...prev.visibility,
-                            interaction: { ...prev.visibility.interaction, productCards: mode },
-                          },
-                        }))
-                      }
-                    />
+                );
 
-                    <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "interaction.prefill" : "Prefill"}
-                      checked={draft.interaction.prefill}
-                      visibility={draft.visibility.interaction.prefill}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, prefill: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: {
-                            ...prev.visibility,
-                            interaction: { ...prev.visibility.interaction, prefill: mode },
-                          },
-                        }))
-                      }
-                    />
-                    <label className="block">
-                      <div className="mb-1 text-[11px] font-semibold text-slate-600">
-                        {isHeader ? "interaction.prefillMessages" : "Prefill Messages (줄바꿈)"}
-                      </div>
-                      <textarea
-                        value={(draft.interaction.prefillMessages || []).join("\n")}
-                        disabled={isHeader}
-                        onChange={(e) =>
-                          updatePage(page, (prev) => ({
-                            ...prev,
-                            interaction: {
-                              ...prev.interaction,
-                              prefillMessages: e.target.value
-                                .split(/\r?\n/)
-                                .map((item) => item.trim())
-                                .filter(Boolean),
-                            },
-                          }))
-                        }
-                        className="config-input min-h-[70px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
-                        placeholder="예: 기록한대로 응대하는 AI 상담사를"
-                      />
-                      {/* {!isHeader ? <div className="mt-1 text-[10px] text-slate-500">줄바꿈으로 여러 줄 입력</div> : null} */}
-                    </label>
+                const renderAdminPanelSection = () => (
+                  <fieldset
+                    disabled={chatSectionDisabled}
+                    aria-disabled={chatSectionDisabled}
+                    className={`space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 m-0${chatSectionDisabled ? " pointer-events-none opacity-60" : ""
+                      }`}
+                  >
+                    <div className="text-xs font-semibold text-slate-900">Admin Panel</div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-2">
+                      {renderToggle(adminPanelEnabledToggle)}
+                      {renderDetailBlock(
+                        true,
+                        <>
+                          {adminPanelBaseToggles.map((def) => (
+                            <Fragment key={def.path}>{renderToggle(def)}</Fragment>
+                          ))}
+                          {adminPanelCopyToggle ? (
+                            <div className="rounded-lg border border-slate-200 bg-white p-2">
+                              {renderToggle(adminPanelCopyToggle)}
+                              {renderDetailBlock(true, renderDebugSection(), debugSectionDisabled)}
+                            </div>
+                          ) : null}
+                        </>,
+                        !showAdminPanelChildren
+                      )}
+                    </div>
+                  </fieldset>
+                );
+
+                const renderInteractionSection = () => (
+                  <fieldset
+                    disabled={chatSectionDisabled}
+                    aria-disabled={chatSectionDisabled}
+                    className={`space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 m-0${chatSectionDisabled ? " pointer-events-none opacity-60" : ""
+                      }`}
+                  >
+                    <div className="text-xs font-semibold text-slate-900">Interaction</div>
+                    {renderToggle(quickRepliesToggle)}
+                    {renderToggle(productCardsToggle)}
+                    <div className="rounded-lg border border-slate-200 bg-white p-2">
+                      {renderToggle(prefillToggle)}
+                      {renderDetailBlock(
+                        true,
+                        <label className="block">
+                          <div className="mb-1 text-[11px] font-semibold text-slate-600">
+                            {isHeader ? "interaction.prefillMessages" : "Prefill Messages (줄바꿈)"}
+                          </div>
+                          <textarea
+                            value={(draft.interaction.prefillMessages || []).join("\n")}
+                            disabled={isHeader}
+                            onChange={(e) =>
+                              updateFeatureByPath(page, "interaction.prefillMessages", parseLines(e.target.value))
+                            }
+                            className="config-input min-h-[70px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                            placeholder="예: 기록한대로 응대하는 AI 상담사를"
+                          />
+                          {/* {!isHeader ? <div className="mt-1 text-[10px] text-slate-500">줄바꿈으로 여러 줄 입력</div> : null} */}
+                        </label>,
+                        !showPrefillDetails
+                      )}
+                    </div>
                     <label className="block">
                       <div className="mb-1 text-[11px] font-semibold text-slate-600">
                         {isHeader ? "interaction.inputPlaceholder" : "Input Placeholder"}
@@ -2331,105 +2364,21 @@ export function ChatSettingsPanel({ authToken }: Props) {
                         value={draft.interaction.inputPlaceholder || ""}
                         disabled={isHeader}
                         onChange={(e) =>
-                          updatePage(page, (prev) => ({
-                            ...prev,
-                            interaction: { ...prev.interaction, inputPlaceholder: e.target.value },
-                          }))
+                          updateFeatureByPath(page, "interaction.inputPlaceholder", e.target.value)
                         }
                         className="config-input h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
                         placeholder="예: 문의 내용을 입력해주세요"
                       />
                     </label>
                     <div className="rounded-lg border border-slate-200 bg-white p-2">
-                      <div className="text-[11px] font-semibold text-slate-600">
-                        {isHeader ? "interaction.widgetHeader" : "Widget Header"}
-                      </div>
-                      <div className="mt-2 space-y-2">
-                        <ToggleField
-                          neutralStyle={isHeader}
-                          label={isHeader ? "interaction.widgetHeaderAgentAction" : "Agent Action"}
-                          checked={draft.interaction.widgetHeaderAgentAction}
-                          visibility={draft.visibility.interaction.widgetHeaderAgentAction}
-                          onChange={(v) =>
-                            updatePage(page, (prev) => ({
-                              ...prev,
-                              interaction: { ...prev.interaction, widgetHeaderAgentAction: v },
-                            }))
-                          }
-                          onChangeVisibility={(mode) =>
-                            updatePage(page, (prev) => ({
-                              ...prev,
-                              visibility: {
-                                ...prev.visibility,
-                                interaction: { ...prev.visibility.interaction, widgetHeaderAgentAction: mode },
-                              },
-                            }))
-                          }
-                        />
-                        <ToggleField
-                          neutralStyle={isHeader}
-                          label={isHeader ? "interaction.widgetHeaderNewConversation" : "New Conversation"}
-                          checked={draft.interaction.widgetHeaderNewConversation}
-                          visibility={draft.visibility.interaction.widgetHeaderNewConversation}
-                          onChange={(v) =>
-                            updatePage(page, (prev) => ({
-                              ...prev,
-                              interaction: { ...prev.interaction, widgetHeaderNewConversation: v },
-                            }))
-                          }
-                          onChangeVisibility={(mode) =>
-                            updatePage(page, (prev) => ({
-                              ...prev,
-                              visibility: {
-                                ...prev.visibility,
-                                interaction: { ...prev.visibility.interaction, widgetHeaderNewConversation: mode },
-                              },
-                            }))
-                          }
-                        />
-                        <ToggleField
-                          neutralStyle={isHeader}
-                          label={isHeader ? "interaction.widgetHeaderClose" : "Close Button"}
-                          checked={draft.interaction.widgetHeaderClose}
-                          visibility={draft.visibility.interaction.widgetHeaderClose}
-                          onChange={(v) =>
-                            updatePage(page, (prev) => ({
-                              ...prev,
-                              interaction: { ...prev.interaction, widgetHeaderClose: v },
-                            }))
-                          }
-                          onChangeVisibility={(mode) =>
-                            updatePage(page, (prev) => ({
-                              ...prev,
-                              visibility: {
-                                ...prev.visibility,
-                                interaction: { ...prev.visibility.interaction, widgetHeaderClose: mode },
-                              },
-                            }))
-                          }
-                        />
-                      </div>
-                    </div>
-                    <div className="rounded-lg border border-slate-200 bg-white p-2">
                       <GroupToggleField
                         neutralStyle={isHeader}
                         label={isHeader ? "interaction.threePhasePrompt" : "3-Phase Prompt"}
                         checked={draft.interaction.threePhasePrompt}
                         visibility={draft.visibility.interaction.threePhasePrompt}
-                        onChange={(v) =>
-                          updatePage(page, (prev) => ({
-                            ...prev,
-                            interaction: { ...prev.interaction, threePhasePrompt: v },
-                          }))
-                        }
+                        onChange={(v) => updateFeatureByPath(page, "interaction.threePhasePrompt", v)}
                         onChangeVisibility={(mode) =>
-                          updatePage(page, (prev) => ({
-                            ...prev,
-                            visibility: {
-                              ...prev.visibility,
-                              interaction: { ...prev.visibility.interaction, threePhasePrompt: mode },
-                            },
-                          }))
+                          updateVisibilityByPath(page, "visibility.interaction.threePhasePrompt", mode)
                         }
                         expandable={isHeader}
                         expanded={showThreePhaseDetails}
@@ -2445,165 +2394,385 @@ export function ChatSettingsPanel({ authToken }: Props) {
                             <div className="text-[11px] font-semibold text-slate-600">
                               {isHeader ? "interaction.threePhasePromptDisplay" : "3-Phase Display"}
                             </div>
-                            <ToggleField
-                              neutralStyle={isHeader}
-                              label={
-                                isHeader
-                                  ? "interaction.threePhasePromptShowConfirmed"
-                                  : draft.interaction.threePhasePromptLabels?.confirmed || "Show Confirmed"
-                              }
-                              checked={draft.interaction.threePhasePromptShowConfirmed}
-                              visibility={draft.visibility.interaction.threePhasePromptShowConfirmed}
-                              editableLabel={!isHeader}
-                              onLabelChange={(value) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  interaction: {
-                                    ...prev.interaction,
-                                    threePhasePromptLabels: {
-                                      ...prev.interaction.threePhasePromptLabels,
-                                      confirmed: value,
-                                    },
-                                  },
-                                }))
-                              }
-                              onChange={(v) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  interaction: { ...prev.interaction, threePhasePromptShowConfirmed: v },
-                                }))
-                              }
-                              onChangeVisibility={(mode) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  visibility: {
-                                    ...prev.visibility,
-                                    interaction: { ...prev.visibility.interaction, threePhasePromptShowConfirmed: mode },
-                                  },
-                                }))
-                              }
-                            />
-                            <ToggleField
-                              neutralStyle={isHeader}
-                              label={
-                                isHeader
-                                  ? "interaction.threePhasePromptShowConfirming"
-                                  : draft.interaction.threePhasePromptLabels?.confirming || "Show Confirming"
-                              }
-                              checked={draft.interaction.threePhasePromptShowConfirming}
-                              visibility={draft.visibility.interaction.threePhasePromptShowConfirming}
-                              editableLabel={!isHeader}
-                              onLabelChange={(value) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  interaction: {
-                                    ...prev.interaction,
-                                    threePhasePromptLabels: {
-                                      ...prev.interaction.threePhasePromptLabels,
-                                      confirming: value,
-                                    },
-                                  },
-                                }))
-                              }
-                              onChange={(v) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  interaction: { ...prev.interaction, threePhasePromptShowConfirming: v },
-                                }))
-                              }
-                              onChangeVisibility={(mode) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  visibility: {
-                                    ...prev.visibility,
-                                    interaction: { ...prev.visibility.interaction, threePhasePromptShowConfirming: mode },
-                                  },
-                                }))
-                              }
-                            />
-                            <ToggleField
-                              neutralStyle={isHeader}
-                              label={
-                                isHeader
-                                  ? "interaction.threePhasePromptShowNext"
-                                  : draft.interaction.threePhasePromptLabels?.next || "Show Next"
-                              }
-                              checked={draft.interaction.threePhasePromptShowNext}
-                              visibility={draft.visibility.interaction.threePhasePromptShowNext}
-                              editableLabel={!isHeader}
-                              onLabelChange={(value) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  interaction: {
-                                    ...prev.interaction,
-                                    threePhasePromptLabels: {
-                                      ...prev.interaction.threePhasePromptLabels,
-                                      next: value,
-                                    },
-                                  },
-                                }))
-                              }
-                              onChange={(v) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  interaction: { ...prev.interaction, threePhasePromptShowNext: v },
-                                }))
-                              }
-                              onChangeVisibility={(mode) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  visibility: {
-                                    ...prev.visibility,
-                                    interaction: { ...prev.visibility.interaction, threePhasePromptShowNext: mode },
-                                  },
-                                }))
-                              }
-                            />
-                            <ToggleField
-                              neutralStyle={isHeader}
-                              label={isHeader ? "interaction.threePhasePromptHideLabels" : "Hide Labels"}
-                              checked={draft.interaction.threePhasePromptHideLabels}
-                              visibility={draft.visibility.interaction.threePhasePromptHideLabels}
-                              onChange={(v) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  interaction: { ...prev.interaction, threePhasePromptHideLabels: v },
-                                }))
-                              }
-                              onChangeVisibility={(mode) =>
-                                updatePage(page, (prev) => ({
-                                  ...prev,
-                                  visibility: {
-                                    ...prev.visibility,
-                                    interaction: { ...prev.visibility.interaction, threePhasePromptHideLabels: mode },
-                                  },
-                                }))
-                              }
-                            />
+                            {THREE_PHASE_TOGGLES.map((def) => (
+                              <Fragment key={def.path}>{renderToggle(def)}</Fragment>
+                            ))}
                           </div>
                         </div>
                       ) : null}
                     </div>
-                    <ToggleField
-                      neutralStyle={isHeader}
-                      label={isHeader ? "interaction.inputSubmit" : "입력/전송"}
-                      checked={draft.interaction.inputSubmit}
-                      visibility={draft.visibility.interaction.inputSubmit}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, inputSubmit: v } }))}
-                      onChangeVisibility={(mode) =>
-                        updatePage(page, (prev) => ({
-                          ...prev,
-                          visibility: {
-                            ...prev.visibility,
-                            interaction: { ...prev.visibility.interaction, inputSubmit: mode },
-                          },
-                        }))
-                      }
-                    />
-                  </div>
+                    {renderToggle(inputSubmitToggle)}
+                  </fieldset>
+                );
 
-                  <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                const renderSetupSection = () => (
+                  <fieldset
+                    disabled={setupSectionDisabled}
+                    aria-disabled={setupSectionDisabled}
+                    className={`space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 m-0${setupSectionDisabled ? " pointer-events-none opacity-60" : ""
+                      }`}
+                  >
                     <div className="text-xs font-semibold text-slate-900">Setup</div>
+                    <div className="rounded-lg border border-slate-200 bg-white p-2">
+                      <GroupToggleField
+                        neutralStyle={isHeader}
+                        label={isHeader ? "setup.modelSelector" : "Model Selector"}
+                        checked={draft.setup.modelSelector}
+                        visibility={draft.visibility.setup.modelSelector}
+                        onChange={(v) => updateFeatureByPath(page, "setup.modelSelector", v)}
+                        onChangeVisibility={(mode) =>
+                          updateVisibilityByPath(page, "visibility.setup.modelSelector", mode)
+                        }
+                      />
+                      {renderDetailBlock(
+                        true,
+                        <div className="space-y-2">
+                          <div className="rounded-lg border border-slate-200 bg-white p-2">
+                            <ToggleField
+                              neutralStyle={isHeader}
+                              label={
+                                isHeader
+                                  ? "setup.modeExisting"
+                                  : setupUiByPage[page].existingLabels.modeExisting ||
+                                  EXISTING_SETUP_LABELS.modeExisting
+                              }
+                              editableLabel={!isHeader}
+                              onLabelChange={(value) =>
+                                setSetupUiByPage((prev) => ({
+                                  ...prev,
+                                  [page]: {
+                                    ...prev[page],
+                                    existingLabels: { ...prev[page].existingLabels, modeExisting: value },
+                                  },
+                                }))
+                              }
+                              checked={draft.setup.modeExisting}
+                              visibility={draft.visibility.setup.modeExisting}
+                              onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeExisting: v } }))}
+                              onChangeVisibility={(mode) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeExisting: mode } },
+                                }))
+                              }
+                              expandable={isHeader}
+                              expanded={showSetupExistingDetails}
+                              onToggleExpanded={() => {
+                                if (!isHeader) return;
+                                setExpandAll(setSetupExistingDetailsOpenByPage, !setupExistingDetailsOpenByPage["/"]);
+                              }}
+                            />
+                            {showSetupExistingDetails ? (
+                              <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                                {setupUiDraft.existingOrder.map((existingKey) => {
+                                  const codeLabel = `setup.${existingKey}`;
+                                  const defaultLabel =
+                                    EXISTING_SETUP_LABELS[existingKey] || existingKey;
+                                  const customLabel = (setupUiByPage[page].existingLabels[existingKey] || "").trim();
+                                  const label = isHeader ? codeLabel : customLabel || defaultLabel;
+                                  const onLabelChange = (value: string) =>
+                                    setSetupUiByPage((prev) => ({
+                                      ...prev,
+                                      [page]: {
+                                        ...prev[page],
+                                        existingLabels: { ...prev[page].existingLabels, [existingKey]: value },
+                                      },
+                                    }));
+                                  const keyProps = {
+                                    neutralStyle: isHeader,
+                                    label,
+                                    showDragHandle: isHeader,
+                                    editableLabel: !isHeader,
+                                    onLabelChange,
+                                  };
+                                  const node =
+                                    existingKey === "sessionIdSearch" ? (
+                                      <ToggleField
+                                        {...keyProps}
+                                        checked={draft.setup.sessionIdSearch}
+                                        visibility={draft.visibility.setup.sessionIdSearch}
+                                        onChange={(v) =>
+                                          updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, sessionIdSearch: v } }))
+                                        }
+                                        onChangeVisibility={(mode) =>
+                                          updatePage(page, (prev) => ({
+                                            ...prev,
+                                            visibility: {
+                                              ...prev.visibility,
+                                              setup: { ...prev.visibility.setup, sessionIdSearch: mode },
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    ) : existingKey === "agentSelector" ? (
+                                      <ToggleField
+                                        {...keyProps}
+                                        checked={draft.setup.agentSelector}
+                                        visibility={draft.visibility.setup.agentSelector}
+                                        onChange={(v) =>
+                                          updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, agentSelector: v } }))
+                                        }
+                                        onChangeVisibility={(mode) =>
+                                          updatePage(page, (prev) => ({
+                                            ...prev,
+                                            visibility: {
+                                              ...prev.visibility,
+                                              setup: { ...prev.visibility.setup, agentSelector: mode },
+                                            },
+                                          }))
+                                        }
+                                      />
+                                    ) : (
+                                      <div className="flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs">
+                                        <button type="button" className="inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-slate-800">
+                                          <span
+                                            contentEditable={!isHeader}
+                                            suppressContentEditableWarning={!isHeader}
+                                            onBlur={(e) => {
+                                              if (isHeader) return;
+                                              onLabelChange((e.currentTarget.textContent || "").trim());
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (isHeader) return;
+                                              if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                (e.currentTarget as HTMLSpanElement).blur();
+                                              }
+                                            }}
+                                            onClick={(e) => {
+                                              if (isHeader) return;
+                                              e.stopPropagation();
+                                            }}
+                                            className={!isHeader ? "rounded px-1 outline-none" : undefined}
+                                          >
+                                            {label}
+                                          </span>
+                                        </button>
+                                        {isHeader ? (
+                                          <span className="inline-flex h-7 items-center justify-center px-1 text-slate-500">
+                                            <GripVertical className="h-4 w-4" />
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    );
+                                  return (
+                                    <div
+                                      key={`${column}-existing-${existingKey}`}
+                                      draggable={isHeader}
+                                      onDragStart={isHeader ? handleExistingSetupDragStart("/", existingKey) : undefined}
+                                      onDragOver={isHeader ? handleSetupDragOver : undefined}
+                                      onDrop={isHeader ? handleExistingSetupDrop("/", existingKey) : undefined}
+                                      onDragEnd={isHeader ? handleExistingSetupDragEnd("/") : undefined}
+                                      className="space-y-1"
+                                    >
+                                      {node}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="rounded-lg border border-slate-200 bg-white p-2">
+                            <ToggleField
+                              neutralStyle={isHeader}
+                              label={
+                                isHeader
+                                  ? "setup.modeNew"
+                                  : setupUiByPage[page].existingLabels.modeNew || EXISTING_SETUP_LABELS.modeNew
+                              }
+                              editableLabel={!isHeader}
+                              onLabelChange={(value) =>
+                                setSetupUiByPage((prev) => ({
+                                  ...prev,
+                                  [page]: {
+                                    ...prev[page],
+                                    existingLabels: { ...prev[page].existingLabels, modeNew: value },
+                                  },
+                                }))
+                              }
+                              checked={draft.setup.modeNew}
+                              visibility={draft.visibility.setup.modeNew}
+                              onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeNew: v } }))}
+                              onChangeVisibility={(mode) =>
+                                updatePage(page, (prev) => ({
+                                  ...prev,
+                                  visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeNew: mode } },
+                                }))
+                              }
+                              expandable={isHeader}
+                              expanded={showSetupNewDetails}
+                              onToggleExpanded={() => {
+                                if (!isHeader) return;
+                                setExpandAll(setSetupNewDetailsOpenByPage, !setupNewDetailsOpenByPage["/"]);
+                              }}
+                            />
+                            {showSetupNewDetails ? (
+                              <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
+                                {setupUiDraft.order.filter(isSetupUiConfigurableKey).map((setupKey) => {
+                                  const codeLabel = `setup.${setupKey}`;
+                                  const customLabel = (setupUiByPage[page].labels[setupKey] || "").trim();
+                                  const defaultLabel = (SETUP_FIELD_LABELS[setupKey] || setupKey).trim();
+                                  const label = isHeader ? codeLabel : customLabel || defaultLabel;
+                                  const makeToggle = () => {
+                                    const setupToggleMap = {
+                                      kbSelector: { kind: "setup", key: "kbSelector" },
+                                      adminKbSelector: { kind: "setup", key: "adminKbSelector" },
+                                      routeSelector: { kind: "setup", key: "routeSelector" },
+                                      inlineUserKbInput: { kind: "setup", key: "inlineUserKbInput" },
+                                      mcpProviderSelector: { kind: "mcp", key: "providerSelector", labelKey: "mcpProviderSelector" },
+                                      mcpActionSelector: { kind: "mcp", key: "actionSelector", labelKey: "mcpActionSelector" },
+                                    } as const;
+
+                                    const renderSetupToggle = (
+                                      checked: boolean,
+                                      visibility: FeatureVisibilityMode,
+                                      onChange: (v: boolean) => void,
+                                      onChangeVisibility: (mode: FeatureVisibilityMode) => void,
+                                      labelKey: string
+                                    ) => (
+                                      <ToggleField
+                                        neutralStyle={isHeader}
+                                        label={label}
+                                        showDragHandle={isHeader}
+                                        editableLabel={!isHeader}
+                                        onLabelChange={(value) =>
+                                          setSetupUiByPage((prev) => ({
+                                            ...prev,
+                                            [page]: {
+                                              ...prev[page],
+                                              labels: { ...prev[page].labels, [labelKey as SetupFieldKey]: value },
+                                            },
+                                          }))
+                                        }
+                                        checked={checked}
+                                        visibility={visibility}
+                                        onChange={onChange}
+                                        onChangeVisibility={onChangeVisibility}
+                                      />
+                                    );
+                                    const setupConfig = setupToggleMap[setupKey as keyof typeof setupToggleMap];
+                                    if (setupConfig) {
+                                      if (setupConfig.kind === "setup") {
+                                        const key = setupConfig.key as keyof ConversationPageFeatures["setup"];
+                                        return renderSetupToggle(
+                                          draft.setup[key] as boolean,
+                                          (draft.visibility.setup as any)[key],
+                                          (v: boolean) => updateSetupField(page, key as any, v),
+                                          (mode: FeatureVisibilityMode) => updateSetupVisibility(page, key as any, mode),
+                                          key
+                                        );
+                                      }
+                                      const mcpKey = setupConfig.key as keyof ConversationPageFeatures["mcp"];
+                                      return renderSetupToggle(
+                                        draft.mcp[mcpKey] as boolean,
+                                        (draft.visibility.mcp as any)[mcpKey],
+                                        (v: boolean) => updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, [mcpKey]: v } })),
+                                        (mode: FeatureVisibilityMode) =>
+                                          updatePage(page, (prev) => ({
+                                            ...prev,
+                                            visibility: {
+                                              ...prev.visibility,
+                                              mcp: { ...prev.visibility.mcp, [mcpKey]: mode },
+                                            },
+                                          })),
+                                        setupConfig.labelKey
+                                      );
+                                    }
+
+
+
+                                    const safeKey = setupKey as keyof ConversationPageFeatures["setup"];
+                                    return renderSetupToggle(
+                                      draft.setup[safeKey] as boolean,
+                                      (draft.visibility.setup as any)[safeKey],
+                                      (v: boolean) => updateSetupField(page, setupKey, v),
+                                      (mode: FeatureVisibilityMode) => updateSetupVisibility(page, setupKey, mode),
+                                      setupKey
+                                    );
+                                  };
+                                  return (
+                                    <div
+                                      key={`${column}-${setupKey}`}
+                                      draggable={isHeader}
+                                      onDragStart={isHeader ? handleSetupDragStart("/", setupKey) : undefined}
+                                      onDragOver={isHeader ? handleSetupDragOver : undefined}
+                                      onDrop={isHeader ? handleSetupDrop("/", setupKey) : undefined}
+                                      onDragEnd={isHeader ? handleSetupDragEnd("/") : undefined}
+                                      className="space-y-1"
+                                    >
+                                      {makeToggle()}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          <div className="rounded-lg border border-slate-200 bg-white p-2">
+                            <div className="text-[11px] font-semibold text-slate-600">Setup Defaults</div>
+                            {renderSelectField(
+                              isHeader ? "setup.defaultSetupMode" : "Default Mode",
+                              draft.setup.defaultSetupMode,
+                              [
+                                { id: "existing", label: "Existing" },
+                                { id: "new", label: "New" },
+                              ],
+                              (value) =>
+                                updateFeatureByPath(page, "setup.defaultSetupMode", value as "existing" | "new"),
+                              isHeader
+                            )}
+                            {renderSelectField(
+                              isHeader ? "setup.defaultLlm" : "Default LLM",
+                              draft.setup.defaultLlm,
+                              [
+                                { id: "chatgpt", label: "ChatGPT" },
+                                { id: "gemini", label: "Gemini" },
+                              ],
+                              (value) =>
+                                updateFeatureByPath(page, "setup.defaultLlm", value as "chatgpt" | "gemini"),
+                              isHeader
+                            )}
+                          </div>
+                          <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                            <div className="text-[11px] font-semibold text-slate-600">Setup Gates</div>
+                            {renderSetupGateInputs("LLM Gate", "llms", "chatgpt, gemini")}
+                            {renderSetupGateInputs("KB Gate", "kbIds", "kb_id_1, kb_id_2")}
+                            {renderSetupGateInputs("Admin KB Gate", "adminKbIds", "kb_id_1, kb_id_2")}
+                            {renderSetupGateInputs("Route Gate", "routes", "route_1, route_2")}
+                          </div>
+                          </div>
+                        </div>,
+                        !setupDetailsOpen
+                      )}
+                    </div>
+                  </fieldset>
+                );
+
+                const renderMcpSection = () => (
+                  <fieldset
+                    disabled={mcpSectionDisabled}
+                    aria-disabled={mcpSectionDisabled}
+                    className={`space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3 m-0${mcpSectionDisabled ? " pointer-events-none opacity-60" : ""
+                      }`}
+                  >
+                    <div className="text-xs font-semibold text-slate-900">MCP</div>
+                    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                      {MCP_TOGGLES.map((def) => (
+                        <Fragment key={def.path}>{renderToggle(def)}</Fragment>
+                      ))}
+                      {renderDetailBlock(
+                        true,
+                        <div className="space-y-2">
+                          {renderGateInputs("Providers Gate", "providers", "예: openai, anthropic")}
+                          {renderGateInputs("Tools Gate", "tools", "예: tool_id_1, tool_id_2")}
+                        </div>,
+                        !showMcpGates
+                      )}
+                    </div>
+                  </fieldset>
+                );
+
+                const renderRuntimeSection = () => (
+                  <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs font-semibold text-slate-900">Runtime / 자동 업데이트</div>
                     <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
                       <div className="flex items-center text-xs font-semibold text-slate-900">
                         <span>{isHeader ? "runtime.selfUpdate" : "Runtime Self Update"}</span>
@@ -2645,476 +2814,139 @@ export function ChatSettingsPanel({ authToken }: Props) {
                           })
                         }
                       />
-                      {governanceSaving ? <div className="text-[11px] text-slate-500">Self Update 저장 중...</div> : null}
+                      {governanceSaving ? (
+                        <div className="text-[11px] text-slate-500">Self Update 저장 중...</div>
+                      ) : null}
                     </div>
-
-                    {setupDetailsOpen ? (
-                      <>
-                        {effectiveModelSelector ? (
-                          <div className="space-y-2">
-                            <div className="rounded-lg border border-slate-200 bg-white p-2">
-                              <ToggleField
-                                neutralStyle={isHeader}
-                                label={isHeader ? "setup.modeExisting" : (setupUiByPage[page].existingLabels.modeExisting || "기존 모델")}
-                                editableLabel={!isHeader}
-                                onLabelChange={(value) =>
-                                  setSetupUiByPage((prev) => ({
-                                    ...prev,
-                                    [page]: {
-                                      ...prev[page],
-                                      existingLabels: { ...prev[page].existingLabels, modeExisting: value },
-                                    },
-                                  }))
-                                }
-                                checked={draft.setup.modeExisting}
-                                visibility={draft.visibility.setup.modeExisting}
-                                onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeExisting: v } }))}
-                                onChangeVisibility={(mode) =>
-                                  updatePage(page, (prev) => ({
-                                    ...prev,
-                                    visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeExisting: mode } },
-                                  }))
-                                }
-                                expandable={isHeader}
-                                expanded={showSetupExistingDetails}
-                                onToggleExpanded={() => {
-                                  if (!isHeader) return;
-                                  setExpandAll(setSetupExistingDetailsOpenByPage, !setupExistingDetailsOpenByPage["/"]);
-                                }}
-                              />
-                              {showSetupExistingDetails ? (
-                                <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
-                                  {setupUiDraft.existingOrder.map((existingKey) => {
-                                    const meta = EXISTING_SETUP_FIELDS.find((item) => item.key === existingKey);
-                                    const codeLabel = meta?.codeLabel || `setup.${existingKey}`;
-                                    const defaultLabel = meta?.defaultLabel || existingKey;
-                                    const customLabel = (setupUiByPage[page].existingLabels[existingKey] || "").trim();
-                                    const label = isHeader ? codeLabel : customLabel || defaultLabel;
-                                    const onLabelChange = (value: string) =>
-                                      setSetupUiByPage((prev) => ({
-                                        ...prev,
-                                        [page]: {
-                                          ...prev[page],
-                                          existingLabels: { ...prev[page].existingLabels, [existingKey]: value },
-                                        },
-                                      }));
-                                    const keyProps = {
-                                      neutralStyle: isHeader,
-                                      label,
-                                      showDragHandle: isHeader,
-                                      editableLabel: !isHeader,
-                                      onLabelChange,
-                                    };
-                                    const node =
-                                      existingKey === "sessionIdSearch" ? (
-                                        <ToggleField
-                                          {...keyProps}
-                                          checked={draft.setup.sessionIdSearch}
-                                          visibility={draft.visibility.setup.sessionIdSearch}
-                                          onChange={(v) =>
-                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, sessionIdSearch: v } }))
-                                          }
-                                          onChangeVisibility={(mode) =>
-                                            updatePage(page, (prev) => ({
-                                              ...prev,
-                                              visibility: {
-                                                ...prev.visibility,
-                                                setup: { ...prev.visibility.setup, sessionIdSearch: mode },
-                                              },
-                                            }))
-                                          }
-                                        />
-                                      ) : existingKey === "agentSelector" ? (
-                                        <ToggleField
-                                          {...keyProps}
-                                          checked={draft.setup.agentSelector}
-                                          visibility={draft.visibility.setup.agentSelector}
-                                          onChange={(v) =>
-                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, agentSelector: v } }))
-                                          }
-                                          onChangeVisibility={(mode) =>
-                                            updatePage(page, (prev) => ({
-                                              ...prev,
-                                              visibility: {
-                                                ...prev.visibility,
-                                                setup: { ...prev.visibility.setup, agentSelector: mode },
-                                              },
-                                            }))
-                                          }
-                                        />
-                                      ) : (
-                                        <div className="flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs">
-                                          <button type="button" className="inline-flex min-w-0 flex-1 items-center justify-start text-left font-semibold text-slate-800">
-                                            <span
-                                              contentEditable={!isHeader}
-                                              suppressContentEditableWarning={!isHeader}
-                                              onBlur={(e) => {
-                                                if (isHeader) return;
-                                                onLabelChange((e.currentTarget.textContent || "").trim());
-                                              }}
-                                              onKeyDown={(e) => {
-                                                if (isHeader) return;
-                                                if (e.key === "Enter") {
-                                                  e.preventDefault();
-                                                  (e.currentTarget as HTMLSpanElement).blur();
-                                                }
-                                              }}
-                                              onClick={(e) => {
-                                                if (isHeader) return;
-                                                e.stopPropagation();
-                                              }}
-                                              className={!isHeader ? "rounded px-1 outline-none focus:ring-1 focus:ring-slate-300" : undefined}
-                                            >
-                                              {label}
-                                            </span>
-                                          </button>
-                                          {isHeader ? (
-                                            <span className="inline-flex h-7 items-center justify-center px-1 text-slate-500">
-                                              <GripVertical className="h-4 w-4" />
-                                            </span>
-                                          ) : null}
-                                        </div>
-                                      );
-                                    return (
-                                      <div
-                                        key={`${column}-existing-${existingKey}`}
-                                        draggable={isHeader}
-                                        onDragStart={isHeader ? handleExistingSetupDragStart("/", existingKey) : undefined}
-                                        onDragOver={isHeader ? handleSetupDragOver : undefined}
-                                        onDrop={isHeader ? handleExistingSetupDrop("/", existingKey) : undefined}
-                                        onDragEnd={isHeader ? handleExistingSetupDragEnd("/") : undefined}
-                                        className="space-y-1"
-                                      >
-                                        {node}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : null}
-                            </div>
-                            <div className="rounded-lg border border-slate-200 bg-white p-2">
-                              <ToggleField
-                                neutralStyle={isHeader}
-                                label={isHeader ? "setup.modeNew" : (setupUiByPage[page].existingLabels.modeNew || "신규 모델")}
-                                editableLabel={!isHeader}
-                                onLabelChange={(value) =>
-                                  setSetupUiByPage((prev) => ({
-                                    ...prev,
-                                    [page]: {
-                                      ...prev[page],
-                                      existingLabels: { ...prev[page].existingLabels, modeNew: value },
-                                    },
-                                  }))
-                                }
-                                checked={draft.setup.modeNew}
-                                visibility={draft.visibility.setup.modeNew}
-                                onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeNew: v } }))}
-                                onChangeVisibility={(mode) =>
-                                  updatePage(page, (prev) => ({
-                                    ...prev,
-                                    visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeNew: mode } },
-                                  }))
-                                }
-                                expandable={isHeader}
-                                expanded={showSetupNewDetails}
-                                onToggleExpanded={() => {
-                                  if (!isHeader) return;
-                                  setExpandAll(setSetupNewDetailsOpenByPage, !setupNewDetailsOpenByPage["/"]);
-                                }}
-                              />
-                              {showSetupNewDetails ? (
-                                <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">
-                                  {setupUiDraft.order.filter(isSetupUiConfigurableKey).map((setupKey) => {
-                                    const codeLabel = (SETUP_CODE_LABELS[setupKey] || `setup.${setupKey}`).trim();
-                                    const customLabel = (setupUiByPage[page].labels[setupKey] || "").trim();
-                                    const defaultLabel = (SETUP_FIELD_OPTIONS.find((item) => item.key === setupKey)?.defaultLabel || setupKey).trim();
-                                    const label = isHeader ? codeLabel : customLabel || defaultLabel;
-                                    const makeToggle = () => {
-                                      if (setupKey === "llmSelector") {
-                                        return (
-                                          <>
-                                            <ToggleField
-                                              neutralStyle={isHeader}
-                                              label={label}
-                                              showDragHandle={isHeader}
-                                              editableLabel={!isHeader}
-                                              onLabelChange={(value) =>
-                                                setSetupUiByPage((prev) => ({
-                                                  ...prev,
-                                                  [page]: {
-                                                    ...prev[page],
-                                                    labels: { ...prev[page].labels, llmSelector: value },
-                                                  },
-                                                }))
-                                              }
-                                              checked={draft.setup.llmSelector}
-                                              visibility={draft.visibility.setup.llmSelector}
-                                              onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, llmSelector: v } }))}
-                                              onChangeVisibility={(mode) =>
-                                                updatePage(page, (prev) => ({
-                                                  ...prev,
-                                                  visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, llmSelector: mode } },
-                                                }))
-                                              }
-                                            />
-                                            <div className="border-l-2 border-slate-200 pl-3">
-                                              <label className="block">
-                                                <div className="mb-1 text-[11px] font-semibold text-slate-600">기본 LLM</div>
-                                                <SelectPopover
-                                                  value={draft.setup.defaultLlm}
-                                                  disabled={isHeader}
-                                                  options={DEFAULT_LLM_OPTIONS}
-                                                  onChange={(value) =>
-                                                    updatePage(page, (prev) => ({
-                                                      ...prev,
-                                                      setup: { ...prev.setup, defaultLlm: value as "chatgpt" | "gemini" },
-                                                    }))
-                                                  }
-                                                  className="w-full"
-                                                  buttonClassName="h-9 text-xs"
-                                                />
-                                              </label>
-                                            </div>
-                                          </>
-                                        );
-                                      }
-                                      if (setupKey === "kbSelector") {
-                                        return (
-                                          <ToggleField
-                                            neutralStyle={isHeader}
-                                            label={label}
-                                            showDragHandle={isHeader}
-                                            editableLabel={!isHeader}
-                                            onLabelChange={(value) =>
-                                              setSetupUiByPage((prev) => ({
-                                                ...prev,
-                                                [page]: {
-                                                  ...prev[page],
-                                                  labels: { ...prev[page].labels, kbSelector: value },
-                                                },
-                                              }))
-                                            }
-                                            checked={draft.setup.kbSelector}
-                                            visibility={draft.visibility.setup.kbSelector}
-                                            onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, kbSelector: v } }))}
-                                            onChangeVisibility={(mode) =>
-                                              updatePage(page, (prev) => ({
-                                                ...prev,
-                                                visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, kbSelector: mode } },
-                                              }))
-                                            }
-                                          />
-                                        );
-                                      }
-                                      if (setupKey === "adminKbSelector") {
-                                        return (
-                                          <ToggleField
-                                            neutralStyle={isHeader}
-                                            label={label}
-                                            showDragHandle={isHeader}
-                                            editableLabel={!isHeader}
-                                            onLabelChange={(value) =>
-                                              setSetupUiByPage((prev) => ({
-                                                ...prev,
-                                                [page]: {
-                                                  ...prev[page],
-                                                  labels: { ...prev[page].labels, adminKbSelector: value },
-                                                },
-                                              }))
-                                            }
-                                            checked={draft.setup.adminKbSelector}
-                                            visibility={draft.visibility.setup.adminKbSelector}
-                                            onChange={(v) =>
-                                              updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, adminKbSelector: v } }))
-                                            }
-                                            onChangeVisibility={(mode) =>
-                                              updatePage(page, (prev) => ({
-                                                ...prev,
-                                                visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, adminKbSelector: mode } },
-                                              }))
-                                            }
-                                          />
-                                        );
-                                      }
-                                      if (setupKey === "routeSelector") {
-                                        return (
-                                          <ToggleField
-                                            neutralStyle={isHeader}
-                                            label={label}
-                                            showDragHandle={isHeader}
-                                            editableLabel={!isHeader}
-                                            onLabelChange={(value) =>
-                                              setSetupUiByPage((prev) => ({
-                                                ...prev,
-                                                [page]: {
-                                                  ...prev[page],
-                                                  labels: { ...prev[page].labels, routeSelector: value },
-                                                },
-                                              }))
-                                            }
-                                            checked={draft.setup.routeSelector}
-                                            visibility={draft.visibility.setup.routeSelector}
-                                            onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, routeSelector: v } }))}
-                                            onChangeVisibility={(mode) =>
-                                              updatePage(page, (prev) => ({
-                                                ...prev,
-                                                visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, routeSelector: mode } },
-                                              }))
-                                            }
-                                          />
-                                        );
-                                      }
-                                      if (setupKey === "mcpProviderSelector") {
-                                        return (
-                                          <ToggleField
-                                            neutralStyle={isHeader}
-                                            label={label}
-                                            showDragHandle={isHeader}
-                                            editableLabel={!isHeader}
-                                            onLabelChange={(value) =>
-                                              setSetupUiByPage((prev) => ({
-                                                ...prev,
-                                                [page]: {
-                                                  ...prev[page],
-                                                  labels: { ...prev[page].labels, mcpProviderSelector: value },
-                                                },
-                                              }))
-                                            }
-                                            checked={draft.mcp.providerSelector}
-                                            visibility={draft.visibility.mcp.providerSelector}
-                                            onChange={(v) =>
-                                              updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, providerSelector: v } }))
-                                            }
-                                            onChangeVisibility={(mode) =>
-                                              updatePage(page, (prev) => ({
-                                                ...prev,
-                                                visibility: {
-                                                  ...prev.visibility,
-                                                  mcp: { ...prev.visibility.mcp, providerSelector: mode },
-                                                },
-                                              }))
-                                            }
-                                          />
-                                        );
-                                      }
-                                      if (setupKey === "mcpActionSelector") {
-                                        return (
-                                          <ToggleField
-                                            neutralStyle={isHeader}
-                                            label={label}
-                                            showDragHandle={isHeader}
-                                            editableLabel={!isHeader}
-                                            onLabelChange={(value) =>
-                                              setSetupUiByPage((prev) => ({
-                                                ...prev,
-                                                [page]: {
-                                                  ...prev[page],
-                                                  labels: { ...prev[page].labels, mcpActionSelector: value },
-                                                },
-                                              }))
-                                            }
-                                            checked={draft.mcp.actionSelector}
-                                            visibility={draft.visibility.mcp.actionSelector}
-                                            onChange={(v) =>
-                                              updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, actionSelector: v } }))
-                                            }
-                                            onChangeVisibility={(mode) =>
-                                              updatePage(page, (prev) => ({
-                                                ...prev,
-                                                visibility: {
-                                                  ...prev.visibility,
-                                                  mcp: { ...prev.visibility.mcp, actionSelector: mode },
-                                                },
-                                              }))
-                                            }
-                                          />
-                                        );
-                                      }
-                                      return (
-                                        <ToggleField
-                                          neutralStyle={isHeader}
-                                          label={label}
-                                          showDragHandle={isHeader}
-                                          editableLabel={!isHeader}
-                                          onLabelChange={(value) =>
-                                            setSetupUiByPage((prev) => ({
-                                              ...prev,
-                                              [page]: {
-                                                ...prev[page],
-                                                labels: { ...prev[page].labels, inlineUserKbInput: value },
-                                              },
-                                            }))
-                                          }
-                                          checked={draft.setup.inlineUserKbInput}
-                                          visibility={draft.visibility.setup.inlineUserKbInput}
-                                          onChange={(v) =>
-                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, inlineUserKbInput: v } }))
-                                          }
-                                          onChangeVisibility={(mode) =>
-                                            updatePage(page, (prev) => ({
-                                              ...prev,
-                                              visibility: {
-                                                ...prev.visibility,
-                                                setup: { ...prev.visibility.setup, inlineUserKbInput: mode },
-                                              },
-                                            }))
-                                          }
-                                        />
-                                      );
-                                    };
-                                    return (
-                                      <div
-                                        key={`${column}-${setupKey}`}
-                                        draggable={isHeader}
-                                        onDragStart={isHeader ? handleSetupDragStart("/", setupKey) : undefined}
-                                        onDragOver={isHeader ? handleSetupDragOver : undefined}
-                                        onDrop={isHeader ? handleSetupDrop("/", setupKey) : undefined}
-                                        onDragEnd={isHeader ? handleSetupDragEnd("/") : undefined}
-                                        className="space-y-1"
-                                      >
-                                        {makeToggle()}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : null}
-                            </div>
-                          </div>
-                        ) : null}
-                      </>
-                    ) : null}
                   </div>
-                </div>
+                );
 
-              </Card>
-            );
-          })}
-        </div>
-      </div>
+                const toggleWidgetChatPanelExpanded = () => {
+                  if (isHeader) {
+                    setExpandAll(setWidgetChatPanelDetailsOpenByPage, !widgetChatPanelExpanded);
+                    return;
+                  }
+                  setWidgetChatPanelDetailsOpenByPage((prev) => ({ ...prev, [page]: !widgetChatPanelExpanded }));
+                };
 
-      <Card className="p-4">
-        <div className="text-sm font-semibold text-slate-900">설정-파일 매핑 (공통 상세)</div>
-        <div className="mt-1 text-xs text-slate-500">중앙화 구조 기준으로 공통 1회만 출력됩니다.</div>
-        <div className="mt-3 space-y-2">
-          {SETTING_FILE_GUIDE.map((item) => (
-            <details key={`common-${item.key}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-              <summary className="cursor-pointer text-xs font-semibold text-slate-800">{item.label}</summary>
-              <div className="mt-2 text-[11px] text-slate-600">{item.notes}</div>
-              <div className="mt-1 text-[11px] text-slate-500">
-                사용 페이지:{" "}
-                {item.usedByPages === "common" ? "공통" : item.usedByPages.join(", ")}
-              </div>
-              <div className="mt-2 space-y-1">
-                {item.files.map((file, idx) => (
-                  <div key={`common-${item.key}-${idx}-${file}`} className="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] text-slate-700">
-                    {file}
-                  </div>
-                ))}
-              </div>
-            </details>
-          ))}
-        </div>
-      </Card>
+                const toggleWidgetSetupPanelExpanded = () => {
+                  if (isHeader) {
+                    setExpandAll(setWidgetSetupPanelDetailsOpenByPage, !widgetSetupPanelExpanded);
+                    return;
+                  }
+                  setWidgetSetupPanelDetailsOpenByPage((prev) => ({ ...prev, [page]: !widgetSetupPanelExpanded }));
+                };
+
+
+
+                return (
+                  <Card
+                    key={column}
+                    className={
+                      isHeader
+                        ? "shrink-0 p-4 [&_.state-controls]:hidden [&_.config-input]:pointer-events-none [&_.config-input]:opacity-70"
+                        : "shrink-0 p-4"
+                    }
+                    style={{ width: `${SETTINGS_CARD_WIDTH}px` }}
+                  >
+                    <div className="text-sm font-semibold text-slate-900">{isHeader ? "헤더" : pageLabel}</div>
+                    <div className="mt-1 text-xs text-slate-500">{isHeader ? "코드 정의명/펼침 제어" : "해당 페이지에서 실제 적용될 대화 기능 설정"}</div>
+
+                    <div className="mt-4 space-y-4">
+                      <div className="space-y-2">
+                        <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                          {widgetChatPanelToggle ? (
+                            <>
+                              {renderWidgetPanelToggle(widgetChatPanelToggle, {
+                                expandable: true,
+                                expanded: widgetChatPanelExpanded,
+                                onToggleExpanded: toggleWidgetChatPanelExpanded,
+                              })}
+                              {renderDetailBlock(
+                                widgetChatPanelExpanded,
+                                <>
+                                  {renderAdminPanelSection()}
+                                  {renderInteractionSection()}
+                                </>,
+                                chatSectionDisabled
+                              )}
+                            </>
+                          ) : null}
+                          {widgetHistoryPanelToggle ? renderWidgetPanelToggle(widgetHistoryPanelToggle) : null}
+                          {widgetSetupPanelToggle ? (
+                            <>
+                              {renderWidgetPanelToggle(widgetSetupPanelToggle, {
+                                expandable: true,
+                                expanded: widgetSetupPanelExpanded,
+                                onToggleExpanded: toggleWidgetSetupPanelExpanded,
+                              })}
+                              {renderDetailBlock(
+                                widgetSetupPanelExpanded,
+                                <>
+                                  {renderSetupSection()}
+                                  {renderMcpSection()}
+                                  {renderRuntimeSection()}
+                                </>,
+                                setupSectionDisabled
+                              )}
+                            </>
+                          ) : null}
+                        </div>
+                        <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                          <GroupToggleField
+                            neutralStyle={isHeader}
+                            label={isHeader ? "widget.header.enabled" : "Header"}
+                            checked={draft.widget.header.enabled}
+                            visibility={draft.visibility.widget.header.enabled}
+                            onChange={(v) => updateFeatureByPath(page, "widget.header.enabled", v)}
+                            onChangeVisibility={(mode) =>
+                              updateVisibilityByPath(page, "visibility.widget.header.enabled", mode)
+                            }
+                          />
+                          {renderDetailBlock(
+                            true,
+                            <div className="space-y-2">
+                              {WIDGET_HEADER_TOGGLES.map((def) => (
+                                <Fragment key={def.path}>{renderToggle(def)}</Fragment>
+                              ))}
+                            </div>,
+                            !isHeader && !draft.widget.header.enabled
+                          )}
+                        </div>
+                        <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                          <GroupToggleField
+                            neutralStyle={isHeader}
+                            label={isHeader ? "widget.tabBar.enabled" : "Tab Bar"}
+                            checked={draft.widget.tabBar.enabled}
+                            visibility={draft.visibility.widget.tabBar.enabled}
+                            onChange={(v) => updateFeatureByPath(page, "widget.tabBar.enabled", v)}
+                            onChangeVisibility={(mode) =>
+                              updateVisibilityByPath(page, "visibility.widget.tabBar.enabled", mode)
+                            }
+                          />
+                          {renderDetailBlock(
+                            true,
+                            <div className="space-y-2">
+                              {WIDGET_TAB_TOGGLES.map((def) => (
+                                <Fragment key={def.path}>{renderToggle(def)}</Fragment>
+                              ))}
+                            </div>,
+                            !isHeader && !draft.widget.tabBar.enabled
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+
+
+        </>
+      ) : null}
+
+
     </div>
   );
 }

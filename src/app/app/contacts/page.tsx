@@ -31,7 +31,7 @@ type EndUserItem = {
 
 function formatLocation(item: EndUserItem) {
   const parts = [item.city, item.province, item.country].filter(Boolean);
-  return parts.length > 0 ? parts.join(" · ") : "-";
+  return parts.length > 0 ? parts.join(" 쨌 ") : "-";
 }
 
 function formatDate(value?: string | null) {
@@ -62,7 +62,7 @@ export default function ContactsPage() {
           setTotal(res.total || 0);
         } catch {
           if (!mounted) return;
-          setError("고객 목록을 불러오지 못했습니다.");
+          setError("Unknown");
         } finally {
           if (mounted) setLoading(false);
         }
@@ -83,13 +83,13 @@ export default function ContactsPage() {
       <div className="mx-auto w-full max-w-6xl space-y-4">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">고객</h1>
-          <p className="mt-1 text-sm text-slate-500">엔드 유저 프로필과 대화 기록을 관리합니다.</p>
+          <p className="mt-1 text-sm text-slate-500">?붾뱶 ?좎? ?꾨줈?꾧낵 ???湲곕줉??愿由ы빀?덈떎.</p>
         </div>
 
         <Card>
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-slate-200">
             <div className="text-sm font-semibold text-slate-900">고객 목록</div>
-            <div className="text-xs text-slate-500">총 {loading ? "-" : total}명</div>
+            <div className="text-xs text-slate-500">??{loading ? "-" : total}??/div>
           </div>
           <div className="px-4 py-3 border-b border-slate-200">
             <div className="relative">
@@ -97,18 +97,18 @@ export default function ContactsPage() {
               <Input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="이름, 이메일, 전화번호, 회원 ID로 검색"
+                placeholder="?대쫫, ?대찓?? ?꾪솕踰덊샇, ?뚯썝 ID濡?寃??
                 className="pl-9"
               />
             </div>
           </div>
           {error ? <div className="p-4 text-sm text-rose-600">{error}</div> : null}
           {!error && !loading && rows.length === 0 ? (
-            <div className="p-4 text-sm text-slate-500">조회된 고객이 없습니다.</div>
+            <div className="p-4 text-sm text-slate-500">議고쉶??怨좉컼???놁뒿?덈떎.</div>
           ) : null}
           <div className="divide-y divide-slate-200">
             {rows.map((item) => {
-              const name = item.display_name || item.email || item.phone || "이름 없음";
+              const name = item.display_name || item.email || item.phone || "?대쫫 ?놁쓬";
               const tags = (item.tags || []).slice(0, 3);
               return (
                 <Link
@@ -118,18 +118,18 @@ export default function ContactsPage() {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-sm font-semibold text-slate-900">{name}</div>
-                    {item.member_id ? <Badge variant="green">회원</Badge> : <Badge variant="slate">비회원</Badge>}
-                    {item.has_chat ? <Badge variant="amber">대화 있음</Badge> : <Badge variant="slate">대화 없음</Badge>}
+                    {item.member_id ? <Badge variant="green">?뚯썝</Badge> : <Badge variant="slate">鍮꾪쉶??/Badge>}
+                    {item.has_chat ? <Badge variant="amber">????덉쓬</Badge> : <Badge variant="slate">????놁쓬</Badge>}
                     <span className="ml-auto text-xs text-slate-500">
-                      최근 접속 {formatDate(item.last_seen_at || item.created_at)}
+                      理쒓렐 ?묒냽 {formatDate(item.last_seen_at || item.created_at)}
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-600">
-                    <span>이메일 {item.email || "-"}</span>
-                    <span>휴대폰 {item.phone || "-"}</span>
-                    <span>회원 ID {item.member_id || "-"}</span>
-                    <span>총 세션 {item.sessions_count ?? 0}</span>
-                    <span>지역 {formatLocation(item)}</span>
+                    <span>?대찓??{item.email || "-"}</span>
+                    <span>?대???{item.phone || "-"}</span>
+                    <span>?뚯썝 ID {item.member_id || "-"}</span>
+                    <span>珥??몄뀡 {item.sessions_count ?? 0}</span>
+                    <span>지??{formatLocation(item)}</span>
                   </div>
                   {tags.length > 0 ? (
                     <div className="mt-2 flex flex-wrap gap-2">

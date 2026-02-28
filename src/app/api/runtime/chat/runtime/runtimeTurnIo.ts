@@ -177,8 +177,8 @@ type InsertTurnParams = {
   orgId?: string | null;
 };
 
-const ASK_ADDRESS_REGEX = /(주소|배송지|수령지|우편번호)/;
-const KOREAN_ADDRESS_REGEX = /([가-힣]+(시|군|구|동|읍|면|로|길)\s*\d{0,4})/;
+const ASK_ADDRESS_REGEX = /(???|?????|??????|??????)/;
+const KOREAN_ADDRESS_REGEX = /([??-??+(????????????????\s*\d{0,4})/;
 
 function nowIso() {
   return new Date().toISOString();
@@ -652,6 +652,5 @@ export async function insertTurnWithDebug(params: InsertTurnParams): Promise<{
   }
   return { result, lastDebugPrefixJson: nextDebugPrefixJson, latestTurnId };
 }
-
 
 

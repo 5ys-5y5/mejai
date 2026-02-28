@@ -8,14 +8,14 @@ const CHAR_LIST = [
   "0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
   "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
   "+", "-", "*", "=", "<", ">", ":", "."
-  // "ﾊ", "ﾐ", "ﾋ", "ｰ", "ｳ", "ｼ", "ﾅ", "ﾓ", "ﾆ", "ｻ", "ﾜ", "ﾂ", "ｵ", "ﾘ", "ｱ", "ﾎ", "ﾃ", "ﾏ", "ｹ", "ﾒ", "ｴ", "ｶ", "ｷ", "ﾑ", "ﾕ", "ﾗ", "ｾ", "ﾈ", "ｽ", "ﾀ", "ﾇ", "ﾍ"
+  // "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "??, "?", "??, "??
 ];
 
-// 밀도 (한 번에 생성되는 줄기의 수) - 숫자가 클수록 화면에 글자가 꽉 찹니다.
+// 諛??(??踰덉뿉 ?앹꽦?섎뒗 以꾧린???? - ?レ옄媛 ?댁닔濡??붾㈃??湲?먭? 苑?李밸땲??
 // Density: Higher number = more rain drops appearing at once.
 const FLOW_RATE = 1;
 
-// 속도 (초당 프레임 수) - 숫자가 클수록 빠릅니다.
+// ?띾룄 (珥덈떦 ?꾨젅???? - ?レ옄媛 ?댁닔濡?鍮좊쫭?덈떎.
 // Speed: Frames per second.
 const FPS = 15;
 
@@ -248,10 +248,10 @@ export function MatrixRainBackground() {
   return (
     <div className="relative w-full h-screen bg-white overflow-hidden">
       <span ref={headColorRef} className="absolute opacity-0 pointer-events-none text-black" aria-hidden="true">
-        •
+        ??
       </span>
       <span ref={tailColorRef} className="absolute opacity-0 pointer-events-none text-black" aria-hidden="true">
-        •
+        ??
       </span>
       <canvas
         ref={canvasRef}

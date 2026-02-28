@@ -1,4 +1,4 @@
-﻿export type RuntimeQuickReplyConfig = {
+export type RuntimeQuickReplyConfig = {
   selection_mode: "single" | "multi";
   min_select: number;
   max_select: number;
@@ -38,7 +38,7 @@ function clamp(value: number, min: number, max: number) {
 function inferModeFromContextText(text: string, optionsCount: number) {
   const normalized = String(text || "").trim();
   if (!normalized) return optionsCount > 1 ? "multi" : "single";
-  const hasDelimiterSignal = /,|\/|洹몃━怨?諛?and/i.test(normalized);
+  const hasDelimiterSignal = /,|\/|???????and/i.test(normalized);
   const hasExampleCsv = /\b\d+\s*,\s*\d+/.test(normalized);
   if (hasDelimiterSignal || hasExampleCsv) return "multi";
   return optionsCount > 1 ? "multi" : "single";

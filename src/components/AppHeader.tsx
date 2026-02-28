@@ -23,7 +23,7 @@ export function AppHeader({
       <button
         onClick={onToggleSidebar}
         className="relative inline-flex items-center justify-center whitespace-nowrap text-sm font-medium focus:outline-none disabled:pointer-events-auto bg-transparent hover:bg-slate-100 active:bg-slate-200 rounded-[10px] pointer-events-auto p-0 h-8 w-8 text-slate-600 hover:text-slate-900 duration-100 transition-colors shrink-0"
-        aria-label="사이드바 토글"
+        aria-label="사이드바 열기"
         title="메뉴"
       >
         <svg
@@ -77,7 +77,7 @@ export function AppHeader({
                 value={searchValue}
                 onChange={(e) => onSearchChange?.(e.target.value)}
                 className="h-8 w-72 rounded-[0.6rem] border border-slate-200 bg-white pl-9 pr-3 text-sm font-medium placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-300"
-                placeholder="검색..."
+                placeholder="검색.."
                 aria-label="검색"
               />
             </div>
@@ -96,3 +96,4 @@ export function AppHeader({
     </header>
   );
 }
+

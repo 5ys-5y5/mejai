@@ -8,9 +8,11 @@ import {
   isToolEnabled,
   resolveConversationPageFeatures,
   WIDGET_PAGE_KEY,
-  type ConversationFeaturesProviderShape,
+  type WidgetChatPolicyConfig,
 } from "@/lib/conversation/pageFeaturePolicy";
-import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
+import {
+  readConversationFeatureProvider,
+} from "@/lib/conversation/policyMerge";
 
 function getWidgetRuntimeSecret() {
   return String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
@@ -59,24 +61,27 @@ async function handleStream(
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, agent_id, is_active")
+    .select("id, org_id, agent_id, chat_policy")
     .eq("id", payload.widget_id)
     .maybeSingle();
-  if (!widget || !widget.is_active) {
+  if (!widget) {
     return new Response(encodeEvent("error", { error: "WIDGET_NOT_FOUND" }), {
       status: 404,
       headers: { "Content-Type": "text/event-stream" },
     });
   }
 
-  let providerValue: ConversationFeaturesProviderShape | null = null;
-  try {
-    providerValue = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || ""));
-  } catch {
-    providerValue = null;
+  const mergedPolicy = readConversationFeatureProvider(widget.chat_policy);
+  const widgetPolicy = (mergedPolicy as { widget?: WidgetChatPolicyConfig } | null)?.widget || null;
+  if (widgetPolicy?.is_active === false) {
+    return new Response(encodeEvent("error", { error: "WIDGET_INACTIVE" }), {
+      status: 403,
+      headers: { "Content-Type": "text/event-stream" },
+    });
   }
+  const effectiveAgentId = widgetPolicy?.agent_id || widget.agent_id || null;
   const featureFlags = applyConversationFeatureVisibility(
-    resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
+    resolveConversationPageFeatures(WIDGET_PAGE_KEY, mergedPolicy),
     false
   );
   const requestToolIds: unknown[] = Array.isArray(extras?.mcp_tool_ids) ? extras!.mcp_tool_ids! : [];
@@ -141,7 +146,7 @@ async function handleStream(
           body: JSON.stringify({
             message,
             session_id: sessionId,
-            agent_id: widget.agent_id || undefined,
+            agent_id: effectiveAgentId || undefined,
             page_key: WIDGET_PAGE_KEY,
             mode: extras?.mode || undefined,
             llm: effectiveLlm,
@@ -151,6 +156,7 @@ async function handleStream(
             mcp_tool_ids: mergedMcpSelectors,
             mcp_provider_keys: filteredProviderKeys,
             runtime_flags: runtimeFlags,
+            chat_policy: mergedPolicy,
             ...(extras?.visitor && typeof extras.visitor === "object" ? { visitor: extras.visitor } : {}),
             ...(extras?.end_user && typeof extras.end_user === "object" ? { end_user: extras.end_user } : {}),
           }),

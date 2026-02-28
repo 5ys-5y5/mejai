@@ -625,7 +625,8 @@ function extractDebugText(content: string) {
     items.forEach((li) => {
       const label = getLiLabel(li);
       if (label) {
-        lines.push(`${"  ".repeat(depth)}- ${label}`);
+        const indent = Math.max(0, depth);
+        lines.push(`${"  ".repeat(indent)}- ${label}`);
       }
       const nested = Array.from(li.children).find((child) => child.tagName === "UL");
       if (nested) {

@@ -59,22 +59,22 @@ function isTooGenericRestockQuery(value: string) {
   if (!normalized) return true;
   const compact = normalized.replace(/\s+/g, "");
   const genericTokens = new Set([
-    "재입고",
-    "재고",
-    "입고",
-    "품절",
-    "재입고알림",
-    "입고알림",
+    "??????,
+    "?ш퀬",
+    "?낃퀬",
+    "?덉젅",
+    "????????,
+    "?낃퀬?뚮┝",
     "restock",
     "stock",
   ]);
   if (genericTokens.has(compact)) return true;
   const stripped = compact
-    .replace(/재입고/g, "")
-    .replace(/재고/g, "")
-    .replace(/입고/g, "")
-    .replace(/품절/g, "")
-    .replace(/알림/g, "")
+    .replace(/??????g, "")
+    .replace(/?ш퀬/g, "")
+    .replace(/?낃퀬/g, "")
+    .replace(/?덉젅/g, "")
+    .replace(/?뚮┝/g, "")
     .replace(/restock/g, "")
     .replace(/stock/g, "")
     .trim();
@@ -84,7 +84,7 @@ function isTooGenericRestockQuery(value: string) {
 function parseIndexedChoice(text: string): number | null {
   const normalized = String(text || "").trim();
   if (!normalized) return null;
-  const m = normalized.match(/^(\d+)\s*(?:번)?$/);
+  const m = normalized.match(/^(\d+)\s*(?:???$/);
   if (!m) return null;
   const n = Number(m[1]);
   if (!Number.isFinite(n) || n < 1) return null;
@@ -155,10 +155,10 @@ export function buildIntentScopePrompt(input: {
 }) {
   const { spec } = input;
   if (spec.slot_prompt_template_key === "restock_need_product") {
-    return "재입고를 확인할 상품명을 알려주세요. (예: 상품명 또는 모델명)";
+    return "?ъ엯怨좊? ?뺤씤???곹뭹紐낆쓣 ?뚮젮二쇱꽭?? (?? ?곹뭹紐??먮뒗 紐⑤뜽紐?";
   }
   if (spec.slot_prompt_template_key === "faq_need_question_scope") {
-    return "어떤 내용을 도와드릴까요? (예: 배송, 환불, 교환 등)";
+    return "?대뼡 ?댁슜???꾩??쒕┫源뚯슂? (?? 諛곗넚, ?섎텋, 援먰솚 ??";
   }
-  return "필요한 정보를 알려주세요.";
+  return "?꾩슂???뺣낫瑜??뚮젮二쇱꽭??";
 }

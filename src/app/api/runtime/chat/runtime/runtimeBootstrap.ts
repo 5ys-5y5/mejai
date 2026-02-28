@@ -18,6 +18,7 @@ import { prepareSessionState } from "./sessionRuntime";
 import { pushRuntimeTimingStage, type RuntimeTimingStage } from "./runtimeSupport";
 import { DEFAULT_TOOL_PROVIDER_MAP } from "./mcpToolRegistry";
 import type { CompiledPolicy, RuntimeContext } from "../shared/runtimeTypes";
+import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
 
 type Body = {
   page_key?: string;
@@ -37,6 +38,7 @@ type Body = {
   runtime_flags?: {
     restock_lite?: boolean;
   };
+  chat_policy?: ConversationFeaturesProviderShape | null;
 };
 
 type RuntimeContextAny = RuntimeContext;
@@ -416,6 +418,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
     board_no: cafe24Provider.board_no ? String(cafe24Provider.board_no) : null,
   };
   pushRuntimeTimingStage(timingStages, "load_auth_settings", iamLookupStartedAt);
+  const chatPolicyProvider = (body?.chat_policy || null) as ConversationFeaturesProviderShape | null;
 
   const adminKbStartedAt = Date.now();
   const adminKbRes = await fetchAdminKbs(context);
@@ -516,7 +519,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           .select("id, name, provider_key, scope_key, version, is_active")
           .in("id", validToolIds)
         : Promise.resolve({
-          data: [] as Array<{ id: string; name: string; provider_key: string; scope_key?: string | null; version?: string | null; is_active?: boolean | null }>,
+          data: [] as Array<{ id: string; name: "Unknown"}>,
         }),
       providerSelections.length
         ? context.supabase
@@ -525,7 +528,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
           .in("provider_key", providerSelections)
           .eq("is_active", true)
         : Promise.resolve({
-          data: [] as Array<{ id: string; name: string; provider_key: string; scope_key?: string | null; version?: string | null; is_active?: boolean | null }>,
+          data: [] as Array<{ id: string; name: "Unknown"}>,
         }),
     ]);
     const toolsByIdError = (toolsById as { error?: { message?: string } | null }).error;
@@ -693,6 +696,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       providerConfig,
       runtimeFlags,
       authSettings,
+      chatPolicyProvider,
       userPlan,
       userIsAdmin,
       userRole,

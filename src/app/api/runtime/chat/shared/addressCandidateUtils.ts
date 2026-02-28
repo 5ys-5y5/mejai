@@ -48,13 +48,13 @@ export function buildAddressCandidateQuickReplies(candidates: AddressCandidate[]
 export function buildAddressCandidateChoiceItems(candidates: AddressCandidate[]) {
   return candidates.map((candidate) => ({
     value: String(candidate.index),
-    label: `${candidate.index}번`,
-    title: candidate.jibun_addr || candidate.road_addr || `후보 ${candidate.index}`,
+    label: `${candidate.index}??,
+    title: candidate.jibun_addr || candidate.road_addr || `?꾨낫 ${candidate.index}`,
     description: [candidate.road_addr, candidate.zip_no].filter(Boolean).join(" / "),
     fields: [
-      { label: "지번주소", value: candidate.jibun_addr || "-" },
-      { label: "도로명주소", value: candidate.road_addr || "-" },
-      { label: "우편번호", value: candidate.zip_no || "-" },
+      { label: "지번주??, value: candidate.jibun_addr || "-" },
+      { label: "Unknown"-" },
+      { label: "?고렪踰덊샇", value: candidate.zip_no || "-" },
     ],
   }));
 }
@@ -68,7 +68,7 @@ export function parseAddressCandidateSelection(rawText: string, candidateCount: 
     const picked = Number(pureNumber[0]);
     return picked >= 1 && picked <= max ? picked : null;
   }
-  const withKoreanSuffix = normalized.match(/(\d{1,2})\s*번/);
+  const withKoreanSuffix = normalized.match(/(\d{1,2})\s*??);
   if (withKoreanSuffix) {
     const picked = Number(withKoreanSuffix[1]);
     return picked >= 1 && picked <= max ? picked : null;
@@ -79,20 +79,19 @@ export function parseAddressCandidateSelection(rawText: string, candidateCount: 
 export function buildAddressCandidateChoicePrompt(input: { candidates: AddressCandidate[]; originalAddress: string }) {
   const { candidates, originalAddress } = input;
   const lines = [
-    "입력하신 주소와 매칭된 후보가 여러 개입니다. 정확한 주소를 선택해 주세요.",
-    `입력 주소: ${originalAddress || "-"}`,
+    "?낅젰?섏떊 二쇱냼? 留ㅼ묶???꾨낫媛 ?щ윭 媛쒖엯?덈떎. ?뺥솗??二쇱냼瑜??좏깮??二쇱꽭??",
+    `?낅젰 二쇱냼: ${originalAddress || "-"}`,
     "",
   ];
   for (const candidate of candidates) {
     lines.push(
-      `${candidate.index}번`,
-      `- 지번주소: ${candidate.jibun_addr || "-"}`,
-      `- 도로명주소: ${candidate.road_addr || "-"}`,
-      `- 우편번호: ${candidate.zip_no || "-"}`,
+      `${candidate.index}??,
+      `- 지번주?? ${candidate.jibun_addr || "-"}`,
+      `- ?????????? ${candidate.road_addr || "-"}`,
+      `- ?고렪踰덊샇: ${candidate.zip_no || "-"}`,
       ""
     );
   }
-  lines.push("원하는 번호를 입력해 주세요. (예: 1)");
+  lines.push("?먰븯??踰덊샇瑜??낅젰??二쇱꽭?? (?? 1)");
   return lines.join("\n");
 }
-

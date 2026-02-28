@@ -3,8 +3,35 @@ import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { issueWidgetToken } from "@/lib/widgetToken";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
-import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
-import { WIDGET_PAGE_KEY, type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
+import {
+  readConversationFeatureProvider,
+} from "@/lib/conversation/policyMerge";
+import {
+  WIDGET_PAGE_KEY,
+  type ConversationFeaturesProviderShape,
+  type WidgetChatPolicyConfig,
+} from "@/lib/conversation/pageFeaturePolicy";
+
+function normalizeStringArray(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+}
+
+function readWidgetPolicy(policy: unknown): WidgetChatPolicyConfig | null {
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) return null;
+  const widget = (policy as { widget?: unknown }).widget;
+  if (!widget || typeof widget !== "object" || Array.isArray(widget)) return null;
+  return widget as WidgetChatPolicyConfig;
+}
+
+function mergeWidgetTheme(
+  baseTheme: Record<string, unknown> | null | undefined,
+  policyTheme: WidgetChatPolicyConfig["theme"]
+) {
+  const theme = baseTheme && typeof baseTheme === "object" ? baseTheme : {};
+  if (!policyTheme) return { ...theme };
+  return { ...theme, ...policyTheme };
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -47,12 +74,14 @@ function readOrigin(input: Record<string, any>) {
 
 function resolveWidgetUiSettingsSource(policy: ConversationFeaturesProviderShape | null) {
   const pageKey = WIDGET_PAGE_KEY;
-  const hasPageOverride = Boolean(policy?.pages && policy.pages[pageKey]);
-  const hasSetupFields = Boolean(policy?.settings_ui?.setup_fields && policy.settings_ui.setup_fields[pageKey]);
-  const hasDebugCopy = Boolean(policy?.debug_copy && policy.debug_copy[pageKey]);
+  const hasPageOverride = Boolean(policy?.features || (policy?.pages && policy.pages[pageKey]));
+  const hasSetupFields = Boolean(
+    policy?.setup_ui || (policy?.settings_ui?.setup_fields && policy.settings_ui.setup_fields[pageKey])
+  );
+  const hasDebugCopy = Boolean(policy?.debug || (policy?.debug_copy && policy.debug_copy[pageKey]));
   return {
     pageKey,
-    source: hasPageOverride ? "chat_policy.pages" : "default",
+    source: hasPageOverride ? "chat_policy" : "default",
     hasPageOverride,
     hasSetupFields,
     hasDebugCopy,
@@ -81,9 +110,8 @@ export async function POST(req: NextRequest) {
 
   const { data: widget, error: widgetError } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("*")
+    .select("id, org_id, name, agent_id, theme, public_key, chat_policy")
     .eq("public_key", publicKey)
-    .eq("is_active", true)
     .maybeSingle();
 
   if (widgetError) {
@@ -93,14 +121,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
 
+  const mergedChatPolicy = readConversationFeatureProvider(widget.chat_policy);
+  const widgetPolicy = readWidgetPolicy(mergedChatPolicy);
+  if (widgetPolicy?.is_active === false) {
+    return NextResponse.json({ error: "WIDGET_INACTIVE" }, { status: 404 });
+  }
+
   const origin = readOrigin(body);
   const pageUrl = String(body.page_url || body.pageUrl || body.referrer || "").trim();
   const host = extractHostFromUrl(origin || pageUrl);
-  const allowedDomains = Array.isArray(widget.allowed_domains) ? widget.allowed_domains : [];
-  if (!matchAllowedDomain(host, allowedDomains)) {
+  const allowedDomains = widgetPolicy?.allowed_domains || [];
+  if (allowedDomains.length > 0 && !matchAllowedDomain(host, allowedDomains)) {
     return NextResponse.json({ error: "DOMAIN_NOT_ALLOWED" }, { status: 403 });
   }
-  const allowedPaths = Array.isArray(widget.allowed_paths) ? (widget.allowed_paths as unknown[]) : [];
+  const allowedPaths = widgetPolicy?.allowed_paths || [];
+  const mergedTheme = mergeWidgetTheme(widget.theme as Record<string, unknown> | null, widgetPolicy?.theme);
   if (allowedPaths.length > 0 && pageUrl) {
     let pathname = "";
     try {
@@ -130,12 +165,25 @@ export async function POST(req: NextRequest) {
   if (sessionId) {
     const { data: existing } = await supabaseAdmin
       .from("D_conv_sessions")
-      .select("id, org_id, metadata")
+      .select("id, org_id, widget_id, metadata")
       .eq("id", sessionId)
       .eq("org_id", widget.org_id)
       .maybeSingle();
     if (!existing) {
       sessionId = "";
+    } else {
+      const sessionWidgetId = String((existing as Record<string, any>).widget_id || "").trim();
+      const metadata =
+        existing.metadata && typeof existing.metadata === "object"
+          ? (existing.metadata as Record<string, any>)
+          : null;
+      const metadataWidgetId = metadata ? String(metadata.widget_id || "").trim() : "";
+      const expectedWidgetId = String(widget.id || "").trim();
+      if (sessionWidgetId && sessionWidgetId !== expectedWidgetId) {
+        sessionId = "";
+      } else if (!sessionWidgetId && metadataWidgetId && metadataWidgetId !== expectedWidgetId) {
+        sessionId = "";
+      }
     }
   }
 
@@ -149,13 +197,15 @@ export async function POST(req: NextRequest) {
       visitor_id: visitorId || null,
       visitor: body.visitor && typeof body.visitor === "object" ? body.visitor : null,
     };
+    const effectiveAgentId = widgetPolicy?.agent_id || widget.agent_id || null;
     const payload = {
       id: sessionId,
       org_id: widget.org_id,
+      widget_id: widget.id,
       session_code: makeSessionCode(),
       started_at: now,
       channel: "web_widget",
-      agent_id: widget.agent_id || null,
+      agent_id: effectiveAgentId,
       metadata,
     };
     const { error: insertError } = await supabaseAdmin.from("D_conv_sessions").insert(payload);
@@ -180,9 +230,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null);
   if (sessionId) {
-    const settingsSource = resolveWidgetUiSettingsSource(chatPolicy);
+    const settingsSource = resolveWidgetUiSettingsSource(mergedChatPolicy);
     void (async () => {
       try {
         await supabaseAdmin.from("F_audit_events").insert({
@@ -218,12 +267,16 @@ export async function POST(req: NextRequest) {
     session_id: sessionId,
     widget_config: {
       id: widget.id,
-      name: widget.name,
-      agent_id: widget.agent_id,
-      allowed_domains: widget.allowed_domains || [],
-      theme: widget.theme || {},
+      name: widgetPolicy?.name || widget.name,
+      agent_id: widgetPolicy?.agent_id || widget.agent_id,
+      allowed_domains: allowedDomains,
+      allowed_paths: allowedPaths,
+      allowed_accounts: normalizeStringArray(
+        (widgetPolicy?.theme as Record<string, any>)?.allowed_accounts ?? widgetPolicy?.allowed_accounts
+      ),
+      theme: mergedTheme,
       public_key: widget.public_key,
-      chat_policy: chatPolicy,
+      chat_policy: mergedChatPolicy,
     },
   });
 }

@@ -7,7 +7,7 @@ export type InlineKbSampleItem = {
 function normalizeTokens(line: string) {
   return line
     .toLowerCase()
-    .replace(/[^\w가-힣\s]/g, " ")
+    .replace(/[^\w\uAC00-\uD7A3\s]/g, " ")
     .split(/\s+/)
     .map((token) => token.trim())
     .filter(Boolean);
@@ -15,8 +15,8 @@ function normalizeTokens(line: string) {
 
 function detectPolarity(line: string): "positive" | "negative" | "neutral" {
   const normalized = line.toLowerCase();
-  const negative = /(금지|불가|안됨|하지\s*마|하지\s*않|제한|제외|차단)/;
-  const positive = /(허용|가능|진행|권장|필수|해야|적용|승인)/;
+  const negative = /(\uBD88\uB9CC|\uBD80\uC815|\uBD80\uC2E0|\uBD88\uD3B8|\uBB38\uC81C|\uC5B4\uB824\uC6C0|\uC548\uB418|\uC624\uB958)/;
+  const positive = /(\uAC10\uC0AC|\uB9CC\uC871|\uC88B\uC74C|\uAE0D\uC815|\uC720\uC6A9|\uC778\uC0C1|\uB9CC\uB4E4|\uD1B5\uACFC)/;
   if (negative.test(normalized)) return "negative";
   if (positive.test(normalized)) return "positive";
   return "neutral";
@@ -24,19 +24,19 @@ function detectPolarity(line: string): "positive" | "negative" | "neutral" {
 
 function toTopicKey(line: string) {
   const ignore = new Set([
-    "금지",
-    "불가",
-    "안됨",
-    "허용",
-    "가능",
-    "진행",
-    "권장",
-    "필수",
-    "해야",
-    "적용",
-    "승인",
-    "하지",
-    "않",
+    "\uCD08\uAE30",
+    "\uAE30\uBCF8",
+    "\uAD6C\uBD84",
+    "\uC784\uC2DC",
+    "\uC9C4\uD589",
+    "\uAD8C\uC7A5",
+    "\uC120\uD0DD",
+    "\uC644\uB8CC",
+    "\uC694\uCCAD",
+    "\uACF5\uD1B5",
+    "\uC77C\uBC18",
+    "\uC815\uBCF4",
+    "\uAE30\uD0C0",
   ]);
   const terms = normalizeTokens(line).filter((token) => token.length >= 2 && !ignore.has(token));
   return terms.slice(0, 6).join(" ");
@@ -71,4 +71,3 @@ export function hasConflictingInlineKbSamples(sampleContents: string[]) {
   }
   return false;
 }
-

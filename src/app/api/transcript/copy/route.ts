@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { getServerContext } from "@/lib/serverAuth";
 import { verifyWidgetToken } from "@/lib/widgetToken";
-import type { ConversationFeaturesProviderShape, ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
+import type { ConversationFeaturesProviderShape, ConversationPageKey, WidgetChatPolicyConfig } from "@/lib/conversation/pageFeaturePolicy";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import {
   buildDebugTranscript,
@@ -11,6 +11,7 @@ import {
   type TranscriptMessage,
 } from "@/lib/debugTranscript";
 import { mapRuntimeResponseToTranscriptFields, type RuntimeRunResponseLike } from "@/lib/runtimeResponseTranscript";
+import { readConversationFeatureProvider } from "@/lib/conversation/policyMerge";
 
 const TRANSCRIPT_SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
 const WIDGET_PROXY_EVENT_PREFIX = "WIDGET_RUNTIME_PROXY_";
@@ -181,10 +182,15 @@ export async function POST(req: NextRequest) {
 
   const widgetPayload = token ? verifyWidgetToken(token) : null;
   let providerValue: ConversationFeaturesProviderShape | null = null;
+
   let supabase: ReturnType<typeof createAdminSupabaseClient> | null = null;
   let orgId: string | null = null;
   let sessionId = sessionOverride;
   let filterWidgetProxyEvents = false;
+
+  if (!widgetPayload) {
+    return NextResponse.json({ error: "CONVERSATION_DEPRECATED" }, { status: 410 });
+  }
 
   if (widgetPayload) {
     let supabaseAdmin;
@@ -199,11 +205,16 @@ export async function POST(req: NextRequest) {
     supabase = supabaseAdmin;
     const { data: widget } = await supabaseAdmin
       .from("B_chat_widgets")
-      .select("id, org_id, is_active")
+      .select("id, org_id, chat_policy")
       .eq("id", widgetPayload.widget_id)
       .maybeSingle();
-    if (!widget || !widget.is_active) {
+    if (!widget) {
       return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+    }
+    const mergedPolicy = readConversationFeatureProvider(widget.chat_policy);
+    const widgetPolicy = (mergedPolicy as { widget?: WidgetChatPolicyConfig } | null)?.widget || null;
+    if (widgetPolicy?.is_active === false) {
+      return NextResponse.json({ error: "WIDGET_INACTIVE" }, { status: 403 });
     }
     orgId = String(widget.org_id || "");
     if (!orgId) {
@@ -236,45 +247,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "SESSION_VISITOR_MISMATCH" }, { status: 403 });
     }
     sessionId = sessionOverride;
-    const { data: settings } = await supabaseAdmin
-      .from("A_iam_auth_settings")
-      .select("providers")
-      .eq("org_id", orgId)
-      .is("user_id", null)
-      .maybeSingle();
-    const providers = (settings?.providers || {}) as Record<string, ConversationFeaturesProviderShape | undefined>;
-    providerValue = providers.chat_policy || null;
+    providerValue = mergedPolicy;
     filterWidgetProxyEvents = true;
-  } else {
-    const cookieHeader = req.headers.get("cookie") || "";
-    const context = await getServerContext(authHeader, cookieHeader);
-    if ("error" in context) {
-      return NextResponse.json({ error: context.error }, { status: 401 });
-    }
-    supabase = context.supabase as ReturnType<typeof createAdminSupabaseClient>;
-    orgId = context.orgId || null;
-    const { data: sessionRow, error: sessionError } = await context.supabase
-      .from("D_conv_sessions")
-      .select("id, org_id")
-      .eq("id", sessionOverride)
-      .eq("org_id", orgId)
-      .maybeSingle();
-    if (sessionError) {
-      return NextResponse.json({ error: sessionError.message }, { status: 400 });
-    }
-    if (!sessionRow) {
-      return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 });
-    }
-    sessionId = sessionRow.id;
-    const { data: settings } = await context.supabase
-      .from("A_iam_auth_settings")
-      .select("providers")
-      .eq("org_id", orgId)
-      .is("user_id", null)
-      .maybeSingle();
-    const providers = (settings?.providers || {}) as Record<string, ConversationFeaturesProviderShape | undefined>;
-    providerValue = providers.chat_policy || null;
-  }
 
   if (!supabase || !orgId) {
     return NextResponse.json({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 });

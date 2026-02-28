@@ -57,12 +57,12 @@ export type PrincipleViolation = {
 };
 
 const PHONE_REGEX = /\b01[016789]-?\d{3,4}-?\d{4}\b/;
-const ASK_PHONE_REGEX = /(휴대폰 번호|전화번호).*(알려|입력|적어)/;
-const ASK_ADDRESS_REGEX = /(주소|배송지).*(알려|입력|적어)/;
-const ASK_ZIPCODE_REGEX = /(우편번호).*(알려|입력|적어)/;
-const KOREAN_ADDRESS_REGEX = /(서울|경기|인천|부산|대구|광주|대전|울산|세종|제주|강원|충북|충남|전북|전남|경북|경남).*(구|군|시|동|읍|면|로|길)/;
+const ASK_PHONE_REGEX = /(?대???踰덊샇|?꾪솕踰덊샇).*(?뚮젮|?낅젰|?곸뼱)/;
+const ASK_ADDRESS_REGEX = /(二쇱냼|諛곗넚吏).*(?뚮젮|?낅젰|?곸뼱)/;
+const ASK_ZIPCODE_REGEX = /(?고렪踰덊샇).*(?뚮젮|?낅젰|?곸뼱)/;
+const KOREAN_ADDRESS_REGEX = /(?쒖슱|寃쎄린|?몄쿇|遺???援?愿묒＜|????몄궛|?몄쥌|?쒖＜|媛뺤썝|異⑸턿|異⑸궓|?꾨턿|?꾨궓|寃쎈턿|寃쎈궓).*(援?援???????硫?濡?湲?/;
 const COMPLETION_LIKE_ANSWER_REGEX =
-  /(완료되었|완료됐|완료되었습니다|성공적으로|처리되었|처리되었습니다|신청이 완료|등록되었|전송되었|발송되었|done|completed|successful)/i;
+  /(?꾨즺?섏뿀|?꾨즺???꾨즺?섏뿀?듬땲???깃났?곸쑝濡?泥섎━?섏뿀|泥섎━?섏뿀?듬땲???좎껌???꾨즺|?깅줉?섏뿀|?꾩넚?섏뿀|諛쒖넚?섏뿀|done|completed|successful)/i;
 const OUTCOME_EVENT_REGEX = /_(SENT|FAILED|SUCCESS|ERROR|TIMEOUT|CANCELLED|SCHEDULED)$/i;
 const INTERNAL_LIFECYCLE_STEM_EXCLUDE = new Set([
   "RUNTIME_SELF_UPDATE_REVIEW",
@@ -302,7 +302,7 @@ export function detectPrincipleViolations(input: {
 
     const answer = String(turn.final_answer || turn.answer_text || "");
     const previousWasZipcodeConfirmPromptForMemory =
-      /우편번호[:：]/.test(previousAnswer) && /(맞는지 확인|맞으면\s*'네'|아니면\s*'아니오')/.test(previousAnswer);
+      /?고렪踰덊샇[:竊?/.test(previousAnswer) && /(留욌뒗吏 ?뺤씤|留욎쑝硫?s*'??|?꾨땲硫?s*'?꾨땲??)/.test(previousAnswer);
     const suppressMemoryAddressRepeatViolation =
       previousWasZipcodeConfirmPromptForMemory &&
       isYesLike(userText) &&
@@ -373,7 +373,7 @@ export function detectPrincipleViolations(input: {
     const finalSkipPayload = ((finalSkipPolicyDecision?.payload || {}) as Record<string, unknown>) || {};
 
     const finalResponseDebug = readFinalResponseDebug((turn.bot_context || null) as Record<string, unknown> | null);
-    const forcedTemplateLooksAddressPrompt = /(주소|배송지).*(알려|입력|적어)/.test(
+    const forcedTemplateLooksAddressPrompt = /(二쇱냼|諛곗넚吏).*(?뚮젮|?낅젰|?곸뼱)/.test(
       finalResponseDebug.forcedTemplateApplied
     );
     const forceTemplateMisapplied =
@@ -444,7 +444,7 @@ export function detectPrincipleViolations(input: {
       String(toolDeferPayload.reason || "").trim() === "ORDER_AND_ADDRESS_ALREADY_AVAILABLE" ||
       String(finalSkipPayload.reason || "").trim() === "ORDER_AND_ADDRESS_ALREADY_AVAILABLE";
     const previousWasZipcodeConfirmPrompt =
-      /우편번호[:：]/.test(previousAnswer) && /(맞는지 확인|맞으면\s*'네'|아니면\s*'아니오')/.test(previousAnswer);
+      /?고렪踰덊샇[:竊?/.test(previousAnswer) && /(留욌뒗吏 ?뺤씤|留욎쑝硫?s*'??|?꾨땲硫?s*'?꾨땲??)/.test(previousAnswer);
     const confirmationContext =
       previousWasZipcodeConfirmPrompt && (isYesLike(userText) || isNoLike(userText));
     const runtimePathMissingAfterDefer =
@@ -654,7 +654,7 @@ export function detectPrincipleViolations(input: {
             .filter(Boolean)
         : [];
       const completionLikeAnswer =
-        /신청이 완료|알림 신청이 완료|재입고 알림 신청이 완료/.test(answer) ||
+        /?좎껌???꾨즺|?뚮┝ ?좎껌???꾨즺|?ъ엯怨??뚮┝ ?좎껌???꾨즺/.test(answer) ||
         /restock.*subscribe.*completed/i.test(answer);
       if (notificationIds.length > 0 && completionLikeAnswer) {
         const deliveryStartedEventPresent = turnEvents.some((event) => {
@@ -908,7 +908,7 @@ export function detectPrincipleViolations(input: {
       const responseAddress1 = String(firstReceiver.address1 || "").trim();
       const responseAddress2 = String(firstReceiver.address2 || "").trim();
       const responseAddressFull = String(firstReceiver.address_full || "").trim();
-      const detailInAddress1 = /(\d{1,5}\s*호|호$|층$|동$|실$)/.test(requestAddress1);
+      const detailInAddress1 = /(\d{1,5}\s*????|??|??|??)/.test(requestAddress1);
       const structureMismatch =
         detailInAddress1 &&
         Boolean(requestZipcode) &&
@@ -1094,10 +1094,10 @@ function readAddressSearchEvent(events: RuntimeEvent[]) {
 
 function isYesLike(text: string) {
   const normalized = String(text || "").trim().toLowerCase();
-  return normalized === "네" || normalized === "예" || normalized === "yes" || normalized === "y";
+  return normalized === "?? || normalized === "?? || normalized === "yes" || normalized === "y";
 }
 
 function isNoLike(text: string) {
   const normalized = String(text || "").trim().toLowerCase();
-  return normalized === "아니오" || normalized === "아니요" || normalized === "no" || normalized === "n";
+  return normalized === "?꾨땲?? || normalized === "?꾨땲?? || normalized === "no" || normalized === "n";
 }

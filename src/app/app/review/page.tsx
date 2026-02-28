@@ -42,7 +42,7 @@ export default function ReviewPage() {
         }
       } catch {
         if (mounted) {
-          setError("리뷰 큐 데이터를 불러오지 못했습니다.");
+          setError("由щ럭 ???곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??");
           setLoading(false);
         }
       }
@@ -61,29 +61,29 @@ export default function ReviewPage() {
   return (
     <div className="px-5 md:px-8 py-6">
       <div className="mx-auto w-full max-w-6xl">
-        <h1 className="text-2xl font-semibold text-slate-900">후속 지원 요청</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">?꾩냽 吏???붿껌</h1>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <label className="block w-full max-w-xs">
-            <div className="text-xs text-slate-500">담당자 필터</div>
+            <div className="text-xs text-slate-500">?대떦???꾪꽣</div>
             <Input
               className="mt-2"
               value={owner}
               onChange={(e) => setOwner(e.target.value)}
-              placeholder="담당자 이름"
+              placeholder="?대떦???대쫫"
             />
           </label>
         </div>
 
         <Card className="mt-4">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-            <div className="text-sm font-semibold text-slate-900">요청 목록</div>
-            <div className="text-xs text-slate-500">총 {loading ? "-" : items.length}건</div>
+            <div className="text-sm font-semibold text-slate-900">Unknown</div>
+            <div className="text-xs text-slate-500">??{loading ? "-" : items.length}??/div>
           </div>
           <ul className="divide-y divide-slate-200">
             {error ? <li className="p-4 text-sm text-rose-600">{error}</li> : null}
             {!error && !loading && items.length === 0 ? (
-              <li className="p-4 text-sm text-slate-500">요청 데이터가 없습니다.</li>
+              <li className="p-4 text-sm text-slate-500">?붿껌 ?곗씠?곌? ?놁뒿?덈떎.</li>
             ) : null}
             {items.map((r) => (
               <li key={r.id} className="p-4 hover:bg-slate-50">
@@ -94,12 +94,12 @@ export default function ReviewPage() {
                   <div className="ml-auto text-xs text-slate-500">{formatDate(r.created_at)}</div>
                 </div>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                  <IconChip icon={CheckCircle2} label={`담당자: ${r.owner || "미배정"}`} />
+                  <IconChip icon={CheckCircle2} label={`?대떦?? ${r.owner || "誘몃같??}`} />
                   <Link
                     className="text-emerald-700 hover:underline"
                     href={`/app/calls/${r.session_id || ""}`}
                   >
-                    세션 보기
+                    ?몄뀡 蹂닿린
                   </Link>
                 </div>
               </li>

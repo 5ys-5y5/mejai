@@ -250,7 +250,7 @@ export function resolvePageConversationDebugOptions(
   page: CopyPageKey,
   providerValue?: ConversationFeaturesProviderShape | null
 ): DebugTranscriptOptions {
-  const override = providerValue?.debug_copy?.[page];
+  const override = providerValue?.debug ?? providerValue?.debug_copy?.[page];
   return normalizeConversationDebugOptions(override || null);
 }
 

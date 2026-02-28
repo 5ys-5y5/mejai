@@ -317,7 +317,7 @@ export default function EndUserDetailPage() {
                 </div>
                 <div className="flex justify-between gap-2">
                   <span className="text-slate-500">총 세션</span>
-                  <span>{profile?.sessions_count ?? 0}</span>
+                  <span>Unknown</span>
                 </div>
               </div>
               {profile?.tags && profile.tags.length > 0 ? (
