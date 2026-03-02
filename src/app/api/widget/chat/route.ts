@@ -42,15 +42,27 @@ function resolveRuntimeBaseUrl(req: NextRequest) {
   const forwardedHost = String(req.headers.get("x-forwarded-host") || "").trim();
   const forwardedProto = String(req.headers.get("x-forwarded-proto") || "").trim();
   if (forwardedHost) {
+    const cleanedHost = forwardedHost.replace(/^https?:\/\//, "");
     const proto = forwardedProto || "https";
-    return `${proto}://${forwardedHost}`;
+    const candidate = `${proto}://${cleanedHost}`;
+    try {
+      return new URL(candidate).toString().replace(/\/+$/, "");
+    } catch {
+      // fall through
+    }
   }
   const host = String(req.headers.get("host") || "").trim();
   if (host) {
+    const cleanedHost = host.replace(/^https?:\/\//, "");
     const proto = forwardedProto || req.nextUrl.protocol.replace(":", "") || "http";
-    return `${proto}://${host}`;
+    const candidate = `${proto}://${cleanedHost}`;
+    try {
+      return new URL(candidate).toString().replace(/\/+$/, "");
+    } catch {
+      // fall through
+    }
   }
-  return req.nextUrl.origin;
+  return req.nextUrl.origin.replace(/\/+$/, "");
 }
 
 async function logWidgetProxyEvent(input: {
@@ -92,12 +104,13 @@ function getWidgetRuntimeSecret() {
 }
 
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") || "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
-  const payload = verifyWidgetToken(token);
-  if (!payload) {
-    return NextResponse.json({ error: "INVALID_WIDGET_TOKEN" }, { status: 401 });
-  }
+  try {
+    const authHeader = req.headers.get("authorization") || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+    const payload = verifyWidgetToken(token);
+    if (!payload) {
+      return NextResponse.json({ error: "INVALID_WIDGET_TOKEN" }, { status: 401 });
+    }
 
   const body = await req.json().catch(() => null);
   if (!body || !body.message) {
@@ -201,8 +214,18 @@ export async function POST(req: NextRequest) {
   }
 
   const proxyTraceId = crypto.randomUUID();
-  const runtimeBaseUrl = resolveRuntimeBaseUrl(req);
-  const targetUrl = new URL("/api/runtime/chat", runtimeBaseUrl).toString();
+  let runtimeBaseUrl = resolveRuntimeBaseUrl(req);
+  try {
+    runtimeBaseUrl = new URL(runtimeBaseUrl).toString().replace(/\/+$/, "");
+  } catch {
+    runtimeBaseUrl = req.nextUrl.origin.replace(/\/+$/, "");
+  }
+  let targetUrl = "";
+  try {
+    targetUrl = new URL("/api/runtime/chat", runtimeBaseUrl).toString();
+  } catch {
+    targetUrl = new URL("/api/runtime/chat", req.nextUrl.origin).toString();
+  }
   const requestMeta = {
     proxy_trace_id: proxyTraceId,
     runtime_base_url: runtimeBaseUrl,
@@ -379,11 +402,22 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  return NextResponse.json(
-    {
-      ...data,
-      proxy_trace_id: proxyTraceId,
-    },
-    { status: res.status }
-  );
+    return NextResponse.json(
+      {
+        ...data,
+        proxy_trace_id: proxyTraceId,
+      },
+      { status: res.status }
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return NextResponse.json(
+      {
+        error: "WIDGET_CHAT_UNHANDLED",
+        detail: message,
+        stack: error instanceof Error ? error.stack || null : null,
+      },
+      { status: 500 }
+    );
+  }
 }

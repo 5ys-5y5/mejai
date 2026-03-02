@@ -8,7 +8,7 @@ export function extractHostFromUrl(value: string | null | undefined) {
   try {
     if (!value) return "";
     const url = new URL(value);
-    return url.hostname.toLowerCase();
+    return url.host.toLowerCase();
   } catch {
     return "";
   }

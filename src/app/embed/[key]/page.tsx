@@ -1,8 +1,9 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { apiFetch } from "@/lib/apiClient";
 import {
   WidgetConversationLayout,
   Button,
@@ -15,6 +16,8 @@ import {
 import {
   applyConversationFeatureVisibility,
   isEnabledByGate,
+  isProviderEnabled,
+  isToolEnabled,
   resolveConversationPageFeatures,
   resolveConversationSetupUi,
   WIDGET_PAGE_KEY,
@@ -38,7 +41,8 @@ import {
   readWidgetVisibilityOverridesFromSearchParams,
 } from "@/lib/widgetInstanceOverrides";
 import type { LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
-import type { ChatMessage } from "@/lib/conversation/client/conversationPageState";
+import { makeSnippet, type ChatMessage } from "@/lib/conversation/client/conversationPageState";
+import { isAdminKbValue } from "@/lib/kbType";
 
 type WidgetConfig = {
   id: string;
@@ -64,6 +68,34 @@ type WidgetHistoryMessage = {
 type PolicyConfig = {
   llm: string;
   inlineKb: string;
+  kbId: string;
+  adminKbIds: string[];
+  mcpProviderKeys: string[];
+  mcpToolIds: string[];
+  route: string;
+};
+
+type KbItem = {
+  id: string;
+  title?: string | null;
+  content?: string | null;
+  is_admin?: boolean | null;
+  applies_to_user?: boolean | null;
+};
+
+type McpProviderItem = {
+  key: string;
+  title: string;
+  description?: string | null;
+  action_count?: number | null;
+};
+
+type McpToolItem = {
+  id: string;
+  name: string;
+  provider_key?: string | null;
+  tool_key?: string | null;
+  description?: string | null;
 };
 
 function buildId() {
@@ -315,7 +347,15 @@ export default function WidgetEmbedPage() {
   const [policyConfig, setPolicyConfig] = useState<PolicyConfig>({
     llm: "chatgpt",
     inlineKb: "",
+    kbId: "",
+    adminKbIds: [],
+    mcpProviderKeys: [],
+    mcpToolIds: [],
+    route: "shipping",
   });
+  const [kbItems, setKbItems] = useState<KbItem[]>([]);
+  const [mcpProviders, setMcpProviders] = useState<McpProviderItem[]>([]);
+  const [mcpTools, setMcpTools] = useState<McpToolItem[]>([]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const root = document.documentElement;
@@ -414,6 +454,62 @@ export default function WidgetEmbedPage() {
     [providerPolicy]
   );
 
+  useEffect(() => {
+    let active = true;
+    if (!pageFeatures.setup.kbSelector && !pageFeatures.setup.adminKbSelector) {
+      setKbItems([]);
+      return () => {
+        active = false;
+      };
+    }
+    void (async () => {
+      try {
+        const res = await apiFetch<{ items: KbItem[] }>("/api/kb?limit=200");
+        if (!active) return;
+        setKbItems(res.items || []);
+      } catch {
+        if (!active) return;
+        setKbItems([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [pageFeatures.setup.adminKbSelector, pageFeatures.setup.kbSelector]);
+
+  useEffect(() => {
+    let active = true;
+    if (!pageFeatures.mcp.providerSelector && !pageFeatures.mcp.actionSelector) {
+      setMcpProviders([]);
+      setMcpTools([]);
+      return () => {
+        active = false;
+      };
+    }
+    void (async () => {
+      try {
+        const [providersRes, toolsRes] = await Promise.all([
+          pageFeatures.mcp.providerSelector
+            ? apiFetch<{ items: McpProviderItem[] }>("/api/mcp/providers")
+            : Promise.resolve({ items: [] as McpProviderItem[] }),
+          pageFeatures.mcp.actionSelector
+            ? apiFetch<{ items: McpToolItem[] }>("/api/mcp/tools")
+            : Promise.resolve({ items: [] as McpToolItem[] }),
+        ]);
+        if (!active) return;
+        setMcpProviders(providersRes.items || []);
+        setMcpTools(toolsRes.items || []);
+      } catch {
+        if (!active) return;
+        setMcpProviders([]);
+        setMcpTools([]);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [pageFeatures.mcp.actionSelector, pageFeatures.mcp.providerSelector]);
+
   const llmOptions = useMemo<SelectOption[]>(
     () =>
       ([
@@ -421,6 +517,96 @@ export default function WidgetEmbedPage() {
         { id: "gemini", label: "Gemini" },
       ] as const).filter((option) => isEnabledByGate(option.id, baseFeatures.setup.llms)),
     [baseFeatures.setup.llms]
+  );
+
+  const kbOptions = useMemo<SelectOption[]>(() => {
+    return kbItems
+      .filter((kb) => !isAdminKbValue(kb.is_admin))
+      .filter((kb) => isEnabledByGate(kb.id, pageFeatures.setup.kbIds))
+      .map((kb) => ({
+        id: kb.id,
+        label: kb.title || kb.id,
+        description: makeSnippet(kb.content),
+      }));
+  }, [kbItems, pageFeatures.setup.kbIds]);
+
+  const adminKbOptions = useMemo<SelectOption[]>(() => {
+    return kbItems
+      .filter((kb) => isAdminKbValue(kb.is_admin))
+      .filter((kb) => isEnabledByGate(kb.id, pageFeatures.setup.adminKbIds))
+      .map((kb) => ({
+        id: kb.id,
+        label: kb.title || kb.id,
+        description: makeSnippet(kb.content),
+      }));
+  }, [kbItems, pageFeatures.setup.adminKbIds]);
+
+  const providerOptions = useMemo<SelectOption[]>(() => {
+    const options = mcpProviders
+      .filter((provider) => isProviderEnabled(provider.key, pageFeatures))
+      .map((provider) => ({
+        id: provider.key,
+        label: provider.title,
+        description: provider.description || `${provider.action_count || 0} actions`,
+      }));
+    if (isProviderEnabled("runtime", pageFeatures)) {
+      options.push({
+        id: "runtime",
+        label: "Runtime",
+        description: "Local runtime tools",
+      });
+    }
+    return options;
+  }, [mcpProviders, pageFeatures]);
+
+  const toolProviderById = useMemo(() => {
+    const map = new Map<string, string>();
+    mcpTools.forEach((tool) => {
+      if (!tool?.id) return;
+      const providerKey = String(tool.provider_key || "").trim();
+      if (providerKey) map.set(String(tool.id), providerKey);
+    });
+    return map;
+  }, [mcpTools]);
+
+  const toolOptions = useMemo<SelectOption[]>(() => {
+    const providerTitleByKey = new Map<string, string>();
+    mcpProviders.forEach((provider) => providerTitleByKey.set(provider.key, provider.title));
+    const options = mcpTools
+      .filter((tool) => isToolEnabled(String(tool.id || ""), pageFeatures))
+      .map((tool) => ({
+        id: String(tool.id),
+        label: tool.tool_key || (tool.provider_key ? `${tool.provider_key}:${tool.name}` : tool.name),
+        description: tool.description || undefined,
+        group: tool.provider_key ? providerTitleByKey.get(tool.provider_key) || tool.provider_key : "Other",
+      }));
+    if (isToolEnabled("restock_lite", pageFeatures)) {
+      options.push({
+        id: "restock_lite",
+        label: "restock_lite",
+        description: "Runtime restock lite",
+        group: "Runtime",
+      });
+    }
+    return options;
+  }, [mcpProviders, mcpTools, pageFeatures]);
+
+  const filteredToolOptions = useMemo<SelectOption[]>(() => {
+    if (!policyConfig.mcpProviderKeys.length) return toolOptions;
+    const allowed = new Set(policyConfig.mcpProviderKeys);
+    return toolOptions.filter((option) => {
+      const providerKey = toolProviderById.get(option.id);
+      if (!providerKey) return true;
+      return allowed.has(providerKey);
+    });
+  }, [policyConfig.mcpProviderKeys, toolOptions, toolProviderById]);
+
+  const routeOptions = useMemo<SelectOption[]>(
+    () =>
+      [{ id: "shipping", label: "Core Runtime", description: "/api/runtime/chat" }].filter((route) =>
+        isEnabledByGate(route.id, pageFeatures.setup.routes)
+      ),
+    [pageFeatures.setup.routes]
   );
 
   useEffect(() => {
@@ -433,6 +619,36 @@ export default function WidgetEmbedPage() {
       return { ...prev, llm: String(fallback.id) };
     });
   }, [llmOptions, baseFeatures.setup.defaultLlm]);
+
+  useEffect(() => {
+    if (!pageFeatures.setup.kbSelector) return;
+    if (policyConfig.kbId || kbOptions.length === 0) return;
+    setPolicyConfig((prev) => ({ ...prev, kbId: kbOptions[0].id }));
+  }, [kbOptions, pageFeatures.setup.kbSelector, policyConfig.kbId]);
+
+  useEffect(() => {
+    if (!pageFeatures.setup.adminKbSelector) return;
+    if (policyConfig.adminKbIds.length > 0 || adminKbOptions.length === 0) return;
+    setPolicyConfig((prev) => ({ ...prev, adminKbIds: adminKbOptions.map((opt) => opt.id) }));
+  }, [adminKbOptions, pageFeatures.setup.adminKbSelector, policyConfig.adminKbIds.length]);
+
+  useEffect(() => {
+    if (!pageFeatures.mcp.providerSelector) return;
+    if (policyConfig.mcpProviderKeys.length > 0 || providerOptions.length === 0) return;
+    setPolicyConfig((prev) => ({ ...prev, mcpProviderKeys: providerOptions.map((opt) => opt.id) }));
+  }, [pageFeatures.mcp.providerSelector, policyConfig.mcpProviderKeys.length, providerOptions]);
+
+  useEffect(() => {
+    if (!pageFeatures.mcp.actionSelector) return;
+    if (policyConfig.mcpToolIds.length > 0 || toolOptions.length === 0) return;
+    setPolicyConfig((prev) => ({ ...prev, mcpToolIds: toolOptions.map((opt) => opt.id) }));
+  }, [pageFeatures.mcp.actionSelector, policyConfig.mcpToolIds.length, toolOptions]);
+
+  useEffect(() => {
+    if (!pageFeatures.setup.routeSelector) return;
+    if (policyConfig.route || routeOptions.length === 0) return;
+    setPolicyConfig((prev) => ({ ...prev, route: routeOptions[0].id }));
+  }, [pageFeatures.setup.routeSelector, policyConfig.route, routeOptions]);
 
   const theme = (config?.theme || {}) as Record<string, any>;
   const brandName = String(config?.name || "Mejai");
@@ -585,12 +801,12 @@ export default function WidgetEmbedPage() {
   }, []);
 
   const callInit = useCallback(
-    async (user?: Record<string, any> | null, options?: { forceNew?: boolean }) => {
+    async (user?: Record<string, any> | null, options?: { forceNew?: boolean; metaOverride?: Record<string, any> | null }) => {
       if (initCalledRef.current && !options?.forceNew) return;
       initCalledRef.current = true;
-      setStatus(options?.forceNew ? "새 대화 준비 중" : "초기화 중");
+      setStatus(options?.forceNew ? "세션 준비 중" : "초기화 중");
       const referrer = typeof document !== "undefined" ? document.referrer : "";
-      const meta = pendingMeta || {};
+      const meta = options?.metaOverride || pendingMeta || {};
       const seedSession = options?.forceNew ? "" : sessionSeedRef.current;
       if (seedSession) sessionSeedRef.current = "";
       const payload = {
@@ -650,7 +866,7 @@ export default function WidgetEmbedPage() {
         } catch {
           // ignore
         }
-        setStatus("대화 불러오는 중");
+        setStatus("세션 불러오는 중...");
         const history = await fetchHistory(nextToken);
         const resolvedFeatures = resolveConversationPageFeatures(
           WIDGET_PAGE_KEY,
@@ -658,7 +874,7 @@ export default function WidgetEmbedPage() {
         );
         const greeting =
           (data.widget_config?.theme && (data.widget_config.theme as Record<string, any>).greeting) ||
-          "안녕하세요. 무엇을 도와드릴까요?";
+          "안녕하세요! 무엇을 도와드릴까요?";
         const nextMessages =
           history.length > 0
             ? history
@@ -692,10 +908,13 @@ export default function WidgetEmbedPage() {
           visitor_id: data.visitor_id,
         };
         setPendingMeta(nextMeta);
+        if (data.force_new) {
+          void callInit(data.user || null, { forceNew: true, metaOverride: nextMeta });
+          return;
+        }
         if (!initCalledRef.current && data.session_id) {
           sessionSeedRef.current = String(data.session_id || "").trim();
-        }
-      }
+        }      }
       if (data.type === "mejai_widget_event" && data.event) {
         const token = widgetTokenRef.current;
         if (!token) return;
@@ -816,7 +1035,7 @@ export default function WidgetEmbedPage() {
     setSelectedMessageIds([]);
     setQuickReplyDrafts({});
     setLockedReplySelections({});
-    setStatus("새 대화 준비 중");
+    setStatus("세션 준비 중");
     setWidgetToken("");
     setSessionId("");
     setActiveTab("chat");
@@ -844,12 +1063,16 @@ export default function WidgetEmbedPage() {
       setMessages((prev) => [
         ...prev,
         { id: userId, role: "user", content: display || text },
-        { id: botId, role: "bot", content: "답변 생성 중...", isLoading: true },
+        { id: botId, role: "bot", content: "응답 생성 중...", isLoading: true },
       ]);
-      setStatus("응답 중");
+      setStatus("응답 중...");
       try {
         const shouldSendLlm = policyFeatures.setup.llmSelector;
         const shouldSendInlineKb = policyFeatures.setup.inlineUserKbInput;
+        const shouldSendKb = policyFeatures.setup.kbSelector;
+        const shouldSendAdminKb = policyFeatures.setup.adminKbSelector;
+        const shouldSendMcpProviders = policyFeatures.mcp.providerSelector;
+        const shouldSendMcpTools = policyFeatures.mcp.actionSelector;
         const res = await fetch("/api/widget/chat", {
           method: "POST",
           headers: {
@@ -861,6 +1084,10 @@ export default function WidgetEmbedPage() {
             session_id: sessionId,
             llm: shouldSendLlm ? policyConfig.llm || undefined : undefined,
             inline_kb: shouldSendInlineKb ? policyConfig.inlineKb.trim() || undefined : undefined,
+            kb_id: shouldSendKb ? policyConfig.kbId || undefined : undefined,
+            admin_kb_ids: shouldSendAdminKb ? policyConfig.adminKbIds : undefined,
+            mcp_tool_ids: shouldSendMcpTools ? policyConfig.mcpToolIds : undefined,
+            mcp_provider_keys: shouldSendMcpProviders ? policyConfig.mcpProviderKeys : undefined,
             visitor: pendingUser || undefined,
           }),
         });
@@ -1126,13 +1353,13 @@ export default function WidgetEmbedPage() {
       id: "widget",
       config: {
         llm: policyConfig.llm,
-        kbId: "",
+        kbId: policyConfig.kbId,
         inlineKb: policyConfig.inlineKb,
         inlineKbSampleSelectionOrder: [],
-        adminKbIds: [],
-        mcpProviderKeys: [],
-        mcpToolIds: [],
-        route: "",
+        adminKbIds: policyConfig.adminKbIds,
+        mcpProviderKeys: policyConfig.mcpProviderKeys,
+        mcpToolIds: policyConfig.mcpToolIds,
+        route: policyConfig.route,
       },
       detailsOpen,
       setupMode: "new",
@@ -1163,8 +1390,13 @@ export default function WidgetEmbedPage() {
       inputValue,
       messages,
       messageLogs,
+      policyConfig.adminKbIds,
       policyConfig.inlineKb,
+      policyConfig.kbId,
       policyConfig.llm,
+      policyConfig.mcpProviderKeys,
+      policyConfig.mcpToolIds,
+      policyConfig.route,
       selectedMessageIds,
       sending,
       sessionId,
@@ -1174,7 +1406,7 @@ export default function WidgetEmbedPage() {
 
   const headerActions = widgetHeader.agentAction && pageFeatures.interaction.widgetHeaderAgentAction ? (
     <Button variant="outline" size="sm" className="h-8 px-3 text-[11px]">
-      상담원 연결
+      에이전트 실행
     </Button>
   ) : null;
 
@@ -1247,14 +1479,17 @@ export default function WidgetEmbedPage() {
     inlineKbSamples: [],
     inlineKbSampleConflict: false,
     llmOptions,
-    kbOptions: [],
-    adminKbOptions: [],
-    providerOptions: [],
-    routeOptions: [],
-    filteredToolOptions: [],
-    kbInfoText: "선택된 KB 없음",
-    adminKbInfoText: "선택된 관리자 KB 없음",
-    mcpInfoText: "MCP 기능 비활성화",
+    kbOptions,
+    adminKbOptions,
+    providerOptions,
+    routeOptions,
+    filteredToolOptions,
+    kbInfoText: policyConfig.kbId ? "KB 선택됨" : "선택된 KB 없음",
+    adminKbInfoText: policyConfig.adminKbIds.length > 0 ? "관리자 KB 선택됨" : "선택된 관리자 KB 없음",
+    mcpInfoText:
+      policyConfig.mcpToolIds.length > 0 || policyConfig.mcpProviderKeys.length > 0
+        ? "MCP active"
+        : "MCP 비활성화",
     newModelControlOrder,
     onSetLeftPaneRef: () => undefined,
     onSelectExisting: () => undefined,
@@ -1268,18 +1503,18 @@ export default function WidgetEmbedPage() {
     onInlineKbSampleApply: () => undefined,
     onLlmChange: (value) => setPolicyConfig((prev) => ({ ...prev, llm: value })),
     onToggleLlmInfo: () => setDetailsOpen((prev) => ({ ...prev, llm: !prev.llm })),
-    onKbChange: () => undefined,
+    onKbChange: (value) => setPolicyConfig((prev) => ({ ...prev, kbId: value })),
     onToggleKbInfo: () => setDetailsOpen((prev) => ({ ...prev, kb: !prev.kb })),
-    onAdminKbChange: () => undefined,
+    onAdminKbChange: (values) => setPolicyConfig((prev) => ({ ...prev, adminKbIds: values })),
     onToggleAdminKbInfo: () => setDetailsOpen((prev) => ({ ...prev, adminKb: !prev.adminKb })),
-    onRouteChange: () => undefined,
+    onRouteChange: (value) => setPolicyConfig((prev) => ({ ...prev, route: value })),
     onToggleRouteInfo: () => setDetailsOpen((prev) => ({ ...prev, route: !prev.route })),
-    onProviderChange: () => undefined,
+    onProviderChange: (values) => setPolicyConfig((prev) => ({ ...prev, mcpProviderKeys: values })),
     onToggleMcpInfo: () => setDetailsOpen((prev) => ({ ...prev, mcp: !prev.mcp })),
-    onActionChange: () => undefined,
+    onActionChange: (values) => setPolicyConfig((prev) => ({ ...prev, mcpToolIds: values })),
     describeLlm: (value) =>
-      llmOptions.find((option) => option.id === value)?.label || "선택된 LLM 정보 없음",
-    describeRoute: (value) => (value ? `Runtime: ${value}` : "선택된 Runtime 없음"),
+      llmOptions.find((option) => option.id === value)?.label || "선택된 LLM 없음",
+    describeRoute: (value) => (value ? `Runtime: ${value}` : "선택된 런타임 없음"),
   };
 
   return (
@@ -1326,3 +1561,5 @@ export default function WidgetEmbedPage() {
     </div>
   );
 }
+
+

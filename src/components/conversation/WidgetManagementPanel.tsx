@@ -163,6 +163,7 @@ export function WidgetManagementPanel() {
   const [referrer, setReferrer] = useState("");
 
   const [visitorId, setVisitorId] = useState("");
+  const autoMetaRef = useRef<{ origin: string; pageUrl: string; referrer: string } | null>(null);
 
   const [testUserId, setTestUserId] = useState("");
 
@@ -250,30 +251,6 @@ export function WidgetManagementPanel() {
 
   }, [selectedId, widgets, newWidgetMode]);
 
-  useEffect(() => {
-
-    if (typeof window === "undefined") return;
-
-    if (!origin) {
-
-      const base = window.location.origin;
-
-      setOrigin(base);
-
-      setPageUrl(`${base}/support`);
-
-      setReferrer(`${base}/`);
-
-    }
-
-    if (!visitorId) {
-
-      setVisitorId(`mw_preview_${Math.random().toString(36).slice(2, 10)}`);
-
-    }
-
-  }, [origin, visitorId]);
-
   const previewWidget = useMemo(() => (selectedWidget ? (selectedWidget as PreviewWidget) : null), [selectedWidget]);
 
 
@@ -285,6 +262,60 @@ export function WidgetManagementPanel() {
     [selectedWidget?.chat_policy]
 
   );
+
+  useEffect(() => {
+
+    if (typeof window === "undefined") return;
+
+    const widgetPolicy = (parsedPolicy as { widget?: WidgetChatPolicyConfig } | null)?.widget || null;
+    const allowedDomains = Array.isArray(widgetPolicy?.allowed_domains)
+      ? widgetPolicy!.allowed_domains.map((value) => String(value ?? "").trim()).filter(Boolean)
+      : [];
+    const allowedPaths = Array.isArray(widgetPolicy?.allowed_paths)
+      ? widgetPolicy!.allowed_paths.map((value) => String(value ?? "").trim()).filter(Boolean)
+      : [];
+
+    const fallbackOrigin = window.location.origin;
+    const domainCandidate = allowedDomains.find((value) => value !== "*") || "";
+    const cleanedDomain = domainCandidate.replace(/^\*\./, "");
+    const defaultOrigin =
+      cleanedDomain && cleanedDomain !== "*"
+        ? cleanedDomain.includes("://")
+          ? cleanedDomain
+          : `https://${cleanedDomain}`
+        : fallbackOrigin;
+
+    const pathCandidate = allowedPaths.find(Boolean) || "";
+    const normalizedPath =
+      pathCandidate && pathCandidate !== "*"
+        ? pathCandidate.startsWith("/")
+          ? pathCandidate
+          : `/${pathCandidate}`
+        : "/support";
+    const nextOrigin = defaultOrigin;
+    const nextPageUrl = `${defaultOrigin}${normalizedPath}`;
+    const nextReferrer = `${defaultOrigin}/`;
+    const prevAuto = autoMetaRef.current;
+    const canOverwrite =
+      !origin ||
+      !pageUrl ||
+      !referrer ||
+      (prevAuto &&
+        origin === prevAuto.origin &&
+        pageUrl === prevAuto.pageUrl &&
+        referrer === prevAuto.referrer);
+
+    if (canOverwrite) {
+      setOrigin(nextOrigin);
+      setPageUrl(nextPageUrl);
+      setReferrer(nextReferrer);
+      autoMetaRef.current = { origin: nextOrigin, pageUrl: nextPageUrl, referrer: nextReferrer };
+    }
+    if (!visitorId) {
+      setVisitorId(`mw_preview_${Math.random().toString(36).slice(2, 10)}`);
+    }
+
+  }, [origin, pageUrl, referrer, visitorId, parsedPolicy]);
 
 
 
@@ -358,6 +389,20 @@ export function WidgetManagementPanel() {
     setPolicySnapshot(normalizeConversationFeatureProvider(next));
 
   }, []);
+
+  const policyOverrideParam = useMemo(() => {
+    const policy = policySnapshot ?? parsedPolicy ?? null;
+    if (!policy) return "";
+    try {
+      const json = JSON.stringify(policy);
+      const encoded = typeof window !== "undefined"
+        ? btoa(unescape(encodeURIComponent(json)))
+        : Buffer.from(json, "utf-8").toString("base64");
+      return `b64:${encoded}`;
+    } catch {
+      return "";
+    }
+  }, [parsedPolicy, policySnapshot]);
 
   const handleSave = async (payload: WidgetSavePayload) => {
 
@@ -485,6 +530,10 @@ export function WidgetManagementPanel() {
 
       params.set("embed_view", mode.id);
 
+      if (policyOverrideParam) {
+        params.set("policy", policyOverrideParam);
+      }
+
       if (PREVIEW_OVERRIDE_QUERY) {
 
         const extra = new URLSearchParams(PREVIEW_OVERRIDE_QUERY);
@@ -499,7 +548,7 @@ export function WidgetManagementPanel() {
 
     },
 
-    [origin, visitorId]
+    [origin, policyOverrideParam, visitorId]
 
   );
 
@@ -657,19 +706,23 @@ export function WidgetManagementPanel() {
 
       }
 
+      if (policyOverrideParam) {
+        params.set("policy", policyOverrideParam);
+      }
+
       params.set("embed_view", mode.id);
 
       return `/embed/${encodeURIComponent(publicKey)}?${params.toString()}`;
 
     },
 
-    [readPreviewParamsFromCode, visitorId]
+    [policyOverrideParam, readPreviewParamsFromCode, visitorId]
 
   );
 
 
 
-  const buildInitPayload = useCallback(() => {
+  const buildInitPayload = useCallback((options?: { forceNew?: boolean }) => {
 
     const userPayload: Record<string, any> = {};
 
@@ -692,6 +745,7 @@ export function WidgetManagementPanel() {
       visitor_id: visitorId || "",
 
       user: Object.keys(userPayload).length > 0 ? userPayload : null,
+      force_new: Boolean(options?.forceNew),
 
     };
 
@@ -701,13 +755,13 @@ export function WidgetManagementPanel() {
 
   const sendInit = useCallback(
 
-    (iframe: HTMLIFrameElement | null) => {
+    (iframe: HTMLIFrameElement | null, options?: { forceNew?: boolean }) => {
 
       if (!iframe) return;
 
       try {
 
-        iframe.contentWindow?.postMessage(buildInitPayload(), "*");
+        iframe.contentWindow?.postMessage(buildInitPayload(options), "*");
 
       } catch {
 
@@ -725,7 +779,7 @@ export function WidgetManagementPanel() {
 
   const broadcastInit = useCallback(() => {
 
-    Object.values(iframeRefs.current).forEach((iframe) => sendInit(iframe));
+    Object.values(iframeRefs.current).forEach((iframe) => sendInit(iframe, { forceNew: true }));
 
     toast.success("초기화 요청 전송");
 
