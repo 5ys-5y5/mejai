@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
+import { canRead } from "@/lib/ownershipAccess";
 import { callAdapter } from "@/lib/mcpAdapters";
 import { applyMasking, checkPolicyConditions, validateToolParams } from "@/lib/mcpPolicy";
 
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
   const dbToolQuery = context.supabase
     .from("C_mcp_tools")
     .select(
-      "id, name, provider_key, scope_key, endpoint_path, http_method, schema_json, version, is_active, rate_limit_per_min, masking_rules, conditions"
+      "id, name, provider_key, scope_key, endpoint_path, http_method, schema_json, version, is_active, rate_limit_per_min, masking_rules, conditions, created_by, owner_user_ids, allowed_user_ids, is_public"
     )
     .eq("name", toolName)
     .eq("is_active", true);
@@ -83,6 +84,9 @@ export async function POST(req: NextRequest) {
     );
   }
   tool = dbTools[0];
+  if (!canRead(tool as any, context.user.id)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
 
   if (tool.endpoint_path && resolvedParams.path === undefined) {
     resolvedParams.path = tool.endpoint_path;

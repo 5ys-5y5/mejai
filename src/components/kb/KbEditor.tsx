@@ -24,6 +24,7 @@ type KbItem = {
   apply_groups?: Array<{ path: string; values: string[] }> | null;
   apply_groups_mode?: "all" | "any" | null;
   created_at?: string | null;
+  is_public?: boolean | null;
 };
 
 type AgentItem = {
@@ -34,6 +35,13 @@ type AgentItem = {
   version: string | null;
   is_active: boolean | null;
   created_at?: string | null;
+};
+
+type OwnershipInfo = {
+  created_by: string | null;
+  owner_user_ids: string[];
+  allowed_user_ids: string[];
+  is_public: boolean | null;
 };
 
 function parseVersionParts(value?: string | null) {
@@ -161,7 +169,7 @@ function buildDiffLines(current?: KbItem | null, prev?: KbItem | null): DiffLine
 }
 
 function buildContentChangeSummary(current?: KbItem | null, prev?: KbItem | null) {
-  if (!current || !prev) return "?좉퇋";
+  if (!current || !prev) return "초기";
   const diff = buildDiffLines(current, prev);
   const added = diff.filter((line) => line.type === "add").map((line) => line.text.trim()).filter(Boolean);
   const removed = diff.filter((line) => line.type === "del").map((line) => line.text.trim()).filter(Boolean);
@@ -203,19 +211,26 @@ export function KbEditor({
   const [baseTitle, setBaseTitle] = useState("");
   const [baseCategory, setBaseCategory] = useState<string | null>(null);
   const [baseContent, setBaseContent] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
+  const [baseIsPublic, setBaseIsPublic] = useState(false);
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [isAdminKb, setIsAdminKb] = useState(false);
   const [applyGroups, setApplyGroups] = useState<Array<{ path: string; values: string[] }>>([]);
   const [applyGroupsMode, setApplyGroupsMode] = useState<"all" | "any" | null>(null);
   const [agentItems, setAgentItems] = useState<AgentItem[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
+  const [ownerInviteIds, setOwnerInviteIds] = useState("");
+  const [viewerInviteIds, setViewerInviteIds] = useState("");
+  const [ownershipInfo, setOwnershipInfo] = useState<OwnershipInfo | null>(null);
+  const [ownershipLoading, setOwnershipLoading] = useState(false);
+  const [ownershipError, setOwnershipError] = useState<string | null>(null);
   const metaChanged = useMemo(() => {
     const nextTitle = title.trim();
     const nextCategory = category.trim();
     const prevTitle = baseTitle.trim();
     const prevCategory = (baseCategory ?? "").trim();
-    return nextTitle !== prevTitle || nextCategory !== prevCategory;
-  }, [title, category, baseTitle, baseCategory]);
+    return nextTitle !== prevTitle || nextCategory !== prevCategory || isPublic !== baseIsPublic;
+  }, [title, category, isPublic, baseTitle, baseCategory, baseIsPublic]);
 
   const contentChanged = useMemo(() => {
     return content.trim() !== baseContent.trim();
@@ -244,9 +259,11 @@ export function KbEditor({
         setIsAdminKb(isAdminKbValue(res.is_admin));
         setApplyGroups(Array.isArray(res.apply_groups) ? res.apply_groups : []);
         setApplyGroupsMode(res.apply_groups_mode === "any" ? "any" : "all");
+        setIsPublic(Boolean(res.is_public));
         setBaseTitle(res.title || "");
         setBaseCategory(res.category ?? null);
         setBaseContent(res.content || "");
+        setBaseIsPublic(Boolean(res.is_public));
         setContent(res.content || "");
         setLoading(false);
       } catch {
@@ -260,6 +277,40 @@ export function KbEditor({
       mounted = false;
     };
   }, [kbId, allItems]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadOwnership() {
+      if (!kbId) {
+        setOwnershipInfo(null);
+        return;
+      }
+      setOwnershipLoading(true);
+      setOwnershipError(null);
+      try {
+        const res = await apiFetch<OwnershipInfo>(
+          `/api/ownership/resource?resource_type=kb&resource_id=${encodeURIComponent(kbId)}`
+        );
+        if (!mounted) return;
+        setOwnershipInfo({
+          created_by: res.created_by ?? null,
+          owner_user_ids: Array.isArray(res.owner_user_ids) ? res.owner_user_ids : [],
+          allowed_user_ids: Array.isArray(res.allowed_user_ids) ? res.allowed_user_ids : [],
+          is_public: res.is_public ?? null,
+        });
+      } catch (err) {
+        if (!mounted) return;
+        setOwnershipError(err instanceof Error ? err.message : "권한 정보를 불러오지 못했습니다.");
+        setOwnershipInfo(null);
+      } finally {
+        if (mounted) setOwnershipLoading(false);
+      }
+    }
+    void loadOwnership();
+    return () => {
+      mounted = false;
+    };
+  }, [kbId]);
 
   useEffect(() => {
     let mounted = true;
@@ -328,6 +379,7 @@ export function KbEditor({
       const payload = {
         title: title.trim(),
         category: trimmedCategory ? trimmedCategory : null,
+        is_public: isPublic,
       };
 
       const saved = await apiFetch<KbItem>(`/api/kb/${kbId}`, {
@@ -341,8 +393,10 @@ export function KbEditor({
       toast.success("臾몄꽌 ?뺣낫媛 ??λ릺?덉뒿?덈떎.");
       setBaseTitle(saved.title || "");
       setBaseCategory(saved.category ?? null);
+      setBaseIsPublic(Boolean(saved.is_public));
       setTitle(saved.title || "");
       setCategory(saved.category || "");
+      setIsPublic(Boolean(saved.is_public));
       await refreshItems();
     } catch (err) {
       const message = err instanceof Error ? err.message : "臾몄꽌 ?뺣낫 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.";
@@ -488,11 +542,11 @@ export function KbEditor({
                 canSaveContent ? "bg-emerald-600 text-white hover:bg-emerald-700" : "bg-slate-200 text-slate-400"
               )}
             >
-              {savingContent ? "Unknown" : "?댁슜 ???}
+              {savingContent ? "저장 중..." : "내용 저장"}
             </button>
           </div>
           {loading ? (
-            <div className="mt-4 text-sm text-slate-500">Unknown</div>
+            <div className="mt-4 text-sm text-slate-500">불러오는 중...</div>
           ) : error ? (
             <div className="mt-4 text-sm text-rose-600">{error}</div>
           ) : (
@@ -577,7 +631,7 @@ export function KbEditor({
           )}
         </Card>
 
-<Card id="kb-editor-root" className="mt-6 p-6">
+        <Card id="kb-editor-root" className="mt-6 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-slate-900">臾몄꽌 ?뺣낫 (?꾩껜 踰꾩쟾 怨듯넻)</div>
@@ -594,11 +648,11 @@ export function KbEditor({
                 canSaveMeta ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-400"
               )}
             >
-              {savingMeta ? "Unknown" : "?뺣낫 ???}
+              {savingMeta ? "저장 중..." : "정보 저장"}
             </button>
           </div>
           {loading ? (
-            <div className="mt-4 text-sm text-slate-500">Unknown</div>
+            <div className="mt-4 text-sm text-slate-500">불러오는 중...</div>
           ) : error ? (
             <div className="mt-4 text-sm text-rose-600">{error}</div>
           ) : (
@@ -610,13 +664,13 @@ export function KbEditor({
                     ?앹꽦 ???좏삎/??곸? 蹂寃쏀븷 ???놁뒿?덈떎.
                   </div>
                   <div className="mt-3 grid gap-2">
-                    <div className="text-xs font-semibold text-slate-600">Unknown</div>
+                    <div className="text-xs font-semibold text-slate-600">적용 그룹</div>
                     {applyGroups.length === 0 ? (
-                      <div className="text-xs text-slate-500">?꾩껜 ?ъ슜???곸슜</div>
+                      <div className="text-xs text-slate-500">전체 사용에 적용</div>
                     ) : (
                       <div className="grid gap-2 text-xs text-slate-600">
                         <div className="text-xs font-semibold text-slate-700">
-                          ??? ???: {applyGroupsMode === "any" ? "Unknown" : "Unknown"}
+                          모드: {applyGroupsMode === "any" ? "하나라도 일치" : "모두 일치"}
                         </div>
                         <ul className="grid gap-1">
                           {applyGroups.map((group) => (
@@ -631,11 +685,11 @@ export function KbEditor({
                 </div>
               ) : null}
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-slate-900">Unknown</label>
+                <label className="text-sm font-medium text-slate-900">제목</label>
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="?? 諛섑뭹 ?뺤콉 ?덈궡"
+                  placeholder="예: 반품 정책 안내"
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
@@ -645,7 +699,7 @@ export function KbEditor({
                 <input
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  placeholder="?? ?뺤콉"
+                  placeholder="예: 환불 정책"
                   list="kb-category-options"
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
@@ -654,6 +708,135 @@ export function KbEditor({
                     <option key={opt} value={opt} />
                   ))}
                 </datalist>
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-900">공개 설정</label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={isPublic}
+                    onChange={(e) => setIsPublic(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                  />
+                  공개로 설정 (비로그인 사용자도 사용 가능)
+                </label>
+              </div>
+              <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-sm font-semibold text-slate-900">권한 초대</div>
+                {ownershipLoading ? (
+                  <div className="text-xs text-slate-500">권한 정보를 불러오는 중...</div>
+                ) : ownershipError ? (
+                  <div className="text-xs text-rose-600">{ownershipError}</div>
+                ) : ownershipInfo ? (
+                  <div className="grid gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">
+                    <div>
+                      생성자:{" "}
+                      <span className="font-mono text-slate-800">{ownershipInfo.created_by || "-"}</span>
+                    </div>
+                    <div>
+                      수정 권한자:{" "}
+                      <span className="font-mono text-slate-800">
+                        {ownershipInfo.owner_user_ids.length > 0 ? ownershipInfo.owner_user_ids.join(", ") : "-"}
+                      </span>
+                    </div>
+                    <div>
+                      사용 권한자:{" "}
+                      <span className="font-mono text-slate-800">
+                        {ownershipInfo.allowed_user_ids.length > 0 ? ownershipInfo.allowed_user_ids.join(", ") : "-"}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="grid gap-2">
+                  <label className="text-xs text-slate-600">수정 권한자 UUID (쉼표로 구분)</label>
+                  <input
+                    value={ownerInviteIds}
+                    onChange={(e) => setOwnerInviteIds(e.target.value)}
+                    placeholder="uuid, uuid, ..."
+                    className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!kbId || !ownerInviteIds.trim()) return;
+                      const res = await apiFetch<{ owner_user_ids?: string[]; allowed_user_ids?: string[] }>(
+                        "/api/ownership/invite",
+                        {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          resource_type: "kb",
+                          resource_id: kbId,
+                          role: "owner",
+                          action: "add",
+                          user_ids: ownerInviteIds.split(",").map((v) => v.trim()).filter(Boolean),
+                        }),
+                        }
+                      );
+                      setOwnershipInfo((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              owner_user_ids: Array.isArray(res.owner_user_ids) ? res.owner_user_ids : prev.owner_user_ids,
+                              allowed_user_ids: Array.isArray(res.allowed_user_ids)
+                                ? res.allowed_user_ids
+                                : prev.allowed_user_ids,
+                            }
+                          : prev
+                      );
+                      toast.success("수정 권한자를 초대했습니다.");
+                      setOwnerInviteIds("");
+                    }}
+                    className="h-9 rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                    수정 권한자 초대
+                  </button>
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-xs text-slate-600">사용 권한자 UUID (쉼표로 구분)</label>
+                  <input
+                    value={viewerInviteIds}
+                    onChange={(e) => setViewerInviteIds(e.target.value)}
+                    placeholder="uuid, uuid, ..."
+                    className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!kbId || !viewerInviteIds.trim()) return;
+                      const res = await apiFetch<{ owner_user_ids?: string[]; allowed_user_ids?: string[] }>(
+                        "/api/ownership/invite",
+                        {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          resource_type: "kb",
+                          resource_id: kbId,
+                          role: "viewer",
+                          action: "add",
+                          user_ids: viewerInviteIds.split(",").map((v) => v.trim()).filter(Boolean),
+                        }),
+                        }
+                      );
+                      setOwnershipInfo((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              owner_user_ids: Array.isArray(res.owner_user_ids) ? res.owner_user_ids : prev.owner_user_ids,
+                              allowed_user_ids: Array.isArray(res.allowed_user_ids)
+                                ? res.allowed_user_ids
+                                : prev.allowed_user_ids,
+                            }
+                          : prev
+                      );
+                      toast.success("사용 권한자를 초대했습니다.");
+                      setViewerInviteIds("");
+                    }}
+                    className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    사용 권한자 초대
+                  </button>
+                </div>
               </div>
             </div>
           )}
@@ -734,8 +917,8 @@ export function KbEditor({
                       {isCurrent ? (
                         <span
                           className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500"
-                          aria-label="?섏젙 以?
-                          title="?섏젙 以?
+                          aria-label="현재 편집 중"
+                          title="현재 편집 중"
                         >
                           <PencilLine className="h-3.5 w-3.5" />
                         </span>
@@ -758,14 +941,14 @@ export function KbEditor({
                           deployDisabled && !isActiveRow ? "cursor-not-allowed opacity-60" : ""
                         )}
                       >
-                        {activeUpdateId === item.id ? "Unknown" : isActiveRow ? "ON" : "OFF"}
+                        {activeUpdateId === item.id ? "전환 중" : isActiveRow ? "ON" : "OFF"}
                       </button>
                     </div>
                     <div className="flex min-h-[44px] items-center px-1 py-3 text-[11px] text-slate-600 whitespace-nowrap">
-                      0??
+                      0건
                     </div>
                     <div className="flex min-h-[44px] items-center px-1 py-3 text-[11px] text-slate-600 whitespace-nowrap">
-                      0??
+                      0분
                     </div>
                     <div className="flex min-h-[44px] items-center px-1 py-3 text-[11px] text-slate-600 whitespace-nowrap">
                       0.0

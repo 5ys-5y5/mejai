@@ -134,6 +134,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
         providerConfig: { mall_id: string | null; shop_no: string | null; board_no: string | null };
         runtimeFlags: { restock_lite: boolean };
         authSettings: Record<string, any> | null;
+        chatPolicyProvider: ConversationFeaturesProviderShape | null;
         userPlan: string | null;
         userIsAdmin: boolean | null;
         userRole: string | null;

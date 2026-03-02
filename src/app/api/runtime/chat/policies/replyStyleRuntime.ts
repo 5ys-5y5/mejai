@@ -30,23 +30,14 @@ const TRAILING_TAIL_CHARS = new Set([
   "!",
   "?",
   "~",
-  "??,
   ")",
   "]",
   "}",
   ">",
   "\"",
   "'",
-  "??,
-  "??,
-  "??,
-  "??,
-  "??,
-  "??,
-  "??,
-  "??,
-  "??,
-  "??,
+  "…",
+  "—",
 ]);
 
 function splitTrailingTail(value: string) {
@@ -65,22 +56,19 @@ function splitTrailingTail(value: string) {
 }
 
 function hasTerminalPunctuation(value: string) {
-  return /[.!?~??/.test(value);
+  return /[.!?~]/.test(value);
 }
 
 function hasForceEndingYongRule(text: string) {
   const normalized = normalizeText(text);
   if (!normalized) return false;
-  const mustPattern = /(?????????????????)/;
-  const yongEndingPattern =
-    /(???:???)?\s*["'?쒋????"'?쒋??\s*(?:?쇰줈)?\s*??["'?쒋????"'?쒋??\s*?쇰줈\s*??醫낃껐?대?\s*["'?쒋????"'?쒋??)/;
-  return mustPattern.test(normalized) && yongEndingPattern.test(normalized);
+  return /(용체|용으로|용\s*말투|용\s*끝맺음)/.test(normalized);
 }
 
 function extractFieldValues(text: string, keys: string[]) {
   if (!text || keys.length === 0) return [];
   const keyPattern = keys.map((key) => key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
-  const regex = new RegExp(`(?:^|\\n)\\s*(?:${keyPattern})\\s*[:??\\s*([^\\n\\r]+)`, "gi");
+  const regex = new RegExp(`(?:^|\\n)\\s*(?:${keyPattern})\\s*[:：-]?\\s*([^\\n\\r]+)`, "gi");
   const values: string[] = [];
   for (const match of text.matchAll(regex)) {
     const value = normalizeText(match[1] || "");
@@ -94,19 +82,10 @@ function includesAny(text: string, patterns: RegExp[]) {
 }
 
 function resolveSpeechLevel(styleTexts: string[], fullText: string): ReplyStyleDirective["speechLevel"] {
-  const source = `${styleTexts.join("\n")} ${fullText}`;
-  if (
-    includesAny(source, [/???/, /???o??/, /??????, /\bcasual\b/i, /??????s*??]) &&
-    !includesAny(source, [/??????, /????/, /???/])
-  ) {
-    return "casual";
-  }
-  if (includesAny(source, [/??????u/, /???/, /????/, /????/, /\bformal\b/i, /\bprofessional\b/i])) {
-    return "formal";
-  }
-  if (includesAny(source, [/?댁슂泥?, /議대뙎留?, /遺?쒕윭??s*留먰닾/, /移쒓렐??s*議대뙎留?])) {
-    return "polite";
-  }
+  const source = `${styleTexts.join(" ")} ${fullText}`;
+  if (includesAny(source, [/반말/, /친근/, /캐주얼/, /\bcasual\b/i])) return "casual";
+  if (includesAny(source, [/격식/, /공식/, /전문적/, /\bformal\b/i, /\bprofessional\b/i])) return "formal";
+  if (includesAny(source, [/정중/, /공손/, /존댓말/, /\bpolite\b/i])) return "polite";
   return null;
 }
 
@@ -137,27 +116,16 @@ function applySpeechEndingToLine(line: string, speechLevel: ReplyStyleDirective[
   if (!core) return line;
 
   if (hasTerminalPunctuation(tail)) return line;
-  if (/(??$/.test(core)) return line;
 
   if (speechLevel === "formal") {
-    if (/(?댁뿉???덉슂)$/.test(core)) {
-      core = core.replace(/(?댁뿉???덉슂)$/, "?낅땲??);
-    } else if (/(?쇱슂|?섏슂)$/.test(core)) {
-      core = core.replace(/(?쇱슂|?섏슂)$/, "?⑸땲??);
-    } else if (/?댁슂$/.test(core)) {
-      core = core.replace(/?댁슂$/, "?⑸땲??);
-    } else if (/(?듬땲???낅땲???⑸땲???쒕┰?덈떎|????$/.test(core)) {
-      return line;
-    } else {
-      return line;
-    }
-  } else if (speechLevel === "polite") {
-    return line;
-  } else if (speechLevel === "casual") {
-    return line;
+    if (/(습니다|합니다|됩니다|입니다)$/.test(core)) return line;
+    return `${core}입니다.${tail}${trailingWhitespace}`;
   }
-
-  return `${core}${tail}${trailingWhitespace}`;
+  if (speechLevel === "polite") {
+    if (/요$/.test(core)) return line;
+    return `${core}요.${tail}${trailingWhitespace}`;
+  }
+  return line;
 }
 
 function applySpeechEnding(value: string, speechLevel: ReplyStyleDirective["speechLevel"]) {
@@ -174,18 +142,14 @@ function applySpeechEnding(value: string, speechLevel: ReplyStyleDirective["spee
 function applyWarmTail(value: string, speechLevel: ReplyStyleDirective["speechLevel"], respectful: boolean) {
   const text = String(value || "").trim();
   if (!text) return text;
-  const alreadyHasTail = /(?꾩??쒕┫|?꾩?以??덈궡?대뱶由??덈궡?좉쾶|?꾩슂?섏떆硫??먰븯?쒕㈃)/.test(text);
-  if (alreadyHasTail) return text;
   const lines = normalizeLines(text);
   const lastIndex = findLastNonEmptyLineIndex(lines);
   const lastLine = lastIndex >= 0 ? String(lines[lastIndex] || "").trim() : "";
   if (!lastLine) return text;
-  if (/[???$/.test(lastLine)) return text;
-  if (/(二쇱꽭??遺???뚮젮|?낅젰???좏깮???뺤씤??\s*[.!?~???$/.test(lastLine)) return text;
-  if (lastLine.length < 12) return text;
-  if (speechLevel === "casual") return `${text}\n?꾩슂?섎㈃ ???꾩?以꾧쾶.`;
-  if (speechLevel === "formal" || respectful) return `${text}\n?꾩슂?섏떆硫??댁뼱???꾩??쒕━寃좎뒿?덈떎.`;
-  return `${text}\n?꾩슂?섏떆硫??댁뼱???꾩??쒕┫寃뚯슂.`;
+  if (/[.!?]$/.test(lastLine)) return text;
+  if (speechLevel === "casual") return `${text}\n필요하면 말해줘.`;
+  if (speechLevel === "formal" || respectful) return `${text}\n필요하시면 말씀해 주세요.`;
+  return `${text}\n필요하시면 알려 주세요.`;
 }
 
 function applyYongEndingToSegment(value: string) {
@@ -195,27 +159,9 @@ function applyYongEndingToSegment(value: string) {
   let core = String(body || "").trimEnd();
   if (!core) return text;
   if (hasTerminalPunctuation(tail)) return text;
-  if (/??/.test(core)) return text;
-
-  const politeConverted =
-    core
-      .replace(/(?댁슂|?쇱슂|?섏슂|以섏슂|?몄슂|?몄슂|?댁뿉???덉슂)$/, (match) => {
-        const mapped = match.replace(/??/, "??);
-        return mapped;
-      })
-      .replace(/([가-??{2,})??/, (match, stem) => {
-        if (/(??以묒슂|媛쒖슂|?섏슂|鍮꾩슜|?덉슜)$/.test(stem)) return match;
-        return `${stem}??;
-      })
-      .replace(/([0-9,\s]{1,})??/, (_match, stem) => `${String(stem)}??);
-
-  let next = politeConverted;
-  if (next === core) {
-    next = core.replace(/(?낅땲???듬땲???쒕┰?덈떎|?⑸땲??$/, (ending) => `${ending}??);
-  }
-
-  if (next === core) return text;
-  return `${next}${tail}${trailingWhitespace}`;
+  if (!/요$/.test(core)) return text;
+  core = core.replace(/요$/, "용");
+  return `${core}${tail}${trailingWhitespace}`;
 }
 
 function applyYongEndingByLine(value: string) {
@@ -242,17 +188,17 @@ export function resolveReplyStyleDirective(input: {
   ];
   const merged = texts.filter(Boolean).join("\n");
   const speechFieldValues = extractFieldValues(merged, ["말투", "tone", "style", "speech"]);
-  const nuanceFieldValues = extractFieldValues(merged, ["?섏븰??, "nuance"]);
-  const attitudeFieldValues = extractFieldValues(merged, ["?쒕룄", "attitude"]);
+  const nuanceFieldValues = extractFieldValues(merged, ["뉘앙스", "nuance"]);
+  const attitudeFieldValues = extractFieldValues(merged, ["태도", "attitude"]);
   const moodFieldValues = extractFieldValues(merged, ["무드", "mood"]);
   const styleText = `${speechFieldValues.join(" ")} ${nuanceFieldValues.join(" ")} ${attitudeFieldValues.join(" ")} ${moodFieldValues.join(" ")}`;
   const forceEndingYong = texts.some((text) => hasForceEndingYongRule(text));
   const speechLevel = resolveSpeechLevel(speechFieldValues, merged);
-  const concise = includesAny(`${styleText} ${merged}`, [/????/, /????/, /??????, /\bconcise\b/i, /\bbrief\b/i]);
-  const calm = includesAny(`${styleText} ${merged}`, [/????/, /????/, /????/, /\bcalm\b/i, /??????]);
-  const bright = includesAny(`${styleText} ${merged}`, [/諛?, /寃쎌풄/, /?쒓린/, /\bbright\b/i, /\benergetic\b/i]);
-  const warm = includesAny(`${styleText} ${merged}`, [/?곕쑜/, /移쒖젅/, /?ㅼ젙/, /\bwarm\b/i, /\bfriendly\b/i, /怨듦컧/]);
-  const respectful = includesAny(`${styleText} ${merged}`, [/?뺤쨷/, /議댁쨷/, /怨듭넀/, /\brespectful\b/i, /?덉쓽/]);
+  const concise = includesAny(`${styleText} ${merged}`, [/간결/, /짧게/, /요약/, /\bconcise\b/i, /\bbrief\b/i]);
+  const calm = includesAny(`${styleText} ${merged}`, [/차분/, /침착/, /\bcalm\b/i]);
+  const bright = includesAny(`${styleText} ${merged}`, [/밝/, /활기/, /\bbright\b/i, /\benergetic\b/i]);
+  const warm = includesAny(`${styleText} ${merged}`, [/친절/, /따뜻/, /공감/, /\bwarm\b/i, /\bfriendly\b/i]);
+  const respectful = includesAny(`${styleText} ${merged}`, [/정중/, /예의/, /\brespectful\b/i]);
   return {
     forceEndingYong,
     speechLevel,

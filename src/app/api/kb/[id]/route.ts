@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
+import { canRead, canWrite } from "@/lib/ownershipAccess";
 import { createEmbedding } from "@/lib/embeddings";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -120,6 +121,10 @@ export async function GET(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
+  if (!canRead(data, serverContext.user.id)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
   if (process.env.NODE_ENV !== "production") {
     console.debug("[api/kb/[id]] GET ok", { id, orgId: serverContext.orgId });
   }
@@ -146,6 +151,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     category?: string | null;
     is_active?: boolean;
     content_json?: unknown;
+    is_public?: boolean;
   } = {};
 
   if (typeof body.title === "string") payload.title = body.title;
@@ -153,6 +159,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   if (body.category === null || typeof body.category === "string") payload.category = body.category;
   if (typeof body.is_active === "boolean") payload.is_active = body.is_active;
   if (body.content_json !== undefined) payload.content_json = body.content_json;
+  if (typeof body.is_public === "boolean") payload.is_public = body.is_public;
   const updateAgentIds = Array.isArray(body.update_agent_ids)
     ? body.update_agent_ids.filter((id: unknown): id is string => typeof id === "string" && isUuid(id))
     : [];
@@ -188,6 +195,10 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     }
   }
 
+  if (!canWrite(existing, serverContext.user.id)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
   const parentId = (existing as { parent_id?: string | null }).parent_id ?? existing.id;
   const nextTitle = payload.title ?? existing.title;
   const nextCategory = payload.category ?? existing.category ?? null;
@@ -199,6 +210,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const nextIsAdmin = (existing as { is_admin?: boolean | null }).is_admin ?? false;
   const nextApplyGroups = (existing as { apply_groups?: unknown }).apply_groups ?? null;
   const nextApplyGroupsMode = (existing as { apply_groups_mode?: string | null }).apply_groups_mode ?? null;
+  const nextIsPublic = payload.is_public ?? existing.is_public ?? false;
   const shouldActivate = payload.is_active === true;
   const shouldDeactivate = payload.is_active === false;
   const contentChanged = nextContent !== (existing.content ?? "");
@@ -258,6 +270,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       is_admin: nextIsAdmin,
       apply_groups: nextApplyGroups,
       apply_groups_mode: nextApplyGroupsMode,
+      created_by: existing.created_by ?? serverContext.user.id,
+      is_public: nextIsPublic,
     };
 
     const { data: inserted, error: insertError } = await serverContext.supabase
@@ -273,6 +287,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     if (categoryChanged) updatePayload.category = nextCategory;
     if (shouldActivate) updatePayload.is_active = true;
     if (shouldDeactivate) updatePayload.is_active = false;
+    if (payload.is_public !== undefined) updatePayload.is_public = nextIsPublic;
 
     if (shouldActivate) {
       const { error: deactivateError } = await serverContext.supabase
@@ -370,20 +385,33 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
   const rawId = routeId;
   const urlId = req.nextUrl.pathname.split("/").pop() || "";
   const id = normalizeId(rawId && rawId !== "undefined" ? rawId : urlId);
-  const { data, error } = await serverContext.supabase
+  const { data: existing, error: fetchError } = await serverContext.supabase
+    .from("B_bot_knowledge_bases")
+    .select("*")
+    .eq("id", id)
+    .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)
+    .maybeSingle();
+
+  if (fetchError) {
+    return NextResponse.json({ error: fetchError.message }, { status: 400 });
+  }
+
+  if (!existing) {
+    return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  }
+
+  if (!canWrite(existing, serverContext.user.id)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const { error: deleteError } = await serverContext.supabase
     .from("B_bot_knowledge_bases")
     .delete()
     .eq("id", id)
-    .or(`org_id.eq.${serverContext.orgId},org_id.is.null`)
-    .select("*")
-    .maybeSingle();
+    .or(`org_id.eq.${serverContext.orgId},org_id.is.null`);
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
-  }
-
-  if (!data) {
-    return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  if (deleteError) {
+    return NextResponse.json({ error: deleteError.message }, { status: 400 });
   }
 
   return NextResponse.json({ ok: true });

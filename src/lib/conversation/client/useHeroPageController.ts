@@ -6,7 +6,7 @@ import { apiFetch } from "@/lib/apiClient";
 import { useConversationMcpCatalog } from "@/lib/conversation/client/useConversationMcpCatalog";
 import { useConversationController, type InitialMessage } from "@/lib/conversation/client/useConversationController";
 import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
-import { isEnabledByGate } from "@/lib/conversation/pageFeaturePolicy";
+import { isEnabledByGate, type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import {
@@ -22,7 +22,9 @@ const NEW_MODEL_CONFIG = {
 };
 
 export function useHeroPageController() {
-  const { isAdminUser, pageFeatures, providerValue, loadPlan, setupUi } = useConversationPageRuntimeConfig("/");
+  const runtimeConfig = useConversationPageRuntimeConfig("/");
+  const { isAdminUser, pageFeatures, loadPlan, setupUi } = runtimeConfig;
+  const providerValue = runtimeConfig.providerValue as ConversationFeaturesProviderShape | null;
   const { providers: mcpProviders, tools: mcpTools } = useConversationMcpCatalog(loadPlan.loadMcp, pageFeatures);
   const [input, setInput] = useState("");
   const [userKb, setUserKb] = useState("");

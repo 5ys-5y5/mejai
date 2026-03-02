@@ -166,7 +166,7 @@ function buildKeywordSet(text: string) {
   return new Set(
     text
       .toLowerCase()
-      .split(/[^a-z0-9가-??+/g)
+      .split(/[^a-z0-9가-힣+]/g)
       .filter((token) => token.length >= 2)
   );
 }
@@ -176,8 +176,8 @@ function extractBulletLines(content?: string | null) {
   return content
     .split("\n")
     .map((line) => line.trim())
-    .filter((line) => line.startsWith("-") || line.startsWith("*") || line.startsWith("??))
-    .map((line) => line.replace(/^[-*??\s*/, "").trim())
+    .filter((line) => line.startsWith("-") || line.startsWith("*") || line.startsWith("•"))
+    .map((line) => line.replace(/^[-*•]\s*/, "").trim())
     .filter(Boolean);
 }
 
@@ -350,8 +350,8 @@ export default function NewKbPage() {
     () => [
     {
       id: "abuse",
-      title: "?뺤꽕 ???,
-      summary: "?낅젰???뺤꽕???ы븿?섎㈃ ?ш낵 ?쒗뵆由?媛뺤젣 + ??李⑤떒",
+      title: "욕설 차단",
+      summary: "입력에 욕설이 포함되면 경고 템플릿 강제 + 도구 차단",
       rule: {
         id: "R001_abuse",
         stage: "input",
@@ -380,8 +380,8 @@ export default function NewKbPage() {
     },
     {
       id: "need_order",
-      title: "Unknown",
-      summary: "二쇰Ц踰덊샇 ?놁쓣 ??lookup/track 李⑤떒 + ?덈궡 ?쒗뵆由?,
+      title: "주문번호 필요",
+      summary: "주문번호 없을 때 lookup/track 차단 + 안내 템플릿",
       rule: {
         id: "R010_need_order_id_for_lookup",
         stage: "tool",
@@ -402,8 +402,8 @@ export default function NewKbPage() {
     },
     {
       id: "address_ticket",
-      title: "諛곗넚吏 蹂寃??뺤젙 ???곗폆 ?앹꽦",
-      summary: "Unknown",
+      title: "배송지 변경 확정 후 티켓 생성",
+      summary: "배송지 변경 확정 시 티켓을 생성합니다.",
       rule: {
         id: "R020_address_change_create_ticket",
         stage: "tool",
@@ -475,8 +475,8 @@ export default function NewKbPage() {
     () => [
     {
       id: "lookup_order",
-      title: "lookup_order ?꾩닔 ?몄옄/寃利?,
-      summary: "order_id ???? + ???? ????,
+      title: "lookup_order 필수 인자/검증",
+      summary: "order_id 필수 + 형식 검증",
       policy: {
         required_args: ["order_id"],
         arg_validators: { order_id: { regex: "^[0-9]{8}-[0-9]{7}$" } },

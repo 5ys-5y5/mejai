@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const items = await loadMcpToolsForOrg(context.supabase, context.orgId);
+    const items = await loadMcpToolsForOrg(context.supabase, context.orgId, context.user.id);
     const providers = buildMcpProviderGroups(items);
     return NextResponse.json({
       summary: { provider_count: providers.length, action_count: items.length },

@@ -249,6 +249,7 @@ export async function POST(req: NextRequest) {
     sessionId = sessionOverride;
     providerValue = mergedPolicy;
     filterWidgetProxyEvents = true;
+  }
 
   if (!supabase || !orgId) {
     return NextResponse.json({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 });

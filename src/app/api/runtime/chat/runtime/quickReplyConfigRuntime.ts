@@ -38,7 +38,7 @@ function clamp(value: number, min: number, max: number) {
 function inferModeFromContextText(text: string, optionsCount: number) {
   const normalized = String(text || "").trim();
   if (!normalized) return optionsCount > 1 ? "multi" : "single";
-  const hasDelimiterSignal = /,|\/|???????and/i.test(normalized);
+  const hasDelimiterSignal = /(?:,|\/|또는|및|and)/i.test(normalized);
   const hasExampleCsv = /\b\d+\s*,\s*\d+/.test(normalized);
   if (hasDelimiterSignal || hasExampleCsv) return "multi";
   return optionsCount > 1 ? "multi" : "single";

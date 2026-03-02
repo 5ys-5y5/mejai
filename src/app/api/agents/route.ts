@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import crypto from "crypto";
+import { filterReadable } from "@/lib/ownershipAccess";
 
 function parseOrder(orderParam: string | null) {
   if (!orderParam) return { field: "created_at", ascending: false };
@@ -59,7 +60,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  return NextResponse.json({ items: data || [], total: count || 0 });
+  const items = filterReadable((data || []) as any[], context.user.id);
+  return NextResponse.json({ items, total: items.length });
 }
 
 export async function POST(req: NextRequest) {
@@ -103,6 +105,7 @@ export async function POST(req: NextRequest) {
     is_active: body.is_active ?? true,
     org_id: context.orgId,
     created_by: context.user.id,
+    is_public: typeof body.is_public === "boolean" ? body.is_public : false,
   };
 
   if (!payload.name) {

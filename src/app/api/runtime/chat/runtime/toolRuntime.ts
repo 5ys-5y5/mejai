@@ -17,7 +17,13 @@ import {
 } from "../policies/principles";
 import type { CompiledPolicy } from "../shared/runtimeTypes";
 
-type ToolCall = { name: "Unknown", any>; ok?: boolean; data?: Record<string, any>; error?: unknown };
+type ToolCall = {
+  name: string;
+  args?: Record<string, any>;
+  ok?: boolean;
+  data?: Record<string, any>;
+  error?: unknown;
+};
 type LookupOrderView = {
   core?: Record<string, any>;
   summary?: Record<string, any>;
@@ -68,17 +74,17 @@ function buildOrderChoiceItems(input: {
     const price = String(choice.price || "").trim();
     const fields = [
       { label: "주문번호", value: orderId || "-" },
-      { label: "?곹뭹", value: productName || "-" },
-      { label: "?듭뀡", value: optionName || "-" },
-      { label: "?섎웾", value: quantity || "-" },
-      { label: "Unknown", value: price || "-" },
+      { label: "상품", value: productName || "-" },
+      { label: "옵션", value: optionName || "-" },
+      { label: "수량", value: quantity || "-" },
+      { label: "가격", value: price || "-" },
     ];
     return {
       value: String(choice.index || ""),
-      label: "Unknown"}?????`),
+      label: [orderId, productName].filter(Boolean).join(" / ") || String(choice.label || ""),
       title: productName || String(choice.label || ""),
       subtitle: orderId || "",
-      description: [optionName ? `?듭뀡: ${optionName}` : "", quantity ? `?섎웾: ${quantity}` : "", price ? `媛寃? ${price}` : ""]
+      description: [optionName ? `옵션: ${optionName}` : "", quantity ? `수량: ${quantity}` : "", price ? `가격 ${price}` : ""]
         .filter(Boolean)
         .join("\n"),
       image_url: includeImages ? String(choice.image_url || "") : "",
@@ -89,13 +95,13 @@ function buildOrderChoiceItems(input: {
 
 const TARGET_SUMMARY_LABELS: Record<string, string> = {
   order_id: "주문번호",
-  product_name: "?곹뭹",
-  option_name: "?듭뀡",
-  price: "????,
-  quantity: "?섎웾",
-  jibun_address: "지번주??,
-  road_address: "??????????,
-  zipcode: "?고렪踰덊샇",
+  product_name: "상품",
+  option_name: "옵션",
+  price: "가격",
+  quantity: "수량",
+  jibun_address: "지번주소",
+  road_address: "도로명주소",
+  zipcode: "우편번호",
 };
 
 const buildTargetSummaryLines = (
@@ -526,13 +532,15 @@ export async function executeFinalToolCalls(input: Record<string, any>) {
                 price: String(fallbackPrice),
                 image_url: null,
               };
-              const label = `${idx + 1}?????
-  주문?? ${toOrderDateShort(date)}
-  주문번호: ${id}
-  ?곹뭹: ${detail.name}
-  ?듭뀡: ${detail.option}
-  ?섎웾: ${detail.qty}
-  결제금액: ${toMoneyText(detail.price)}??;
+              const label = [
+                `${idx + 1}번`,
+                `주문일: ${toOrderDateShort(date)}`,
+                `주문번호: ${id}`,
+                `상품: ${detail.name}`,
+                `옵션: ${detail.option}`,
+                `수량: ${detail.qty}`,
+                `결제금액: ${toMoneyText(detail.price)}원`,
+              ].join("\n");
               return {
                 index: idx + 1,
                 order_id: id,
@@ -574,7 +582,7 @@ export function summarizeToolResults(input: {
   const summaries: string[] = [];
   toolResults.forEach((tool) => {
     if (!tool.ok) {
-      summaries.push(`${tool.name}: ?ㅽ뙣`);
+      summaries.push(`${tool.name}: 실패`);
       return;
     }
     if (tool.name === "lookup_order") {
@@ -596,7 +604,7 @@ export function summarizeToolResults(input: {
       const data = toRecord(tool.data);
       const shipments = readNestedArray(data.shipments, "shipment");
       const count = Array.isArray(shipments) ? shipments.length : 0;
-      summaries.push(`track_shipment: ${count}??);
+      summaries.push(`track_shipment: ${count}건`);
       return;
     }
     if (tool.name === "create_ticket") {
@@ -615,10 +623,10 @@ export function summarizeToolResults(input: {
       const data = toRecord(tool.data);
       const orders = readNestedArray(data.orders, "order");
       const count = Array.isArray(orders) ? orders.length : 0;
-      summaries.push(`list_orders: ${count}??);
+      summaries.push(`list_orders: ${count}건`);
       return;
     }
-    summaries.push(`${tool.name}: ?뺣낫 ?놁쓬`);
+    summaries.push(`${tool.name}: 정보 없음`);
   });
 
   return summaries.join(" | ");

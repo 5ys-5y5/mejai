@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
 
   const { data: widget, error: widgetError } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, name, agent_id, theme, public_key, chat_policy")
+    .select("id, org_id, name, agent_id, theme, public_key, chat_policy, is_public")
     .eq("public_key", publicKey)
     .maybeSingle();
 
@@ -119,6 +119,9 @@ export async function POST(req: NextRequest) {
   }
   if (!widget) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+  }
+  if (widget.is_public !== true) {
+    return NextResponse.json({ error: "WIDGET_PRIVATE" }, { status: 403 });
   }
 
   const mergedChatPolicy = readConversationFeatureProvider(widget.chat_policy);

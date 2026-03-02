@@ -71,8 +71,7 @@ function formatDate(value: string | null | undefined) {
 function formatLineDelta(current: number, prev: number | null) {
   if (prev === null || prev === undefined) return null;
   const diff = current - prev;
-  if (diff === 0) return "0";
-  return diff > 0 ? `+${diff}` : `${diff}`;
+  return diff;
 }
 
 export function PolicySettingsPanel() {
@@ -272,7 +271,7 @@ export function PolicySettingsPanel() {
               <p className="mt-3 whitespace-pre-line text-sm text-slate-700">{overview}</p>
               <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
                 <span>{"\uC904 \uC218"} {item.line_count}</span>
-                {delta ? <span>{`(${delta > 0 ? "+" : ""}${delta})`}</span> : null}
+                {delta !== null && delta !== 0 ? <span>{`(${delta > 0 ? "+" : ""}${delta})`}</span> : null}
                 <span>{"\uCD5C\uC885 \uC218\uC815"} {formatDate(item.updated_at)}</span>
               </div>
               <div className="mt-3 text-xs text-slate-600">

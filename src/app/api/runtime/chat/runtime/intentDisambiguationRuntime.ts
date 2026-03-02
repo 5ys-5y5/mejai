@@ -46,8 +46,8 @@ function buildIntentDisambiguationPrompt(input: {
   intentSupportScope: (intent: string) => string;
   prevBotContext: Record<string, any>;
 }) {
-  const defaultTitle = "?먰븯?쒕뒗 臾몄쓽 ?좏삎???좏깮?댁＜?몄슂. (踰덊샇濡??듬?)";
-  const defaultExample = "?? 1,2";
+  const defaultTitle = "원하시는 문의 유형을 선택해 주세요. (번호 입력)";
+  const defaultExample = "예: 1,2";
   const title =
     resolveRuntimeTemplate({
       key: "intent_disambiguation_title",
@@ -71,7 +71,7 @@ function buildIntentDisambiguationPrompt(input: {
   const lines = input.options.map((intent, idx) => {
     const label = input.intentLabel(intent);
     const scope = input.intentSupportScope(intent);
-    return `- ${idx + 1}??| ${label}${scope ? ` | ${scope}` : ""}`;
+    return `- ${idx + 1}번 | ${label}${scope ? ` | ${scope}` : ""}`;
   });
   return `${title}\n${lines.join("\n")}\n${example}`;
 }
@@ -96,12 +96,12 @@ function buildIntentDisambiguationChoiceItems(
     const label = intentLabel(intent);
     const scope = intentSupportScope(intent);
     const fields = [
-      { label: "??ぉ", value: label },
-      ...(scope ? [{ label: "지??범위", value: scope }] : []),
+      { label: "의도", value: label },
+      ...(scope ? [{ label: "지원 범위", value: scope }] : []),
     ];
     return {
       value: String(idx + 1),
-      label: "Unknown"}??| ${label}${scope ? ` | ${scope}` : ""}`,
+      label: `${idx + 1}번 | ${label}${scope ? ` | ${scope}` : ""}`,
       title: label,
       description: scope || "",
       fields,
@@ -119,7 +119,7 @@ function resolveIntentDisambiguationQuickReplyConfig(input: {
   const configuredMaxRaw = Number(prevContext.intent_disambiguation_max_select ?? 0);
   const explicitMode = prevContext.intent_disambiguation_mode;
   const explicitMulti = Boolean(prevContext.intent_disambiguation_multi === true);
-  const connectorSignal = /(,|\/|?????????|and)/i.test(String(input.sourceText || ""));
+  const connectorSignal = /(,|\/|또는|및|and)/i.test(String(input.sourceText || ""));
   return resolveQuickReplyConfig({
     optionsCount: input.options.length,
     minSelectHint: configuredMinRaw,
@@ -247,7 +247,7 @@ export async function resolveIntentDisambiguation(params: DisambiguationParams):
           .map((v) => String(v))
           .filter(Boolean)
       : [];
-    if (queuedIntents.length > 0 && (isYesText(message) || /???|????|????/.test(message))) {
+    if (queuedIntents.length > 0 && (isYesText(message) || /(?:다음|계속|진행)/.test(message))) {
       forcedIntentQueue = [queuedIntents[0]];
       pendingIntentQueue = queuedIntents.slice(1);
     }

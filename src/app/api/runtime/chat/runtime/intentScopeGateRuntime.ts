@@ -59,22 +59,22 @@ function isTooGenericRestockQuery(value: string) {
   if (!normalized) return true;
   const compact = normalized.replace(/\s+/g, "");
   const genericTokens = new Set([
-    "??????,
-    "?ш퀬",
-    "?낃퀬",
-    "?덉젅",
-    "????????,
-    "?낃퀬?뚮┝",
+    "재고",
+    "재입고",
+    "입고",
+    "품절",
+    "재고확인",
+    "입고알림",
     "restock",
     "stock",
   ]);
   if (genericTokens.has(compact)) return true;
   const stripped = compact
-    .replace(/??????g, "")
-    .replace(/?ш퀬/g, "")
-    .replace(/?낃퀬/g, "")
-    .replace(/?덉젅/g, "")
-    .replace(/?뚮┝/g, "")
+    .replace(/재고확인/g, "")
+    .replace(/재고/g, "")
+    .replace(/입고/g, "")
+    .replace(/품절/g, "")
+    .replace(/알림/g, "")
     .replace(/restock/g, "")
     .replace(/stock/g, "")
     .trim();
@@ -84,7 +84,7 @@ function isTooGenericRestockQuery(value: string) {
 function parseIndexedChoice(text: string): number | null {
   const normalized = String(text || "").trim();
   if (!normalized) return null;
-  const m = normalized.match(/^(\d+)\s*(?:???$/);
+  const m = normalized.match(/^(\d+)\s*(?:번)?$/);
   if (!m) return null;
   const n = Number(m[1]);
   if (!Number.isFinite(n) || n < 1) return null;

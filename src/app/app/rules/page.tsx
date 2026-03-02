@@ -49,6 +49,13 @@ type RunState = {
   error?: string | null;
 };
 
+type OwnershipInfo = {
+  created_by: string | null;
+  owner_user_ids: string[];
+  allowed_user_ids: string[];
+  is_public: boolean | null;
+};
+
 const ACTION_SEARCH_COLUMN_OPTIONS = [
   { id: "all", label: "전체 컬럼" },
   { id: "name", label: "액션" },
@@ -134,6 +141,12 @@ export default function RulesPage() {
   const [outputByTool, setOutputByTool] = useState<Record<string, string>>({});
   const [outputExpandedByTool, setOutputExpandedByTool] = useState<Record<string, boolean>>({});
   const [runStateByTool, setRunStateByTool] = useState<Record<string, RunState>>({});
+  const [ownershipInfo, setOwnershipInfo] = useState<OwnershipInfo | null>(null);
+  const [ownershipLoading, setOwnershipLoading] = useState(false);
+  const [ownershipError, setOwnershipError] = useState<string | null>(null);
+  const [ownerInviteIds, setOwnerInviteIds] = useState("");
+  const [viewerInviteIds, setViewerInviteIds] = useState("");
+  const [isPublicToggle, setIsPublicToggle] = useState(false);
   const GRID_COLS = "grid-cols-[minmax(0,0.5fr)_minmax(0,1fr)_minmax(0,0.5fr)_minmax(56px,0.25fr)]";
   useEffect(() => {
     let mounted = true;
@@ -249,6 +262,44 @@ export default function RulesPage() {
     }
   }, [selectedProvider, sortedActions, selectedActionId]);
 
+  useEffect(() => {
+    let mounted = true;
+    async function loadOwnership() {
+      if (!selectedAction?.id) {
+        setOwnershipInfo(null);
+        setOwnerInviteIds("");
+        setViewerInviteIds("");
+        setIsPublicToggle(false);
+        return;
+      }
+      setOwnershipLoading(true);
+      setOwnershipError(null);
+      try {
+        const res = await apiFetch<OwnershipInfo>(
+          `/api/ownership/resource?resource_type=mcp&resource_id=${encodeURIComponent(selectedAction.id)}`
+        );
+        if (!mounted) return;
+        setOwnershipInfo({
+          created_by: res.created_by ?? null,
+          owner_user_ids: Array.isArray(res.owner_user_ids) ? res.owner_user_ids : [],
+          allowed_user_ids: Array.isArray(res.allowed_user_ids) ? res.allowed_user_ids : [],
+          is_public: res.is_public ?? null,
+        });
+        setIsPublicToggle(Boolean(res.is_public));
+      } catch (err) {
+        if (!mounted) return;
+        setOwnershipError(err instanceof Error ? err.message : "권한 정보를 불러오지 못했습니다.");
+        setOwnershipInfo(null);
+      } finally {
+        if (mounted) setOwnershipLoading(false);
+      }
+    }
+    void loadOwnership();
+    return () => {
+      mounted = false;
+    };
+  }, [selectedAction?.id]);
+
   function handleActionSort(nextKey: "name" | "description" | "meta" | "usage_count") {
     if (actionSortKey === nextKey) {
       setActionSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -300,6 +351,31 @@ export default function RulesPage() {
       toast.success("Input/Output을 복사했습니다.");
     } catch {
       toast.error("복사에 실패했습니다.");
+    }
+  }
+
+  async function handlePublicToggle(nextValue: boolean) {
+    if (!selectedAction?.id) return;
+    const prevValue = Boolean(ownershipInfo?.is_public);
+    setIsPublicToggle(nextValue);
+    try {
+      const res = await apiFetch<{ item?: { is_public?: boolean | null } }>(`/api/mcp/tools/${selectedAction.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_public: nextValue }),
+      });
+      setOwnershipInfo((prev) =>
+        prev
+          ? {
+              ...prev,
+              is_public: res.item?.is_public ?? nextValue,
+            }
+          : prev
+      );
+      toast.success("공개 설정을 업데이트했습니다.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "공개 설정 업데이트에 실패했습니다.");
+      setIsPublicToggle(prevValue);
     }
   }
 
@@ -663,6 +739,142 @@ export default function RulesPage() {
                             </button>
                           </div>
                         </div>
+                      </div>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+                      <div className="text-[11px] font-semibold text-slate-700">권한 관리</div>
+                      <label className="mt-2 flex items-center gap-2 text-[11px] text-slate-700">
+                        <input
+                          type="checkbox"
+                          checked={isPublicToggle}
+                          onChange={(e) => handlePublicToggle(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                        />
+                        공개 액션 (비로그인 사용자도 사용 가능)
+                      </label>
+                      <div className="mt-2">
+                        {ownershipLoading ? (
+                          <div className="text-[11px] text-slate-500">권한 정보를 불러오는 중...</div>
+                        ) : ownershipError ? (
+                          <div className="text-[11px] text-rose-600">{ownershipError}</div>
+                        ) : ownershipInfo ? (
+                          <div className="grid gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">
+                            <div>
+                              생성자:{" "}
+                              <span className="font-mono text-slate-800">{ownershipInfo.created_by || "-"}</span>
+                            </div>
+                            <div>
+                              수정 권한자:{" "}
+                              <span className="font-mono text-slate-800">
+                                {ownershipInfo.owner_user_ids.length > 0
+                                  ? ownershipInfo.owner_user_ids.join(", ")
+                                  : "-"}
+                              </span>
+                            </div>
+                            <div>
+                              사용 권한자:{" "}
+                              <span className="font-mono text-slate-800">
+                                {ownershipInfo.allowed_user_ids.length > 0
+                                  ? ownershipInfo.allowed_user_ids.join(", ")
+                                  : "-"}
+                              </span>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="mt-2 grid gap-2">
+                        <label className="text-[11px] text-slate-600">수정 권한자 UUID (쉼표로 구분)</label>
+                        <input
+                          value={ownerInviteIds}
+                          onChange={(event) => setOwnerInviteIds(event.target.value)}
+                          placeholder="uuid, uuid, ..."
+                          className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs text-slate-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!selectedAction?.id || !ownerInviteIds.trim()) return;
+                            const res = await apiFetch<{ owner_user_ids?: string[]; allowed_user_ids?: string[] }>(
+                              "/api/ownership/invite",
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  resource_type: "mcp",
+                                  resource_id: selectedAction.id,
+                                  role: "owner",
+                                  action: "add",
+                                  user_ids: ownerInviteIds.split(",").map((v) => v.trim()).filter(Boolean),
+                                }),
+                              }
+                            );
+                            setOwnershipInfo((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    owner_user_ids: Array.isArray(res.owner_user_ids)
+                                      ? res.owner_user_ids
+                                      : prev.owner_user_ids,
+                                    allowed_user_ids: Array.isArray(res.allowed_user_ids)
+                                      ? res.allowed_user_ids
+                                      : prev.allowed_user_ids,
+                                  }
+                                : prev
+                            );
+                            setOwnerInviteIds("");
+                            toast.success("수정 권한자를 초대했습니다.");
+                          }}
+                          className="h-9 rounded-lg bg-slate-900 px-3 text-[11px] font-semibold text-white hover:bg-slate-800"
+                        >
+                          수정 권한자 초대
+                        </button>
+                      </div>
+                      <div className="mt-2 grid gap-2">
+                        <label className="text-[11px] text-slate-600">사용 권한자 UUID (쉼표로 구분)</label>
+                        <input
+                          value={viewerInviteIds}
+                          onChange={(event) => setViewerInviteIds(event.target.value)}
+                          placeholder="uuid, uuid, ..."
+                          className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs text-slate-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!selectedAction?.id || !viewerInviteIds.trim()) return;
+                            const res = await apiFetch<{ owner_user_ids?: string[]; allowed_user_ids?: string[] }>(
+                              "/api/ownership/invite",
+                              {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  resource_type: "mcp",
+                                  resource_id: selectedAction.id,
+                                  role: "viewer",
+                                  action: "add",
+                                  user_ids: viewerInviteIds.split(",").map((v) => v.trim()).filter(Boolean),
+                                }),
+                              }
+                            );
+                            setOwnershipInfo((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    owner_user_ids: Array.isArray(res.owner_user_ids)
+                                      ? res.owner_user_ids
+                                      : prev.owner_user_ids,
+                                    allowed_user_ids: Array.isArray(res.allowed_user_ids)
+                                      ? res.allowed_user_ids
+                                      : prev.allowed_user_ids,
+                                  }
+                                : prev
+                            );
+                            setViewerInviteIds("");
+                            toast.success("사용 권한자를 초대했습니다.");
+                          }}
+                          className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-[11px] font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          사용 권한자 초대
+                        </button>
                       </div>
                     </div>
                     {runStateByTool[selectedAction.id]?.error ? (

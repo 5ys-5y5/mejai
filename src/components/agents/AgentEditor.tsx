@@ -20,6 +20,7 @@ type AgentItem = {
   admin_kb_ids?: string[] | null;
   version: string | null;
   is_active: boolean | null;
+  is_public?: boolean | null;
   created_at?: string | null;
   website?: string | null;
   goal?: string | null;
@@ -62,13 +63,20 @@ type AgentMetric = {
   escalation_rate: number;
 };
 
+type OwnershipInfo = {
+  created_by: string | null;
+  owner_user_ids: string[];
+  allowed_user_ids: string[];
+  is_public: boolean | null;
+};
+
 const llmOptions = [
   { id: "chatgpt", label: "chatGPT" },
   { id: "gemini", label: "GEMINI" },
 ];
 
-const resolvedSet = new Set(["?닿껐", "Resolved", "resolved"]);
-const escalatedSet = new Set(["?닿?", "Escalated", "escalated"]);
+const resolvedSet = new Set(["완료", "Resolved", "resolved"]);
+const escalatedSet = new Set(["에스컬레이션", "Escalated", "escalated"]);
 
 function parseVersionParts(value?: string | null) {
   if (!value) return null;
@@ -141,9 +149,9 @@ function normalizeIds(ids?: string[] | null) {
 }
 
 function buildChangeSummary(current: AgentItem, prev?: AgentItem | null) {
-  if (!prev) return "?좉퇋";
+  if (!prev) return "초기";
   const changes: string[] = [];
-  if ((current.name || "") !== (prev.name || "")) changes.push("?대쫫");
+  if ((current.name || "") !== (prev.name || "")) changes.push("이름");
   if ((current.llm || "") !== (prev.llm || "")) changes.push("LLM");
   if ((current.kb_id || "") !== (prev.kb_id || "")) changes.push("KB");
   if (JSON.stringify(normalizeIds(current.mcp_tool_ids)) !== JSON.stringify(normalizeIds(prev.mcp_tool_ids))) {
@@ -152,19 +160,19 @@ function buildChangeSummary(current: AgentItem, prev?: AgentItem | null) {
   if (JSON.stringify(normalizeIds(current.admin_kb_ids)) !== JSON.stringify(normalizeIds(prev.admin_kb_ids))) {
     changes.push("ADMIN KB");
   }
-  if ((current.website || "") !== (prev.website || "")) changes.push("?뱀궗?댄듃");
+  if ((current.website || "") !== (prev.website || "")) changes.push("웹사이트");
   if ((current.goal || "") !== (prev.goal || "")) changes.push("목표");
-  return changes.length > 0 ? `${changes.join(", ")} ???? : "Unknown";
+  return changes.length > 0 ? `${changes.join(", ")} 변경` : "변경 없음";
 }
 
 function formatDuration(seconds?: number | null) {
   const safe = Number(seconds || 0);
-  if (!Number.isFinite(safe) || safe <= 0) return "0??;
+  if (!Number.isFinite(safe) || safe <= 0) return "0분";
   const minutes = Math.round(safe / 60);
-  if (minutes < 60) return `${minutes}??;
+  if (minutes < 60) return `${minutes}분`;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
-  return rest > 0 ? `${hours}?쒓컙 ${rest}遺? : `${hours}?쒓컙`;
+  return rest > 0 ? `${hours}시간 ${rest}분` : `${hours}시간`;
 }
 
 function formatRate(value?: number | null) {
@@ -195,6 +203,7 @@ export function AgentEditor({
   const [adminKbIds, setAdminKbIds] = useState<string[]>([]);
   const [website, setWebsite] = useState("");
   const [goal, setGoal] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
 
   const [baseName, setBaseName] = useState("");
   const [baseLlm, setBaseLlm] = useState("chatgpt");
@@ -202,6 +211,7 @@ export function AgentEditor({
   const [baseMcpToolIds, setBaseMcpToolIds] = useState<string[]>([]);
   const [baseWebsite, setBaseWebsite] = useState("");
   const [baseGoal, setBaseGoal] = useState("");
+  const [baseIsPublic, setBaseIsPublic] = useState(false);
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
 
   const [allAgents, setAllAgents] = useState<AgentItem[]>([]);
@@ -216,6 +226,11 @@ export function AgentEditor({
   const [isAdmin, setIsAdmin] = useState(false);
   const [kbInfoOpen, setKbInfoOpen] = useState(false);
   const [mcpInfoOpen, setMcpInfoOpen] = useState(false);
+  const [ownerInviteIds, setOwnerInviteIds] = useState("");
+  const [viewerInviteIds, setViewerInviteIds] = useState("");
+  const [ownershipInfo, setOwnershipInfo] = useState<OwnershipInfo | null>(null);
+  const [ownershipLoading, setOwnershipLoading] = useState(false);
+  const [ownershipError, setOwnershipError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -234,6 +249,7 @@ export function AgentEditor({
         setAdminKbIds(nextAdminKbIds);
         setWebsite(res.website || "");
         setGoal(res.goal || "");
+        setIsPublic(Boolean(res.is_public));
         setCurrentVersion(res.version || "");
 
         setBaseName(res.name || "");
@@ -242,6 +258,7 @@ export function AgentEditor({
         setBaseMcpToolIds(res.mcp_tool_ids ?? []);
         setBaseWebsite(res.website || "");
         setBaseGoal(res.goal || "");
+        setBaseIsPublic(Boolean(res.is_public));
         setLoading(false);
       } catch {
         if (!mounted) return;
@@ -250,6 +267,40 @@ export function AgentEditor({
       }
     }
     load();
+    return () => {
+      mounted = false;
+    };
+  }, [agentId]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadOwnership() {
+      if (!agentId) {
+        setOwnershipInfo(null);
+        return;
+      }
+      setOwnershipLoading(true);
+      setOwnershipError(null);
+      try {
+        const res = await apiFetch<OwnershipInfo>(
+          `/api/ownership/resource?resource_type=agents&resource_id=${encodeURIComponent(agentId)}`
+        );
+        if (!mounted) return;
+        setOwnershipInfo({
+          created_by: res.created_by ?? null,
+          owner_user_ids: Array.isArray(res.owner_user_ids) ? res.owner_user_ids : [],
+          allowed_user_ids: Array.isArray(res.allowed_user_ids) ? res.allowed_user_ids : [],
+          is_public: res.is_public ?? null,
+        });
+      } catch (err) {
+        if (!mounted) return;
+        setOwnershipError(err instanceof Error ? err.message : "권한 정보를 불러오지 못했습니다.");
+        setOwnershipInfo(null);
+      } finally {
+        if (mounted) setOwnershipLoading(false);
+      }
+    }
+    void loadOwnership();
     return () => {
       mounted = false;
     };
@@ -318,30 +369,30 @@ export function AgentEditor({
   const activeKb = selectedKbParentId ? activeKbByParent.get(selectedKbParentId) ?? null : null;
   const kbUpdateAvailable = Boolean(selectedKb && activeKb && activeKb.id !== selectedKb.id);
   const kbInfoText = useMemo(() => {
-    if (!selectedKb) return "?좏깮??KB媛 ?놁뒿?덈떎.";
+    if (!selectedKb) return "선택된 KB가 없습니다.";
     const adminFlag = isAdminKbValue(selectedKb.is_admin);
     return [
-      `?쒕ぉ: ${selectedKb.title || "-"}`,
+      `이름: ${selectedKb.title || "-"}`,
       `버전: ${selectedKb.version || "-"}`,
-      `?곹깭: ${selectedKb.is_active ? "諛고룷" : "鍮꾪솢??}`,
-      `?좏삎: ${adminFlag ? "ADMIN" : "?쇰컲"}`,
-      `?댁슜:\n${selectedKb.content || "-"}`,
+      `상태: ${selectedKb.is_active ? "배포" : "비활성"}`,
+      `유형: ${adminFlag ? "ADMIN" : "일반"}`,
+      `내용:\n${selectedKb.content || "-"}`,
       `ID: ${selectedKb.id}`,
     ].join("\n");
   }, [selectedKb]);
 
   const mcpInfoText = useMemo(() => {
-    if (mcpToolIds.length === 0) return "?좏깮??MCP ?꾧뎄媛 ?놁뒿?덈떎.";
+    if (mcpToolIds.length === 0) return "선택된 MCP 도구가 없습니다.";
     const byId = new Map(mcpTools.map((tool) => [tool.id, tool]));
     return mcpToolIds
       .map((id) => {
         const tool = byId.get(id);
-        if (!tool) return `?????녿뒗 ?꾧뎄 (${id})`;
+        if (!tool) return `알 수 없는 도구 (${id})`;
         const label = tool.tool_key || (tool.provider_key ? `${tool.provider_key}:${tool.name}` : tool.name);
         const lines = [
-          `?꾧뎄: ${label}`,
-          `?꾨줈諛붿씠?? ${tool.provider_key || "-"}`,
-          `?ㅻ챸: ${tool.description || "-"}`,
+          `도구: ${label}`,
+          `프로바이더: ${tool.provider_key || "-"}`,
+          `설명: ${tool.description || "-"}`,
           `ID: ${tool.id}`,
         ];
         return lines.join("\n");
@@ -361,7 +412,7 @@ export function AgentEditor({
       .map((item) => ({
         id: item.id,
         label: `${item.title}${item.version ? ` (${item.version})` : ""}`,
-        description: item.is_active ? "배포" : "비활??,
+        description: item.is_active ? "배포" : "비활성",
       }));
   }, [scopedKbItems]);
 
@@ -393,8 +444,9 @@ export function AgentEditor({
   const metaChanged = useMemo(() => {
     if (name.trim() !== baseName.trim()) return true;
     if (website.trim() !== baseWebsite.trim()) return true;
-    return goal.trim() !== baseGoal.trim();
-  }, [name, website, goal, baseName, baseWebsite, baseGoal]);
+    if (goal.trim() !== baseGoal.trim()) return true;
+    return isPublic !== baseIsPublic;
+  }, [name, website, goal, isPublic, baseName, baseWebsite, baseGoal, baseIsPublic]);
 
   const hasChanges = configChanged || metaChanged;
 
@@ -425,6 +477,7 @@ export function AgentEditor({
       if ((kbId || "") !== (baseKbId || "")) payload.kb_id = kbId;
       if (website.trim() !== baseWebsite.trim()) payload.website = website.trim() || null;
       if (goal.trim() !== baseGoal.trim()) payload.goal = goal.trim();
+      if (isPublic !== baseIsPublic) payload.is_public = isPublic;
       if (JSON.stringify(normalizeIds(mcpToolIds)) !== JSON.stringify(normalizeIds(baseMcpToolIds))) {
         payload.mcp_tool_ids = mcpToolIds;
       }
@@ -442,6 +495,7 @@ export function AgentEditor({
       const savedAdminKbIds = Array.isArray(saved.admin_kb_ids) ? saved.admin_kb_ids : [];
       setBaseWebsite(saved.website || "");
       setBaseGoal(saved.goal || "");
+      setBaseIsPublic(Boolean(saved.is_public));
       setName(saved.name || "");
       setLlm(saved.llm === "gemini" ? "gemini" : "chatgpt");
       setKbId(saved.kb_id || "");
@@ -449,6 +503,7 @@ export function AgentEditor({
       setAdminKbIds(savedAdminKbIds);
       setWebsite(saved.website || "");
       setGoal(saved.goal || "");
+      setIsPublic(Boolean(saved.is_public));
       setCurrentVersion(saved.version || "");
       await refreshAgents();
 
@@ -609,8 +664,8 @@ export function AgentEditor({
                       {isCurrent ? (
                         <span
                           className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500"
-                          aria-label="?섏젙 以?
-                          title="?섏젙 以?
+                          aria-label="현재 편집 중"
+                          title="현재 편집 중"
                         >
                           <PencilLine className="h-3.5 w-3.5" />
                         </span>
@@ -633,11 +688,11 @@ export function AgentEditor({
                           deployDisabled && !isActiveRow ? "cursor-not-allowed opacity-60" : ""
                         )}
                       >
-                        {activeUpdateId === item.id ? "Unknown" : isActiveRow ? "ON" : "OFF"}
+                        {activeUpdateId === item.id ? "전환 중" : isActiveRow ? "ON" : "OFF"}
                       </button>
                     </div>
                     <div className="flex min-h-[44px] items-center px-1 py-3 text-[11px] text-slate-600 whitespace-nowrap">
-                      {metric?.call_count ?? 0}??
+                      {metric?.call_count ?? 0}건
                     </div>
                     <div className="flex min-h-[44px] items-center px-1 py-3 text-[11px] text-slate-600 whitespace-nowrap">
                       {formatDuration(metric?.call_duration_sec)}
@@ -664,7 +719,7 @@ export function AgentEditor({
                           e.stopPropagation();
                           handleDelete(item.id);
                         }}
-                        aria-label="??젣"
+                        aria-label="삭제"
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -677,12 +732,12 @@ export function AgentEditor({
           </ul>
         </Card>
 
-<Card id="agent-editor-root" className="mt-6 p-6">
+        <Card id="agent-editor-root" className="mt-6 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-slate-900">?먯씠?꾪듃 援ъ꽦</div>
+              <div className="text-sm font-semibold text-slate-900">에이전트 구성</div>
               <p className="mt-1 text-xs text-slate-500">
-                ?꾩옱 踰꾩쟾 {currentVersion || "-"} 쨌 LLM/MCP/KB 蹂寃?????踰꾩쟾???앹꽦?⑸땲??
+                현재 버전 {currentVersion || "-"}에서 LLM/MCP/KB 변경 시 새 버전을 생성합니다.
               </p>
             </div>
             <button
@@ -694,11 +749,11 @@ export function AgentEditor({
                 canSave ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-slate-200 text-slate-400"
               )}
             >
-              {saving ? "Unknown" : "????}
+              {saving ? "저장 중..." : "저장"}
             </button>
           </div>
           {loading ? (
-            <div className="mt-4 text-sm text-slate-500">?먯씠?꾪듃瑜?遺덈윭?ㅻ뒗 以?..</div>
+            <div className="mt-4 text-sm text-slate-500">에이전트를 불러오는 중...</div>
           ) : error ? (
             <div className="mt-4 text-sm text-rose-600">{error}</div>
           ) : (
@@ -900,6 +955,135 @@ export function AgentEditor({
                   placeholder="?먯씠?꾪듃 紐⑺몴瑜??낅젰?섏꽭??"
                   className="min-h-[120px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-slate-900">공개 설정</label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={isPublic}
+                    onChange={(e) => setIsPublic(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-slate-900"
+                  />
+                  공개로 설정 (비로그인 사용자도 사용 가능)
+                </label>
+              </div>
+              <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-sm font-semibold text-slate-900">권한 초대</div>
+                {ownershipLoading ? (
+                  <div className="text-xs text-slate-500">권한 정보를 불러오는 중...</div>
+                ) : ownershipError ? (
+                  <div className="text-xs text-rose-600">{ownershipError}</div>
+                ) : ownershipInfo ? (
+                  <div className="grid gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">
+                    <div>
+                      생성자:{" "}
+                      <span className="font-mono text-slate-800">{ownershipInfo.created_by || "-"}</span>
+                    </div>
+                    <div>
+                      수정 권한자:{" "}
+                      <span className="font-mono text-slate-800">
+                        {ownershipInfo.owner_user_ids.length > 0 ? ownershipInfo.owner_user_ids.join(", ") : "-"}
+                      </span>
+                    </div>
+                    <div>
+                      사용 권한자:{" "}
+                      <span className="font-mono text-slate-800">
+                        {ownershipInfo.allowed_user_ids.length > 0 ? ownershipInfo.allowed_user_ids.join(", ") : "-"}
+                      </span>
+                    </div>
+                  </div>
+                ) : null}
+                <div className="grid gap-2">
+                  <label className="text-xs text-slate-600">수정 권한자 UUID (쉼표로 구분)</label>
+                  <input
+                    value={ownerInviteIds}
+                    onChange={(e) => setOwnerInviteIds(e.target.value)}
+                    placeholder="uuid, uuid, ..."
+                    className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!agentId || !ownerInviteIds.trim()) return;
+                      const res = await apiFetch<{ owner_user_ids?: string[]; allowed_user_ids?: string[] }>(
+                        "/api/ownership/invite",
+                        {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          resource_type: "agents",
+                          resource_id: agentId,
+                          role: "owner",
+                          action: "add",
+                          user_ids: ownerInviteIds.split(",").map((v) => v.trim()).filter(Boolean),
+                        }),
+                        }
+                      );
+                      setOwnershipInfo((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              owner_user_ids: Array.isArray(res.owner_user_ids) ? res.owner_user_ids : prev.owner_user_ids,
+                              allowed_user_ids: Array.isArray(res.allowed_user_ids)
+                                ? res.allowed_user_ids
+                                : prev.allowed_user_ids,
+                            }
+                          : prev
+                      );
+                      toast.success("수정 권한자를 초대했습니다.");
+                      setOwnerInviteIds("");
+                    }}
+                    className="h-9 rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                    수정 권한자 초대
+                  </button>
+                </div>
+                <div className="grid gap-2">
+                  <label className="text-xs text-slate-600">사용 권한자 UUID (쉼표로 구분)</label>
+                  <input
+                    value={viewerInviteIds}
+                    onChange={(e) => setViewerInviteIds(e.target.value)}
+                    placeholder="uuid, uuid, ..."
+                    className="h-9 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!agentId || !viewerInviteIds.trim()) return;
+                      const res = await apiFetch<{ owner_user_ids?: string[]; allowed_user_ids?: string[] }>(
+                        "/api/ownership/invite",
+                        {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          resource_type: "agents",
+                          resource_id: agentId,
+                          role: "viewer",
+                          action: "add",
+                          user_ids: viewerInviteIds.split(",").map((v) => v.trim()).filter(Boolean),
+                        }),
+                        }
+                      );
+                      setOwnershipInfo((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              owner_user_ids: Array.isArray(res.owner_user_ids) ? res.owner_user_ids : prev.owner_user_ids,
+                              allowed_user_ids: Array.isArray(res.allowed_user_ids)
+                                ? res.allowed_user_ids
+                                : prev.allowed_user_ids,
+                            }
+                          : prev
+                      );
+                      toast.success("사용 권한자를 초대했습니다.");
+                      setViewerInviteIds("");
+                    }}
+                    className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    사용 권한자 초대
+                  </button>
+                </div>
               </div>
             </div>
           )}

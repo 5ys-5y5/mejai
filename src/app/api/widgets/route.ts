@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { normalizeConversationFeatureProvider } from "@/lib/conversation/pageFeaturePolicy";
+import { filterReadable } from "@/lib/ownershipAccess";
 
 function makePublicKey() {
   return `mw_pk_${crypto.randomBytes(16).toString("hex")}`;
@@ -22,19 +23,6 @@ function readChatPolicy(value: unknown) {
 
 
 
-async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
-  if ("error" in context) return { ok: false, status: 401, error: context.error };
-  const { data: access } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  if (!access?.is_admin) {
-    return { ok: false, status: 403, error: "FORBIDDEN" };
-  }
-  return { ok: true as const };
-}
-
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
@@ -45,7 +33,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await context.supabase
     .from("B_chat_widgets")
-    .select("id, org_id, name, agent_id, theme, public_key, chat_policy, created_at, updated_at")
+    .select("id, org_id, name, agent_id, theme, public_key, chat_policy, created_at, updated_at, created_by, owner_user_ids, allowed_user_ids, is_public")
     .eq("org_id", context.orgId)
     .order("updated_at", { ascending: false });
 
@@ -53,7 +41,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  const items = Array.isArray(data) ? data : [];
+  const visible = filterReadable((Array.isArray(data) ? data : []) as any[], context.user.id);
+  const items = visible.map((row: Record<string, any>) => ({
+    id: row.id,
+    org_id: row.org_id,
+    name: row.name,
+    agent_id: row.agent_id,
+    theme: row.theme,
+    public_key: row.public_key,
+    chat_policy: row.chat_policy,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    is_public: row.is_public ?? false,
+  }));
   return NextResponse.json({ items, item: items[0] || null });
 }
 
@@ -63,11 +63,6 @@ export async function POST(req: NextRequest) {
   const context = await getServerContext(authHeader, cookieHeader);
   if ("error" in context) {
     return NextResponse.json({ error: context.error }, { status: 401 });
-  }
-
-  const adminCheck = await ensureAdmin(context);
-  if (!adminCheck.ok) {
-    return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
   }
 
   const body = await req.json().catch(() => null);
@@ -102,8 +97,10 @@ export async function POST(req: NextRequest) {
       public_key: publicKey,
       created_at: nowIso,
       updated_at: nowIso,
+      created_by: context.user.id,
+      is_public: typeof body.is_public === "boolean" ? body.is_public : false,
     })
-    .select("id, org_id, name, agent_id, theme, public_key, chat_policy, created_at, updated_at")
+    .select("id, org_id, name, agent_id, theme, public_key, chat_policy, created_at, updated_at, is_public")
     .single();
 
   if (error) {

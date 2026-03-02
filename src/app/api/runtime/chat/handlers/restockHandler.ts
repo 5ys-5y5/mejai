@@ -1189,15 +1189,16 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
     const policyRestock = String(productDecisionRes.decision?.restock_policy || "UNKNOWN");
     const policyRestockAt = String(productDecisionRes.decision?.restock_at || "").trim();
     const stockLine = productView.soldOut
-      ? "?꾩옱 ?곹깭: ?덉젅"
+      ? "현재 상태: 품절"
       : productView.qty === null
-        ? "?꾩옱 ?곹깭: ?ш퀬 ?섎웾 ?뺤씤 ?꾩슂"
-        : `?꾩옱 ?곹깭: ?ш퀬 ${productView.qty}媛?;
+        ? "현재 상태: 재고 수량 확인 필요"
+        : `현재 상태: 재고 ${productView.qty}개`;
     const policyLine =
       policyAnswerability === "UNKNOWN" && policyRestock === "UNKNOWN"
-        ? "KB ?뺤콉: 蹂꾨룄 ?ъ엯怨??뺤콉 ?놁쓬"
-        : `KB ?뺤콉: answerability=${policyAnswerability}, restock_policy=${policyRestock}${policyRestockAt ? `, restock_at=${policyRestockAt}` : ""
-        }`;
+        ? "KB 정책: 별도 입고정책 없음"
+        : `KB 정책: answerability=${policyAnswerability}, restock_policy=${policyRestock}${
+            policyRestockAt ? `, restock_at=${policyRestockAt}` : ""
+          }`;
 
     if (resolvedIntent === "restock_subscribe") {
       if (scheduleDueForEntry && scheduleDueForEntry.diffDays < 0) {
@@ -1647,8 +1648,8 @@ export async function handleRestockIntent(input: HandleRestockIntentInput): Prom
               {
                 id: `restock-${restockProductId}`,
                 title: restockDisplayName || restockProductId,
-                subtitle: "?곹뭹 ?뺤씤",
-                description: stockLine.replace(/^?꾩옱 ?곹깭:\s*/, ""),
+                subtitle: "상품 확인",
+                description: stockLine.replace(/^현재 상태:\s*/, ""),
                 image_url: productView.thumbnailUrl,
                 value: "1",
               },

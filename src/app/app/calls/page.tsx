@@ -44,7 +44,7 @@ export default function CallsListPage({ headerSearch = "" }: { headerSearch?: st
         }
       } catch {
         if (mounted) {
-          setError("?몄뀡 ?곗씠?곕? 遺덈윭?ㅼ? 紐삵뻽?듬땲??");
+          setError("콜 세션 데이터를 불러오지 못했습니다.");
           setLoading(false);
         }
       }
@@ -72,22 +72,22 @@ export default function CallsListPage({ headerSearch = "" }: { headerSearch?: st
       <div className="mx-auto w-full max-w-6xl">
         <Card>
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-            <div className="text-sm font-semibold text-slate-900">?몄뀡</div>
-            <div className="text-xs text-slate-500">??{loading ? "-" : filtered.length}??/div>
+            <div className="text-sm font-semibold text-slate-900">콜 세션</div>
+            <div className="text-xs text-slate-500">총 {loading ? "-" : filtered.length}건</div>
           </div>
           <ul className="divide-y divide-slate-200">
             {error ? (
               <li className="p-4 text-sm text-rose-600">{error}</li>
             ) : null}
             {!error && !loading && filtered.length === 0 ? (
-              <li className="p-4 text-sm text-slate-500">?몄뀡 ?곗씠?곌? ?놁뒿?덈떎.</li>
+              <li className="p-4 text-sm text-slate-500">콜 세션 데이터가 없습니다.</li>
             ) : null}
             {filtered.map((s) => (
               <li key={s.id}>
                 <Link href={`/app/calls/${s.id}`} className="block p-4 hover:bg-slate-50">
                   <div className="flex items-center gap-2">
                     <div className="font-medium text-slate-900">{s.id}</div>
-                    <Badge variant={s.outcome === "?닿껐" ? "green" : "amber"}>
+                    <Badge variant={s.outcome === "완료" ? "green" : "amber"}>
                       {s.outcome || "미정"}
                     </Badge>
                     <span className="ml-auto text-xs text-slate-500">
@@ -95,12 +95,12 @@ export default function CallsListPage({ headerSearch = "" }: { headerSearch?: st
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                    <IconChip icon={PhoneCall} label={s.caller_masked || "諛쒖떊???뺣낫 ?놁쓬"} />
+                    <IconChip icon={PhoneCall} label={s.caller_masked || "발신자 정보 없음"} />
                     <IconChip
                       icon={Clock}
-                      label={`${Math.round((s.duration_sec || 0) / 60)}??}
+                      label={`${Math.round((s.duration_sec || 0) / 60)}분`}
                     />
-                    <IconChip icon={Headphones} label={s.agent_id || "??????} />
+                    <IconChip icon={Headphones} label={s.agent_id || "담당자 없음"} />
                   </div>
                 </Link>
               </li>

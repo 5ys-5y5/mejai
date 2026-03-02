@@ -17,9 +17,9 @@ const auditSeed = [
 ];
 
 const teamSeed = [
-  { role: "Unknown", perms: "Unknown" },
-  { role: "?댁쁺??, perms: "?듯솕, KB, 由щ럭" },
-  { role: "媛먯궗??, perms: "?쎄린 ?꾩슜, 媛먯궗" },
+  { role: "운영", perms: "대화, KB, 리뷰" },
+  { role: "관리자", perms: "정책, KB, 리뷰" },
+  { role: "감사", perms: "읽기 전용, 감사" },
 ];
 
 export default function SettingsPage() {
@@ -33,7 +33,7 @@ export default function SettingsPage() {
       : "profile";
 
   const [email, setEmail] = useState("operator@mejai.help");
-  const givenName = "?깆???;
+  const givenName = "사용자";
 
   const { enabled: helpPanelEnabled, setEnabled: setHelpPanelEnabled } = useHelpPanelEnabled();
 
@@ -77,9 +77,9 @@ export default function SettingsPage() {
 
   const tabs = useMemo(
     () => [
-      { key: "profile", label: "?꾨줈?? },
-      { key: "workspaces", label: "?뚰겕?ㅽ럹?댁뒪" },
-      { key: "team", label: "Unknown" },
+      { key: "profile", label: "프로필" },
+      { key: "workspaces", label: "워크스페이스" },
+      { key: "team", label: "팀" },
       { key: "audit", label: "감사로그" },
     ],
     []

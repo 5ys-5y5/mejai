@@ -46,11 +46,14 @@ export async function GET(req: NextRequest) {
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, chat_policy")
+    .select("id, org_id, chat_policy, is_public")
     .eq("id", payload.widget_id)
     .maybeSingle();
   if (!widget) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+  }
+  if (widget.is_public !== true) {
+    return NextResponse.json({ error: "WIDGET_PRIVATE" }, { status: 403 });
   }
   const mergedPolicy = readConversationFeatureProvider(widget.chat_policy);
   const widgetPolicy = (mergedPolicy as { widget?: WidgetChatPolicyConfig } | null)?.widget || null;

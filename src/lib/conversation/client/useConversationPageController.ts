@@ -5,7 +5,13 @@ import { useSearchParams } from "next/navigation";
 import { type SelectOption } from "@/components/SelectPopover";
 import { apiFetch } from "@/lib/apiClient";
 import { fetchSessionLogs, fetchTranscriptSnapshot } from "@/lib/conversation/client/runtimeClient";
-import { isEnabledByGate, isProviderEnabled, isToolEnabled, type ConversationPageKey } from "@/lib/conversation/pageFeaturePolicy";
+import {
+  isEnabledByGate,
+  isProviderEnabled,
+  isToolEnabled,
+  type ConversationFeaturesProviderShape,
+  type ConversationPageKey,
+} from "@/lib/conversation/pageFeaturePolicy";
 import { useConversationMcpCatalog } from "@/lib/conversation/client/useConversationMcpCatalog";
 import { useConversationActions } from "@/lib/conversation/client/useConversationActions";
 import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
@@ -90,7 +96,9 @@ function buildMessageLogsForMessages(
 }
 
 export function useConversationPageController(pageKey: ConversationPageKey = "/app/conversation") {
-  const { isAdminUser, pageFeatures, providerValue, loadPlan, setupUi } = useConversationPageRuntimeConfig(pageKey);
+  const runtimeConfig = useConversationPageRuntimeConfig(pageKey);
+  const { isAdminUser, pageFeatures, loadPlan, setupUi } = runtimeConfig;
+  const providerValue = runtimeConfig.providerValue as ConversationFeaturesProviderShape | null;
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

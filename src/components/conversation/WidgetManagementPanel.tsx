@@ -137,6 +137,7 @@ export function WidgetManagementPanel() {
   const [agents, setAgents] = useState<AgentItem[]>([]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [newWidgetMode, setNewWidgetMode] = useState(false);
 
   const agentNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -202,7 +203,11 @@ export function WidgetManagementPanel() {
 
       setAgents(agentRes.items || []);
 
-      setSelectedId((prev) => prev || items[0]?.id || null);
+      if (newWidgetMode) {
+        setSelectedId(null);
+      } else {
+        setSelectedId((prev) => prev || items[0]?.id || null);
+      }
 
     } catch {
 
@@ -214,7 +219,7 @@ export function WidgetManagementPanel() {
 
     }
 
-  }, []);
+  }, [newWidgetMode]);
 
 
 
@@ -228,13 +233,15 @@ export function WidgetManagementPanel() {
 
   useEffect(() => {
 
+    if (newWidgetMode) return;
+
     if (!selectedId) return;
 
     if (widgets.some((widget) => widget.id === selectedId)) return;
 
     setSelectedId(widgets[0]?.id || null);
 
-  }, [selectedId, widgets]);
+  }, [selectedId, widgets, newWidgetMode]);
 
   useEffect(() => {
 
@@ -269,6 +276,7 @@ export function WidgetManagementPanel() {
     [widgets, selectedId]
 
   );
+  const showDetails = Boolean(selectedWidget) || newWidgetMode;
 
 
 
@@ -408,6 +416,7 @@ export function WidgetManagementPanel() {
     });
 
     setSelectedId(res.item.id || null);
+    setNewWidgetMode(false);
 
     setPolicySnapshot(readConversationFeatureProvider(res.item.chat_policy ?? null));
 
@@ -762,8 +771,19 @@ export function WidgetManagementPanel() {
 
           <div className="text-sm font-semibold text-slate-900">Widget List</div>
 
-          <Button type="button" variant="outline" onClick={() => setSelectedId(null)}>
-            New Widget
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              if (newWidgetMode) {
+                setNewWidgetMode(false);
+                return;
+              }
+              setNewWidgetMode(true);
+              setSelectedId(null);
+            }}
+          >
+            {newWidgetMode ? "X" : "New Widget"}
           </Button>
 
         </div>
@@ -815,7 +835,14 @@ export function WidgetManagementPanel() {
 
                       type="button"
 
-                      onClick={() => setSelectedId(item.id || null)}
+                      onClick={() => {
+                        if (isSelected) {
+                          setSelectedId(null);
+                          return;
+                        }
+                        setSelectedId(item.id || null);
+                        if (newWidgetMode) setNewWidgetMode(false);
+                      }}
 
                       className="text-left flex-1"
 
@@ -880,6 +907,7 @@ export function WidgetManagementPanel() {
 
 
 
+      {showDetails ? (
       <Card className="p-4 space-y-6">
 
         <div className="grid grid-cols-1 gap-6">
@@ -891,7 +919,10 @@ export function WidgetManagementPanel() {
 
             onSave={handleSave}
 
-            onSaved={(next) => setSelectedId(next.id || null)}
+            onSaved={(next) => {
+              setSelectedId(next.id || null);
+              setNewWidgetMode(false);
+            }}
 
             title={"위젯 설정"}
 
@@ -1090,6 +1121,7 @@ export function WidgetManagementPanel() {
         </div>
 
       </Card>
+      ) : null}
 
     </div>
 

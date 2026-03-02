@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
@@ -13,6 +13,7 @@ export type WidgetConfig = {
   public_key?: string | null;
   theme?: Record<string, unknown> | null;
   chat_policy?: ConversationFeaturesProviderShape | null;
+  is_public?: boolean | null;
 };
 
 export type AgentItem = {
@@ -28,6 +29,7 @@ export type WidgetSavePayload = {
   theme: Record<string, unknown>;
   chat_policy?: ConversationFeaturesProviderShape | null;
   rotate_key?: boolean;
+  is_public?: boolean;
 };
 
 type WidgetSettingsFormProps = {
@@ -46,6 +48,11 @@ export function WidgetSettingsForm({
   extra,
 }: WidgetSettingsFormProps) {
   const [saving, setSaving] = useState(false);
+  const [isPublic, setIsPublic] = useState<boolean>(Boolean(widget?.is_public));
+
+  useEffect(() => {
+    setIsPublic(Boolean(widget?.is_public));
+  }, [widget?.is_public]);
 
   const handleSave = async (rotateKey = false) => {
     setSaving(true);
@@ -57,6 +64,7 @@ export function WidgetSettingsForm({
         theme: { ...(widget?.theme || {}) },
         chat_policy: chatPolicy,
         rotate_key: rotateKey,
+        is_public: isPublic,
       };
       const saved = await onSave(payload);
       onSaved?.(saved);
@@ -73,6 +81,15 @@ export function WidgetSettingsForm({
     <div className="space-y-4">
       <Card className="p-4 space-y-3">
         <div className="text-sm font-semibold text-slate-900">{title}</div>
+        <label className="flex items-center gap-2 text-xs text-slate-700">
+          <input
+            type="checkbox"
+            checked={isPublic}
+            onChange={(e) => setIsPublic(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-slate-900"
+          />
+          공개 위젯 (비로그인 사용자도 사용 가능)
+        </label>
         {extra ? <div className="pt-2">{extra}</div> : null}
       </Card>
 

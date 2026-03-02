@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { normalizeConversationFeatureProvider } from "@/lib/conversation/pageFeaturePolicy";
+import { canWrite } from "@/lib/ownershipAccess";
 
 type RouteContext = { params: Promise<{ id: string }> | { id: string } };
 
@@ -31,30 +32,12 @@ function nowIso() {
   return new Date().toISOString();
 }
 
-async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
-  if ("error" in context) return { ok: false, status: 401, error: context.error };
-  const { data: access } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  if (!access?.is_admin) {
-    return { ok: false, status: 403, error: "FORBIDDEN" };
-  }
-  return { ok: true as const };
-}
-
 export async function PATCH(req: NextRequest, context: RouteContext) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
   const serverContext = await getServerContext(authHeader, cookieHeader);
   if ("error" in serverContext) {
     return NextResponse.json({ error: serverContext.error }, { status: 401 });
-  }
-
-  const adminCheck = await ensureAdmin(serverContext);
-  if (!adminCheck.ok) {
-    return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
   }
 
   const { id: routeId } = await context.params;
@@ -82,6 +65,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   if (theme !== undefined) payload.theme = theme;
   const chatPolicy = readChatPolicy(body.chat_policy);
   if (chatPolicy !== undefined) payload.chat_policy = chatPolicy;
+  if (typeof body.is_public === "boolean") payload.is_public = body.is_public;
   if (body.rotate_key === true) payload.public_key = makePublicKey();
 
   let supabaseAdmin;
@@ -96,7 +80,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
 
   const { data: existing, error: fetchError } = await serverContext.supabase
     .from("B_chat_widgets")
-    .select("id, org_id, name, agent_id, theme, chat_policy")
+    .select("id, org_id, name, agent_id, theme, chat_policy, created_by, owner_user_ids, allowed_user_ids, is_public")
     .eq("id", id)
     .eq("org_id", serverContext.orgId)
     .maybeSingle();
@@ -108,11 +92,15 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
+  if (!canWrite(existing, serverContext.user.id)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
   const { data, error } = await supabaseAdmin
     .from("B_chat_widgets")
     .update(payload)
     .eq("id", existing.id)
-    .select("id, org_id, name, agent_id, theme, public_key, chat_policy, created_at, updated_at")
+    .select("id, org_id, name, agent_id, theme, public_key, chat_policy, created_at, updated_at, is_public")
     .single();
 
   if (error) {
@@ -128,11 +116,6 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
   const serverContext = await getServerContext(authHeader, cookieHeader);
   if ("error" in serverContext) {
     return NextResponse.json({ error: serverContext.error }, { status: 401 });
-  }
-
-  const adminCheck = await ensureAdmin(serverContext);
-  if (!adminCheck.ok) {
-    return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
   }
 
   const { id: routeId } = await context.params;
@@ -153,7 +136,7 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
 
   const { data: existing, error: fetchError } = await serverContext.supabase
     .from("B_chat_widgets")
-    .select("id, org_id, name, agent_id, theme, chat_policy")
+    .select("id, org_id, name, agent_id, theme, chat_policy, created_by, owner_user_ids, allowed_user_ids, is_public")
     .eq("id", id)
     .eq("org_id", serverContext.orgId)
     .maybeSingle();
@@ -163,6 +146,10 @@ export async function DELETE(req: NextRequest, context: RouteContext) {
   }
   if (!existing) {
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  }
+
+  if (!canWrite(existing, serverContext.user.id)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
   const { error } = await supabaseAdmin

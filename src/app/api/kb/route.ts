@@ -3,6 +3,7 @@ import { getServerContext } from "@/lib/serverAuth";
 import crypto from "crypto";
 import { createEmbedding } from "@/lib/embeddings";
 import { isAdminKbValue, isSampleKbRow, isSampleKbValue } from "@/lib/kbType";
+import { filterReadable } from "@/lib/ownershipAccess";
 
 function parseOrder(orderParam: string | null) {
   if (!orderParam) return { field: "created_at", ascending: false };
@@ -90,13 +91,13 @@ export async function GET(req: NextRequest) {
     .maybeSingle();
   const userGroup = (accessRow?.group as Record<string, unknown> | null) ?? null;
 
-  const { data, error, count } = await query;
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  const items = (data || []).map((row: Record<string, unknown>) => {
+  const items = filterReadable((data || []) as Record<string, unknown>[], context.user.id).map((row) => {
     const applyGroups = toApplyGroups(row?.apply_groups);
     const applyGroupsMode = row?.apply_groups_mode === "any" ? "any" : row?.apply_groups_mode === "all" ? "all" : null;
     const applies = isAdminKbValue(row?.is_admin)
@@ -107,7 +108,7 @@ export async function GET(req: NextRequest) {
 
   const filteredItems = isAdmin === "sample" ? items.filter((row) => isSampleKbRow(row as Record<string, unknown>)) : items;
 
-  return NextResponse.json({ items: filteredItems, total: isAdmin === "sample" ? filteredItems.length : count || 0 });
+  return NextResponse.json({ items: filteredItems, total: filteredItems.length });
 }
 
 export async function POST(req: NextRequest) {
@@ -161,6 +162,8 @@ export async function POST(req: NextRequest) {
     apply_groups: applyGroups,
     apply_groups_mode: applyGroupsMode,
     content_json: isAdmin ? (body.content_json ?? null) : null,
+    created_by: context.user.id,
+    is_public: typeof body.is_public === "boolean" ? body.is_public : false,
   };
 
   try {

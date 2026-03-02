@@ -61,12 +61,18 @@ async function handleStream(
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, agent_id, chat_policy")
+    .select("id, org_id, agent_id, chat_policy, is_public")
     .eq("id", payload.widget_id)
     .maybeSingle();
   if (!widget) {
     return new Response(encodeEvent("error", { error: "WIDGET_NOT_FOUND" }), {
       status: 404,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
+  if (widget.is_public !== true) {
+    return new Response(encodeEvent("error", { error: "WIDGET_PRIVATE" }), {
+      status: 403,
       headers: { "Content-Type": "text/event-stream" },
     });
   }

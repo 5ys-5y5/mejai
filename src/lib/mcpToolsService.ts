@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { filterReadable } from "@/lib/ownershipAccess";
 
 export type McpProviderKey = "cafe24" | "solapi" | "juso" | "unknown";
 
@@ -83,6 +84,10 @@ type ToolRow = {
   rate_limit_per_min?: number | null;
   masking_rules?: unknown;
   conditions?: unknown;
+  created_by?: string | null;
+  owner_user_ids?: string[] | null;
+  allowed_user_ids?: string[] | null;
+  is_public?: boolean | null;
 };
 
 function normalizeProvider(value?: string | null): McpProviderKey {
@@ -123,12 +128,16 @@ function buildToolKey(provider: McpProviderKey, name: string) {
   return `${provider}:${name}`;
 }
 
-export async function loadMcpToolsForOrg(supabase: SupabaseClient, orgId: string): Promise<McpToolItem[]> {
+export async function loadMcpToolsForOrg(
+  supabase: SupabaseClient,
+  orgId: string,
+  userId?: string | null
+): Promise<McpToolItem[]> {
   void orgId;
   const dbResult = await supabase
     .from("C_mcp_tools")
     .select(
-      "id, name, scope_key, endpoint_path, http_method, usage_count, description, schema_json, version, provider_key, visibility, access, is_destructive, rate_limit_per_min, masking_rules, conditions, is_active"
+      "id, name, scope_key, endpoint_path, http_method, usage_count, description, schema_json, version, provider_key, visibility, access, is_destructive, rate_limit_per_min, masking_rules, conditions, is_active, created_by, owner_user_ids, allowed_user_ids, is_public"
     )
     .eq("is_active", true);
 
@@ -136,7 +145,8 @@ export async function loadMcpToolsForOrg(supabase: SupabaseClient, orgId: string
     throw new Error(dbResult.error.message);
   }
 
-  const items: McpToolItem[] = ((dbResult.data || []) as ToolRow[]).map((tool) => {
+  const visible = filterReadable((dbResult.data || []) as ToolRow[], userId);
+  const items: McpToolItem[] = visible.map((tool) => {
     const policy: McpToolPolicy = {
       tool_id: tool.id,
       is_allowed: true,
