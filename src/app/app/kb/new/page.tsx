@@ -190,33 +190,33 @@ function buildRecommendations(
   const recos: Recommendation[] = [
     {
       id: "scope",
-      title: "?곸슜 踰붿쐞/?덉쇅 議곌굔",
-      detail: "?뺤콉???곸슜 ??곴낵 ?덉쇅瑜?紐낇솗???섏뿬 紐⑦샇?깆쓣 以꾩엯?덈떎.",
-      insertText: "## ?곸슜 踰붿쐞/?덉쇅\n- ?곸슜 ???n- ?덉쇅 議곌굔\n",
+      title: "적용 범위/예외 조건",
+      detail: "정책의 적용 대상과 예외를 명확히 하여 모호성을 줄입니다.",
+      insertText: "## 적용 범위/예외\n- 적용 대상\n- 예외 조건\n",
     },
     {
       id: "process",
-      title: "泥섎━ ?덉감/?뱀씤 ?먮쫫",
-      detail: "怨좉컼 ?덈궡 ?④퀎? ?대? ?뱀씤 ?먮쫫??遺꾨━???덈궡?⑸땲??",
-      insertText: "## 泥섎━ ?덉감\n- 怨좉컼 ?덈궡 ?④퀎\n- ?대? ?뱀씤/寃???④퀎\n",
+      title: "처리 절차/승인 흐름",
+      detail: "고객 안내 단계와 내부 승인 흐름을 분리해 안내합니다.",
+      insertText: "## 처리 절차\n- 고객 안내 단계\n- 내부 승인/검토 단계\n",
     },
     {
       id: "limits",
-      title: "?쒗븳?ы빆/?쒓퀎",
-      detail: "遺덇? ??ぉ怨??쒗븳 議곌굔??誘몃━ 怨좎????댁뒋瑜?以꾩엯?덈떎.",
-      insertText: "## ?쒗븳?ы빆\n- 遺덇? ??ぉ\n- ?쒗븳 議곌굔\n",
+      title: "제한사항/한계",
+      detail: "불가 항목과 제한 조건을 미리 고지해 이슈를 줄입니다.",
+      insertText: "## 제한사항\n- 불가 항목\n- 제한 조건\n",
     },
     {
       id: "evidence",
-      title: "利앸튃/?꾩닔 ?뺤씤 ??ぉ",
-      detail: "?꾩닔 ?쒖텧 ?먮즺? ?뺤씤 ?덉감瑜?紐낆떆?⑸땲??",
-      insertText: "## ?꾩슂 利앸튃\n- ?꾩닔 ?쒖텧 ?먮즺\n- ?뺤씤 ?덉감\n",
+      title: "증빙/필수 확인 항목",
+      detail: "필수 제출 자료와 확인 절차를 명시합니다.",
+      insertText: "## 필요 증빙\n- 필수 제출 자료\n- 확인 절차\n",
     },
     {
       id: "escalation",
-      title: "?먯뒪而щ젅?댁뀡 湲곗?",
-      detail: "?곸쐞 ?닿? 湲곗?怨??곕씫 梨꾨꼸??援щ텇?⑸땲??",
-      insertText: "## ?먯뒪而щ젅?댁뀡 湲곗?\n- 利됱떆 ?닿? 議곌굔\n- ?대떦 遺???곕씫 梨꾨꼸\n",
+      title: "에스컬레이션 기준",
+      detail: "상위 이관 기준과 연락 채널을 구분합니다.",
+      insertText: "## 에스컬레이션 기준\n- 즉시 이관 조건\n- 담당 부서/연락 채널\n",
     },
   ];
 
@@ -246,9 +246,9 @@ function buildRecommendations(
   if (topBullets.length > 0) {
     recos.push({
       id: "faq",
-      title: "?좎궗 臾몄꽌 湲곕컲 FAQ 蹂닿컯",
-      detail: "?좎궗 臾몄꽌?먯꽌 ?먯＜ ?깆옣??吏덈Ц/?덈궡瑜?異붽??⑸땲??",
-      insertText: `## ???? ???? ????\n${topBullets.map((line) => `- ${line}`).join("\n")}\n`,
+      title: "유사 문서 기반 FAQ 보강",
+      detail: "유사 문서에서 자주 등장한 질문/안내를 추가합니다.",
+      insertText: `## 자주 묻는 질문\n${topBullets.map((line) => `- ${line}`).join("\n")}\n`,
     });
   }
 
@@ -369,7 +369,7 @@ export default function NewKbPage() {
     {
       id: "repeat",
       title: "반복 질문 차단",
-      summary: "諛섎났 ?잛닔 珥덇낵 ???덈궡 ?쒗뵆由?媛뺤젣",
+      summary: "반복 횟수 초과 시 안내 템플릿 강제",
       rule: {
         id: "R005_repeat_cooldown",
         stage: "input",
@@ -433,7 +433,7 @@ export default function NewKbPage() {
     {
       id: "format_output",
       title: "Unknown",
-      summary: "?묐떟???붿빟?믨렐嫄겸넂?곸꽭?믩떎???≪뀡 ?뺥깭濡?媛뺤젣",
+      summary: "응답을 요약→근거→상세→다음 액션 형태로 강제",
       rule: {
         id: "R030_output_format",
         stage: "output",
@@ -450,21 +450,21 @@ export default function NewKbPage() {
     () => [
     {
       id: "abuse_warn",
-      title: "?뺤꽕 寃쎄퀬",
-      summary: "?뺤꽕 ?낅젰 ???ш낵 + ?뺣낫 ?붿껌",
+      title: "욕설 경고",
+      summary: "욕설 입력 시 사과 + 정보 요청",
       value:
-        "遺덊렪???쒕젮 二꾩넚?⑸땲?? ?먰솢???덈궡瑜??꾪빐 ?뺤쨷???쒗쁽?쇰줈 留먯? 遺?곷뱶由쎈땲?? 二쇰Ц踰덊샇???대???踰덊샇瑜??뚮젮二쇱떆硫?諛붾줈 ?뺤씤???쒕━寃좎뒿?덈떎.",
+        "불편을 드려 죄송합니다. 원활한 안내를 위해 정중한 표현으로 말씀 부탁드립니다. 주문번호나 휴대폰 번호를 알려주시면 바로 확인해 드리겠습니다.",
     },
     {
       id: "repeat_block",
       title: "Unknown",
       summary: "Unknown",
-      value: "媛숈? 臾몄쓽媛 諛섎났?섍퀬 ?덉뒿?덈떎. 二쇰Ц踰덊샇/?대???踰덊샇 以??섎굹瑜??뚮젮二쇱떆硫?利됱떆 泥섎━?섍쿋?듬땲??",
+      value: "같은 문의가 반복되고 있습니다. 주문번호/휴대폰 번호 중 하나를 알려주시면 즉시 처리하겠습니다.",
     },
     {
       id: "need_order_id",
       title: "Unknown",
-      summary: "二쇰Ц踰덊샇 ?꾩슂 ?덈궡",
+      summary: "주문번호 필요 안내",
       value: "Unknown",
     },
     ],
@@ -484,14 +484,14 @@ export default function NewKbPage() {
     },
     {
       id: "track_shipment",
-      title: "track_shipment ?꾩닔 ?몄옄",
-      summary: "order_id ?꾩닔",
+      title: "track_shipment 필수 인자",
+      summary: "order_id 필수",
       policy: { required_args: ["order_id"] },
     },
     {
       id: "create_ticket",
-      title: "create_ticket ?꾩닔 ?몄옄",
-      summary: "title/content ?꾩닔",
+      title: "create_ticket 필수 인자",
+      summary: "title/content 필수",
       policy: { required_args: ["title", "content"] },
     },
     ],
@@ -582,7 +582,7 @@ export default function NewKbPage() {
     const predicate = customRulePredicate.trim();
     const action = customRuleAction.trim();
     if (!predicate || !action) {
-      toast.error("議곌굔(predicate)怨??≪뀡(type)???낅젰??二쇱꽭??");
+      toast.error("조건(predicate)과 액션(type)을 입력해 주세요.");
       return;
     }
     const knownPredicates = new Set([
@@ -621,7 +621,7 @@ export default function NewKbPage() {
 
   const handleSubmit = async () => {
     if (!canSubmit) {
-      toast.error("?쒕ぉ怨??댁슜???낅젰??二쇱꽭??");
+      toast.error("제목과 내용을 입력해 주세요.");
       return;
     }
     if (isAdminUser && kbType === "admin") {
@@ -629,8 +629,8 @@ export default function NewKbPage() {
         JSON.parse(policyJson);
         setPolicyError(null);
       } catch {
-        setPolicyError("Policy JSON ?뺤떇???щ컮瑜댁? ?딆뒿?덈떎.");
-        toast.error("Policy JSON ?뺤떇???щ컮瑜댁? ?딆뒿?덈떎.");
+        setPolicyError("Policy JSON 형식이 올바르지 않습니다.");
+        toast.error("Policy JSON 형식이 올바르지 않습니다.");
         return;
       }
     }
@@ -679,11 +679,11 @@ export default function NewKbPage() {
         body: JSON.stringify(payload),
       });
 
-      toast.success("臾몄꽌媛 ?앹꽦?섏뿀?듬땲??");
+      toast.success("문서가 생성되었습니다.");
       router.push("/app/kb");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "臾몄꽌 ?앹꽦???ㅽ뙣?덉뒿?덈떎.";
-      toast.error(message || "臾몄꽌 ?앹꽦???ㅽ뙣?덉뒿?덈떎.");
+      const message = err instanceof Error ? err.message : "문서 생성에 실패했습니다.";
+      toast.error(message || "문서 생성에 실패했습니다.");
     } finally {
       setSaving(false);
     }
@@ -694,7 +694,7 @@ export default function NewKbPage() {
       <div className="mx-auto w-full max-w-6xl">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">臾몄꽌 ?앹꽦</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">문서 생성</h1>
             <p className="mt-1 text-sm text-slate-500">Unknown</p>
           </div>
           <div className="flex items-center gap-2">
@@ -730,7 +730,7 @@ export default function NewKbPage() {
                 <input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="?? 諛섑뭹 ?뺤콉 ?덈궡"
+                  placeholder="예: 반품 정책 안내"
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
@@ -740,7 +740,7 @@ export default function NewKbPage() {
                 <input
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  placeholder="?? ?뺤콉"
+                  placeholder="예: 정책"
                   className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
@@ -758,7 +758,7 @@ export default function NewKbPage() {
                           onChange={() => setGroupMatchMode("all")}
                           className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
                         />
-                        ??? ????
+                        모두 포함
                       </label>
                       <label className="flex items-center gap-2">
                         <input
@@ -768,15 +768,15 @@ export default function NewKbPage() {
                           onChange={() => setGroupMatchMode("any")}
                           className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
                         />
-                        ?섎굹?쇰룄 ?ы븿
+                        하나라도 포함
                       </label>
                     </span>
                   </label>
                   {groupOptions.length === 0 ? (
-                    <div className="text-sm text-slate-500">?좏깮 媛?ν븳 洹몃９???놁뒿?덈떎.</div>
+                    <div className="text-sm text-slate-500">선택 가능한 그룹이 없습니다.</div>
                   ) : (
                     <InlineGroupSelect
-                      label={`??? ???? (${groupOptions.length})`}
+                      label={`그룹 선택 (${groupOptions.length})`}
                       options={groupOptions}
                       selections={groupSelections}
                       onChange={(path, value, checked) =>
@@ -795,9 +795,9 @@ export default function NewKbPage() {
 
               {kbType !== "admin" ? (
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-900">?댁슜 *</label>
+                  <label className="text-sm font-medium text-slate-900">내용 *</label>
                   <InlineSelectBox
-                    label={`??o ???????? ${Object.values(selectedRecos).filter(Boolean).length}/${recommendations.length}`}
+                    label={`추천 지침 선택 ${Object.values(selectedRecos).filter(Boolean).length}/${recommendations.length}`}
                     sections={[
                       {
                         title: "Unknown",
@@ -819,21 +819,21 @@ export default function NewKbPage() {
                   <textarea
                     value={userContent}
                     onChange={(e) => setUserContent(e.target.value)}
-                    placeholder="異붿쿇 吏移??몄쓽 吏移⑥쓣 吏곸젒 ?낅젰?????덉뒿?덈떎."
+                    placeholder="추천 지침 외의 지침을 직접 입력할 수 있습니다."
                     className="min-h-[160px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                   />
                   <textarea
                     value={selectedRecoText}
                     readOnly
-                    placeholder="異붿쿇 吏移⑥씠 ???곸뿭???먮룞?쇰줈 異붽??⑸땲??"
+                    placeholder="추천 지침이 이 영역에 자동으로 추가됩니다."
                     className="min-h-[160px] w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600"
                   />
                 </div>
               ) : (
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-900">?댁슜 *</label>
+                  <label className="text-sm font-medium text-slate-900">내용 *</label>
                   <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
-                    <span>?뺤콉 ?낅젰 諛⑹떇</span>
+                    <span>정책 입력 방식</span>
                     <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1">
                       <label className="flex items-center gap-2">
                         <input
@@ -843,7 +843,7 @@ export default function NewKbPage() {
                           onChange={() => setAdminInputMode("builder")}
                           className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
                         />
-                        ?좏깮 ?낅젰
+                        선택 입력
                       </label>
                       <label className="flex items-center gap-2">
                         <input
@@ -853,13 +853,13 @@ export default function NewKbPage() {
                           onChange={() => setAdminInputMode("manual")}
                           className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600 focus:ring-0"
                         />
-                        ?섎룞 ?낅젰
+                        수동 입력
                       </label>
                     </div>
                   </div>
                   {adminInputMode === "builder" ? (
                     <InlineSelectBox
-                      label={`洹쒖튃/?쒗뵆由????뺤콉 ?좏깮`}
+                      label={`규칙/템플릿/툴 정책 선택`}
                       sections={[
                         {
                           title: `규칙 (${Object.values(selectedRules).filter(Boolean).length}/${rulePresets.length})`,
@@ -870,7 +870,7 @@ export default function NewKbPage() {
                           })),
                         },
                         {
-                          title: `?쒗뵆由?(${Object.values(selectedTemplates).filter(Boolean).length}/${templatePresets.length})`,
+                          title: `템플릿 (${Object.values(selectedTemplates).filter(Boolean).length}/${templatePresets.length})`,
                           items: templatePresets.map((item) => ({
                             id: item.id,
                             title: item.title,
@@ -878,7 +878,7 @@ export default function NewKbPage() {
                           })),
                         },
                         {
-                          title: `???뺤콉 (${Object.values(selectedToolPolicies).filter(Boolean).length}/${toolPolicyPresets.length})`,
+                          title: `툴 정책 (${Object.values(selectedToolPolicies).filter(Boolean).length}/${toolPolicyPresets.length})`,
                           items: toolPolicyPresets.map((item) => ({
                             id: item.id,
                             title: item.title,
@@ -906,7 +906,7 @@ export default function NewKbPage() {
                               <input
                                 value={customRuleTitle}
                                 onChange={(e) => setCustomRuleTitle(e.target.value)}
-                                placeholder="洹쒖튃 ?대쫫 ?덉떆: R050_custom_rule"
+                                placeholder="규칙 이름 예시: R050_custom_rule"
                                 className="h-8 rounded-lg border border-slate-200 px-2"
                               />
                               <select
@@ -922,13 +922,13 @@ export default function NewKbPage() {
                             <input
                               value={customRulePredicate}
                               onChange={(e) => setCustomRulePredicate(e.target.value)}
-                              placeholder="predicate ?덉떆: text.contains_abuse"
+                              placeholder="predicate 예시: text.contains_abuse"
                               className="h-8 rounded-lg border border-slate-200 px-2"
                             />
                             <input
                               value={customRuleAction}
                               onChange={(e) => setCustomRuleAction(e.target.value)}
-                              placeholder="action ?덉떆: force_response_template"
+                              placeholder="action 예시: force_response_template"
                               className="h-8 rounded-lg border border-slate-200 px-2"
                             />
                             <button
@@ -937,7 +937,7 @@ export default function NewKbPage() {
                               className="inline-flex items-center gap-2 self-start rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
                             >
                               <Plus className="h-3 w-3" />
-                              ??? ????
+                              규칙 추가
                             </button>
                             {customRules.length > 0 ? (
                               <div className="grid gap-2">
@@ -945,7 +945,7 @@ export default function NewKbPage() {
                                   <div key={rule.id} className="flex items-center gap-2 text-xs text-slate-600">
                                     {rule.needsCode ? <AlertTriangle className="h-3 w-3 text-amber-500" /> : null}
                                     <span>{rule.id}</span>
-                                    {rule.needsCode ? <span className="text-amber-600">?섎뱶肄붾뵫 ?꾩슂</span> : null}
+                                    {rule.needsCode ? <span className="text-amber-600">하드코딩 필요</span> : null}
                                   </div>
                                 ))}
                               </div>
@@ -956,7 +956,7 @@ export default function NewKbPage() {
                     />
                   ) : (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                      洹쒖튃/?쒗뵆由????뺤콉 ?좏깮 ?놁씠 吏곸젒 JSON???낅젰?⑸땲??
+                      규칙/템플릿/툴 정책 선택 없이 직접 JSON을 입력합니다.
                     </div>
                   )}
                   <textarea
@@ -965,7 +965,7 @@ export default function NewKbPage() {
                       setPolicyJson(e.target.value);
                       setPolicyError(null);
                     }}
-                    placeholder="Policy JSON???낅젰?섏꽭??"
+                    placeholder="Policy JSON을 입력하세요."
                     className={cn(
                       "min-h-[260px] w-full rounded-xl border px-3 py-2 font-mono text-xs",
                       adminInputMode === "manual"
@@ -975,7 +975,7 @@ export default function NewKbPage() {
                   />
                   {policyError ? <div className="text-xs text-rose-600">{policyError}</div> : null}
                   <div className="grid gap-2 text-xs text-slate-500">
-                    <div>?섎뱶肄붾뵫 ?꾩슂 ?곸뿭:</div>
+                    <div>하드코딩 필요 영역:</div>
                     <div>Unknown</div>
                     <div>Unknown</div>
                   </div>
@@ -1006,7 +1006,7 @@ export default function NewKbPage() {
                 : "bg-slate-200 text-slate-400"
             )}
           >
-            {saving ? "?앹꽦 以?.." : "臾몄꽌 ?앹꽦"}
+            {saving ? "생성 중..." : "문서 생성"}
           </button>
         </div>
       </div>

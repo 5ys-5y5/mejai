@@ -11,15 +11,15 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 type TabKey = "profile" | "workspaces" | "team" | "audit";
 
 const auditSeed = [
-  { t: "2026-01-21 10:30", who: "operator@mejai.help", what: "?몄뀡 s_9d3f2b 議고쉶" },
-  { t: "2026-01-20 18:50", who: "jane@mejai.help", what: "Unknown" },
-  { t: "2026-01-18 09:02", who: "owner@mejai.help", what: "KB '?섎텋 ?뺤콉' v3 諛고룷" },
+  { t: "2026-01-21 10:30", who: "operator@mejai.help", what: "세션 s_9d3f2b 조회" },
+  { t: "2026-01-20 18:50", who: "jane@mejai.help", what: "리뷰 rq_01 할당" },
+  { t: "2026-01-18 09:02", who: "owner@mejai.help", what: "KB '환불 정책' v3 배포" },
 ];
 
 const teamSeed = [
-  { role: "운영", perms: "대화, KB, 리뷰" },
-  { role: "관리자", perms: "정책, KB, 리뷰" },
-  { role: "감사", perms: "읽기 전용, 감사" },
+  { role: "오너", perms: "모든 권한" },
+  { role: "운영자", perms: "통화, KB, 리뷰" },
+  { role: "감사자", perms: "읽기 전용, 감사" },
 ];
 
 export default function SettingsPage() {
@@ -113,12 +113,12 @@ export default function SettingsPage() {
               <div className="divide-y divide-slate-200">
                 <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div>
-                    <div className="text-sm font-semibold text-slate-900">?뚰겕?ㅽ럹?댁뒪</div>
-                    <div className="mt-1 text-sm text-slate-600">?깆????뚰겕?ㅽ럹?댁뒪</div>
+                    <div className="text-sm font-semibold text-slate-900">워크스페이스</div>
+                    <div className="mt-1 text-sm text-slate-600">성지용 워크스페이스</div>
                     <div className="mt-1 text-xs text-slate-500">경로: /workspaces/01</div>
                   </div>
                   <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
-                    ????
+                    관리
                   </button>
                 </div>
               </div>
@@ -126,7 +126,7 @@ export default function SettingsPage() {
           ) : tab === "team" ? (
             <Card>
               <div className="p-4">
-                <div className="text-sm font-semibold text-slate-900">Unknown</div>
+                <div className="text-sm font-semibold text-slate-900">팀/권한</div>
                 <div className="mt-2 grid grid-cols-1 gap-3 text-xs md:grid-cols-3">
                   {teamSeed.map((r) => (
                     <div key={r.role} className="rounded-xl border border-slate-200 bg-white p-3">
@@ -154,39 +154,39 @@ export default function SettingsPage() {
               <div className="divide-y divide-slate-200">
                 <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
-                    <p className="text-sm font-semibold text-slate-900">?대찓??二쇱냼</p>
+                    <p className="text-sm font-semibold text-slate-900">이메일 주소</p>
                     <p className="text-sm text-slate-600">{email}</p>
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
-                    <p className="text-sm font-semibold text-slate-900">?대쫫</p>
+                    <p className="text-sm font-semibold text-slate-900">이름</p>
                     <p className="text-sm text-slate-600">{givenName}</p>
                   </div>
                   <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
-                    ???? ????
+                    이름 변경
                   </button>
                 </div>
 
                 <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
-                    <p className="text-sm font-semibold text-slate-900">?꾩옱 ?뚮옖</p>
+                    <p className="text-sm font-semibold text-slate-900">현재 플랜</p>
                     <p className="text-sm text-slate-600">무료</p>
                   </div>
                   <Link
                     href="/app/billing"
                     className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
                   >
-                    ???? ????
+                    구독 관리
                   </Link>
                 </div>
 
                 <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
-                    <p className="text-sm font-semibold text-slate-900">?꾩? ?⑤꼸</p>
+                    <p className="text-sm font-semibold text-slate-900">도움 패널</p>
                     <p className="text-sm text-slate-600">
-                      ?쒕퉬???ъ슜 ?쒖꽌? ?꾩냽 吏???붿껌 ???諛붾줈媛湲곕? ?쒖떆?⑸땲??
+                      서비스 사용 순서와 후속 지원 요청 대상 바로가기를 표시합니다.
                     </p>
                   </div>
                   <button
@@ -204,21 +204,21 @@ export default function SettingsPage() {
 
                 <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
-                    <p className="text-sm font-semibold text-slate-900">紐⑤뱺 湲곌린?먯꽌 濡쒓렇?꾩썐</p>
-                    <p className="text-sm text-slate-600">紐⑤뱺 湲곌린 諛??몄뀡?먯꽌 濡쒓렇?꾩썐?⑸땲??</p>
+                    <p className="text-sm font-semibold text-slate-900">모든 기기에서 로그아웃</p>
+                    <p className="text-sm text-slate-600">모든 기기 및 세션에서 로그아웃합니다.</p>
                   </div>
                   <button className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50">
-                    濡쒓렇?꾩썐
+                    로그아웃
                   </button>
                 </div>
 
                 <div className="flex items-center justify-between gap-3 px-4 py-2.5">
                   <div className="flex flex-col">
-                    <p className="text-sm font-semibold text-rose-600">怨꾩젙 ??젣</p>
-                    <p className="text-sm text-slate-600">怨꾩젙 ??젣???섎룎由????놁뒿?덈떎.</p>
+                    <p className="text-sm font-semibold text-rose-600">계정 삭제</p>
+                    <p className="text-sm text-slate-600">계정 삭제는 되돌릴 수 없습니다.</p>
                   </div>
                   <button className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-600 hover:bg-rose-100">
-                    怨꾩젙 ??젣
+                    계정 삭제
                   </button>
                 </div>
               </div>

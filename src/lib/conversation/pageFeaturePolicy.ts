@@ -1,4 +1,4 @@
-import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
+﻿import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 
 export type ConversationPageKey = string;
 
@@ -28,22 +28,22 @@ export type ConversationSetupUi = {
 };
 
 /**
- * 중앙 대화 기능 정책 파일
+ * ì¤ì ëí ê¸°ë¥ ì ì± íì¼
  *
- * 운영 규칙:
- * - 페이지별 기능 차등은 이 파일에서만 조정한다.
- * - 페이지 컴포넌트에서 하드코딩 분기(예: provider.key !== "cafe24")를 만들지 않는다.
- * - UI 노출/동작 가능 여부/요청 payload 포함 여부를 같은 정책으로 맞춘다.
+ * ì´ì ê·ì¹:
+ * - íì´ì§ë³ ê¸°ë¥ ì°¨ë±ì ì´ íì¼ììë§ ì¡°ì íë¤.
+ * - íì´ì§ ì»´í¬ëí¸ìì íëì½ë© ë¶ê¸°(ì: provider.key !== "cafe24")ë¥¼ ë§ë¤ì§ ìëë¤.
+ * - UI ë¸ì¶/ëì ê°ë¥ ì¬ë¶/ìì²­ payload í¬í¨ ì¬ë¶ë¥¼ ê°ì ì ì±ì¼ë¡ ë§ì¶ë¤.
  *
- * 적용 범위:
- * - "/" (랜딩 체험)
- * - "/app/conversation" (대화)
- * - "/embed" (위젯)
+ * ì ì© ë²ì:
+ * - "/" (ëë© ì²´í)
+ * - "/app/conversation" (ëí)
+ * - "/embed" (ìì ¯)
  */
 type IdGate = {
-  /** 허용 목록. 비어있으면 전체 허용 */
+  /** íì© ëª©ë¡. ë¹ì´ìì¼ë©´ ì ì²´ íì© */
   allowlist?: string[];
-  /** 차단 목록. allowlist보다 우선 차단 */
+  /** ì°¨ë¨ ëª©ë¡. allowlistë³´ë¤ ì°ì  ì°¨ë¨ */
   denylist?: string[];
 };
 
@@ -59,6 +59,7 @@ type ConversationFeatureVisibility = {
   interaction: VisibilityFields<ConversationPageFeatures["interaction"]>;
   setup: VisibilityFields<ConversationPageFeatures["setup"]>;
   widget: {
+    launcher: FeatureVisibilityMode;
     header: VisibilityFields<ConversationPageFeatures["widget"]["header"]>;
     tabBar: VisibilityFields<ConversationPageFeatures["widget"]["tabBar"]>;
     chatPanel: FeatureVisibilityMode;
@@ -69,35 +70,35 @@ type ConversationFeatureVisibility = {
 
 export type ConversationPageFeatures = {
   mcp: {
-    /** MCP provider 선택 UI 노출 여부 */
+    /** MCP provider ì í UI ë¸ì¶ ì¬ë¶ */
     providerSelector: boolean;
-    /** MCP action 선택 UI 노출 여부 */
+    /** MCP action ì í UI ë¸ì¶ ì¬ë¶ */
     actionSelector: boolean;
-    /** provider key 단위 허용/차단 */
+    /** provider key ë¨ì íì©/ì°¨ë¨ */
     providers: IdGate;
-    /** tool id 단위 허용/차단 */
+    /** tool id ë¨ì íì©/ì°¨ë¨ */
     tools: IdGate;
   };
   adminPanel: {
-    /** 관리자 메뉴 자체 노출 여부 */
+    /** ê´ë¦¬ì ë©ë´ ìì²´ ë¸ì¶ ì¬ë¶ */
     enabled: boolean;
-    /** "선택 ON/OFF" 토글 버튼 노출 및 동작 */
+    /** "ì í ON/OFF" í ê¸ ë²í¼ ë¸ì¶ ë° ëì */
     selectionToggle: boolean;
-    /** "로그 ON/OFF" 토글 버튼 노출 및 동작 */
+    /** "ë¡ê·¸ ON/OFF" í ê¸ ë²í¼ ë¸ì¶ ë° ëì */
     logsToggle: boolean;
-    /** 메시지 선택 동작 허용 여부 */
+    /** ë©ìì§ ì í ëì íì© ì¬ë¶ */
     messageSelection: boolean;
-    /** 메시지 메타(role/id/session) 노출 여부 */
+    /** ë©ìì§ ë©í(role/id/session) ë¸ì¶ ì¬ë¶ */
     messageMeta: boolean;
-    /** "대화 복사" 버튼 노출/동작 */
+    /** "ëí ë³µì¬" ë²í¼ ë¸ì¶/ëì */
     copyConversation: boolean;
-    /** "문제 로그 복사" 버튼 노출/동작 */
+    /** "ë¬¸ì  ë¡ê·¸ ë³µì¬" ë²í¼ ë¸ì¶/ëì */
     copyIssue: boolean;
   };
   interaction: {
-    /** quick reply 선택 UI 활성화 */
+    /** quick reply ì í UI íì±í */
     quickReplies: boolean;
-    /** product card 선택 UI 활성화 */
+    /** product card ì í UI íì±í */
     productCards: boolean;
     /** 3-phase prompt (confirmed/confirming/next) */
     threePhasePrompt: boolean;
@@ -110,51 +111,42 @@ export type ConversationPageFeatures = {
     threePhasePromptShowConfirming: boolean;
     threePhasePromptShowNext: boolean;
     threePhasePromptHideLabels: boolean;
-    inputPlaceholder: string;
-    /** 초기 안내 prefill 메시지 출력 */
-    prefill: boolean;
-    prefillMessages: string[];
-    /** 입력창/전송 버튼 활성화 */
+    /** ìë ¥ì°½/ì ì¡ ë²í¼ íì±í */
     inputSubmit: boolean;
     /** Widget header: agent connect button */
-    widgetHeaderAgentAction: boolean;
-    /** Widget header: new conversation button */
-    widgetHeaderNewConversation: boolean;
-    /** Widget header: close button */
-    widgetHeaderClose: boolean;
   };
   setup: {
-    /** 모델(기존/신규) 선택 UI 노출 */
+    /** ëª¨ë¸(ê¸°ì¡´/ì ê·) ì í UI ë¸ì¶ */
     modelSelector: boolean;
-    /** existing 모드 하위 에이전트 선택 UI 노출 */
+    /** existing ëª¨ë íì ìì´ì í¸ ì í UI ë¸ì¶ */
     agentSelector: boolean;
-    /** LLM 선택 UI 노출 */
+    /** LLM ì í UI ë¸ì¶ */
     llmSelector: boolean;
-    /** LLM 선택 UI 하위 항목 허용/차단 (llm id) */
+    /** LLM ì í UI íì í­ëª© íì©/ì°¨ë¨ (llm id) */
     llms: IdGate;
-    /** KB 선택 UI 노출 */
+    /** KB ì í UI ë¸ì¶ */
     kbSelector: boolean;
-    /** KB 선택 UI 하위 항목 허용/차단 (KB id) */
+    /** KB ì í UI íì í­ëª© íì©/ì°¨ë¨ (KB id) */
     kbIds: IdGate;
-    /** 관리자 KB 선택 UI 노출 */
+    /** ê´ë¦¬ì KB ì í UI ë¸ì¶ */
     adminKbSelector: boolean;
-    /** 관리자 KB 선택 UI 하위 항목 허용/차단 (KB id) */
+    /** ê´ë¦¬ì KB ì í UI íì í­ëª© íì©/ì°¨ë¨ (KB id) */
     adminKbIds: IdGate;
-    /** existing 모드 버튼/동작 허용 */
+    /** existing ëª¨ë ë²í¼/ëì íì© */
     modeExisting: boolean;
-    /** existing 모드에서 세션 ID 직접 검색 UI 노출 */
+    /** existing ëª¨ëìì ì¸ì ID ì§ì  ê²ì UI ë¸ì¶ */
     sessionIdSearch: boolean;
-    /** new 모드 버튼/동작 허용 */
+    /** new ëª¨ë ë²í¼/ëì íì© */
     modeNew: boolean;
-    /** runtime(route) 선택 UI 노출 */
+    /** runtime(route) ì í UI ë¸ì¶ */
     routeSelector: boolean;
-    /** runtime(route) 선택 UI 하위 항목 허용/차단 (route id) */
+    /** runtime(route) ì í UI íì í­ëª© íì©/ì°¨ë¨ (route id) */
     routes: IdGate;
-    /** 인라인 사용자 KB 입력 textarea 노출 */
+    /** ì¸ë¼ì¸ ì¬ì©ì KB ìë ¥ textarea ë¸ì¶ */
     inlineUserKbInput: boolean;
-    /** 기본 모드 */
+    /** ê¸°ë³¸ ëª¨ë */
     defaultSetupMode: "existing" | "new";
-    /** 기본 LLM */
+    /** ê¸°ë³¸ LLM */
     defaultLlm: "chatgpt" | "gemini";
   };
   widget: {
@@ -176,7 +168,7 @@ export type ConversationPageFeatures = {
     };
     setupPanel: boolean;
   };
-  /** on/off 기능의 user/admin 가시성 제어 */
+  /** on/off ê¸°ë¥ì user/admin ê°ìì± ì ì´ */
   visibility: ConversationFeatureVisibility;
 };
 
@@ -313,8 +305,8 @@ const DEFAULT_SETUP_UI: ConversationSetupUi = {
   },
   existingOrder: ["agentSelector", "versionSelector", "conversationMode", "sessionSelector", "sessionIdSearch"],
   existingLabels: {
-    modeExisting: "기존 모델",
-    modeNew: "신규 모델",
+    modeExisting: "기존 모드",
+    modeNew: "신규 모드",
     agentSelector: "에이전트 선택",
     versionSelector: "버전 선택",
     sessionSelector: "세션 선택",
@@ -323,15 +315,10 @@ const DEFAULT_SETUP_UI: ConversationSetupUi = {
   },
 };
 
-const DEFAULT_PREFILL_MESSAGES = [
-  "기록한대로 응대하는 AI 상담사를",
-  "압도적으로 저렴하게 사용해보세요",
-];
-
 const DEFAULT_THREE_PHASE_LABELS = {
-  confirmed: "확인한 것",
-  confirming: "확인할 것",
-  next: "그 다음으로 확인할 것",
+  confirmed: "확인된 결과",
+  confirming: "확인중 결과",
+  next: "그 다음으로 확인된 결과",
 } as const;
 
 function normalizeSetupOrder(order?: SetupFieldKey[]) {
@@ -368,6 +355,34 @@ function normalizeExistingSetupOrder(order?: ExistingSetupFieldKey[]) {
   return normalized;
 }
 
+const MOJIBAKE_RE = /[ÃÂÀÁÐÑìëíðñ]/;
+
+function isMojibakeLabel(value: string) {
+  if (!value) return false;
+  if (/[\uAC00-\uD7A3]/.test(value)) return false;
+  return MOJIBAKE_RE.test(value);
+}
+
+function normalizeLabelValue(value: unknown, fallback: string) {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed || isMojibakeLabel(trimmed)) return fallback;
+  return trimmed;
+}
+
+function normalizeLabelMap<T extends Record<string, string>>(
+  override: Partial<Record<keyof T, string>> | undefined,
+  defaults: T
+): T {
+  const next: T = { ...defaults };
+  if (!override) return next;
+  (Object.keys(defaults) as Array<keyof T>).forEach((key) => {
+    const raw = override[key];
+    if (typeof raw !== "string") return;
+    next[key] = normalizeLabelValue(raw, defaults[key]);
+  });
+  return next;
+}
+
 export function resolveConversationSetupUi(
   page: ConversationPageKey,
   providerValue?: ConversationFeaturesProviderShape | null
@@ -378,15 +393,9 @@ export function resolveConversationSetupUi(
     providerValue?.settings_ui?.setup_fields?.[resolvedPage];
   return {
     order: normalizeSetupOrder(override?.order),
-    labels: {
-      ...DEFAULT_SETUP_UI.labels,
-      ...(override?.labels || {}),
-    },
+    labels: normalizeLabelMap(override?.labels, DEFAULT_SETUP_UI.labels),
     existingOrder: normalizeExistingSetupOrder(override?.existing_order),
-    existingLabels: {
-      ...DEFAULT_SETUP_UI.existingLabels,
-      ...(override?.existing_labels || {}),
-    },
+    existingLabels: normalizeLabelMap(override?.existing_labels, DEFAULT_SETUP_UI.existingLabels),
   };
 }
 
@@ -419,15 +428,19 @@ function normalizeThreePhaseLabels(
   fallback?: { confirmed: string; confirming: string; next: string }
 ) {
   return {
-    confirmed: String(override?.confirmed || fallback?.confirmed || DEFAULT_THREE_PHASE_LABELS.confirmed).trim() || DEFAULT_THREE_PHASE_LABELS.confirmed,
-    confirming: String(override?.confirming || fallback?.confirming || DEFAULT_THREE_PHASE_LABELS.confirming).trim() || DEFAULT_THREE_PHASE_LABELS.confirming,
-    next: String(override?.next || fallback?.next || DEFAULT_THREE_PHASE_LABELS.next).trim() || DEFAULT_THREE_PHASE_LABELS.next,
+    confirmed: normalizeLabelValue(
+      override?.confirmed || fallback?.confirmed,
+      DEFAULT_THREE_PHASE_LABELS.confirmed
+    ),
+    confirming: normalizeLabelValue(
+      override?.confirming || fallback?.confirming,
+      DEFAULT_THREE_PHASE_LABELS.confirming
+    ),
+    next: normalizeLabelValue(
+      override?.next || fallback?.next,
+      DEFAULT_THREE_PHASE_LABELS.next
+    ),
   };
-}
-
-function normalizePrefillMessages(value: unknown, fallback: string[]) {
-  if (!Array.isArray(value)) return fallback;
-  return value.map((item) => String(item || "").trim()).filter(Boolean);
 }
 
 function normalizeStringArray(value: unknown): string[] | undefined {
@@ -517,16 +530,7 @@ export function mergeConversationPageFeatures(
       threePhasePromptShowConfirming: override.interaction?.threePhasePromptShowConfirming ?? base.interaction.threePhasePromptShowConfirming,
       threePhasePromptShowNext: override.interaction?.threePhasePromptShowNext ?? base.interaction.threePhasePromptShowNext,
       threePhasePromptHideLabels: override.interaction?.threePhasePromptHideLabels ?? base.interaction.threePhasePromptHideLabels,
-      inputPlaceholder: String((override.interaction?.inputPlaceholder ?? base.interaction.inputPlaceholder) || ""),
-      prefill: override.interaction?.prefill ?? base.interaction.prefill,
-      prefillMessages: normalizePrefillMessages(
-        override.interaction?.prefillMessages,
-        base.interaction.prefillMessages
-      ),
       inputSubmit: override.interaction?.inputSubmit ?? base.interaction.inputSubmit,
-      widgetHeaderAgentAction: override.interaction?.widgetHeaderAgentAction ?? base.interaction.widgetHeaderAgentAction,
-      widgetHeaderNewConversation: override.interaction?.widgetHeaderNewConversation ?? base.interaction.widgetHeaderNewConversation,
-      widgetHeaderClose: override.interaction?.widgetHeaderClose ?? base.interaction.widgetHeaderClose,
     },
     setup: {
       modelSelector: override.setup?.modelSelector ?? base.setup.modelSelector,
@@ -592,11 +596,7 @@ export function mergeConversationPageFeatures(
           override.visibility?.interaction?.threePhasePromptShowNext ?? base.visibility.interaction.threePhasePromptShowNext,
         threePhasePromptHideLabels:
           override.visibility?.interaction?.threePhasePromptHideLabels ?? base.visibility.interaction.threePhasePromptHideLabels,
-        prefill: override.visibility?.interaction?.prefill ?? base.visibility.interaction.prefill,
         inputSubmit: override.visibility?.interaction?.inputSubmit ?? base.visibility.interaction.inputSubmit,
-        widgetHeaderAgentAction: override.visibility?.interaction?.widgetHeaderAgentAction ?? base.visibility.interaction.widgetHeaderAgentAction,
-        widgetHeaderNewConversation: override.visibility?.interaction?.widgetHeaderNewConversation ?? base.visibility.interaction.widgetHeaderNewConversation,
-        widgetHeaderClose: override.visibility?.interaction?.widgetHeaderClose ?? base.visibility.interaction.widgetHeaderClose,
       },
       setup: {
         modelSelector: override.visibility?.setup?.modelSelector ?? base.visibility.setup.modelSelector,
@@ -612,6 +612,7 @@ export function mergeConversationPageFeatures(
           override.visibility?.setup?.inlineUserKbInput ?? base.visibility.setup.inlineUserKbInput,
       },
       widget: {
+        launcher: override.visibility?.widget?.launcher ?? base.visibility.widget.launcher,
         header: {
           enabled: override.visibility?.widget?.header?.enabled ?? base.visibility.widget.header.enabled,
           logo: override.visibility?.widget?.header?.logo ?? base.visibility.widget.header.logo,
@@ -643,15 +644,6 @@ export function resolveConversationPageFeatures(
   const base = getDefaultConversationPageFeatures(resolvedPage);
   const override = providerValue?.features ?? providerValue?.pages?.[resolvedPage];
   let merged = mergeConversationPageFeatures(base, override);
-  if (merged.interaction.prefill && resolvedPage !== "/") {
-    const rootBase = getDefaultConversationPageFeatures("/");
-    const rootOverride = providerValue?.pages?.["/"] ?? providerValue?.features;
-    const rootMerged = mergeConversationPageFeatures(rootBase, rootOverride);
-    merged = {
-      ...merged,
-      interaction: { ...merged.interaction, prefillMessages: rootMerged.interaction.prefillMessages },
-    };
-  }
   return merged;
 }
 
@@ -752,25 +744,7 @@ export function applyConversationFeatureVisibility(
         isAdminUser
       ),
       threePhasePromptLabels: features.interaction.threePhasePromptLabels,
-      inputPlaceholder: features.interaction.inputPlaceholder,
-      prefill: withVisibilityFlag(features.interaction.prefill, features.visibility.interaction.prefill, isAdminUser),
-      prefillMessages: features.interaction.prefillMessages,
       inputSubmit: withVisibilityFlag(features.interaction.inputSubmit, features.visibility.interaction.inputSubmit, isAdminUser),
-      widgetHeaderAgentAction: withVisibilityFlag(
-        features.interaction.widgetHeaderAgentAction,
-        features.visibility.interaction.widgetHeaderAgentAction,
-        isAdminUser
-      ),
-      widgetHeaderNewConversation: withVisibilityFlag(
-        features.interaction.widgetHeaderNewConversation,
-        features.visibility.interaction.widgetHeaderNewConversation,
-        isAdminUser
-      ),
-      widgetHeaderClose: withVisibilityFlag(
-        features.interaction.widgetHeaderClose,
-        features.visibility.interaction.widgetHeaderClose,
-        isAdminUser
-      ),
     },
     setup: {
       ...features.setup,
@@ -848,14 +822,14 @@ export function applyConversationFeatureVisibility(
 }
 
 /**
- * 정책 편집 가이드:
- * 1) 특정 페이지에서 provider를 막고 싶으면:
- *    mcp.providers.denylist 에 key 추가 (예: "cafe24")
- * 2) 특정 tool만 허용하고 싶으면:
- *    mcp.tools.allowlist 에 tool id만 나열
- * 3) 관리자 복사 기능만 끄고 싶으면:
+ * ì ì± í¸ì§ ê°ì´ë:
+ * 1) í¹ì  íì´ì§ìì providerë¥¼ ë§ê³  ì¶ì¼ë©´:
+ *    mcp.providers.denylist ì key ì¶ê° (ì: "cafe24")
+ * 2) í¹ì  toolë§ íì©íê³  ì¶ì¼ë©´:
+ *    mcp.tools.allowlist ì tool idë§ ëì´
+ * 3) ê´ë¦¬ì ë³µì¬ ê¸°ë¥ë§ ëê³  ì¶ì¼ë©´:
  *    adminPanel.copyConversation / copyIssue = false
- * 4) 선택형 응답(quickReplies/cards)만 끄고 싶으면:
+ * 4) ì íí ìëµ(quickReplies/cards)ë§ ëê³  ì¶ì¼ë©´:
  *    interaction.quickReplies / productCards = false
  */
 export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures> = {
@@ -864,7 +838,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       providerSelector: true,
       actionSelector: true,
       providers: {
-        // 랜딩은 Cafe24 provider 차단
+        // ëë©ì Cafe24 provider ì°¨ë¨
         denylist: ["cafe24"],
       },
       tools: {},
@@ -887,13 +861,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       threePhasePromptShowConfirming: true,
       threePhasePromptShowNext: true,
       threePhasePromptHideLabels: false,
-      inputPlaceholder: "",
-      prefill: true,
-      prefillMessages: DEFAULT_PREFILL_MESSAGES,
       inputSubmit: true,
-      widgetHeaderAgentAction: false,
-      widgetHeaderNewConversation: true,
-      widgetHeaderClose: true,
     },
     setup: {
       modelSelector: false,
@@ -954,11 +922,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         threePhasePromptShowConfirming: "user",
         threePhasePromptShowNext: "user",
         threePhasePromptHideLabels: "user",
-        prefill: "user",
         inputSubmit: "user",
-        widgetHeaderAgentAction: "user",
-        widgetHeaderNewConversation: "user",
-        widgetHeaderClose: "user",
       },
       setup: {
         modelSelector: "user",
@@ -973,6 +937,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         inlineUserKbInput: "user",
       },
       widget: {
+        launcher: "user",
         header: {
           enabled: "user",
           logo: "user",
@@ -997,7 +962,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     mcp: {
       providerSelector: true,
       actionSelector: true,
-      // 대화은 기본 전체 허용
+      // ëíì ê¸°ë³¸ ì ì²´ íì©
       providers: {},
       tools: {},
     },
@@ -1019,13 +984,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       threePhasePromptShowConfirming: true,
       threePhasePromptShowNext: true,
       threePhasePromptHideLabels: false,
-      inputPlaceholder: "",
-      prefill: true,
-      prefillMessages: DEFAULT_PREFILL_MESSAGES,
       inputSubmit: true,
-      widgetHeaderAgentAction: false,
-      widgetHeaderNewConversation: true,
-      widgetHeaderClose: true,
     },
     setup: {
       modelSelector: true,
@@ -1086,11 +1045,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         threePhasePromptShowConfirming: "user",
         threePhasePromptShowNext: "user",
         threePhasePromptHideLabels: "user",
-        prefill: "user",
         inputSubmit: "user",
-        widgetHeaderAgentAction: "user",
-        widgetHeaderNewConversation: "user",
-        widgetHeaderClose: "user",
       },
       setup: {
         modelSelector: "user",
@@ -1105,6 +1060,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         inlineUserKbInput: "user",
       },
       widget: {
+        launcher: "user",
         header: {
           enabled: "user",
           logo: "user",
@@ -1152,13 +1108,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       threePhasePromptShowConfirming: true,
       threePhasePromptShowNext: true,
       threePhasePromptHideLabels: false,
-      inputPlaceholder: "",
-      prefill: false,
-      prefillMessages: [],
       inputSubmit: true,
-      widgetHeaderAgentAction: false,
-      widgetHeaderNewConversation: true,
-      widgetHeaderClose: true,
     },
     setup: {
       modelSelector: false,
@@ -1219,11 +1169,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         threePhasePromptShowConfirming: "user",
         threePhasePromptShowNext: "user",
         threePhasePromptHideLabels: "user",
-        prefill: "user",
         inputSubmit: "user",
-        widgetHeaderAgentAction: "user",
-        widgetHeaderNewConversation: "user",
-        widgetHeaderClose: "user",
       },
       setup: {
         modelSelector: "user",
@@ -1238,6 +1184,7 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         inlineUserKbInput: "user",
       },
       widget: {
+        launcher: "user",
         header: {
           enabled: "user",
           logo: "user",
@@ -1285,3 +1232,4 @@ export function resolveRegisteredPageKey(
   if (providerValue?.setup_ui && normalized === WIDGET_PAGE_KEY) return normalized;
   return normalized;
 }
+

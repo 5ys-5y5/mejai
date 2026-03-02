@@ -3,6 +3,7 @@ import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { verifyWidgetToken } from "@/lib/widgetToken";
 import { readConversationFeatureProvider } from "@/lib/conversation/policyMerge";
 import type { WidgetChatPolicyConfig } from "@/lib/conversation/pageFeaturePolicy";
+import { canAccessPrivateWidget } from "@/app/api/widget/_lib/privateAccess";
 
 const TRANSCRIPT_SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
 const WIDGET_PROXY_EVENT_PREFIX = "WIDGET_RUNTIME_PROXY_";
@@ -67,7 +68,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
   if (widget.is_public !== true) {
-    return NextResponse.json({ error: "WIDGET_PRIVATE" }, { status: 403 });
+    const canAccess = await canAccessPrivateWidget(req, widget.org_id);
+    if (!canAccess) {
+      return NextResponse.json({ error: "WIDGET_PRIVATE" }, { status: 403 });
+    }
   }
   const mergedPolicy = readConversationFeatureProvider(widget.chat_policy);
   const widgetPolicy = (mergedPolicy as { widget?: WidgetChatPolicyConfig } | null)?.widget || null;

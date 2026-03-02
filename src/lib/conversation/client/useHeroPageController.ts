@@ -83,12 +83,10 @@ export function useHeroPageController() {
       .filter((option) => effectiveProviderKeys.includes(option.group || ""))
       .map((option) => option.id);
   }, [actionOptions, effectiveProviderKeys, selectedMcpToolIds]);
-  const initialMessages: InitialMessage[] = pageFeatures.interaction.prefill
-    ? []
-    : [
-      { role: "bot", content: "\uC548\uB155\uD558\uC138\uC694! \uBB54\uC744 \uB3C4\uC640\uB4DC\uB9B4\uAE4C\uC694?" },
-      { role: "bot", content: "\uBB38\uC758\uD558\uC2E4 \uB0B4\uC6A9\uC744 \uC785\uB825\uD574 \uC8FC\uC138\uC694." },
-    ];
+  const initialMessages: InitialMessage[] = [
+    { role: "bot", content: "안녕하세요! 무엇을 도와드릴까요?" },
+    { role: "bot", content: "문의하실 내용을 입력해 주세요." },
+  ];
 
   const convo = useConversationController({
     page: "/",

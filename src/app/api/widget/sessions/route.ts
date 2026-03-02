@@ -48,6 +48,36 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "WIDGET_INACTIVE" }, { status: 403 });
   }
 
+  const sessionId = String(payload.session_id || "").trim();
+  if (sessionId) {
+    const { data: baseSession } = await supabaseAdmin
+      .from("D_conv_sessions")
+      .select("id, end_user_id")
+      .eq("id", sessionId)
+      .eq("org_id", widget.org_id)
+      .maybeSingle();
+    const endUserId = String((baseSession as Record<string, any>)?.end_user_id || "").trim();
+    if (endUserId) {
+      const { data, error } = await supabaseAdmin
+        .from("D_conv_sessions")
+        .select("id, session_code, started_at")
+        .eq("org_id", widget.org_id)
+        .eq("widget_id", widget.id)
+        .eq("end_user_id", endUserId)
+        .order("started_at", { ascending: false })
+        .limit(80);
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      const sessions = (data || []).map((row) => ({
+        id: row.id,
+        session_code: row.session_code,
+        started_at: row.started_at,
+      }));
+      return NextResponse.json({ sessions });
+    }
+  }
+
   const { data, error } = await supabaseAdmin
     .from("D_conv_sessions")
     .select("id, session_code, started_at, metadata")

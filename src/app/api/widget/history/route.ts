@@ -61,9 +61,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "WIDGET_INACTIVE" }, { status: 403 });
   }
 
+  let baseEndUserId = "";
+  const baseSessionId = String(payload.session_id || "").trim();
+  if (baseSessionId) {
+    const { data: baseSession } = await supabaseAdmin
+      .from("D_conv_sessions")
+      .select("id, end_user_id")
+      .eq("id", baseSessionId)
+      .eq("org_id", widget.org_id)
+      .maybeSingle();
+    baseEndUserId = String((baseSession as Record<string, any>)?.end_user_id || "").trim();
+  }
+
   const { data: session } = await supabaseAdmin
     .from("D_conv_sessions")
-    .select("id, org_id, widget_id, metadata")
+    .select("id, org_id, widget_id, metadata, end_user_id")
     .eq("id", targetSessionId)
     .eq("org_id", widget.org_id)
     .maybeSingle();
@@ -83,7 +95,11 @@ export async function GET(req: NextRequest) {
   const metadataVisitorId = metadata
     ? String(metadata.visitor_id || metadata.visitorId || metadata.external_user_id || "").trim()
     : "";
-  if (payload.visitor_id && metadataVisitorId && metadataVisitorId !== String(payload.visitor_id)) {
+  const targetEndUserId = String((session as Record<string, any>).end_user_id || "").trim();
+  if (baseEndUserId && targetEndUserId && baseEndUserId !== targetEndUserId) {
+    return NextResponse.json({ error: "SESSION_END_USER_MISMATCH" }, { status: 403 });
+  }
+  if (!baseEndUserId && payload.visitor_id && metadataVisitorId && metadataVisitorId !== String(payload.visitor_id)) {
     return NextResponse.json({ error: "SESSION_VISITOR_MISMATCH" }, { status: 403 });
   }
 

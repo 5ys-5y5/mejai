@@ -268,7 +268,7 @@ export function KbEditor({
         setLoading(false);
       } catch {
         if (!mounted) return;
-        setError("臾몄꽌瑜?遺덈윭?ㅼ? 紐삵뻽?듬땲??");
+        setError("문서를 불러오지 못했습니다.");
         setLoading(false);
       }
     }
@@ -366,11 +366,11 @@ export function KbEditor({
   const handleSaveMeta = async () => {
     if (!kbId) return;
     if (title.trim().length === 0) {
-      toast.error("?쒕ぉ???낅젰??二쇱꽭??");
+      toast.error("제목을 입력해 주세요.");
       return;
     }
     if (!metaChanged) {
-      toast.error("蹂寃쎈맂 ?뺣낫媛 ?놁뒿?덈떎.");
+      toast.error("변경된 정보가 없습니다.");
       return;
     }
     setSavingMeta(true);
@@ -390,7 +390,7 @@ export function KbEditor({
         body: JSON.stringify(payload),
       });
 
-      toast.success("臾몄꽌 ?뺣낫媛 ??λ릺?덉뒿?덈떎.");
+      toast.success("문서 정보가 저장되었습니다.");
       setBaseTitle(saved.title || "");
       setBaseCategory(saved.category ?? null);
       setBaseIsPublic(Boolean(saved.is_public));
@@ -399,8 +399,8 @@ export function KbEditor({
       setIsPublic(Boolean(saved.is_public));
       await refreshItems();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "臾몄꽌 ?뺣낫 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.";
-      toast.error(message || "臾몄꽌 ?뺣낫 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.");
+      const message = err instanceof Error ? err.message : "버전 삭제에 실패했습니다.";
+      toast.error(message || "문서 정보 저장에 실패했습니다.");
     } finally {
       setSavingMeta(false);
     }
@@ -409,11 +409,11 @@ export function KbEditor({
   const handleSaveContent = async () => {
     if (!kbId) return;
     if (content.trim().length === 0) {
-      toast.error("?댁슜???낅젰??二쇱꽭??");
+      toast.error("내용을 입력해 주세요.");
       return;
     }
     if (!contentChanged) {
-      toast.error("蹂寃쎈맂 ?댁슜???놁뒿?덈떎.");
+      toast.error("변경된 내용이 없습니다.");
       return;
     }
     setSavingContent(true);
@@ -430,7 +430,7 @@ export function KbEditor({
         body: JSON.stringify(payload),
       });
 
-      toast.success("??踰꾩쟾???앹꽦?섏뿀?듬땲??");
+      toast.success("새 버전이 생성되었습니다.");
       setBaseContent(saved.content || "");
       setContent(saved.content || "");
       setCurrentVersion(saved.version || "");
@@ -441,15 +441,15 @@ export function KbEditor({
         onSelectKb(saved.id);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "臾몄꽌 ?댁슜 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.";
-      toast.error(message || "臾몄꽌 ?댁슜 ??μ뿉 ?ㅽ뙣?덉뒿?덈떎.");
+      const message = err instanceof Error ? err.message : "버전 삭제에 실패했습니다.";
+      toast.error(message || "문서 내용 저장에 실패했습니다.");
     } finally {
       setSavingContent(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("??踰꾩쟾????젣?좉퉴?? ??젣??踰꾩쟾? 蹂듦뎄?????놁뒿?덈떎.")) {
+    if (!window.confirm("이 버전을 삭제할까요? 삭제된 버전은 복구할 수 없습니다.")) {
       return;
     }
     try {
@@ -457,13 +457,13 @@ export function KbEditor({
       const next = allItems.filter((item) => item.id !== id);
       setAllItems(next);
       setUsedBytes(calcRagUsageBytes(next));
-      toast.success("踰꾩쟾????젣?섏뿀?듬땲??");
+      toast.success("버전이 삭제되었습니다.");
       if (id === kbId) {
         onSelectKb(null);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "踰꾩쟾 ??젣???ㅽ뙣?덉뒿?덈떎.";
-      toast.error(message || "踰꾩쟾 ??젣???ㅽ뙣?덉뒿?덈떎.");
+      const message = err instanceof Error ? err.message : "버전 삭제에 실패했습니다.";
+      toast.error(message || "버전 삭제에 실패했습니다.");
     }
   };
 
@@ -480,11 +480,11 @@ export function KbEditor({
         },
         body: JSON.stringify({ is_active: true }),
       });
-      toast.success("諛고룷 踰꾩쟾??蹂寃쎈릺?덉뒿?덈떎.");
+      toast.success("배포 버전이 변경되었습니다.");
       await refreshItems();
     } catch (err) {
-      const message = err instanceof Error ? err.message : "諛고룷 ?곹깭 蹂寃쎌뿉 ?ㅽ뙣?덉뒿?덈떎.";
-      toast.error(message || "諛고룷 ?곹깭 蹂寃쎌뿉 ?ㅽ뙣?덉뒿?덈떎.");
+      const message = err instanceof Error ? err.message : "버전 삭제에 실패했습니다.";
+      toast.error(message || "배포 상태 변경에 실패했습니다.");
     } finally {
       setActiveUpdateId(null);
     }
@@ -527,10 +527,10 @@ export function KbEditor({
         <Card className="mt-6 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-slate-900">踰꾩쟾 ?댁슜 (??踰꾩쟾 ?앹꽦)</div>
+              <div className="text-sm font-semibold text-slate-900">버전 내용 (새 버전 생성)</div>
               <p className="mt-1 text-xs text-slate-500">
-                ?댁슜????ν븯硫???踰꾩쟾???앹꽦?섍퀬 ?댁쟾 踰꾩쟾? 洹몃?濡??좎??⑸땲?? ?쒕ぉ/移댄뀒怨좊━???꾩뿉??
-                ????????????????????
+                내용을 저장하면 새 버전이 생성되고 이전 버전은 그대로 유지됩니다. 제목/카테고리는 위에서
+                별도로 저장해야 합니다.
               </p>
             </div>
             <button
@@ -553,20 +553,20 @@ export function KbEditor({
             <div className="mt-4 grid gap-4">
               <div className="grid gap-2">
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium text-slate-900">?꾩옱 踰꾩쟾</label>
+                  <label className="text-sm font-medium text-slate-900">현재 버전</label>
                   <input
-                    value={currentVersion ? `${currentVersion} 쨌 ???????踰꾩쟾 ?앹꽦` : "???????踰꾩쟾 ?앹꽦"}
+                    value={currentVersion ? `${currentVersion} · 저장 시 새 버전 생성` : "저장 시 새 버전 생성"}
                     disabled
                     className="h-10 w-full rounded-xl border border-slate-200 bg-slate-100 px-3 text-xs text-slate-500 cursor-not-allowed"
                   />
                 </div>
               </div>
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-slate-900">?댁슜 *</label>
+                <label className="text-sm font-medium text-slate-900">내용 *</label>
                 <textarea
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
-                  placeholder="臾몄꽌 ?댁슜???낅젰?섏꽭??"
+                  placeholder="문서 내용을 입력하세요."
                   className="min-h-[220px] w-full rounded-xl border border-slate-200 px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-0 focus-visible:border-slate-900"
                 />
               </div>
@@ -574,9 +574,9 @@ export function KbEditor({
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-slate-900">KB ?낅뜲?댄듃 ?곸슜 ?먯씠?꾪듃 ?좏깮</div>
+                      <div className="text-sm font-semibold text-slate-900">KB 업데이트 적용 에이전트 선택</div>
                       <p className="mt-1 text-xs text-slate-500">
-                        ?댁슜 ??????좏깮???먯씠?꾪듃留???踰꾩쟾?쇰줈 ?앹꽦?⑸땲??
+                        내용 저장 시 선택한 에이전트만 새 버전으로 생성됩니다.
                       </p>
                     </div>
                     <button
@@ -591,11 +591,11 @@ export function KbEditor({
                       className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 hover:bg-slate-100"
                       disabled={agentsUsingKb.length === 0}
                     >
-                      {allAgentsSelected ? "?꾩껜 ?댁젣" : "?꾩껜 ?좏깮"}
+                      {allAgentsSelected ? "전체 해제" : "전체 선택"}
                     </button>
                   </div>
                   {agentsUsingKb.length === 0 ? (
-                    <div className="mt-3 text-xs text-slate-500">??KB 踰꾩쟾???ъ슜?섎뒗 ?먯씠?꾪듃媛 ?놁뒿?덈떎.</div>
+                    <div className="mt-3 text-xs text-slate-500">이 KB 버전을 사용하는 에이전트가 없습니다.</div>
                   ) : (
                     <div className="mt-3 grid gap-2">
                       {agentsUsingKb.map((agent) => {
@@ -634,9 +634,9 @@ export function KbEditor({
         <Card id="kb-editor-root" className="mt-6 p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-slate-900">臾몄꽌 ?뺣낫 (?꾩껜 踰꾩쟾 怨듯넻)</div>
+              <div className="text-sm font-semibold text-slate-900">문서 정보 (전체 버전 공통)</div>
               <p className="mt-1 text-xs text-slate-500">
-                ????/????? ?????? ???? parent_id????? ????????? ?????????
+                제목/카테고리 변경은 같은 parent_id의 모든 버전에 즉시 반영됩니다.
               </p>
             </div>
             <button
@@ -661,7 +661,7 @@ export function KbEditor({
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <div className="text-sm font-semibold text-slate-900">ADMIN 공통 KB</div>
                   <div className="mt-1 text-xs text-slate-500">
-                    ?앹꽦 ???좏삎/??곸? 蹂寃쏀븷 ???놁뒿?덈떎.
+                    생성 후 유형/대상은 변경할 수 없습니다.
                   </div>
                   <div className="mt-3 grid gap-2">
                     <div className="text-xs font-semibold text-slate-600">적용 그룹</div>
@@ -845,7 +845,7 @@ export function KbEditor({
         
 
         <Card className="mt-6 p-6">
-          <div className="text-sm font-semibold text-slate-900">?섏젙 ?댁슜</div>
+          <div className="text-sm font-semibold text-slate-900">수정 내용</div>
           <div className="mt-3">
             <DiffViewer lines={diffLines} />
           </div>
@@ -854,8 +854,8 @@ export function KbEditor({
         <Card className="mt-6 p-6">
           <div className="text-sm font-semibold text-slate-900">버전 목록</div>
           <p className="mt-1 text-xs text-slate-500">
-            諛고룷 ?곹깭??踰꾩쟾 紐⑸줉?먯꽌留?愿由щ맗?덈떎. 諛고룷 而щ읆??on?쇰줈 諛붽씀硫??대떦 踰꾩쟾留??쒖꽦?붾릺怨?
-            ???????????????? off o????????
+            배포 상태는 버전 목록에서만 관리됩니다. 배포 컬럼을 on으로 바꾸면 해당 버전만 활성화되고
+            나머지는 자동으로 off 처리됩니다.
           </p>
           <ul className="mt-3 grid grid-cols-[80px_80px_60px_60px_60px_60px_60px_100px_minmax(0,1fr)_40px] gap-x-[6px] divide-y divide-slate-200">
             <li className="contents">
@@ -866,25 +866,25 @@ export function KbEditor({
                 배포
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                ?듯솕??
+                통화수
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                ?듯솕?쒓컙
+                통화시간
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                만족??
+                만족도
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                ?깃났瑜?
+                성공률
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                ?닿???
+                이관율
               </span>
               <span className="flex min-h-[44px] items-center px-1 py-3 text-left text-[10px] font-semibold text-slate-500 whitespace-nowrap">
-                ?섏젙??
+                수정일
               </span>
               <span className="flex min-h-[44px] items-center px-2 py-3 text-left text-xs font-semibold text-slate-500 whitespace-nowrap">
-                ?섏젙 ?댁슜
+                수정 내용
               </span>
               <span className="flex min-h-[44px] items-center px-0 py-3 pr-2 text-left text-xs font-semibold text-slate-500">
                 
@@ -892,7 +892,7 @@ export function KbEditor({
             </li>
             <li className="col-span-full border-b border-slate-200" />
             {versionItems.length === 0 ? (
-              <li className="col-span-full py-3 text-sm text-slate-500">踰꾩쟾 湲곕줉???놁뒿?덈떎.</li>
+              <li className="col-span-full py-3 text-sm text-slate-500">버전 기록이 없습니다.</li>
             ) : (
               versionItems.map((item, index) => {
                 const isCurrent = item.id === kbId;
@@ -972,7 +972,7 @@ export function KbEditor({
                           e.stopPropagation();
                           handleDelete(item.id);
                         }}
-                        aria-label="??젣"
+                        aria-label="삭제"
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50"
                       >
                         <Trash2 className="h-4 w-4" />

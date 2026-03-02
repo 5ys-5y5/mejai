@@ -155,10 +155,10 @@ export function buildIntentScopePrompt(input: {
 }) {
   const { spec } = input;
   if (spec.slot_prompt_template_key === "restock_need_product") {
-    return "?ъ엯怨좊? ?뺤씤???곹뭹紐낆쓣 ?뚮젮二쇱꽭?? (?? ?곹뭹紐??먮뒗 紐⑤뜽紐?";
+    return "재입고를 확인할 상품명을 알려주세요. (예: 상품명 또는 모델명)";
   }
   if (spec.slot_prompt_template_key === "faq_need_question_scope") {
-    return "?대뼡 ?댁슜???꾩??쒕┫源뚯슂? (?? 諛곗넚, ?섎텋, 援먰솚 ??";
+    return "어떤 내용을 도와드릴까요? (예: 배송, 환불, 교환 등)";
   }
-  return "?꾩슂???뺣낫瑜??뚮젮二쇱꽭??";
+  return "필요한 정보를 알려주세요.";
 }

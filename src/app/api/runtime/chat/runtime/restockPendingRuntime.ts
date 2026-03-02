@@ -113,7 +113,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
             .map((candidate, idx) => ({
               id: `restock-${idx + 1}`,
               title: String((candidate as Record<string, any>).product_name || "-"),
-              subtitle: `${String((candidate as Record<string, any>).raw_date || "-")} ?낃퀬 ?덉젙`,
+              subtitle: `${String((candidate as Record<string, any>).raw_date || "-")} 입고 예정`,
               description: "",
               image_url: String((candidate as Record<string, any>).thumbnail_url || ""),
               value: String(idx + 1),
@@ -165,7 +165,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
       };
     }
     if (isNoText(message)) {
-      const reply = makeReply("?뚭쿋?듬땲?? ?ъ엯怨좊? ?뺤씤???곹뭹紐낆쓣 ?뚮젮二쇱꽭??");
+      const reply = makeReply("알겠습니다. 재입고를 확인할 상품명을 알려주세요.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -258,7 +258,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     const pendingProductName = String(prevBotContext.pending_product_name || "").trim();
     const pendingChannel = String(prevBotContext.pending_channel || "").trim();
     if (isEndConversationText(message)) {
-      const reply = makeReply("??붾? 醫낅즺?좉쾶?? ?ㅻⅨ 臾몄쓽媛 ?덉쑝硫??뚮젮二쇱꽭??");
+      const reply = makeReply("대화를 종료할게요. 다른 문의가 있으면 알려주세요.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -296,7 +296,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
       };
     }
     if (isNoText(message)) {
-      const reply = makeReply("?ъ엯怨??뚮┝ ?좎껌? 吏꾪뻾?섏? ?딆쓣寃뚯슂. ?ㅻⅨ ?곹뭹???ъ엯怨좊룄 ?꾩슂?섎㈃ ?뚮젮二쇱꽭??");
+      const reply = makeReply("재입고 알림 신청은 진행하지 않을게요. 다른 상품의 재입고도 필요하면 알려주세요.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -324,7 +324,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     } else {
       const reply = makeReply(
         buildYesNoConfirmationPrompt(
-          `?곹뭹(${pendingProductName || pendingProductId || "-"})??瑜? ${pendingChannel || "sms"}濡??ъ엯怨??뚮┝ ?좎껌?좉퉴??`,
+          `상품(${pendingProductName || pendingProductId || "-"})을(를) ${pendingChannel || "sms"}로 재입고 알림 신청할까요?`,
           { botContext: prevBotContext, entity: prevEntity }
         )
       );
@@ -380,7 +380,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
       : [];
     const extractedPhone = normalizePhoneDigits(extractPhone(message));
     if (!extractedPhone) {
-      const reply = makeReply("?ъ엯怨??뚮┝??諛쏆쓣 ?대???踰덊샇瑜??뚮젮二쇱꽭?? (?? 01012345678)");
+      const reply = makeReply("재입고 알림을 받을 휴대폰 번호를 알려주세요. (예: 01012345678)");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -408,7 +408,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
       };
     }
     const reply = makeReply(
-      buildYesNoConfirmationPrompt(`?대???踰덊샇(${maskPhone(extractedPhone)})濡?${pendingChannel} ?ъ엯怨??뚮┝??諛쏆쓣源뚯슂?`, {
+      buildYesNoConfirmationPrompt(`휴대폰 번호(${maskPhone(extractedPhone)})로 ${pendingChannel} 재입고 알림을 받을까요?`, {
         botContext: prevBotContext,
         entity: prevEntity,
       })
@@ -527,7 +527,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     }
     const reply = makeReply(
       buildYesNoConfirmationPrompt(
-        `?좏깮?섏떊 D-${selectedLeadDays.join(", D-")}遺??${pendingChannel}濡??뚮┝??諛쏆쓣源뚯슂?`,
+        `선택하신 D-${selectedLeadDays.join(", D-")}부터 ${pendingChannel}로 알림을 받을까요?`,
         { botContext: prevBotContext, entity: prevEntity }
       )
     );
@@ -582,7 +582,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
           .filter((n) => Number.isFinite(n))
       : [];
     if (isEndConversationText(message)) {
-      const reply = makeReply("??붾? 醫낅즺?좉쾶?? ?ㅻⅨ 臾몄쓽媛 ?덉쑝硫??뚮젮二쇱꽭??");
+      const reply = makeReply("대화를 종료할게요. 다른 문의가 있으면 알려주세요.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -623,7 +623,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
       nextAccepted = true;
       nextLocked = true;
     } else if (isNoText(message)) {
-      const reply = makeReply("?ъ엯怨??뚮┝ ?좎껌? 吏꾪뻾?섏? ?딆쓣寃뚯슂. ?ㅻⅨ ?곹뭹???ъ엯怨좊룄 ?꾩슂?섎㈃ ?뚮젮二쇱꽭??");
+      const reply = makeReply("재입고 알림 신청은 진행하지 않을게요. 다른 상품의 재입고도 필요하면 알려주세요.");
       await insertTurn({
         session_id: sessionId,
         seq: nextSeq,
@@ -646,7 +646,7 @@ export async function handleRestockPendingStage(params: RestockPendingParams): P
     } else {
       const reply = makeReply(
         buildYesNoConfirmationPrompt(
-          `?곹뭹(${pendingProductName || pendingProductId || "-"})??瑜? ${pendingChannel || "sms"}濡??ъ엯怨??뚮┝ ?좎껌?좉퉴??`,
+          `상품(${pendingProductName || pendingProductId || "-"})을(를) ${pendingChannel || "sms"}로 재입고 알림 신청할까요?`,
           { botContext: prevBotContext, entity: prevEntity }
         )
       );

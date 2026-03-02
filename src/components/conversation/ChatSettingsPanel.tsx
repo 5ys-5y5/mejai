@@ -228,21 +228,27 @@ export function ChatSettingsPanel({
     [authToken]
   );
 
-  const agentOptions = useMemo<SelectOption[]>(
-    () =>
-      (agents || []).map((agent) => ({
-        id: agent.id,
-        label: `${agent.name || agent.id}${agent.is_active ? "" : " (inactive)"}`,
-        description: agent.version ? `v${agent.version}` : undefined,
-      })),
-    [agents]
-  );
-
   const widget = draft.widget;
   const features = draft.features;
   const visibility = draft.features.visibility;
   const debug = draft.debug;
   const setupUi = draft.setupUi;
+
+  const agentOptions = useMemo<SelectOption[]>(() => {
+    const base = (agents || []).map((agent) => {
+      const versionLabel = agent.version ? `v${agent.version}` : "v-";
+      const activeLabel = agent.is_active ? "active" : "inactive";
+      return {
+        id: agent.id,
+        label: `${agent.name || agent.id} ${versionLabel}`,
+        description: activeLabel,
+      };
+    });
+    const current = String(widget.agent_id || "").trim();
+    if (!current) return base;
+    if (base.some((opt) => opt.id === current)) return base;
+    return [{ id: current, label: `${current} (current)` }, ...base];
+  }, [agents, widget.agent_id]);
 
   const updateWidget = (path: string[], value: unknown) =>
     updateDraft((current) => ({ ...current, widget: setIn(current.widget as any, path, value) }));
@@ -258,54 +264,49 @@ export function ChatSettingsPanel({
   const updateSetupUi = (path: string[], value: unknown) =>
     updateDraft((current) => ({ ...current, setupUi: setIn(current.setupUi as any, path, value) }));
 
+  const tabBarChatEnabled = features.widget.tabBar.chat || features.widget.chatPanel;
+  const tabBarListEnabled = features.widget.tabBar.list || features.widget.historyPanel;
+  const tabBarPolicyEnabled = features.widget.tabBar.policy || features.widget.setupPanel;
+
+  const setTabBarPanelEnabled = (key: "chat" | "list" | "policy", next: boolean) =>
+    updateDraft((current) => {
+      const panelKey = key === "chat" ? "chatPanel" : key === "list" ? "historyPanel" : "setupPanel";
+      const withTab = setIn(current.features as any, ["widget", "tabBar", key], next);
+      const withPanel = setIn(withTab as any, ["widget", panelKey], next);
+      return { ...current, features: withPanel };
+    });
+
+  const setTabBarPanelVisibility = (key: "chat" | "list" | "policy", mode: FeatureVisibilityMode) =>
+    updateDraft((current) => {
+      const panelKey = key === "chat" ? "chatPanel" : key === "list" ? "historyPanel" : "setupPanel";
+      const withTab = setIn(current.features as any, ["visibility", "widget", "tabBar", key], mode);
+      const withPanel = setIn(withTab as any, ["visibility", "widget", panelKey], mode);
+      return { ...current, features: withPanel };
+    });
+
   const pageLabel = pageLabelOverride || pageKey;
 
   return (
     <div className="space-y-4">
-      <div className="text-xs font-semibold text-slate-700">Widget Policy: {pageLabel}</div>
-
-      <Section title="런처">
-        <ToggleRowGroup
+      <ToggleRowGroup
           label="widget.is_active"
           checked={widget.is_active !== false}
           onToggle={(next) => updateWidget(["is_active"], next)}
+          visibility={visibility.widget.launcher}
+          onVisibilityChange={(mode) => updateVisibility(["widget", "launcher"], mode)}
         >
           <div className="text-[11px] text-slate-600">false면 런처/임베드 모두 완전 숨김</div>
-          <Row
-            label="widget.entry_mode"
-            right={
-              <SelectPopover
-                value={widget.entry_mode || "launcher"}
-                options={ENTRY_MODE_OPTIONS}
-                onChange={(value) => updateWidget(["entry_mode"], value)}
-                buttonClassName="h-7 text-[11px]"
-                className="w-[140px]"
-              />
-            }
-          />
-          <Row
-            label="widget.embed_view"
-            right={
-              <SelectPopover
-                value={widget.embed_view || "both"}
-                options={EMBED_VIEW_OPTIONS}
-                onChange={(value) => updateWidget(["embed_view"], value)}
-                buttonClassName="h-7 text-[11px]"
-                className="w-[140px]"
-              />
-            }
-          />
-          <Row
-            label="widget.name"
-            right={
-              <Input
-                value={widget.name || ""}
-                onChange={(event) => updateWidget(["name"], event.target.value)}
-                className="h-7 w-[200px] text-[11px]"
-              />
-            }
-          />
-          {agentOptions.length > 0 ? (
+          <RowGroup label="기본 세팅">
+            <Row
+              label="widget.name"
+              right={
+                <Input
+                  value={widget.name || ""}
+                  onChange={(event) => updateWidget(["name"], event.target.value)}
+                  className="h-7 w-[200px] text-[11px]"
+                />
+              }
+            />
             <Row
               label="widget.agent_id"
               right={
@@ -315,155 +316,333 @@ export function ChatSettingsPanel({
                   onChange={(value) => updateWidget(["agent_id"], value)}
                   buttonClassName="h-7 text-[11px]"
                   className="w-[200px]"
+                  searchable
+                  renderOption={(option, active) => (
+                    <div className="flex items-center w-full gap-2">
+                      {option.description ? (
+                        <span
+                          className={`inline-block h-[5px] w-[5px] rounded-full ${
+                            option.description === "active" ? "bg-emerald-500" : "bg-slate-400"
+                          }`}
+                        />
+                      ) : null}
+                      <div className="min-w-0 text-left">
+                        <div className="truncate text-slate-900">{option.label}</div>
+                      </div>
+                    </div>
+                  )}
                 />
               }
             />
-          ) : (
             <Row
-              label="widget.agent_id"
+              label="widget.entry_mode"
+              right={
+                <SelectPopover
+                  value={widget.entry_mode || "launcher"}
+                  options={ENTRY_MODE_OPTIONS}
+                  onChange={(value) => updateWidget(["entry_mode"], value)}
+                  buttonClassName="h-7 text-[11px]"
+                  className="w-[140px]"
+                />
+              }
+            />
+            <Row
+              label="widget.embed_view"
+              right={
+                <SelectPopover
+                  value={widget.embed_view || "both"}
+                  options={EMBED_VIEW_OPTIONS}
+                  onChange={(value) => updateWidget(["embed_view"], value)}
+                  buttonClassName="h-7 text-[11px]"
+                  className="w-[140px]"
+                />
+              }
+            />
+          </RowGroup>
+
+          <RowGroup label="대화 기본값">
+            <Row
+              label="theme.greeting"
               right={
                 <Input
-                  value={widget.agent_id || ""}
-                  onChange={(event) => updateWidget(["agent_id"], event.target.value)}
+                  value={widget.theme?.greeting || ""}
+                  onChange={(event) => updateWidget(["theme", "greeting"], event.target.value)}
+                  className="h-7 w-[260px] text-[11px]"
+                />
+              }
+            />
+            <Row
+              label="theme.input_placeholder"
+              right={
+                <Input
+                  value={widget.theme?.input_placeholder || ""}
+                  onChange={(event) => updateWidget(["theme", "input_placeholder"], event.target.value)}
+                  className="h-7 w-[260px] text-[11px]"
+                />
+              }
+            />
+          </RowGroup>
+
+          <RowGroup label="런처 디자인">
+            <Row
+              label="cfg.launcherLabel"
+              right={
+                <Input
+                  value={widget.cfg?.launcherLabel || ""}
+                  onChange={(event) => updateWidget(["cfg", "launcherLabel"], event.target.value)}
                   className="h-7 w-[200px] text-[11px]"
                 />
               }
             />
-          )}
-          <Row
-            label="theme.launcher_logo_id"
-            right={
-              <Input
-                value={widget.theme?.launcher_logo_id || ""}
-                onChange={(event) => updateWidget(["theme", "launcher_logo_id"], event.target.value)}
-                className="h-7 w-[200px] text-[11px]"
-              />
-            }
-          />
-          <Row
-            label="theme.primary_color | launcher_bg"
-            right={
-              <div className="flex items-center gap-2">
-                <input
-                  type="color"
-                  value={widget.theme?.primary_color || "#4f46e5"}
-                  onChange={(event) => updateWidget(["theme", "primary_color"], event.target.value)}
-                  className="h-7 w-9 cursor-pointer rounded border border-slate-200"
+            <Row
+              label="cfg.position"
+              right={
+                <SelectPopover
+                  value={widget.cfg?.position || "bottom-right"}
+                  options={POSITION_OPTIONS}
+                  onChange={(value) => updateWidget(["cfg", "position"], value)}
+                  buttonClassName="h-7 text-[11px]"
+                  className="w-[150px]"
                 />
+              }
+            />
+            <Row
+              label="theme.launcher_logo_id"
+              right={
                 <Input
-                  value={widget.theme?.primary_color || ""}
-                  onChange={(event) => updateWidget(["theme", "primary_color"], event.target.value)}
-                  className="h-7 w-[120px] text-[11px]"
-                  placeholder="#4f46e5"
+                  value={widget.theme?.launcher_logo_id || ""}
+                  onChange={(event) => updateWidget(["theme", "launcher_logo_id"], event.target.value)}
+                  className="h-7 w-[200px] text-[11px]"
                 />
+              }
+            />
+            <Row
+              label="theme.primary_color | launcher_bg"
+              right={
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={widget.theme?.primary_color || "#4f46e5"}
+                    onChange={(event) => updateWidget(["theme", "primary_color"], event.target.value)}
+                    className="h-7 w-9 cursor-pointer rounded border border-slate-200"
+                  />
+                  <Input
+                    value={widget.theme?.primary_color || ""}
+                    onChange={(event) => updateWidget(["theme", "primary_color"], event.target.value)}
+                    className="h-7 w-[120px] text-[11px]"
+                    placeholder="#4f46e5"
+                  />
+                  <Input
+                    value={widget.theme?.launcher_bg || ""}
+                    onChange={(event) => updateWidget(["theme", "launcher_bg"], event.target.value)}
+                    className="h-7 w-[120px] text-[11px]"
+                    placeholder="#0f172a"
+                  />
+                </div>
+              }
+            />
+            <Row
+              label="launcher.container.bottom"
+              right={
                 <Input
-                  value={widget.theme?.launcher_bg || ""}
-                  onChange={(event) => updateWidget(["theme", "launcher_bg"], event.target.value)}
+                  value={widget.launcher?.container?.bottom || ""}
+                  onChange={(event) => updateWidget(["launcher", "container", "bottom"], event.target.value)}
                   className="h-7 w-[120px] text-[11px]"
-                  placeholder="#0f172a"
+                  placeholder="16px"
                 />
-              </div>
-            }
-          />
-          <Row
-            label="cfg.launcherLabel"
-            right={
-              <Input
-                value={widget.cfg?.launcherLabel || ""}
-                onChange={(event) => updateWidget(["cfg", "launcherLabel"], event.target.value)}
-                className="h-7 w-[200px] text-[11px]"
-              />
-            }
-          />
-          <Row
-            label="cfg.position"
-            right={
-              <SelectPopover
-                value={widget.cfg?.position || "bottom-right"}
-                options={POSITION_OPTIONS}
-                onChange={(value) => updateWidget(["cfg", "position"], value)}
-                buttonClassName="h-7 text-[11px]"
-                className="w-[150px]"
-              />
-            }
-          />
-          <Row
-            label="launcher.container.bottom"
-            right={
-              <Input
-                value={widget.launcher?.container?.bottom || ""}
-                onChange={(event) => updateWidget(["launcher", "container", "bottom"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-                placeholder="16px"
-              />
-            }
-          />
-          <Row
-            label="launcher.container.left"
-            right={
-              <Input
-                value={widget.launcher?.container?.left || ""}
-                onChange={(event) => updateWidget(["launcher", "container", "left"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-                placeholder="auto"
-              />
-            }
-          />
-          <Row
-            label="launcher.container.right"
-            right={
-              <Input
-                value={widget.launcher?.container?.right || ""}
-                onChange={(event) => updateWidget(["launcher", "container", "right"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-                placeholder="16px"
-              />
-            }
-          />
-          <Row
-            label="launcher.container.gap"
-            right={
-              <Input
-                value={widget.launcher?.container?.gap || ""}
-                onChange={(event) => updateWidget(["launcher", "container", "gap"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-                placeholder="12px"
-              />
-            }
-          />
-          <Row
-            label="launcher.container.zIndex"
-            right={
-              <Input
-                value={widget.launcher?.container?.zIndex?.toString() || ""}
-                onChange={(event) => {
-                  const raw = event.target.value.trim();
-                  updateWidget(["launcher", "container", "zIndex"], raw ? Number(raw) : undefined);
-                }}
-                className="h-7 w-[120px] text-[11px]"
-                placeholder="999"
-              />
-            }
-          />
-          <Row
-            label="launcher.size"
-            right={
-              <Input
-                value={widget.launcher?.size?.toString() || ""}
-                onChange={(event) => {
-                  const raw = event.target.value.trim();
-                  updateWidget(["launcher", "size"], raw ? Number(raw) : undefined);
-                }}
-                className="h-7 w-[120px] text-[11px]"
-                placeholder="56"
-              />
-            }
-          />
-        </ToggleRowGroup>
-      </Section>
+              }
+            />
+            <Row
+              label="launcher.container.left"
+              right={
+                <Input
+                  value={widget.launcher?.container?.left || ""}
+                  onChange={(event) => updateWidget(["launcher", "container", "left"], event.target.value)}
+                  className="h-7 w-[120px] text-[11px]"
+                  placeholder="auto"
+                />
+              }
+            />
+            <Row
+              label="launcher.container.right"
+              right={
+                <Input
+                  value={widget.launcher?.container?.right || ""}
+                  onChange={(event) => updateWidget(["launcher", "container", "right"], event.target.value)}
+                  className="h-7 w-[120px] text-[11px]"
+                  placeholder="16px"
+                />
+              }
+            />
+            <Row
+              label="launcher.container.gap"
+              right={
+                <Input
+                  value={widget.launcher?.container?.gap || ""}
+                  onChange={(event) => updateWidget(["launcher", "container", "gap"], event.target.value)}
+                  className="h-7 w-[120px] text-[11px]"
+                  placeholder="12px"
+                />
+              }
+            />
+            <Row
+              label="launcher.container.zIndex"
+              right={
+                <Input
+                  value={widget.launcher?.container?.zIndex?.toString() || ""}
+                  onChange={(event) => {
+                    const raw = event.target.value.trim();
+                    updateWidget(["launcher", "container", "zIndex"], raw ? Number(raw) : undefined);
+                  }}
+                  className="h-7 w-[120px] text-[11px]"
+                  placeholder="999"
+                />
+              }
+            />
+            <Row
+              label="launcher.size"
+              right={
+                <Input
+                  value={widget.launcher?.size?.toString() || ""}
+                  onChange={(event) => {
+                    const raw = event.target.value.trim();
+                    updateWidget(["launcher", "size"], raw ? Number(raw) : undefined);
+                  }}
+                  className="h-7 w-[120px] text-[11px]"
+                  placeholder="56"
+                />
+              }
+            />
+          </RowGroup>
 
-      <Section title="위젯 헤더">
-        <ToggleRowGroup
+          <RowGroup label="위젯 디자인">
+            <Row
+              label="iframe.width"
+              right={
+                <Input
+                  value={widget.iframe?.width || ""}
+                  onChange={(event) => updateWidget(["iframe", "width"], event.target.value)}
+                  className="h-7 w-[120px] text-[11px]"
+                  placeholder="360px"
+                />
+              }
+            />
+            <Row
+              label="iframe.height"
+              right={
+                <Input
+                  value={widget.iframe?.height || ""}
+                  onChange={(event) => updateWidget(["iframe", "height"], event.target.value)}
+                  className="h-7 w-[120px] text-[11px]"
+                  placeholder="560px"
+                />
+              }
+            />
+            <Row
+              label="iframe.borderRadius"
+              right={
+                <Input
+                  value={widget.iframe?.borderRadius || ""}
+                  onChange={(event) => updateWidget(["iframe", "borderRadius"], event.target.value)}
+                  className="h-7 w-[120px] text-[11px]"
+                />
+              }
+            />
+            <Row
+              label="iframe.boxShadow"
+              right={
+                <Input
+                  value={widget.iframe?.boxShadow || ""}
+                  onChange={(event) => updateWidget(["iframe", "boxShadow"], event.target.value)}
+                  className="h-7 w-[200px] text-[11px]"
+                />
+              }
+            />
+            <Row
+              label="iframe.background"
+              right={
+                <Input
+                  value={widget.iframe?.background || ""}
+                  onChange={(event) => updateWidget(["iframe", "background"], event.target.value)}
+                  className="h-7 w-[200px] text-[11px]"
+                />
+              }
+            />
+            <Row
+              label="iframe.layout"
+              right={
+                <SelectPopover
+                  value={widget.iframe?.layout || "fixed"}
+                  options={[
+                    { id: "fixed", label: "fixed" },
+                    { id: "absolute", label: "absolute" },
+                  ]}
+                  onChange={(value) => updateWidget(["iframe", "layout"], value)}
+                  buttonClassName="h-7 text-[11px]"
+                  className="w-[120px]"
+                />
+              }
+            />
+            <Row
+              label="iframe.bottomOffset"
+              right={
+                <Input
+                  value={widget.iframe?.bottomOffset || ""}
+                  onChange={(event) => updateWidget(["iframe", "bottomOffset"], event.target.value)}
+                  className="h-7 w-[120px] text-[11px]"
+                />
+              }
+            />
+            <Row
+              label="iframe.sideOffset"
+              right={
+                <Input
+                  value={widget.iframe?.sideOffset || ""}
+                  onChange={(event) => updateWidget(["iframe", "sideOffset"], event.target.value)}
+                  className="h-7 w-[120px] text-[11px]"
+                />
+              }
+            />
+          </RowGroup>
+
+          <RowGroup label="노출/권한">
+            <Row
+              label="widget.allowed_domains"
+              alignTop
+              right={
+                <textarea
+                  value={formatLines(widget.allowed_domains)}
+                  onChange={(event) => updateWidget(["allowed_domains"], parseLinesAndComma(event.target.value))}
+                  className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                />
+              }
+            />
+            <Row
+              label="widget.allowed_paths"
+              alignTop
+              right={
+                <textarea
+                  value={formatLines(widget.allowed_paths)}
+                  onChange={(event) => updateWidget(["allowed_paths"], parseLinesAndComma(event.target.value))}
+                  className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                />
+              }
+            />
+            <Row
+              label="theme.allowed_accounts"
+              alignTop
+              right={
+                <textarea
+                  value={formatLines(widget.theme?.allowed_accounts)}
+                  onChange={(event) => updateWidget(["theme", "allowed_accounts"], parseLinesAndComma(event.target.value))}
+                  className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                />
+              }
+            />
+          </RowGroup>
+        </ToggleRowGroup>
+
+      <ToggleRowGroup
           label="widget.header.enabled"
           checked={features.widget.header.enabled}
           visibility={visibility.widget.header.enabled}
@@ -506,157 +685,26 @@ export function ChatSettingsPanel({
             onVisibilityChange={(mode) => updateVisibility(["widget", "header", "close"], mode)}
           />
         </ToggleRowGroup>
-        <ToggleRow
-          label="interaction.widgetHeaderAgentAction"
-          checked={features.interaction.widgetHeaderAgentAction}
-          visibility={visibility.interaction.widgetHeaderAgentAction}
-          onToggle={(next) => updateFeatures(["interaction", "widgetHeaderAgentAction"], next)}
-          onVisibilityChange={(mode) => updateVisibility(["interaction", "widgetHeaderAgentAction"], mode)}
-        />
-        <ToggleRow
-          label="interaction.widgetHeaderNewConversation"
-          checked={features.interaction.widgetHeaderNewConversation}
-          visibility={visibility.interaction.widgetHeaderNewConversation}
-          onToggle={(next) => updateFeatures(["interaction", "widgetHeaderNewConversation"], next)}
-          onVisibilityChange={(mode) => updateVisibility(["interaction", "widgetHeaderNewConversation"], mode)}
-        />
-        <ToggleRow
-          label="interaction.widgetHeaderClose"
-          checked={features.interaction.widgetHeaderClose}
-          visibility={visibility.interaction.widgetHeaderClose}
-          onToggle={(next) => updateFeatures(["interaction", "widgetHeaderClose"], next)}
-          onVisibilityChange={(mode) => updateVisibility(["interaction", "widgetHeaderClose"], mode)}
-        />
-      </Section>
 
-      <Section title="위젯 대화">
-        <ToggleRow
-          label="widget.chatPanel"
-          checked={features.widget.chatPanel}
-          visibility={visibility.widget.chatPanel}
-          onToggle={(next) => updateFeatures(["widget", "chatPanel"], next)}
-          onVisibilityChange={(mode) => updateVisibility(["widget", "chatPanel"], mode)}
-        />
-        <ToggleRow
-          label="widget.historyPanel"
-          checked={features.widget.historyPanel}
-          visibility={visibility.widget.historyPanel}
-          onToggle={(next) => updateFeatures(["widget", "historyPanel"], next)}
-          onVisibilityChange={(mode) => updateVisibility(["widget", "historyPanel"], mode)}
-        />
+      <ToggleRowGroup
+          label="widget.tabBar.enabled"
+          checked={features.widget.tabBar.enabled}
+          visibility={visibility.widget.tabBar.enabled}
+          onToggle={(next) => updateFeatures(["widget", "tabBar", "enabled"], next)}
+          onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "enabled"], mode)}
+        >
+          <ToggleRowGroup
+            label="widget.tabBar.chat"
+            checked={tabBarChatEnabled}
+            visibility={visibility.widget.tabBar.chat}
+            onToggle={(next) => setTabBarPanelEnabled("chat", next)}
+            onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
+          >
 
-        <RowGroup label="대화 기본값">
-          <Row
-            label="theme.greeting"
-            right={
-              <Input
-                value={widget.theme?.greeting || ""}
-                onChange={(event) => updateWidget(["theme", "greeting"], event.target.value)}
-                className="h-7 w-[260px] text-[11px]"
-              />
-            }
-          />
-          <Row
-            label="theme.input_placeholder"
-            right={
-              <Input
-                value={widget.theme?.input_placeholder || ""}
-                onChange={(event) => updateWidget(["theme", "input_placeholder"], event.target.value)}
-                className="h-7 w-[260px] text-[11px]"
-              />
-            }
-          />
-        </RowGroup>
 
-        <RowGroup label="위젯 프레임/사이즈">
-          <Row
-            label="iframe.width"
-            right={
-              <Input
-                value={widget.iframe?.width || ""}
-                onChange={(event) => updateWidget(["iframe", "width"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-                placeholder="360px"
-              />
-            }
-          />
-          <Row
-            label="iframe.height"
-            right={
-              <Input
-                value={widget.iframe?.height || ""}
-                onChange={(event) => updateWidget(["iframe", "height"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-                placeholder="560px"
-              />
-            }
-          />
-          <Row
-            label="iframe.bottomOffset"
-            right={
-              <Input
-                value={widget.iframe?.bottomOffset || ""}
-                onChange={(event) => updateWidget(["iframe", "bottomOffset"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-              />
-            }
-          />
-          <Row
-            label="iframe.sideOffset"
-            right={
-              <Input
-                value={widget.iframe?.sideOffset || ""}
-                onChange={(event) => updateWidget(["iframe", "sideOffset"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-              />
-            }
-          />
-          <Row
-            label="iframe.borderRadius"
-            right={
-              <Input
-                value={widget.iframe?.borderRadius || ""}
-                onChange={(event) => updateWidget(["iframe", "borderRadius"], event.target.value)}
-                className="h-7 w-[120px] text-[11px]"
-              />
-            }
-          />
-          <Row
-            label="iframe.boxShadow"
-            right={
-              <Input
-                value={widget.iframe?.boxShadow || ""}
-                onChange={(event) => updateWidget(["iframe", "boxShadow"], event.target.value)}
-                className="h-7 w-[200px] text-[11px]"
-              />
-            }
-          />
-          <Row
-            label="iframe.background"
-            right={
-              <Input
-                value={widget.iframe?.background || ""}
-                onChange={(event) => updateWidget(["iframe", "background"], event.target.value)}
-                className="h-7 w-[200px] text-[11px]"
-              />
-            }
-          />
-          <Row
-            label="iframe.layout"
-            right={
-              <SelectPopover
-                value={widget.iframe?.layout || "fixed"}
-                options={[
-                  { id: "fixed", label: "fixed" },
-                  { id: "absolute", label: "absolute" },
-                ]}
-                onChange={(value) => updateWidget(["iframe", "layout"], value)}
-                buttonClassName="h-7 text-[11px]"
-                className="w-[120px]"
-              />
-            }
-          />
-        </RowGroup>
+        
+
+        
 
         <RowGroup label="Admin Panel">
           <ToggleRow
@@ -939,34 +987,6 @@ export function ChatSettingsPanel({
             onVisibilityChange={(mode) => updateVisibility(["interaction", "productCards"], mode)}
           />
           <ToggleRow
-            label="interaction.prefill"
-            checked={features.interaction.prefill}
-            visibility={visibility.interaction.prefill}
-            onToggle={(next) => updateFeatures(["interaction", "prefill"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["interaction", "prefill"], mode)}
-          />
-          <Row
-            label="interaction.prefillMessages"
-            alignTop
-            right={
-              <textarea
-                value={formatLines(features.interaction.prefillMessages)}
-                onChange={(event) => updateFeatures(["interaction", "prefillMessages"], parseLines(event.target.value))}
-                className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-              />
-            }
-          />
-          <Row
-            label="interaction.inputPlaceholder"
-            right={
-              <Input
-                value={features.interaction.inputPlaceholder || ""}
-                onChange={(event) => updateFeatures(["interaction", "inputPlaceholder"], event.target.value)}
-                className="h-7 w-[260px] text-[11px]"
-              />
-            }
-          />
-          <ToggleRow
             label="interaction.inputSubmit"
             checked={features.interaction.inputSubmit}
             visibility={visibility.interaction.inputSubmit}
@@ -1025,6 +1045,232 @@ export function ChatSettingsPanel({
             />
           </ToggleRowGroup>
         </RowGroup>
+          </ToggleRowGroup>
+          <ToggleRow
+            label="widget.tabBar.list"
+            checked={tabBarListEnabled}
+            visibility={visibility.widget.tabBar.list}
+            onToggle={(next) => setTabBarPanelEnabled("list", next)}
+            onVisibilityChange={(mode) => setTabBarPanelVisibility("list", mode)}
+          />
+          <ToggleRowGroup
+            label="widget.tabBar.policy"
+            checked={tabBarPolicyEnabled}
+            visibility={visibility.widget.tabBar.policy}
+            onToggle={(next) => setTabBarPanelEnabled("policy", next)}
+            onVisibilityChange={(mode) => setTabBarPanelVisibility("policy", mode)}
+          >
+            {tabBarPolicyEnabled ? (
+              <RowGroup label="Setup">
+                <ToggleRow
+                  label="setup.modelSelector"
+                  checked={features.setup.modelSelector}
+                  visibility={visibility.setup.modelSelector}
+                  onToggle={(next) => updateFeatures(["setup", "modelSelector"], next)}
+                  onVisibilityChange={(mode) => updateVisibility(["setup", "modelSelector"], mode)}
+                />
+                <ToggleRowGroup
+                  label="setup.modeExisting"
+                  checked={features.setup.modeExisting}
+                  visibility={visibility.setup.modeExisting}
+                  onToggle={(next) => updateFeatures(["setup", "modeExisting"], next)}
+                  onVisibilityChange={(mode) => updateVisibility(["setup", "modeExisting"], mode)}
+                >
+                  <ToggleRow
+                    label="setup.agentSelector"
+                    checked={features.setup.agentSelector}
+                    visibility={visibility.setup.agentSelector}
+                    onToggle={(next) => updateFeatures(["setup", "agentSelector"], next)}
+                    onVisibilityChange={(mode) => updateVisibility(["setup", "agentSelector"], mode)}
+                  />
+                  <ToggleRow
+                    label="setup.sessionIdSearch"
+                    checked={features.setup.sessionIdSearch}
+                    visibility={visibility.setup.sessionIdSearch}
+                    onToggle={(next) => updateFeatures(["setup", "sessionIdSearch"], next)}
+                    onVisibilityChange={(mode) => updateVisibility(["setup", "sessionIdSearch"], mode)}
+                  />
+                  <Row
+                    label={setupUi.existingLabels.agentSelector || "setup.existingLabels.agentSelector"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["existingLabels", "agentSelector"], value)}
+                  />
+                  <Row
+                    label={setupUi.existingLabels.versionSelector || "setup.existingLabels.versionSelector"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["existingLabels", "versionSelector"], value)}
+                  />
+                  <Row
+                    label={setupUi.existingLabels.sessionSelector || "setup.existingLabels.sessionSelector"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["existingLabels", "sessionSelector"], value)}
+                  />
+                  <Row
+                    label={setupUi.existingLabels.sessionIdSearch || "setup.existingLabels.sessionIdSearch"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["existingLabels", "sessionIdSearch"], value)}
+                  />
+                  <Row
+                    label={setupUi.existingLabels.conversationMode || "setup.existingLabels.conversationMode"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["existingLabels", "conversationMode"], value)}
+                  />
+                  <Row
+                    label={setupUi.existingLabels.modeExisting || "setup.existingLabels.modeExisting"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["existingLabels", "modeExisting"], value)}
+                  />
+                </ToggleRowGroup>
+
+                <ToggleRowGroup
+                  label="setup.modeNew"
+                  checked={features.setup.modeNew}
+                  visibility={visibility.setup.modeNew}
+                  onToggle={(next) => updateFeatures(["setup", "modeNew"], next)}
+                  onVisibilityChange={(mode) => updateVisibility(["setup", "modeNew"], mode)}
+                >
+                  <ToggleRow
+                    label="setup.inlineUserKbInput"
+                    checked={features.setup.inlineUserKbInput}
+                    visibility={visibility.setup.inlineUserKbInput}
+                    onToggle={(next) => updateFeatures(["setup", "inlineUserKbInput"], next)}
+                    onVisibilityChange={(mode) => updateVisibility(["setup", "inlineUserKbInput"], mode)}
+                  />
+                  <ToggleRow
+                    label="setup.llmSelector"
+                    checked={features.setup.llmSelector}
+                    visibility={visibility.setup.llmSelector}
+                    onToggle={(next) => updateFeatures(["setup", "llmSelector"], next)}
+                    onVisibilityChange={(mode) => updateVisibility(["setup", "llmSelector"], mode)}
+                  />
+                  <ToggleRow
+                    label="setup.kbSelector"
+                    checked={features.setup.kbSelector}
+                    visibility={visibility.setup.kbSelector}
+                    onToggle={(next) => updateFeatures(["setup", "kbSelector"], next)}
+                    onVisibilityChange={(mode) => updateVisibility(["setup", "kbSelector"], mode)}
+                  />
+                  <ToggleRow
+                    label="setup.adminKbSelector"
+                    checked={features.setup.adminKbSelector}
+                    visibility={visibility.setup.adminKbSelector}
+                    onToggle={(next) => updateFeatures(["setup", "adminKbSelector"], next)}
+                    onVisibilityChange={(mode) => updateVisibility(["setup", "adminKbSelector"], mode)}
+                  />
+                </ToggleRowGroup>
+
+                <ToggleRowGroup
+                  label="setup.routeSelector"
+                  checked={features.setup.routeSelector}
+                  visibility={visibility.setup.routeSelector}
+                  onToggle={(next) => updateFeatures(["setup", "routeSelector"], next)}
+                  onVisibilityChange={(mode) => updateVisibility(["setup", "routeSelector"], mode)}
+                >
+                  <Row
+                    label={setupUi.labels.inlineUserKbInput || "setup.labels.inlineUserKbInput"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["labels", "inlineUserKbInput"], value)}
+                  />
+                  <Row
+                    label={setupUi.labels.llmSelector || "setup.labels.llmSelector"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["labels", "llmSelector"], value)}
+                  />
+                  <Row
+                    label={setupUi.labels.kbSelector || "setup.labels.kbSelector"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["labels", "kbSelector"], value)}
+                  />
+                  <Row
+                    label={setupUi.labels.adminKbSelector || "setup.labels.adminKbSelector"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["labels", "adminKbSelector"], value)}
+                  />
+                  <Row
+                    label={setupUi.labels.routeSelector || "setup.labels.routeSelector"}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["labels", "routeSelector"], value)}
+                  />
+                </ToggleRowGroup>
+
+                <Row
+                  label="setup.defaultSetupMode"
+                  right={
+                    <SelectPopover
+                      value={features.setup.defaultSetupMode || "existing"}
+                      options={DEFAULT_SETUP_MODE_OPTIONS}
+                      onChange={(value) => updateFeatures(["setup", "defaultSetupMode"], value)}
+                      buttonClassName="h-7 text-[11px]"
+                      className="w-[140px]"
+                    />
+                  }
+                />
+                <Row
+                  label="setup.defaultLlm"
+                  right={
+                    <SelectPopover
+                      value={features.setup.defaultLlm || "chatgpt"}
+                      options={DEFAULT_LLM_OPTIONS}
+                      onChange={(value) => updateFeatures(["setup", "defaultLlm"], value)}
+                      buttonClassName="h-7 text-[11px]"
+                      className="w-[140px]"
+                    />
+                  }
+                />
+                <Row
+                  label="setup.llms"
+                  right={
+                    <Input
+                      value={formatCsv(features.setup.llms.allowlist)}
+                      onChange={(event) =>
+                        updateFeatures(["setup", "llms", "allowlist"], parseCsv(event.target.value))
+                      }
+                      className="h-7 w-[260px] text-[11px]"
+                      placeholder="gpt-4o, gpt-4o-mini"
+                    />
+                  }
+                />
+                <Row
+                  label="setup.kbIds"
+                  right={
+                    <Input
+                      value={formatCsv(features.setup.kbIds.allowlist)}
+                      onChange={(event) =>
+                        updateFeatures(["setup", "kbIds", "allowlist"], parseCsv(event.target.value))
+                      }
+                      className="h-7 w-[260px] text-[11px]"
+                      placeholder="kb_1, kb_2"
+                    />
+                  }
+                />
+                <Row
+                  label="setup.adminKbIds"
+                  right={
+                    <Input
+                      value={formatCsv(features.setup.adminKbIds.allowlist)}
+                      onChange={(event) =>
+                        updateFeatures(["setup", "adminKbIds", "allowlist"], parseCsv(event.target.value))
+                      }
+                      className="h-7 w-[260px] text-[11px]"
+                      placeholder="kb_admin_1"
+                    />
+                  }
+                />
+                <Row
+                  label="setup.routes"
+                  right={
+                    <Input
+                      value={formatCsv(features.setup.routes.allowlist)}
+                      onChange={(event) =>
+                        updateFeatures(["setup", "routes", "allowlist"], parseCsv(event.target.value))
+                      }
+                      className="h-7 w-[260px] text-[11px]"
+                      placeholder="route_a, route_b"
+                    />
+                  }
+                />
+              </RowGroup>
+            ) : null}
 
         <RowGroup label="MCP">
           <ToggleRow
@@ -1063,288 +1309,9 @@ export function ChatSettingsPanel({
           />
           {governanceSaving ? <div className="text-[11px] text-slate-500">저장 중...</div> : null}
         </RowGroup>
-      </Section>
-
-      <Section title="위젯 탭바">
-        <ToggleRowGroup
-          label="widget.tabBar.enabled"
-          checked={features.widget.tabBar.enabled}
-          visibility={visibility.widget.tabBar.enabled}
-          onToggle={(next) => updateFeatures(["widget", "tabBar", "enabled"], next)}
-          onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "enabled"], mode)}
-        >
-          <ToggleRow
-            label="widget.tabBar.chat"
-            checked={features.widget.tabBar.chat}
-            visibility={visibility.widget.tabBar.chat}
-            onToggle={(next) => updateFeatures(["widget", "tabBar", "chat"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "chat"], mode)}
-          />
-          <ToggleRow
-            label="widget.tabBar.list"
-            checked={features.widget.tabBar.list}
-            visibility={visibility.widget.tabBar.list}
-            onToggle={(next) => updateFeatures(["widget", "tabBar", "list"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "list"], mode)}
-          />
-          <ToggleRow
-            label="widget.tabBar.policy"
-            checked={features.widget.tabBar.policy}
-            visibility={visibility.widget.tabBar.policy}
-            onToggle={(next) => updateFeatures(["widget", "tabBar", "policy"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "policy"], mode)}
-          />
+          </ToggleRowGroup>
         </ToggleRowGroup>
-        <ToggleRow
-          label="widget.setupPanel"
-          checked={features.widget.setupPanel}
-          visibility={visibility.widget.setupPanel}
-          onToggle={(next) => updateFeatures(["widget", "setupPanel"], next)}
-          onVisibilityChange={(mode) => updateVisibility(["widget", "setupPanel"], mode)}
-        />
 
-        <RowGroup label="노출/권한">
-          <Row
-            label="widget.allowed_domains"
-            alignTop
-            right={
-              <textarea
-                value={formatLines(widget.allowed_domains)}
-                onChange={(event) => updateWidget(["allowed_domains"], parseLinesAndComma(event.target.value))}
-                className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-              />
-            }
-          />
-          <Row
-            label="widget.allowed_paths"
-            alignTop
-            right={
-              <textarea
-                value={formatLines(widget.allowed_paths)}
-                onChange={(event) => updateWidget(["allowed_paths"], parseLinesAndComma(event.target.value))}
-                className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-              />
-            }
-          />
-          <Row
-            label="theme.allowed_accounts"
-            alignTop
-            right={
-              <textarea
-                value={formatLines(widget.theme?.allowed_accounts)}
-                onChange={(event) => updateWidget(["theme", "allowed_accounts"], parseLinesAndComma(event.target.value))}
-                className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-              />
-            }
-          />
-        </RowGroup>
-
-        <RowGroup label="Setup">
-          <ToggleRow
-            label="setup.modelSelector"
-            checked={features.setup.modelSelector}
-            visibility={visibility.setup.modelSelector}
-            onToggle={(next) => updateFeatures(["setup", "modelSelector"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["setup", "modelSelector"], mode)}
-          />
-          <ToggleRowGroup
-            label="setup.modeExisting"
-            checked={features.setup.modeExisting}
-            visibility={visibility.setup.modeExisting}
-            onToggle={(next) => updateFeatures(["setup", "modeExisting"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["setup", "modeExisting"], mode)}
-          >
-            <ToggleRow
-              label="setup.agentSelector"
-              checked={features.setup.agentSelector}
-              visibility={visibility.setup.agentSelector}
-              onToggle={(next) => updateFeatures(["setup", "agentSelector"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["setup", "agentSelector"], mode)}
-            />
-            <ToggleRow
-              label="setup.sessionIdSearch"
-              checked={features.setup.sessionIdSearch}
-              visibility={visibility.setup.sessionIdSearch}
-              onToggle={(next) => updateFeatures(["setup", "sessionIdSearch"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["setup", "sessionIdSearch"], mode)}
-            />
-            <Row
-              label={setupUi.existingLabels.agentSelector || "setup.existingLabels.agentSelector"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["existingLabels", "agentSelector"], value)}
-            />
-            <Row
-              label={setupUi.existingLabels.versionSelector || "setup.existingLabels.versionSelector"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["existingLabels", "versionSelector"], value)}
-            />
-            <Row
-              label={setupUi.existingLabels.sessionSelector || "setup.existingLabels.sessionSelector"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["existingLabels", "sessionSelector"], value)}
-            />
-            <Row
-              label={setupUi.existingLabels.sessionIdSearch || "setup.existingLabels.sessionIdSearch"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["existingLabels", "sessionIdSearch"], value)}
-            />
-            <Row
-              label={setupUi.existingLabels.conversationMode || "setup.existingLabels.conversationMode"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["existingLabels", "conversationMode"], value)}
-            />
-            <Row
-              label={setupUi.existingLabels.modeExisting || "setup.existingLabels.modeExisting"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["existingLabels", "modeExisting"], value)}
-            />
-          </ToggleRowGroup>
-
-          <ToggleRowGroup
-            label="setup.modeNew"
-            checked={features.setup.modeNew}
-            visibility={visibility.setup.modeNew}
-            onToggle={(next) => updateFeatures(["setup", "modeNew"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["setup", "modeNew"], mode)}
-          >
-            <ToggleRow
-              label="setup.inlineUserKbInput"
-              checked={features.setup.inlineUserKbInput}
-              visibility={visibility.setup.inlineUserKbInput}
-              onToggle={(next) => updateFeatures(["setup", "inlineUserKbInput"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["setup", "inlineUserKbInput"], mode)}
-            />
-            <ToggleRow
-              label="setup.llmSelector"
-              checked={features.setup.llmSelector}
-              visibility={visibility.setup.llmSelector}
-              onToggle={(next) => updateFeatures(["setup", "llmSelector"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["setup", "llmSelector"], mode)}
-            />
-            <ToggleRow
-              label="setup.kbSelector"
-              checked={features.setup.kbSelector}
-              visibility={visibility.setup.kbSelector}
-              onToggle={(next) => updateFeatures(["setup", "kbSelector"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["setup", "kbSelector"], mode)}
-            />
-            <ToggleRow
-              label="setup.adminKbSelector"
-              checked={features.setup.adminKbSelector}
-              visibility={visibility.setup.adminKbSelector}
-              onToggle={(next) => updateFeatures(["setup", "adminKbSelector"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["setup", "adminKbSelector"], mode)}
-            />
-          </ToggleRowGroup>
-
-          <ToggleRowGroup
-            label="setup.routeSelector"
-            checked={features.setup.routeSelector}
-            visibility={visibility.setup.routeSelector}
-            onToggle={(next) => updateFeatures(["setup", "routeSelector"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["setup", "routeSelector"], mode)}
-          >
-            <Row
-              label={setupUi.labels.inlineUserKbInput || "setup.labels.inlineUserKbInput"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["labels", "inlineUserKbInput"], value)}
-            />
-            <Row
-              label={setupUi.labels.llmSelector || "setup.labels.llmSelector"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["labels", "llmSelector"], value)}
-            />
-            <Row
-              label={setupUi.labels.kbSelector || "setup.labels.kbSelector"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["labels", "kbSelector"], value)}
-            />
-            <Row
-              label={setupUi.labels.adminKbSelector || "setup.labels.adminKbSelector"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["labels", "adminKbSelector"], value)}
-            />
-            <Row
-              label={setupUi.labels.routeSelector || "setup.labels.routeSelector"}
-              editableLabel
-              onLabelChange={(value) => updateSetupUi(["labels", "routeSelector"], value)}
-            />
-          </ToggleRowGroup>
-
-          <Row
-            label="setup.defaultSetupMode"
-            right={
-              <SelectPopover
-                value={features.setup.defaultSetupMode || "existing"}
-                options={DEFAULT_SETUP_MODE_OPTIONS}
-                onChange={(value) => updateFeatures(["setup", "defaultSetupMode"], value)}
-                buttonClassName="h-7 text-[11px]"
-                className="w-[140px]"
-              />
-            }
-          />
-          <Row
-            label="setup.defaultLlm"
-            right={
-              <SelectPopover
-                value={features.setup.defaultLlm || "chatgpt"}
-                options={DEFAULT_LLM_OPTIONS}
-                onChange={(value) => updateFeatures(["setup", "defaultLlm"], value)}
-                buttonClassName="h-7 text-[11px]"
-                className="w-[140px]"
-              />
-            }
-          />
-          <Row
-            label="setup.llms"
-            right={
-              <Input
-                value={formatCsv(features.setup.llms.allowlist)}
-                onChange={(event) =>
-                  updateFeatures(["setup", "llms", "allowlist"], parseCsv(event.target.value))
-                }
-                className="h-7 w-[260px] text-[11px]"
-                placeholder="gpt-4o, gpt-4o-mini"
-              />
-            }
-          />
-          <Row
-            label="setup.kbIds"
-            right={
-              <Input
-                value={formatCsv(features.setup.kbIds.allowlist)}
-                onChange={(event) => updateFeatures(["setup", "kbIds", "allowlist"], parseCsv(event.target.value))}
-                className="h-7 w-[260px] text-[11px]"
-                placeholder="kb_1, kb_2"
-              />
-            }
-          />
-          <Row
-            label="setup.adminKbIds"
-            right={
-              <Input
-                value={formatCsv(features.setup.adminKbIds.allowlist)}
-                onChange={(event) =>
-                  updateFeatures(["setup", "adminKbIds", "allowlist"], parseCsv(event.target.value))
-                }
-                className="h-7 w-[260px] text-[11px]"
-                placeholder="kb_admin_1"
-              />
-            }
-          />
-          <Row
-            label="setup.routes"
-            right={
-              <Input
-                value={formatCsv(features.setup.routes.allowlist)}
-                onChange={(event) => updateFeatures(["setup", "routes", "allowlist"], parseCsv(event.target.value))}
-                className="h-7 w-[260px] text-[11px]"
-                placeholder="route_a, route_b"
-              />
-            }
-          />
-        </RowGroup>
-      </Section>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
 import {
   readConversationFeatureProvider,
 } from "@/lib/conversation/policyMerge";
+import { canAccessPrivateWidget } from "@/app/api/widget/_lib/privateAccess";
 
 function getWidgetRuntimeSecret() {
   return String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
@@ -71,10 +72,13 @@ async function handleStream(
     });
   }
   if (widget.is_public !== true) {
-    return new Response(encodeEvent("error", { error: "WIDGET_PRIVATE" }), {
-      status: 403,
-      headers: { "Content-Type": "text/event-stream" },
-    });
+    const canAccess = await canAccessPrivateWidget(req, widget.org_id);
+    if (!canAccess) {
+      return new Response(encodeEvent("error", { error: "WIDGET_PRIVATE" }), {
+        status: 403,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    }
   }
 
   const mergedPolicy = readConversationFeatureProvider(widget.chat_policy);

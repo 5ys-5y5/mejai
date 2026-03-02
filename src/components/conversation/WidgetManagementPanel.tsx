@@ -149,6 +149,13 @@ export function WidgetManagementPanel() {
 
 
 
+  const selectedWidget = useMemo(
+    () => widgets.find((widget) => widget.id === selectedId) || null,
+    [widgets, selectedId]
+  );
+  const showDetails = Boolean(selectedWidget) || newWidgetMode;
+
+
   const [origin, setOrigin] = useState("");
 
   const [pageUrl, setPageUrl] = useState("");
@@ -266,19 +273,6 @@ export function WidgetManagementPanel() {
     }
 
   }, [origin, visitorId]);
-
-
-
-  const selectedWidget = useMemo(
-
-    () => widgets.find((widget) => widget.id === selectedId) || null,
-
-    [widgets, selectedId]
-
-  );
-  const showDetails = Boolean(selectedWidget) || newWidgetMode;
-
-
 
   const previewWidget = useMemo(() => (selectedWidget ? (selectedWidget as PreviewWidget) : null), [selectedWidget]);
 

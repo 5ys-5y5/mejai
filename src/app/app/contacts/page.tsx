@@ -108,7 +108,7 @@ export default function ContactsPage() {
           ) : null}
           <div className="divide-y divide-slate-200">
             {rows.map((item) => {
-              const name = item.display_name || item.email || item.phone || "?대쫫 ?놁쓬";
+              const name = item.display_name || item.email || item.phone || "이름 없음";
               const tags = (item.tags || []).slice(0, 3);
               return (
                 <Link

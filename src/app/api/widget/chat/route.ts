@@ -15,6 +15,7 @@ import {
 import {
   readConversationFeatureProvider,
 } from "@/lib/conversation/policyMerge";
+import { canAccessPrivateWidget } from "@/app/api/widget/_lib/privateAccess";
 
 function encodeHeaderValue(input: string) {
   const value = String(input || "").trim();
@@ -140,7 +141,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
   if (widget.is_public !== true) {
-    return NextResponse.json({ error: "WIDGET_PRIVATE" }, { status: 403 });
+    const canAccess = await canAccessPrivateWidget(req, widget.org_id);
+    if (!canAccess) {
+      return NextResponse.json({ error: "WIDGET_PRIVATE" }, { status: 403 });
+    }
   }
 
   let providerValue: ConversationFeaturesProviderShape | null = null;

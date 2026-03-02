@@ -895,6 +895,19 @@ export async function syncEndUserFromTurn(input: {
       { onConflict: "session_id" }
     );
 
+    try {
+      await context.supabase
+        .from("D_conv_sessions")
+        .update({ end_user_id: endUserId })
+        .eq("id", sessionId);
+    } catch (error) {
+      console.warn("[runtime/chat_mk2] end user session sync failed", {
+        session_id: sessionId,
+        turn_id: turnId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     const userContent = readString(turnPayload.transcript_text);
     const assistantContent = userFacingMessage;
     const messageRows: Array<Record<string, any>> = [];
