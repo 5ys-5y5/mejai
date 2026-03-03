@@ -5,6 +5,8 @@ import { issueWidgetToken } from "@/lib/widgetToken";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
 import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
 import { WIDGET_PAGE_KEY, type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
+import { normalizeWidgetOverrides, readWidgetMeta } from "@/lib/widgetTemplateMeta";
+import { resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
 
 function nowIso() {
   return new Date().toISOString();
@@ -68,6 +70,7 @@ export async function POST(req: NextRequest) {
   if (!publicKey) {
     return NextResponse.json({ error: "PUBLIC_KEY_REQUIRED" }, { status: 400 });
   }
+  const overrides = normalizeWidgetOverrides(body.overrides);
 
   let supabaseAdmin;
   try {
@@ -93,14 +96,21 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
 
+  const widgetMeta = readWidgetMeta(widget.theme);
+  const templateId = widgetMeta.template_id ? String(widgetMeta.template_id) : "";
+  const { data: template } = templateId
+    ? await supabaseAdmin.from("B_chat_widgets").select("*").eq("id", templateId).maybeSingle()
+    : { data: null };
+
+  const resolved = resolveWidgetRuntimeConfig(widget, template || null, overrides);
   const origin = readOrigin(body);
   const pageUrl = String(body.page_url || body.pageUrl || body.referrer || "").trim();
   const host = extractHostFromUrl(origin || pageUrl);
-  const allowedDomains = Array.isArray(widget.allowed_domains) ? widget.allowed_domains : [];
-  if (!matchAllowedDomain(host, allowedDomains)) {
+  const allowedDomains = Array.isArray(resolved.allowed_domains) ? resolved.allowed_domains : [];
+  if (allowedDomains.length > 0 && !matchAllowedDomain(host, allowedDomains)) {
     return NextResponse.json({ error: "DOMAIN_NOT_ALLOWED" }, { status: 403 });
   }
-  const allowedPaths = Array.isArray(widget.allowed_paths) ? (widget.allowed_paths as unknown[]) : [];
+  const allowedPaths = resolved.allowed_paths as unknown[];
   if (allowedPaths.length > 0 && pageUrl) {
     let pathname = "";
     try {
@@ -155,7 +165,7 @@ export async function POST(req: NextRequest) {
       session_code: makeSessionCode(),
       started_at: now,
       channel: "web_widget",
-      agent_id: widget.agent_id || null,
+      agent_id: resolved.agent_id || null,
       metadata,
     };
     const { error: insertError } = await supabaseAdmin.from("D_conv_sessions").insert(payload);
@@ -180,7 +190,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null);
+  const chatPolicy =
+    resolved.chat_policy ||
+    (await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null));
   if (sessionId) {
     const settingsSource = resolveWidgetUiSettingsSource(chatPolicy);
     void (async () => {
@@ -218,12 +230,13 @@ export async function POST(req: NextRequest) {
     session_id: sessionId,
     widget_config: {
       id: widget.id,
-      name: widget.name,
-      agent_id: widget.agent_id,
-      allowed_domains: widget.allowed_domains || [],
-      theme: widget.theme || {},
+      name: resolved.name,
+      agent_id: resolved.agent_id,
+      allowed_domains: resolved.allowed_domains,
+      theme: resolved.theme || {},
       public_key: widget.public_key,
       chat_policy: chatPolicy,
+      setup_config: resolved.setup_config,
     },
   });
 }

@@ -15,6 +15,7 @@ import {
 import { renderBotContent } from "@/lib/conversation/messageRenderUtils";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/conversation/client/laboratoryPageState";
+import { encodeWidgetOverrides } from "@/lib/widgetOverrides";
 
 const globalScope = typeof globalThis !== "undefined" ? (globalThis as Record<string, any>) : undefined;
 if (globalScope && typeof globalScope.process === "undefined") {
@@ -351,7 +352,7 @@ type WidgetLauncherWindow = Window & {
   mejaiWidget?: Record<string, any>;
 };
 
-type WidgetLauncherRuntimeConfig = {
+export type WidgetLauncherRuntimeConfig = {
   cfg: Record<string, any>;
   baseUrl: string;
   publicKey: string;
@@ -362,6 +363,18 @@ type WidgetLauncherRuntimeConfig = {
   brandName: string;
   launcherLabel: string;
   mountNode: HTMLElement;
+  previewMeta?: {
+    origin?: string;
+    page_url?: string;
+    referrer?: string;
+  };
+  defaultOpen?: boolean;
+  layout?: "fixed" | "absolute";
+  bottom?: string;
+  left?: string;
+  right?: string;
+  zIndex?: number;
+  initNonce?: number;
 };
 
 function readThemeValue(theme: Record<string, any> | null, keys: string[]) {
@@ -399,15 +412,24 @@ function resolveLauncherColor(cfg: Record<string, any>, themeConfig: Record<stri
   );
 }
 
-function buildIframeSrc(baseUrl: string, publicKey: string, visitorId: string, sessionId: string) {
+function buildIframeSrc(
+  baseUrl: string,
+  publicKey: string,
+  visitorId: string,
+  sessionId: string,
+  overridesParam?: string
+) {
   let src = `${baseUrl}/embed/${encodeURIComponent(publicKey)}?vid=${encodeURIComponent(visitorId)}`;
   if (sessionId) {
     src += `&sid=${encodeURIComponent(sessionId)}`;
   }
+  if (overridesParam) {
+    src += `&ovr=${encodeURIComponent(overridesParam)}`;
+  }
   return src;
 }
 
-function WidgetLauncherRuntime({
+export function WidgetLauncherRuntime({
   cfg,
   baseUrl,
   publicKey,
@@ -418,11 +440,19 @@ function WidgetLauncherRuntime({
   brandName,
   launcherLabel,
   mountNode,
+  previewMeta,
+  defaultOpen = false,
+  layout,
+  bottom,
+  left,
+  right,
+  zIndex,
+  initNonce,
 }: WidgetLauncherRuntimeConfig) {
   const cfgRef = useRef(cfg);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const sessionIdRef = useRef(sessionId);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const [isMobile, setIsMobile] = useState(false);
   const [themeConfig, setThemeConfig] = useState<Record<string, any>>({});
   const [resolvedName, setResolvedName] = useState(brandName);
@@ -441,9 +471,14 @@ function WidgetLauncherRuntime({
     return launcherLabel || "💬";
   }, [launcherLabel]);
 
+  const overridesParam = useMemo(() => {
+    if (!cfgRef.current?.overrides || typeof cfgRef.current.overrides !== "object") return "";
+    return encodeWidgetOverrides(cfgRef.current.overrides as Record<string, unknown>);
+  }, []);
+
   const iframeSrc = useMemo(
-    () => buildIframeSrc(baseUrl, publicKey, visitorId, sessionIdRef.current),
-    [baseUrl, publicKey, visitorId]
+    () => buildIframeSrc(baseUrl, publicKey, visitorId, sessionIdRef.current, overridesParam),
+    [baseUrl, publicKey, visitorId, overridesParam]
   );
 
   const notify = (eventType: "open" | "close") => {
@@ -477,25 +512,59 @@ function WidgetLauncherRuntime({
     });
   };
 
-  const handleIframeLoad = () => {
+  const resolvePreviewOrigin = () => {
+    const rawOrigin = String(previewMeta?.origin || "").trim();
+    if (rawOrigin) return rawOrigin;
+    const rawPageUrl = String(previewMeta?.page_url || "").trim();
+    if (rawPageUrl) {
+      try {
+        return new URL(rawPageUrl).origin;
+      } catch {
+        return "";
+      }
+    }
+    return window.location.origin;
+  };
+
+  const resolvePreviewPageUrl = () => {
+    const rawPageUrl = String(previewMeta?.page_url || "").trim();
+    return rawPageUrl || window.location.href;
+  };
+
+  const resolvePreviewReferrer = () => {
+    const rawReferrer = String(previewMeta?.referrer || "").trim();
+    return rawReferrer || document.referrer || "";
+  };
+
+  const sendInitMessage = () => {
     try {
       iframeRef.current?.contentWindow?.postMessage(
         {
           type: "mejai_widget_init",
           user: cfgRef.current.user || null,
-          origin: window.location.origin,
-          page_url: window.location.href,
-          referrer: document.referrer || "",
+          origin: resolvePreviewOrigin(),
+          page_url: resolvePreviewPageUrl(),
+          referrer: resolvePreviewReferrer(),
           visitor_id: visitorId,
           session_id: sessionIdRef.current || "",
+          overrides: cfgRef.current.overrides || null,
         },
         "*"
       );
     } catch {
       // ignore
     }
+  };
+
+  const handleIframeLoad = () => {
+    sendInitMessage();
     notify("open");
   };
+
+  useEffect(() => {
+    if (!iframeRef.current) return;
+    sendInitMessage();
+  }, [initNonce, previewMeta?.origin, previewMeta?.page_url, previewMeta?.referrer]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !("matchMedia" in window)) return;
@@ -573,7 +642,9 @@ function WidgetLauncherRuntime({
 
   useEffect(() => {
     try {
-      const url = `${baseUrl}/api/widget/config?key=${encodeURIComponent(publicKey)}`;
+      const url = `${baseUrl}/api/widget/config?key=${encodeURIComponent(publicKey)}${
+        overridesParam ? `&ovr=${encodeURIComponent(overridesParam)}` : ""
+      }`;
       fetch(url)
         .then((res) => {
           if (!res || !res.ok) return null;
@@ -592,7 +663,7 @@ function WidgetLauncherRuntime({
     } catch {
       // ignore
     }
-  }, [baseUrl, publicKey]);
+  }, [baseUrl, publicKey, overridesParam]);
 
   const launcherBottom = isMobile ? "calc(16px + env(safe-area-inset-bottom))" : "24px";
   const launcherRight = isMobile ? "calc(16px + env(safe-area-inset-right))" : "24px";
@@ -602,10 +673,12 @@ function WidgetLauncherRuntime({
     <WidgetLauncherContainer
       mountTo={mountNode}
       position={position}
+      layout={layout}
       stack
-      bottom={launcherBottom}
-      right={launcherRight}
-      left={launcherLeft}
+      bottom={bottom || launcherBottom}
+      right={right || launcherRight}
+      left={left || launcherLeft}
+      zIndex={zIndex}
     >
       <WidgetLauncherButton
         brandName={resolvedName}
@@ -658,6 +731,14 @@ export function mountWidgetLauncher() {
   const cfg = rawCfg && typeof rawCfg === "object" ? (rawCfg as Record<string, any>) : {};
   const publicKey = (script && (script as HTMLScriptElement).dataset && (script as HTMLScriptElement).dataset.key) || cfg.key;
   if (!publicKey) return;
+  const scriptOverrides = (script as HTMLScriptElement)?.dataset?.overrides;
+  if (scriptOverrides && !cfg.overrides) {
+    try {
+      cfg.overrides = JSON.parse(scriptOverrides);
+    } catch {
+      // ignore invalid overrides
+    }
+  }
 
   let baseUrl = "";
   try {

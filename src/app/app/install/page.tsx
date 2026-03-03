@@ -3,8 +3,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { WidgetQuickstartPanel } from "@/components/settings/WidgetQuickstartPanel";
-import { WidgetSettingsPanel } from "@/components/settings/WidgetSettingsPanel";
+import { WidgetInstallPanel } from "@/components/settings/WidgetInstallPanel";
 import { EnvSettingsPanel } from "@/components/settings/EnvSettingsPanel";
 
 type TabKey = "widget" | "quickstart" | "env";
@@ -17,9 +16,9 @@ export default function InstallPage() {
 
   const tabs = useMemo(
     () => [
-      { key: "widget", label: "채팅 위젯" },
+      { key: "widget", label: "Widget" },
       { key: "quickstart", label: "Quickstart" },
-      { key: "env", label: "환경 변수" },
+      { key: "env", label: "Env" },
     ],
     []
   );
@@ -47,8 +46,8 @@ export default function InstallPage() {
         </div>
 
         <div className="mt-6">
-          {tab === "widget" ? <WidgetSettingsPanel /> : null}
-          {tab === "quickstart" ? <WidgetQuickstartPanel /> : null}
+          {tab === "widget" ? <WidgetInstallPanel /> : null}
+          {tab === "quickstart" ? <WidgetInstallPanel /> : null}
           {tab === "env" ? <EnvSettingsPanel /> : null}
         </div>
       </div>

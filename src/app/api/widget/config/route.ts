@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
 import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
+import { decodeWidgetOverrides } from "@/lib/widgetOverrides";
+import { normalizeWidgetOverrides, readWidgetMeta } from "@/lib/widgetTemplateMeta";
+import { resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
 
 function withCors(res: NextResponse, origin?: string | null) {
   res.headers.set("Access-Control-Allow-Origin", origin || "*");
@@ -19,10 +22,12 @@ export async function OPTIONS(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const publicKey = String(url.searchParams.get("key") || url.searchParams.get("public_key") || "").trim();
+  const overridesParam = String(url.searchParams.get("ovr") || "").trim();
   const originHeader = req.headers.get("origin");
   if (!publicKey) {
     return withCors(NextResponse.json({ error: "PUBLIC_KEY_REQUIRED" }, { status: 400 }), originHeader);
   }
+  const overrides = normalizeWidgetOverrides(decodeWidgetOverrides(overridesParam));
 
   let supabaseAdmin;
   try {
@@ -51,23 +56,33 @@ export async function GET(req: NextRequest) {
     return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
   }
 
-  const allowedDomains = Array.isArray(widget.allowed_domains) ? widget.allowed_domains : [];
+  const widgetMeta = readWidgetMeta(widget.theme);
+  const templateId = widgetMeta.template_id ? String(widgetMeta.template_id) : "";
+  const { data: template } = templateId
+    ? await supabaseAdmin.from("B_chat_widgets").select("*").eq("id", templateId).maybeSingle()
+    : { data: null };
+  const resolved = resolveWidgetRuntimeConfig(widget, template || null, overrides);
+
+  const allowedDomains = resolved.allowed_domains;
   const originHost = extractHostFromUrl(originHeader || "");
   if (allowedDomains.length > 0 && originHost && !matchAllowedDomain(originHost, allowedDomains)) {
     return withCors(NextResponse.json({ error: "DOMAIN_NOT_ALLOWED" }, { status: 403 }), originHeader);
   }
 
-  const chatPolicy = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null);
+  const chatPolicy =
+    resolved.chat_policy ||
+    (await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")).catch(() => null));
 
   return withCors(
     NextResponse.json({
       widget: {
         id: widget.id,
-        name: widget.name,
-        theme: widget.theme || {},
+        name: resolved.name,
+        theme: resolved.theme || {},
         public_key: widget.public_key,
-        allowed_domains: widget.allowed_domains || [],
+        allowed_domains: resolved.allowed_domains,
         chat_policy: chatPolicy,
+        setup_config: resolved.setup_config,
       },
     }),
     originHeader

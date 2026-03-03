@@ -11,6 +11,8 @@ import {
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
 import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
+import { normalizeWidgetOverrides, readWidgetMeta, normalizeStringArray } from "@/lib/widgetTemplateMeta";
+import { resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
 
 function getWidgetRuntimeSecret() {
   return String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
@@ -35,6 +37,7 @@ async function handleStream(
     mcp_tool_ids?: unknown[] | null;
     mcp_provider_keys?: unknown[] | null;
     mode?: string | null;
+    overrides?: Record<string, unknown> | null;
   }
 ) {
   const authHeader = req.headers.get("authorization") || "";
@@ -59,7 +62,7 @@ async function handleStream(
 
   const { data: widget } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, agent_id, is_active")
+    .select("id, org_id, agent_id, is_active, theme, allowed_domains, allowed_paths")
     .eq("id", payload.widget_id)
     .maybeSingle();
   if (!widget || !widget.is_active) {
@@ -69,9 +72,18 @@ async function handleStream(
     });
   }
 
+  const widgetMeta = readWidgetMeta(widget.theme);
+  const templateId = widgetMeta.template_id ? String(widgetMeta.template_id) : "";
+  const { data: template } = templateId
+    ? await supabaseAdmin.from("B_chat_widgets").select("*").eq("id", templateId).maybeSingle()
+    : { data: null };
+
+  const overrides = normalizeWidgetOverrides(extras?.overrides);
+  const resolved = resolveWidgetRuntimeConfig(widget, template || null, overrides);
+
   let providerValue: ConversationFeaturesProviderShape | null = null;
   try {
-    providerValue = await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || ""));
+    providerValue = resolved.chat_policy || (await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")));
   } catch {
     providerValue = null;
   }
@@ -93,26 +105,71 @@ async function handleStream(
         .map((value: unknown) => String(value || "").trim())
         .filter((id: string) => id.length > 0 && isToolEnabled(id, featureFlags))
     : [];
-  const mergedMcpSelectors = Array.from(
-    new Set(
-      [...filteredToolIds, ...filteredProviderKeys]
-        .map((value) => String(value).trim())
-        .filter(Boolean)
-    )
-  );
+  const setupConfig = resolved.setup_config || {};
+  const resolvedAgentId = resolved.agent_id || null;
+  const kbConfig = setupConfig.kb || {};
+  const mcpConfig = setupConfig.mcp || {};
+  const enforcedProviderKeys = normalizeStringArray(mcpConfig.provider_keys);
+  const enforcedToolIds = normalizeStringArray(mcpConfig.tool_ids);
+  const enforcedKbId = kbConfig.mode === "select" ? String(kbConfig.kb_id || "").trim() : "";
+  const enforcedAdminKbIds = normalizeStringArray(kbConfig.admin_kb_ids);
+  const enforcedLlm = String(setupConfig.llm?.default || "").trim();
+
+  const filteredEnforcedProviders = enforcedProviderKeys.filter((key) => isProviderEnabled(key, featureFlags));
+  const filteredEnforcedTools = enforcedToolIds.filter((id) => isToolEnabled(id, featureFlags));
+
+  const mergedMcpSelectors = resolvedAgentId
+    ? []
+    : Array.from(
+        new Set(
+          [
+            ...filteredEnforcedTools,
+            ...filteredEnforcedProviders,
+            ...filteredToolIds,
+            ...filteredProviderKeys,
+          ]
+            .map((value) => String(value).trim())
+            .filter(Boolean)
+        )
+      );
+
+  if (!resolvedAgentId && mergedMcpSelectors.length === 0) {
+    return new Response(encodeEvent("error", { error: "MCP_REQUIRED" }), {
+      status: 400,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
+
   const normalizedLlm = String(extras?.llm || "").trim();
+  const effectiveLlmCandidate = enforcedLlm || normalizedLlm;
   const effectiveLlm = featureFlags.setup.llmSelector
-    ? normalizedLlm || featureFlags.setup.defaultLlm
+    ? effectiveLlmCandidate || featureFlags.setup.defaultLlm
     : featureFlags.setup.defaultLlm;
-  const effectiveKbId = featureFlags.setup.kbSelector ? String(extras?.kb_id || "").trim() || undefined : undefined;
-  const effectiveInlineKb = featureFlags.setup.inlineUserKbInput
-    ? String(extras?.inline_kb || "").trim() || undefined
-    : undefined;
-  const effectiveAdminKbIds = featureFlags.setup.adminKbSelector
-    ? (Array.isArray(extras?.admin_kb_ids) ? extras!.admin_kb_ids! : [])
-        .map((value: unknown) => String(value || "").trim())
-        .filter((value: string) => value.length > 0)
-    : [];
+  const effectiveKbId =
+    !resolvedAgentId && featureFlags.setup.kbSelector
+      ? enforcedKbId || String(extras?.kb_id || "").trim() || undefined
+      : undefined;
+  const effectiveInlineKb =
+    !resolvedAgentId && featureFlags.setup.inlineUserKbInput
+      ? String(extras?.inline_kb || "").trim() || undefined
+      : undefined;
+  const effectiveAdminKbIds =
+    !resolvedAgentId && featureFlags.setup.adminKbSelector
+      ? Array.from(
+          new Set(
+            [...enforcedAdminKbIds, ...(Array.isArray(extras?.admin_kb_ids) ? extras!.admin_kb_ids! : [])]
+              .map((value: unknown) => String(value || "").trim())
+              .filter((value: string) => value.length > 0)
+          )
+        )
+      : [];
+
+  if (!resolvedAgentId && kbConfig.mode !== "inline" && !effectiveKbId) {
+    return new Response(encodeEvent("error", { error: "KB_REQUIRED" }), {
+      status: 400,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
 
   const secret = getWidgetRuntimeSecret();
   if (!secret) {
@@ -141,7 +198,7 @@ async function handleStream(
           body: JSON.stringify({
             message,
             session_id: sessionId,
-            agent_id: widget.agent_id || undefined,
+            agent_id: resolvedAgentId || undefined,
             page_key: WIDGET_PAGE_KEY,
             mode: extras?.mode || undefined,
             llm: effectiveLlm,
@@ -204,6 +261,7 @@ export async function POST(req: NextRequest) {
   const mcpToolIds = Array.isArray(body?.mcp_tool_ids) ? body.mcp_tool_ids : null;
   const mcpProviderKeys = Array.isArray(body?.mcp_provider_keys) ? body.mcp_provider_keys : null;
   const mode = typeof body?.mode === "string" ? body.mode : null;
+  const overrides = body?.overrides && typeof body.overrides === "object" ? body.overrides : null;
   return handleStream(req, message, sessionId, {
     visitor,
     end_user: endUser,
@@ -215,6 +273,7 @@ export async function POST(req: NextRequest) {
     mcp_tool_ids: mcpToolIds,
     mcp_provider_keys: mcpProviderKeys,
     mode,
+    overrides,
   });
 }
 

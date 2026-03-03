@@ -180,8 +180,38 @@ const PREFIX_JSON_SECTIONS_TREE: DebugFieldTree[] = [
   },
 ];
 
+type PolicyDataSource = {
+  loadProvider: (authToken: string) => Promise<ConversationFeaturesProviderShape | null>;
+  saveProvider: (
+    authToken: string,
+    values: {
+      pages: Partial<Record<ConversationPageKey, ConversationPageFeatures>>;
+      debug_copy: Partial<Record<ConversationPageKey, Partial<DebugTranscriptOptions>>>;
+      page_registry: ConversationPageKey[];
+      settings_ui: {
+        setup_fields: Partial<
+          Record<
+            ConversationPageKey,
+            {
+              order: SetupFieldKey[];
+              labels: Record<SetupFieldKey, string>;
+              existing_order: ExistingSetupFieldKey[];
+              existing_labels: Record<ExistingSetupLabelKey, string>;
+            }
+          >
+        >;
+      };
+    }
+  ) => Promise<void>;
+};
+
 type Props = {
   authToken: string;
+  dataSource?: PolicyDataSource;
+  title?: string;
+  description?: string;
+  visiblePages?: ConversationPageKey[];
+  showRegisteredPages?: boolean;
 };
 
 type GovernanceConfig = {
@@ -828,7 +858,14 @@ const SETTING_FILE_GUIDE: SettingFileItem[] = [
   },
 ];
 
-export function ChatSettingsPanel({ authToken }: Props) {
+export function ChatSettingsPanel({
+  authToken,
+  dataSource,
+  title,
+  description,
+  visiblePages,
+  showRegisteredPages = true,
+}: Props) {
   const initialPages = useMemo(() => normalizePages([]), []);
   const buildInitialDraftByPage = useCallback(
     (pages: ConversationPageKey[]) =>
@@ -1161,15 +1198,19 @@ export function ChatSettingsPanel({ authToken }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/auth-settings/providers?provider=chat_policy", {
-        headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
-      });
-      const payload = await parseJsonBody<{ provider?: ConversationFeaturesProviderShape; error?: string }>(res);
-      if (!res.ok) {
-        setError(payload?.error || "대화 설정을 불러오지 못했습니다.");
-        return;
-      }
-      applyProviderToDraft(payload?.provider || null);
+      const provider = dataSource
+        ? await dataSource.loadProvider(authToken)
+        : await (async () => {
+            const res = await fetch("/api/auth-settings/providers?provider=chat_policy", {
+              headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined,
+            });
+            const payload = await parseJsonBody<{ provider?: ConversationFeaturesProviderShape; error?: string }>(res);
+            if (!res.ok) {
+              throw new Error(payload?.error || "대화 설정을 불러오지 못했습니다.");
+            }
+            return payload?.provider || null;
+          })();
+      applyProviderToDraft(provider || null);
       try {
         await loadGovernanceConfig();
       } catch {
@@ -1180,12 +1221,12 @@ export function ChatSettingsPanel({ authToken }: Props) {
       } catch {
         // debug field examples are optional for this panel
       }
-    } catch {
-      setError("대화 설정을 불러오지 못했습니다.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "대화 설정을 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
-  }, [applyProviderToDraft, authToken, loadDebugFieldExamples, loadGovernanceConfig]);
+  }, [applyProviderToDraft, authToken, dataSource, loadDebugFieldExamples, loadGovernanceConfig]);
 
   const saveGovernanceConfig = useCallback(
     async (next: { enabled: boolean; visibility_mode: "user" | "admin" }) => {
@@ -1228,10 +1269,10 @@ export function ChatSettingsPanel({ authToken }: Props) {
     void load();
   }, [load]);
 
-  const columnKeys = useMemo<Array<"__header" | ConversationPageKey>>(
-    () => ["__header", ...registeredPages],
-    [registeredPages]
-  );
+  const columnKeys = useMemo<Array<"__header" | ConversationPageKey>>(() => {
+    const filtered = visiblePages && visiblePages.length > 0 ? visiblePages : registeredPages;
+    return ["__header", ...filtered];
+  }, [registeredPages, visiblePages]);
 
   const handleResetToDefaults = () => {
     applyProviderToDraft(null);
@@ -1294,25 +1335,34 @@ export function ChatSettingsPanel({ authToken }: Props) {
         return acc;
       }, {});
 
-      const res = await fetch("/api/auth-settings/providers", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          provider: "chat_policy",
-          values: {
-            pages,
-            debug_copy,
-            page_registry: registeredPages,
-            settings_ui: {
-              setup_fields,
+      if (dataSource) {
+        await dataSource.saveProvider(authToken, {
+          pages,
+          debug_copy,
+          page_registry: registeredPages,
+          settings_ui: { setup_fields },
+        });
+      } else {
+        const res = await fetch("/api/auth-settings/providers", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            provider: "chat_policy",
+            values: {
+              pages,
+              debug_copy,
+              page_registry: registeredPages,
+              settings_ui: {
+                setup_fields,
+              },
             },
-          },
-          commit: true,
-        }),
-      });
-      const payload = await parseJsonBody<{ ok?: boolean; error?: string }>(res);
-      if (!res.ok || payload?.error || !payload?.ok) {
-        throw new Error(payload?.error || "대화 설정 저장에 실패했습니다.");
+            commit: true,
+          }),
+        });
+        const payload = await parseJsonBody<{ ok?: boolean; error?: string }>(res);
+        if (!res.ok || payload?.error || !payload?.ok) {
+          throw new Error(payload?.error || "대화 설정 저장에 실패했습니다.");
+        }
       }
       setSavedAt(new Date().toLocaleString("ko-KR"));
     } catch (err) {
@@ -1325,10 +1375,10 @@ export function ChatSettingsPanel({ authToken }: Props) {
   return (
     <div className="space-y-4">
       <Card className="p-4">
-        <div className="text-sm font-semibold text-slate-900">대화 설정 관리</div>
+        <div className="text-sm font-semibold text-slate-900">{title || "대화 설정 관리"}</div>
         <div className="mt-2 text-sm text-slate-600">
-          서비스 전역 대화 정책을 폼으로 수정합니다. 저장 시 <code>A_iam_auth_settings.providers.chat_policy</code> (org 최신 값)에
-          반영됩니다.
+          {description ||
+            "서비스 전역 대화 정책을 폼으로 수정합니다. 저장 시 A_iam_auth_settings.providers.chat_policy (org 최신 값)에 반영됩니다."}
         </div>
         {loading ? <div className="mt-2 text-xs text-slate-500">불러오는 중...</div> : null}
         {error ? <div className="mt-2 text-xs text-rose-600">{error}</div> : null}
@@ -1346,22 +1396,24 @@ export function ChatSettingsPanel({ authToken }: Props) {
         </div>
       </Card>
 
-      <Card className="p-4">
-        <div className="text-sm font-semibold text-slate-900">자동 등록된 대화 페이지</div>
-        <div className="mt-1 text-xs text-slate-500">
-          대화 UI(설정 박스/대화 박스)가 로드되면 경로가 자동 등록됩니다.
-        </div>
-        <div className="mt-2 space-y-1">
-          {registeredPages.map((page) => (
-            <div
-              key={`registered-page-${page}`}
-              className="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] text-slate-700"
-            >
-              {page}
-            </div>
-          ))}
-        </div>
-      </Card>
+      {showRegisteredPages ? (
+        <Card className="p-4">
+          <div className="text-sm font-semibold text-slate-900">자동 등록된 대화 페이지</div>
+          <div className="mt-1 text-xs text-slate-500">
+            대화 UI(설정 박스/대화 박스)가 로드되면 경로가 자동 등록됩니다.
+          </div>
+          <div className="mt-2 space-y-1">
+            {registeredPages.map((page) => (
+              <div
+                key={`registered-page-${page}`}
+                className="rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] text-slate-700"
+              >
+                {page}
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       <div className="overflow-x-auto pb-3">
         <div className="flex min-w-full gap-4">

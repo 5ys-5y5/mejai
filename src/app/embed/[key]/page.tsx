@@ -31,6 +31,7 @@ import {
 import { buildRuntimeBotMessageFields } from "@/lib/conversation/client/runtimeMessageMapping";
 import { resolvePageConversationDebugOptions } from "@/lib/transcriptCopyPolicy";
 import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
+import { decodeWidgetOverrides } from "@/lib/widgetOverrides";
 import type { LogBundle, TranscriptMessage } from "@/lib/debugTranscript";
 import type { ChatMessage } from "@/lib/conversation/client/laboratoryPageState";
 
@@ -42,6 +43,7 @@ type WidgetConfig = {
   public_key?: string | null;
   chat_policy?: ConversationFeaturesProviderShape | null;
   allowed_domains?: string[] | null;
+  setup_config?: Record<string, unknown> | null;
 };
 
 type LogMap = Record<string, LogBundle>;
@@ -241,6 +243,8 @@ export default function WidgetEmbedPage() {
   const key = useMemo(() => String(params?.key || ""), [params]);
   const visitorId = useMemo(() => String(searchParams?.get("vid") || "").trim(), [searchParams]);
   const sessionSeed = useMemo(() => String(searchParams?.get("sid") || "").trim(), [searchParams]);
+  const overridesParam = useMemo(() => String(searchParams?.get("ovr") || "").trim(), [searchParams]);
+  const initialOverrides = useMemo(() => decodeWidgetOverrides(overridesParam), [overridesParam]);
 
   const [activeTab, setActiveTab] = useState<WidgetConversationTab>("chat");
   const [widgetToken, setWidgetToken] = useState("");
@@ -253,6 +257,7 @@ export default function WidgetEmbedPage() {
   const [status, setStatus] = useState("연결 중");
   const [pendingUser, setPendingUser] = useState<Record<string, any> | null>(null);
   const [pendingMeta, setPendingMeta] = useState<Record<string, any> | null>(null);
+  const [pendingOverrides, setPendingOverrides] = useState<Record<string, any> | null>(initialOverrides);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [showAdminLogs, setShowAdminLogs] = useState(false);
   const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
@@ -499,6 +504,7 @@ export default function WidgetEmbedPage() {
         page_url: meta.page_url || referrer || "",
         referrer: meta.referrer || referrer || "",
         session_id: seedSession || undefined,
+        overrides: pendingOverrides || undefined,
         visitor: {
           id: meta.visitor_id || visitorId || undefined,
           ...user,
@@ -576,7 +582,7 @@ export default function WidgetEmbedPage() {
         });
       }
     },
-    [appendBotNotice, fetchHistory, key, pendingMeta, visitorId]
+    [appendBotNotice, fetchHistory, key, pendingMeta, pendingOverrides, visitorId]
   );
 
   useEffect(() => {
@@ -590,7 +596,9 @@ export default function WidgetEmbedPage() {
           referrer: data.referrer,
           visitor_id: data.visitor_id,
         };
+        const overrides = data.overrides && typeof data.overrides === "object" ? data.overrides : null;
         setPendingMeta(nextMeta);
+        setPendingOverrides(overrides || initialOverrides);
         if (!initCalledRef.current && data.session_id) {
           sessionSeedRef.current = String(data.session_id || "").trim();
         }
@@ -757,6 +765,7 @@ export default function WidgetEmbedPage() {
           body: JSON.stringify({
             message: text,
             session_id: sessionId,
+            overrides: pendingOverrides || undefined,
             llm: shouldSendLlm ? policyConfig.llm || undefined : undefined,
             inline_kb: shouldSendInlineKb ? policyConfig.inlineKb.trim() || undefined : undefined,
             visitor: pendingUser || undefined,
@@ -872,6 +881,7 @@ export default function WidgetEmbedPage() {
     [
       policyFeatures,
       pendingUser,
+      pendingOverrides,
       policyConfig,
       refreshSessionLogs,
       sending,
