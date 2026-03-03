@@ -980,15 +980,12 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
       const latestBotTurnId =
         [...visible].reverse().find((item) => item.role === "bot" && String(item.turnId || "").trim().length > 0)?.turnId ||
         "-";
-      const selectedSignature = (model.selectedMessageIds || []).join(",");
       const syncSignature = [
         activeSessionId,
         model.conversationMode,
         String(latestBotTurnId || "-"),
         String(visible.length),
-        selectedSignature,
         pageFeatures.adminPanel.copyConversation ? "1" : "0",
-        pageFeatures.adminPanel.copyIssue ? "1" : "0",
         JSON.stringify(conversationDebugOptions),
       ].join("|");
       if (signatureByModel[model.id] === syncSignature) return;
@@ -1003,28 +1000,15 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
           if (!active) return;
           const dbMessages = buildHistoryMessages(turns || []);
           const dbMessageLogs = buildMessageLogsForMessages(dbMessages, logs);
-          const selectedIds = (model.selectedMessageIds || []).filter((id) =>
-            dbMessages.some((msg) => msg.id === id)
-          );
-
           const conversationPayload = buildCopyPayload({
             page: pageKey,
             kind: "conversation",
             messages: dbMessages,
-            selectedMessageIds: selectedIds,
             messageLogs: dbMessageLogs,
             enabledOverride: pageFeatures.adminPanel.copyConversation,
             conversationDebugOptionsOverride: conversationDebugOptions,
           });
-          const issuePayload = buildCopyPayload({
-            page: pageKey,
-            kind: "issue",
-            messages: dbMessages,
-            selectedMessageIds: selectedIds,
-            messageLogs: dbMessageLogs,
-            enabledOverride: pageFeatures.adminPanel.copyIssue,
-          });
-          const turnId = resolveSnapshotTurnId(dbMessages, selectedIds);
+          const turnId = resolveSnapshotTurnId(dbMessages, []);
 
           updateModel(model.id, (prev) => ({
             ...prev,
@@ -1033,8 +1017,6 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
               conversationPayload.allowed && conversationPayload.text.trim()
                 ? conversationPayload.text
                 : prev.conversationSnapshotText,
-            issueSnapshotText:
-              issuePayload.allowed && issuePayload.text.trim() ? issuePayload.text : prev.issueSnapshotText,
           }));
 
           if (conversationPayload.allowed && conversationPayload.text.trim()) {
@@ -1043,15 +1025,6 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
               page: pageKey,
               kind: "conversation",
               transcriptText: conversationPayload.text,
-              turnId,
-            }).catch(() => null);
-          }
-          if (issuePayload.allowed && issuePayload.text.trim()) {
-            await saveTranscriptSnapshot({
-              sessionId: activeSessionId,
-              page: pageKey,
-              kind: "issue",
-              transcriptText: issuePayload.text,
               turnId,
             }).catch(() => null);
           }
@@ -1068,30 +1041,12 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     conversationDebugOptions,
     models,
     pageFeatures.adminPanel.copyConversation,
-    pageFeatures.adminPanel.copyIssue,
     pageKey,
     updateModel,
   ]);
 
-  const toggleMessageSelection = (modelId: string, messageId: string) => {
-    if (!pageFeatures.adminPanel.messageSelection) return;
-    updateModel(modelId, (model) => {
-      if (!model.chatSelectionEnabled) return model;
-      const exists = model.selectedMessageIds.includes(messageId);
-      return {
-        ...model,
-        selectedMessageIds: exists
-          ? model.selectedMessageIds.filter((id) => id !== messageId)
-          : [...model.selectedMessageIds, messageId],
-      };
-    });
-  };
-
   const handleCopyTranscript = async (id: string) =>
     labActions.copyConversation(id, pageFeatures.adminPanel.copyConversation, conversationDebugOptions);
-
-  const handleCopyIssueTranscript = async (id: string) =>
-    labActions.copyIssue(id, pageFeatures.adminPanel.copyIssue);
 
   const handleCopySessionId = async (sessionId?: string | null) => {
     if (!sessionId) return;
@@ -1198,10 +1153,8 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
     handleSearchSessionById,
     handleChangeConversationMode,
     handleCopyTranscript,
-    handleCopyIssueTranscript,
     conversationDebugOptions,
     updateConversationDebugOptions,
-    toggleMessageSelection,
     submitMessage: labActions.submitMessage,
     expandModelLayout,
     collapseModelLayout,

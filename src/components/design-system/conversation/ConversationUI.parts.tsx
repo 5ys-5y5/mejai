@@ -3,7 +3,7 @@
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from "react";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { AlertTriangle, Bot, Check, Copy, CornerDownRight, ExternalLink, Info, Loader, Loader2, Minus, Plus, RefreshCw, Send, Settings2, Trash2, User, X } from "lucide-react";
+import { Bot, Check, Copy, CornerDownRight, ExternalLink, Info, Loader, Loader2, Minus, Plus, RefreshCw, Send, Settings2, Trash2, User, X } from "lucide-react";
 import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -18,7 +18,6 @@ import type { ConversationPageFeatures, ConversationSetupUi, ExistingSetupFieldK
 import type { ChatMessage, ModelState, SetupMode } from "@/lib/conversation/client/laboratoryPageState";
 import { appendInlineKbSample, hasConflictingInlineKbSamples } from "@/lib/conversation/inlineKbSamples";
 import type { DebugTranscriptOptions, LogBundle } from "@/lib/debugTranscript";
-import { applyDebugToggleSelection, DEBUG_COPY_TOGGLE_OPTIONS, resolveDebugToggleValues } from "@/lib/debugTranscriptToggle";
 
 // ------------------------------------------------------------
 // Unified conversation UI assembly file.
@@ -161,18 +160,11 @@ export function ConversationSessionHeader({
 type AdminMenuProps = {
   open: boolean;
   onToggleOpen: () => void;
-  selectionEnabled: boolean;
-  onToggleSelection: () => void;
   showLogs: boolean;
   onToggleLogs: () => void;
   onCopyConversation: () => void | boolean | Promise<void> | Promise<boolean>;
-  onCopyIssue: () => void | boolean | Promise<void> | Promise<boolean>;
-  debugOptions?: DebugTranscriptOptions;
-  onUpdateDebugOptions?: (next: DebugTranscriptOptions) => void | Promise<void>;
-  showSelectionToggle?: boolean;
   showLogsToggle?: boolean;
   showConversationCopy?: boolean;
-  showIssueCopy?: boolean;
   disableCopy?: boolean;
   className?: string;
 };
@@ -180,33 +172,21 @@ type AdminMenuProps = {
 export function ConversationAdminMenu({
   open,
   onToggleOpen,
-  selectionEnabled,
-  onToggleSelection,
   showLogs,
   onToggleLogs,
   onCopyConversation,
-  onCopyIssue,
-  debugOptions,
-  onUpdateDebugOptions,
-  showSelectionToggle = true,
   showLogsToggle = true,
   showConversationCopy = true,
-  showIssueCopy = true,
   disableCopy = false,
   className,
 }: AdminMenuProps) {
   const [copyState, setCopyState] = useState<"idle" | "copying" | "done">("idle");
   const copyResetRef = useRef<number | null>(null);
-  const [debugSaveState, setDebugSaveState] = useState<"idle" | "saving" | "done" | "error">("idle");
-  const debugResetRef = useRef<number | null>(null);
 
   useEffect(() => {
     return () => {
       if (copyResetRef.current) {
         window.clearTimeout(copyResetRef.current);
-      }
-      if (debugResetRef.current) {
-        window.clearTimeout(debugResetRef.current);
       }
     };
   }, []);
@@ -240,28 +220,6 @@ export function ConversationAdminMenu({
     ) : (
       <Copy className="h-3 w-3" />
     );
-  const debugToggleValues = debugOptions ? resolveDebugToggleValues(debugOptions) : [];
-  const showDebugOptions = Boolean(showConversationCopy && debugOptions && onUpdateDebugOptions);
-
-  const handleDebugToggleChange = async (values: string[]) => {
-    if (!debugOptions || !onUpdateDebugOptions) return;
-    const nextOptions = applyDebugToggleSelection(debugOptions, values);
-    setDebugSaveState("saving");
-    try {
-      await Promise.resolve(onUpdateDebugOptions(nextOptions));
-      setDebugSaveState("done");
-      if (debugResetRef.current) window.clearTimeout(debugResetRef.current);
-      debugResetRef.current = window.setTimeout(() => {
-        setDebugSaveState("idle");
-      }, 1800);
-    } catch {
-      setDebugSaveState("error");
-      if (debugResetRef.current) window.clearTimeout(debugResetRef.current);
-      debugResetRef.current = window.setTimeout(() => {
-        setDebugSaveState("idle");
-      }, 2400);
-    }
-  };
 
   return (
     <div className={cn("z-20", className)}>
@@ -275,37 +233,24 @@ export function ConversationAdminMenu({
         <Settings2 className="h-4 w-4" />
       </button>
       {open ? (
-        <div
-          className={cn(
-            "absolute right-0 mt-1 rounded-md border border-slate-200 bg-white p-2",
-            showDebugOptions ? "w-72" : "w-36"
-          )}
-        >
-          {showSelectionToggle ? (
-            <button
-              type="button"
-              onClick={onToggleSelection}
-              className={cn(
-                "mb-1 w-full rounded-md border px-2 py-1 text-[11px] font-semibold",
-                selectionEnabled ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-600"
-              )}
-            >
-              선택 {selectionEnabled ? "ON" : "OFF"}
-            </button>
-          ) : null}
+        <div className={cn("absolute right-0 mt-1 w-36 rounded-md border border-slate-200 bg-white p-2")}>
           {showLogsToggle ? (
             <button
               type="button"
-              onClick={onToggleLogs}
+              onClick={() => {
+                if (showLogs) onToggleLogs();
+              }}
+              disabled={!showLogs}
               className={cn(
                 "w-full rounded-md border px-2 py-1 text-[11px] font-semibold",
-                showLogs ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-600"
+                showLogs ? "border-slate-900 bg-slate-900 text-white" : "border-slate-300 bg-white text-slate-400",
+                "disabled:cursor-not-allowed"
               )}
             >
-              로그 {showLogs ? "ON" : "OFF"}
+              로그 OFF
             </button>
           ) : null}
-          {showConversationCopy || showIssueCopy ? <div className="my-1 border-t border-slate-100" /> : null}
+          {showLogsToggle && showConversationCopy ? <div className="my-1 border-t border-slate-100" /> : null}
           {showConversationCopy ? (
             <button
               type="button"
@@ -316,41 +261,6 @@ export function ConversationAdminMenu({
               <span>{copyLabel}</span>
               {copyIcon}
             </button>
-          ) : null}
-          {showIssueCopy ? (
-            <button
-              type="button"
-              onClick={onCopyIssue}
-              disabled={disableCopy}
-              className="inline-flex w-full items-center justify-between rounded-md border border-rose-200 px-2 py-1 text-[11px] font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-60"
-            >
-              <span>문제 로그 복사</span>
-              <AlertTriangle className="h-3 w-3" />
-            </button>
-          ) : null}
-          {showDebugOptions ? (
-            <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2">
-              <div className="mb-1 text-[11px] font-semibold text-slate-700">Debug Transcript</div>
-              <MultiSelectPopover
-                values={debugToggleValues}
-                onChange={handleDebugToggleChange}
-                options={DEBUG_COPY_TOGGLE_OPTIONS}
-                displayMode="count"
-                showBulkActions
-                className="w-full"
-                buttonClassName="h-8 text-[11px]"
-                panelClassName="z-50"
-              />
-              <div className="mt-1 text-[10px] text-slate-500">
-                {debugSaveState === "saving"
-                  ? "저장 중..."
-                  : debugSaveState === "done"
-                    ? "저장 완료"
-                    : debugSaveState === "error"
-                      ? "저장 실패"
-                      : " "}
-              </div>
-            </div>
           ) : null}
         </div>
       ) : null}
@@ -1733,13 +1643,10 @@ function ConversationModelChatColumnCore({
   adminFeatures,
   interactionFeatures,
   onToggleAdminOpen,
-  onToggleSelectionMode,
   onToggleLogs,
   onCopyConversation,
-  onCopyIssue,
   debugOptions,
   onUpdateDebugOptions,
-  onToggleMessageSelection,
   onSubmitMessage,
   onCollapse,
   onInputChange,
@@ -1939,24 +1846,14 @@ function ConversationModelChatColumnCore({
           className="absolute right-6 top-6"
           open={model.adminLogControlsOpen}
           onToggleOpen={onToggleAdminOpen}
-          selectionEnabled={adminFeatures.selectionToggle && model.chatSelectionEnabled}
-          onToggleSelection={() => {
-            if (!adminFeatures.selectionToggle) return;
-            onToggleSelectionMode();
-          }}
           showLogs={adminFeatures.logsToggle && model.showAdminLogs}
           onToggleLogs={() => {
             if (!adminFeatures.logsToggle) return;
             onToggleLogs();
           }}
           onCopyConversation={onCopyConversation}
-          onCopyIssue={onCopyIssue}
-          debugOptions={debugOptions}
-          onUpdateDebugOptions={onUpdateDebugOptions}
-          showSelectionToggle={adminFeatures.selectionToggle}
           showLogsToggle={adminFeatures.logsToggle}
           showConversationCopy={adminFeatures.copyConversation}
-          showIssueCopy={adminFeatures.copyIssue}
           disableCopy={effectiveVisibleMessages.length === 0}
         />
       ) : null}
@@ -1967,13 +1864,10 @@ function ConversationModelChatColumnCore({
         >
           <ConversationThread<UiChatMessage>
             messages={displayMessages}
-            selectedMessageIds={model.selectedMessageIds}
-            selectionEnabled={adminFeatures.messageSelection && model.chatSelectionEnabled}
-            onToggleSelection={(messageId) => {
-              if (!adminFeatures.messageSelection) return;
-              onToggleMessageSelection(messageId);
-            }}
-            avatarSelectionStyle="both"
+            selectedMessageIds={[]}
+            selectionEnabled={false}
+            onToggleSelection={() => undefined}
+            avatarSelectionStyle="none"
             renderContent={(msg) => {
               const hasDebug = msg.role === "bot" && msg.content.includes("debug_prefix");
               const debugParts = hasDebug ? getDebugParts(msg.content) : null;
@@ -2228,10 +2122,8 @@ type ConversationModelCardProps = {
   onSearchSessionById: (id: string, sessionId: string) => Promise<void> | void;
   onChangeConversationMode: (id: string, mode: ConversationModelMode) => void;
   onCopyConversation: (id: string) => Promise<boolean> | boolean | Promise<void> | void;
-  onCopyIssue: (id: string) => Promise<boolean> | boolean | Promise<void> | void;
   conversationDebugOptions?: DebugTranscriptOptions;
   onUpdateConversationDebugOptions?: (next: DebugTranscriptOptions) => void | Promise<void>;
-  onToggleMessageSelection: (id: string, messageId: string) => void;
   onSubmitMessage: (id: string, text: string, displayText?: string) => Promise<boolean> | boolean | Promise<void> | void;
   onExpand: (id: string) => void;
   onCollapse: (id: string) => void;
@@ -2469,11 +2361,8 @@ export type ConversationModelChatColumnLegoProps = {
   setLockedReplySelections: Dispatch<SetStateAction<Record<string, string[]>>>;
   adminFeatures: {
     enabled: boolean;
-    selectionToggle: boolean;
     logsToggle: boolean;
-    messageSelection: boolean;
     copyConversation: boolean;
-    copyIssue: boolean;
   };
   interactionFeatures: {
     quickReplies: boolean;
@@ -2490,13 +2379,10 @@ export type ConversationModelChatColumnLegoProps = {
     inputSubmit: boolean;
   };
   onToggleAdminOpen: () => void;
-  onToggleSelectionMode: () => void;
   onToggleLogs: () => void;
   onCopyConversation: () => void | boolean | Promise<void> | Promise<boolean>;
-  onCopyIssue: () => void | boolean | Promise<void> | Promise<boolean>;
   debugOptions?: DebugTranscriptOptions;
   onUpdateDebugOptions?: (next: DebugTranscriptOptions) => void | Promise<void>;
-  onToggleMessageSelection: (messageId: string) => void;
   onSubmitMessage: (text: string, displayText?: string) => void | boolean | Promise<void> | Promise<boolean>;
   onExpand: () => void;
   onCollapse: () => void;
@@ -2515,13 +2401,10 @@ export function ConversationModelChatColumnLego({
   adminFeatures,
   interactionFeatures,
   onToggleAdminOpen,
-  onToggleSelectionMode,
   onToggleLogs,
   onCopyConversation,
-  onCopyIssue,
   debugOptions,
   onUpdateDebugOptions,
-  onToggleMessageSelection,
   onSubmitMessage,
   onExpand,
   onCollapse,
@@ -2541,13 +2424,10 @@ export function ConversationModelChatColumnLego({
         adminFeatures={adminFeatures}
         interactionFeatures={interactionFeatures}
         onToggleAdminOpen={onToggleAdminOpen}
-        onToggleSelectionMode={onToggleSelectionMode}
         onToggleLogs={onToggleLogs}
         onCopyConversation={onCopyConversation}
-        onCopyIssue={onCopyIssue}
         debugOptions={debugOptions}
         onUpdateDebugOptions={onUpdateDebugOptions}
-        onToggleMessageSelection={onToggleMessageSelection}
         onSubmitMessage={onSubmitMessage}
         onExpand={onExpand}
         onCollapse={onCollapse}
@@ -2614,10 +2494,8 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
     onSearchSessionById,
     onChangeConversationMode,
     onCopyConversation,
-    onCopyIssue,
     conversationDebugOptions,
     onUpdateConversationDebugOptions,
-    onToggleMessageSelection,
     onSubmitMessage,
     onExpand,
     onCollapse,
@@ -2777,11 +2655,8 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
   };
   const adminFeaturesForPane = {
     enabled: pageFeatures.adminPanel.enabled,
-    selectionToggle: pageFeatures.adminPanel.selectionToggle,
     logsToggle: pageFeatures.adminPanel.logsToggle,
-    messageSelection: pageFeatures.adminPanel.messageSelection,
     copyConversation: pageFeatures.adminPanel.copyConversation,
-    copyIssue: pageFeatures.adminPanel.copyIssue,
   };
   const interactionFeaturesForPane = {
     quickReplies: pageFeatures.interaction.quickReplies,
@@ -2858,22 +2733,14 @@ export function createConversationModelLegos(props: ConversationModelCardProps):
         ...m,
         adminLogControlsOpen: !m.adminLogControlsOpen,
       })),
-    onToggleSelectionMode: () =>
-      updateModel((m) => ({
-        ...m,
-        chatSelectionEnabled: !m.chatSelectionEnabled,
-        selectedMessageIds: !m.chatSelectionEnabled ? m.selectedMessageIds : [],
-      })),
     onToggleLogs: () =>
       updateModel((m) => ({
         ...m,
         showAdminLogs: !m.showAdminLogs,
       })),
     onCopyConversation: () => onCopyConversation(model.id),
-    onCopyIssue: () => onCopyIssue(model.id),
     debugOptions: conversationDebugOptions,
     onUpdateDebugOptions: onUpdateConversationDebugOptions,
-    onToggleMessageSelection: (messageId) => onToggleMessageSelection(model.id, messageId),
     onSubmitMessage: (text, displayText) => onSubmitMessage(model.id, text, displayText),
     onExpand: () => onExpand(model.id),
     onCollapse: () => onCollapse(model.id),

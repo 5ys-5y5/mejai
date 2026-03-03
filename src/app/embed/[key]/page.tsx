@@ -255,8 +255,6 @@ export default function WidgetEmbedPage() {
   const [pendingMeta, setPendingMeta] = useState<Record<string, any> | null>(null);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [showAdminLogs, setShowAdminLogs] = useState(false);
-  const [chatSelectionEnabled, setChatSelectionEnabled] = useState(false);
-  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
   const [lockedReplySelections, setLockedReplySelections] = useState<Record<string, string[]>>({});
   const [detailsOpen, setDetailsOpen] = useState({
@@ -529,7 +527,6 @@ export default function WidgetEmbedPage() {
         setSessionId(nextSessionId);
         setConfig(data.widget_config || null);
         setMessageLogs({});
-        setSelectedMessageIds([]);
         setQuickReplyDrafts({});
         setLockedReplySelections({});
         try {
@@ -715,7 +712,6 @@ export default function WidgetEmbedPage() {
     setMessages([]);
     setMessageLogs({});
     setInputValue("");
-    setSelectedMessageIds([]);
     setQuickReplyDrafts({});
     setLockedReplySelections({});
     setStatus("새 대화 준비 중");
@@ -885,12 +881,6 @@ export default function WidgetEmbedPage() {
     ]
   );
 
-  const handleToggleMessageSelection = useCallback((messageId: string) => {
-    setSelectedMessageIds((prev) =>
-      prev.includes(messageId) ? prev.filter((id) => id !== messageId) : [...prev, messageId]
-    );
-  }, []);
-
   const copyMessages = useMemo<TranscriptMessage[]>(
     () =>
       messages.map((msg) => ({
@@ -905,16 +895,13 @@ export default function WidgetEmbedPage() {
     [messages]
   );
 
-  const copyByKind = useCallback(
-    async (kind: "conversation" | "issue") => {
+  const copyConversation = useCallback(
+    async () => {
       if (!sessionId) {
         toast.error("\ub300\ud654 \uae30\ub85d\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.");
         return false;
       }
-      const latestDebugOptions =
-        !widgetToken && kind === "conversation"
-          ? await fetchConversationDebugOptions(WIDGET_PAGE_KEY).catch(() => null)
-          : null;
+      const latestDebugOptions = !widgetToken ? await fetchConversationDebugOptions(WIDGET_PAGE_KEY).catch(() => null) : null;
       const effectiveDebugOptions = latestDebugOptions || debugOptions;
       let mergedLogs = messageLogs;
       let prebuiltTextOverride: string | null = null;
@@ -924,7 +911,7 @@ export default function WidgetEmbedPage() {
             sessionId,
             widgetToken,
             page: "/app/laboratory",
-            kind,
+            kind: "conversation",
             limit: 500,
           });
           if (typeof serverCopy?.transcript_text === "string") {
@@ -945,12 +932,11 @@ export default function WidgetEmbedPage() {
       }
       return executeTranscriptCopy({
         page: WIDGET_PAGE_KEY,
-        kind,
+        kind: "conversation",
         messages: copyMessages,
         messageLogs: mergedLogs,
-        enabledOverride:
-          kind === "conversation" ? pageFeatures.adminPanel.copyConversation : pageFeatures.adminPanel.copyIssue,
-        conversationDebugOptionsOverride: kind === "conversation" ? effectiveDebugOptions : undefined,
+        enabledOverride: pageFeatures.adminPanel.copyConversation,
+        conversationDebugOptionsOverride: effectiveDebugOptions,
         prebuiltTextOverride,
       });
     },
@@ -1053,21 +1039,19 @@ export default function WidgetEmbedPage() {
       layoutExpanded: false,
       adminLogControlsOpen: adminMenuOpen,
       showAdminLogs,
-      chatSelectionEnabled,
-      selectedMessageIds,
+      chatSelectionEnabled: false,
+      selectedMessageIds: [],
       input: inputValue,
       sending,
     }),
     [
       adminMenuOpen,
-      chatSelectionEnabled,
       detailsOpen,
       inputValue,
       messages,
       messageLogs,
       policyConfig.inlineKb,
       policyConfig.llm,
-      selectedMessageIds,
       sending,
       sessionId,
       showAdminLogs,
@@ -1090,11 +1074,8 @@ export default function WidgetEmbedPage() {
     setLockedReplySelections,
     adminFeatures: {
       enabled: pageFeatures.adminPanel.enabled,
-      selectionToggle: pageFeatures.adminPanel.selectionToggle,
       logsToggle: pageFeatures.adminPanel.logsToggle,
-      messageSelection: pageFeatures.adminPanel.messageSelection,
       copyConversation: pageFeatures.adminPanel.copyConversation,
-      copyIssue: pageFeatures.adminPanel.copyIssue,
     },
     interactionFeatures: {
       quickReplies: pageFeatures.interaction.quickReplies,
@@ -1111,15 +1092,8 @@ export default function WidgetEmbedPage() {
       inputSubmit: pageFeatures.interaction.inputSubmit,
     },
     onToggleAdminOpen: () => setAdminMenuOpen((prev) => !prev),
-    onToggleSelectionMode: () =>
-      setChatSelectionEnabled((prev) => {
-        if (prev) setSelectedMessageIds([]);
-        return !prev;
-      }),
     onToggleLogs: () => setShowAdminLogs((prev) => !prev),
-    onCopyConversation: () => copyByKind("conversation"),
-    onCopyIssue: () => copyByKind("issue"),
-    onToggleMessageSelection: handleToggleMessageSelection,
+    onCopyConversation: copyConversation,
     onSubmitMessage: handleSendText,
     onExpand: () => undefined,
     onCollapse: () => undefined,

@@ -30,7 +30,6 @@ export function useHeroPageController() {
   const [selectedMcpToolIds, setSelectedMcpToolIds] = useState<string[]>([]);
   const [selectedLlmOverride, setSelectedLlmOverride] = useState<"chatgpt" | "gemini" | null>(null);
   const [adminLogControlsOpen, setAdminLogControlsOpen] = useState(false);
-  const [chatSelectionEnabled, setChatSelectionEnabled] = useState(false);
   const [showAdminLogs, setShowAdminLogs] = useState(false);
   const [conversationDebugOptions, setConversationDebugOptions] = useState<DebugTranscriptOptions>(() =>
     resolvePageConversationDebugOptions("/", providerValue)
@@ -186,15 +185,6 @@ export function useHeroPageController() {
     await convo.copyConversation(pageFeatures.adminPanel.copyConversation, conversationDebugOptions);
   };
 
-  const handleCopyIssueTranscript = async () => {
-    await convo.copyIssue(pageFeatures.adminPanel.copyIssue);
-  };
-
-  const toggleMessageSelection = (id: string) => {
-    if (!pageFeatures.adminPanel.messageSelection || !chatSelectionEnabled) return;
-    convo.toggleMessageSelection(id);
-  };
-
   const handleSubmit = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
     const text = input.trim();
@@ -243,17 +233,12 @@ export function useHeroPageController() {
       setSelectedMcpToolIds(next.filter((id) => actionOptions.some((option) => option.id === id))),
     adminLogControlsOpen,
     setAdminLogControlsOpen,
-    chatSelectionEnabled,
-    setChatSelectionEnabled,
     showAdminLogs,
     setShowAdminLogs,
     handleCopyTranscript,
-    handleCopyIssueTranscript,
     conversationDebugOptions,
     updateConversationDebugOptions,
     messages,
-    selectedMessageIds,
-    toggleMessageSelection,
     sessionId,
     sending,
     quickReplyDrafts,
@@ -261,7 +246,6 @@ export function useHeroPageController() {
     setQuickReplyDrafts,
     setLockedReplySelections,
     send: convo.send,
-    setSelectedMessageIds: convo.setSelectedMessageIds,
     scrollRef,
     input,
     setInput,

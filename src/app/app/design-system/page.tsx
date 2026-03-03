@@ -72,8 +72,6 @@ import { cn } from "@/lib/utils";
 import { RENDER_POLICY } from "@/app/api/runtime/chat/policies/uiPolicy";
 import { buildIntentDisambiguationTableHtmlFromText } from "@/components/design-system/conversation/runtimeUiCatalog";
 import { getDefaultConversationPageFeatures } from "@/lib/conversation/pageFeaturePolicy";
-import { DEFAULT_CONVERSATION_DEBUG_OPTIONS } from "@/lib/transcriptCopyPolicy";
-import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
 import { useConversationPageRuntimeConfig } from "@/lib/conversation/client/useConversationPageRuntimeConfig";
 import {
   createDefaultModel,
@@ -342,7 +340,7 @@ const conversationDefinitionGroups: Array<{ label: string; items: DefinitionCata
       { name: "ConversationExistingSetup", sourceLine: 842, note: "기존 모델 설정 블록" },
       { name: "ConversationNewModelControls", sourceLine: 1114, note: "신규 모델 설정 블록" },
       { name: "ConversationModelSetupColumnLego", sourceLine: 1637, note: "모델 좌측 설정 레고" },
-      { name: "ConversationAdminMenu", sourceLine: 181, note: "로그/선택/복사 어드민 메뉴" },
+      { name: "ConversationAdminMenu", sourceLine: 181, note: "로그 OFF/대화 복사 어드민 메뉴" },
       { name: "ConversationThread", sourceLine: 283, note: "메시지 스레드 렌더러" },
       { name: "ConversationReplySelectors", sourceLine: 654, note: "quick reply / cards 선택 및 confirm" },
       { name: "ConversationModelChatColumnLego", sourceLine: 1843, note: "모델 우측 채팅 레고(단일 채팅 UI 포함)" },
@@ -1153,11 +1151,7 @@ export function DesignSystemContent() {
   };
 
   const [conversationAdminOpen, setConversationAdminOpen] = useState(false);
-  const [conversationSelectionEnabled, setConversationSelectionEnabled] = useState(false);
   const [conversationShowLogs, setConversationShowLogs] = useState(false);
-  const [conversationDebugOptions, setConversationDebugOptions] = useState<DebugTranscriptOptions>(
-    () => structuredClone(DEFAULT_CONVERSATION_DEBUG_OPTIONS)
-  );
   const [conversationQuickReplyDrafts, setConversationQuickReplyDrafts] = useState<Record<string, string[]>>({});
   const [conversationLockedReplySelections, setConversationLockedReplySelections] = useState<Record<string, string[]>>({});
 
@@ -1448,17 +1442,6 @@ export function DesignSystemContent() {
       updateDemoModel((prev) => ({ ...prev, conversationMode: mode }));
     },
     onCopyConversation: () => undefined,
-    onCopyIssue: () => undefined,
-    conversationDebugOptions,
-    onUpdateConversationDebugOptions: (next) => setConversationDebugOptions(next),
-    onToggleMessageSelection: (_id, messageId) => {
-      updateDemoModel((prev) => ({
-        ...prev,
-        selectedMessageIds: prev.selectedMessageIds.includes(messageId)
-          ? prev.selectedMessageIds.filter((id) => id !== messageId)
-          : [...prev.selectedMessageIds, messageId],
-      }));
-    },
     onSubmitMessage: (_id, text, displayText) => {
       if (!text.trim()) return;
       const display = String(displayText ?? text).trim();
@@ -1644,14 +1627,9 @@ export function DesignSystemContent() {
               className=""
               open={conversationAdminOpen}
               onToggleOpen={() => setConversationAdminOpen((prev) => !prev)}
-              selectionEnabled={conversationSelectionEnabled}
-              onToggleSelection={() => setConversationSelectionEnabled((prev) => !prev)}
               showLogs={conversationShowLogs}
               onToggleLogs={() => setConversationShowLogs((prev) => !prev)}
               onCopyConversation={() => undefined}
-              onCopyIssue={() => undefined}
-              debugOptions={conversationDebugOptions}
-              onUpdateDebugOptions={(next) => setConversationDebugOptions(next)}
             />
           </div>
         </div>

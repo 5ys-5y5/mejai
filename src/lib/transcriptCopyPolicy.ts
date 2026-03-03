@@ -128,7 +128,7 @@ function normalizeConversationDebugOptions(input?: Partial<DebugTranscriptOption
   const defaultLogsMcp = defaultLogs?.mcp;
   const defaultLogsEvent = defaultLogs?.event;
 
-  return {
+  const normalized: DebugTranscriptOptions = {
     outputMode:
       input?.outputMode === "summary" || input?.outputMode === "used_only" ? input.outputMode : "full",
     includePrincipleHeader: input?.includePrincipleHeader ?? DEFAULT_CONVERSATION_DEBUG_OPTIONS.includePrincipleHeader,
@@ -244,6 +244,62 @@ function normalizeConversationDebugOptions(input?: Partial<DebugTranscriptOption
       },
     },
   };
+
+  return {
+    ...normalized,
+    outputMode: "full",
+    includeTurnLogs: true,
+    sections: {
+      ...normalized.sections,
+      logs: {
+        enabled: true,
+        issueSummary: true,
+        debug: {
+          enabled: true,
+          prefixJson: true,
+          dedupeGlobalPrefixJson: true,
+          usedOnly: false,
+          prefixJsonSections: {
+            requestMeta: true,
+            resolvedAgent: true,
+            kbResolution: true,
+            modelResolution: true,
+            toolAllowlist: true,
+            toolAllowlistResolvedToolIds: true,
+            toolAllowlistAllowedToolNames: true,
+            toolAllowlistAllowedToolCount: true,
+            toolAllowlistMissingExpectedTools: true,
+            toolAllowlistRequestedToolCount: true,
+            toolAllowlistValidToolCount: true,
+            toolAllowlistProviderSelectionCount: true,
+            toolAllowlistProviderSelections: true,
+            toolAllowlistToolsByIdCount: true,
+            toolAllowlistToolsByProviderCount: true,
+            toolAllowlistResolvedToolCount: true,
+            toolAllowlistQueryError: true,
+            toolAllowlistQueryErrorById: true,
+            toolAllowlistQueryErrorByProvider: true,
+            slotFlow: true,
+            intentScope: true,
+            policyConflicts: true,
+            conflictResolution: true,
+          },
+        },
+        mcp: {
+          enabled: true,
+          request: true,
+          response: true,
+          includeSuccess: true,
+          includeError: true,
+        },
+        event: {
+          enabled: true,
+          payload: true,
+          allowlist: [],
+        },
+      },
+    },
+  };
 }
 
 export function resolvePageConversationDebugOptions(
@@ -261,11 +317,11 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
     conversation: {
       enabled: PAGE_CONVERSATION_FEATURES["/"].adminPanel.copyConversation,
       formatter: "debug_transcript_v1",
-      useSelectedMessages: true,
+      useSelectedMessages: false,
       debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
     },
     issue: {
-      enabled: PAGE_CONVERSATION_FEATURES["/"].adminPanel.copyIssue,
+      enabled: false,
       // disabledReason: "랜딩 페이지에서는 문제 로그 복사를 지원하지 않습니다.",
       formatter: "issue_transcript_v1",
       useSelectedMessages: false,
@@ -278,11 +334,11 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
     conversation: {
       enabled: PAGE_CONVERSATION_FEATURES["/app/laboratory"].adminPanel.copyConversation,
       formatter: "debug_transcript_v1",
-      useSelectedMessages: true,
+      useSelectedMessages: false,
       debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
     },
     issue: {
-      enabled: PAGE_CONVERSATION_FEATURES["/app/laboratory"].adminPanel.copyIssue,
+      enabled: false,
       formatter: "issue_transcript_v1",
       useSelectedMessages: false,
     },
@@ -294,11 +350,11 @@ export const PAGE_COPY_POLICY: Record<CopyPageKey, PageCopyPolicy> = {
     conversation: {
       enabled: PAGE_CONVERSATION_FEATURES[WIDGET_PAGE_KEY].adminPanel.copyConversation,
       formatter: "debug_transcript_v1",
-      useSelectedMessages: true,
+      useSelectedMessages: false,
       debugOptions: DEFAULT_CONVERSATION_DEBUG_OPTIONS,
     },
     issue: {
-      enabled: PAGE_CONVERSATION_FEATURES[WIDGET_PAGE_KEY].adminPanel.copyIssue,
+      enabled: false,
       formatter: "issue_transcript_v1",
       useSelectedMessages: false,
     },

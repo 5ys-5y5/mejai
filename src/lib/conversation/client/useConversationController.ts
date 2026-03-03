@@ -265,11 +265,6 @@ export function useConversationController(options: ControllerOptions) {
       copyByKind("conversation", enabledOverride, conversationDebugOptionsOverride),
     [copyByKind]
   );
-  const copyIssue = useCallback(async (enabledOverride?: boolean) => copyByKind("issue", enabledOverride), [copyByKind]);
-
-  const toggleMessageSelection = useCallback((id: string) => {
-    setSelectedMessageIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
-  }, []);
 
   return useMemo(
     () => ({
@@ -278,26 +273,19 @@ export function useConversationController(options: ControllerOptions) {
       sending,
       sessionId,
       setSessionId,
-      selectedMessageIds,
-      setSelectedMessageIds,
-      toggleMessageSelection,
       messageLogs,
       send,
       copyConversation,
-      copyIssue,
       loadTurnLogs,
     }),
     [
       copyConversation,
-      copyIssue,
       loadTurnLogs,
       messageLogs,
       messages,
-      selectedMessageIds,
       sending,
       send,
       sessionId,
-      toggleMessageSelection,
     ]
   );
 }
