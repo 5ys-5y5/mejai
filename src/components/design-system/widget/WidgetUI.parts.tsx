@@ -417,7 +417,12 @@ function buildIframeSrc(
   publicKey: string,
   visitorId: string,
   sessionId: string,
-  overridesParam?: string
+  overridesParam?: string,
+  previewMeta?: {
+    origin?: string;
+    page_url?: string;
+    referrer?: string;
+  }
 ) {
   let src = `${baseUrl}/embed/${encodeURIComponent(publicKey)}?vid=${encodeURIComponent(visitorId)}`;
   if (sessionId) {
@@ -425,6 +430,14 @@ function buildIframeSrc(
   }
   if (overridesParam) {
     src += `&ovr=${encodeURIComponent(overridesParam)}`;
+  }
+  if (previewMeta) {
+    const origin = String(previewMeta.origin || "").trim();
+    const pageUrl = String(previewMeta.page_url || "").trim();
+    const referrer = String(previewMeta.referrer || "").trim();
+    if (origin) src += `&origin=${encodeURIComponent(origin)}`;
+    if (pageUrl) src += `&page_url=${encodeURIComponent(pageUrl)}`;
+    if (referrer) src += `&referrer=${encodeURIComponent(referrer)}`;
   }
   return src;
 }
@@ -477,8 +490,8 @@ export function WidgetLauncherRuntime({
   }, []);
 
   const iframeSrc = useMemo(
-    () => buildIframeSrc(baseUrl, publicKey, visitorId, sessionIdRef.current, overridesParam),
-    [baseUrl, publicKey, visitorId, overridesParam]
+    () => buildIframeSrc(baseUrl, publicKey, visitorId, sessionIdRef.current, overridesParam, previewMeta),
+    [baseUrl, publicKey, visitorId, overridesParam, previewMeta?.origin, previewMeta?.page_url, previewMeta?.referrer]
   );
 
   const notify = (eventType: "open" | "close") => {

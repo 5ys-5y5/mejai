@@ -4,4 +4,4 @@ set "PYTHONIOENCODING=utf-8"
 set "PYTHONUTF8=1"
 set "PYTHONLEGACYWINDOWSSTDIO=0"
 set "TERM=dumb"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0codex-utf8.ps1" %*
+pwsh -NoProfile -ExecutionPolicy Bypass -File "%~dp0codex-utf8.ps1" %*

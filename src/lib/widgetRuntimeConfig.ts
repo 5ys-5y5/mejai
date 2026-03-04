@@ -1,4 +1,5 @@
 import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
+import { normalizeWidgetChatPolicyProvider, type WidgetChatPolicyInput } from "@/lib/widgetChatPolicyShape";
 import {
   type WidgetOverrides,
   type WidgetSetupConfig,
@@ -17,7 +18,7 @@ export type WidgetRow = {
   allowed_domains?: string[] | null;
   allowed_paths?: string[] | null;
   theme?: Record<string, unknown> | null;
-  chat_policy?: ConversationFeaturesProviderShape | null;
+  chat_policy?: WidgetChatPolicyInput | null;
   is_active?: boolean | null;
 };
 
@@ -88,13 +89,9 @@ export function resolveWidgetRuntimeConfig(
   const overrideSetup = overrides?.setup_config || null;
   const mergedSetup = mergeSetupConfig(mergeSetupConfig(baseSetup, widgetSetup), overrideSetup);
 
-  const basePolicy =
-    (template?.chat_policy || null) ||
-    ((templateMeta.chat_policy || null) as ConversationFeaturesProviderShape | null);
-  const widgetPolicy =
-    (widget.chat_policy || null) ||
-    ((widgetMeta.chat_policy || null) as ConversationFeaturesProviderShape | null);
-  const overridePolicy = (overrides?.chat_policy || null) as ConversationFeaturesProviderShape | null;
+  const basePolicy = normalizeWidgetChatPolicyProvider(template?.chat_policy || templateMeta.chat_policy || null);
+  const widgetPolicy = normalizeWidgetChatPolicyProvider(widget.chat_policy || widgetMeta.chat_policy || null);
+  const overridePolicy = normalizeWidgetChatPolicyProvider(overrides?.chat_policy || null);
   const resolvedPolicy = overridePolicy || widgetPolicy || basePolicy;
 
   return {

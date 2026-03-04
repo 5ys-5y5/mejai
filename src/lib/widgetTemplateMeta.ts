@@ -1,4 +1,4 @@
-import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
+import { normalizeWidgetChatPolicyProvider, type WidgetChatPolicyInput } from "@/lib/widgetChatPolicyShape";
 
 export type WidgetKbConfig = {
   mode?: "inline" | "select";
@@ -25,14 +25,14 @@ export type WidgetOverrides = {
   allowed_paths?: string[] | null;
   theme?: Record<string, unknown> | null;
   setup_config?: WidgetSetupConfig | null;
-  chat_policy?: ConversationFeaturesProviderShape | null;
+  chat_policy?: WidgetChatPolicyInput | null;
 };
 
 export type WidgetTemplateMeta = {
   type?: "template" | "instance";
   template_id?: string | null;
   setup_config?: WidgetSetupConfig | null;
-  chat_policy?: ConversationFeaturesProviderShape | null;
+  chat_policy?: WidgetChatPolicyInput | null;
 };
 
 const META_KEY = "__widget_meta";
@@ -76,9 +76,7 @@ export function normalizeWidgetOverrides(value: unknown): WidgetOverrides {
   if (!isPlainObject(value)) return {};
   const theme = isPlainObject(value.theme) ? (value.theme as Record<string, unknown>) : null;
   const setupConfig = isPlainObject(value.setup_config) ? (value.setup_config as WidgetSetupConfig) : null;
-  const chatPolicy = isPlainObject(value.chat_policy)
-    ? (value.chat_policy as ConversationFeaturesProviderShape)
-    : null;
+  const chatPolicy = normalizeWidgetChatPolicyProvider(value.chat_policy ?? null);
   return {
     name: typeof value.name === "string" ? value.name : null,
     agent_id: typeof value.agent_id === "string" ? value.agent_id : null,

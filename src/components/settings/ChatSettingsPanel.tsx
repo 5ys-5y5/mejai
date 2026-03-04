@@ -11,6 +11,7 @@ import {
   mergeConversationPageFeatures,
   resolveConversationSetupUi,
   type ConversationFeaturesProviderShape,
+  type ConversationPageFeaturesOverride,
   type FeatureVisibilityMode,
   type ConversationPageFeatures,
   type ConversationPageKey,
@@ -238,6 +239,9 @@ type DebugFieldExamplesPayload = {
 };
 
 type BooleanMap = Record<string, boolean>;
+type ReviewFlagMap = Record<string, boolean>;
+type ReviewFlagsByPage = Record<ConversationPageKey, ReviewFlagMap>;
+type ReviewTarget = { page: ConversationPageKey; key: string } | null;
 
 function updateBooleanMap(current: BooleanMap | undefined, keys: string[], next: boolean): BooleanMap {
   const nextMap: BooleanMap = { ...(current ?? {}) };
@@ -288,6 +292,150 @@ function toEventCsv(values?: string[]) {
   return (values || []).join(", ");
 }
 
+const REVIEWABLE_FIELDS: Array<{ key: string; paths: string[][] }> = [
+  { key: "adminPanel.enabled", paths: [["adminPanel", "enabled"], ["visibility", "adminPanel", "enabled"]] },
+  { key: "adminPanel.logsToggle", paths: [["adminPanel", "logsToggle"], ["visibility", "adminPanel", "logsToggle"]] },
+  {
+    key: "adminPanel.copyConversation",
+    paths: [["adminPanel", "copyConversation"], ["visibility", "adminPanel", "copyConversation"]],
+  },
+  { key: "interaction.quickReplies", paths: [["interaction", "quickReplies"], ["visibility", "interaction", "quickReplies"]] },
+  {
+    key: "interaction.productCards",
+    paths: [["interaction", "productCards"], ["visibility", "interaction", "productCards"]],
+  },
+  { key: "interaction.prefill", paths: [["interaction", "prefill"], ["visibility", "interaction", "prefill"]] },
+  { key: "interaction.prefillMessages", paths: [["interaction", "prefillMessages"]] },
+  { key: "interaction.inputPlaceholder", paths: [["interaction", "inputPlaceholder"]] },
+  {
+    key: "interaction.widgetHeaderAgentAction",
+    paths: [["interaction", "widgetHeaderAgentAction"], ["visibility", "interaction", "widgetHeaderAgentAction"]],
+  },
+  {
+    key: "interaction.widgetHeaderNewConversation",
+    paths: [["interaction", "widgetHeaderNewConversation"], ["visibility", "interaction", "widgetHeaderNewConversation"]],
+  },
+  {
+    key: "interaction.widgetHeaderClose",
+    paths: [["interaction", "widgetHeaderClose"], ["visibility", "interaction", "widgetHeaderClose"]],
+  },
+  {
+    key: "interaction.threePhasePrompt",
+    paths: [["interaction", "threePhasePrompt"], ["visibility", "interaction", "threePhasePrompt"]],
+  },
+  {
+    key: "interaction.threePhasePromptShowConfirmed",
+    paths: [
+      ["interaction", "threePhasePromptShowConfirmed"],
+      ["visibility", "interaction", "threePhasePromptShowConfirmed"],
+      ["interaction", "threePhasePromptLabels", "confirmed"],
+    ],
+  },
+  {
+    key: "interaction.threePhasePromptShowConfirming",
+    paths: [
+      ["interaction", "threePhasePromptShowConfirming"],
+      ["visibility", "interaction", "threePhasePromptShowConfirming"],
+      ["interaction", "threePhasePromptLabels", "confirming"],
+    ],
+  },
+  {
+    key: "interaction.threePhasePromptShowNext",
+    paths: [
+      ["interaction", "threePhasePromptShowNext"],
+      ["visibility", "interaction", "threePhasePromptShowNext"],
+      ["interaction", "threePhasePromptLabels", "next"],
+    ],
+  },
+  {
+    key: "interaction.threePhasePromptHideLabels",
+    paths: [["interaction", "threePhasePromptHideLabels"], ["visibility", "interaction", "threePhasePromptHideLabels"]],
+  },
+  { key: "interaction.inputSubmit", paths: [["interaction", "inputSubmit"], ["visibility", "interaction", "inputSubmit"]] },
+  { key: "setup.modeExisting", paths: [["setup", "modeExisting"], ["visibility", "setup", "modeExisting"]] },
+  { key: "setup.sessionIdSearch", paths: [["setup", "sessionIdSearch"], ["visibility", "setup", "sessionIdSearch"]] },
+  { key: "setup.agentSelector", paths: [["setup", "agentSelector"], ["visibility", "setup", "agentSelector"]] },
+  { key: "setup.modeNew", paths: [["setup", "modeNew"], ["visibility", "setup", "modeNew"]] },
+  { key: "setup.modelSelector", paths: [["setup", "modelSelector"], ["visibility", "setup", "modelSelector"]] },
+  { key: "setup.llmSelector", paths: [["setup", "llmSelector"], ["visibility", "setup", "llmSelector"]] },
+  { key: "setup.defaultLlm", paths: [["setup", "defaultLlm"]] },
+  { key: "setup.defaultSetupMode", paths: [["setup", "defaultSetupMode"]] },
+  { key: "setup.kbSelector", paths: [["setup", "kbSelector"], ["visibility", "setup", "kbSelector"]] },
+  { key: "setup.adminKbSelector", paths: [["setup", "adminKbSelector"], ["visibility", "setup", "adminKbSelector"]] },
+  { key: "setup.routeSelector", paths: [["setup", "routeSelector"], ["visibility", "setup", "routeSelector"]] },
+  { key: "setup.inlineUserKbInput", paths: [["setup", "inlineUserKbInput"], ["visibility", "setup", "inlineUserKbInput"]] },
+  { key: "mcp.providerSelector", paths: [["mcp", "providerSelector"], ["visibility", "mcp", "providerSelector"]] },
+  { key: "mcp.actionSelector", paths: [["mcp", "actionSelector"], ["visibility", "mcp", "actionSelector"]] },
+];
+
+const REVIEW_LABELS: Record<string, string> = {
+  "adminPanel.enabled": "Admin Panel 활성화",
+  "adminPanel.logsToggle": "로그 OFF",
+  "adminPanel.copyConversation": "대화 복사",
+  "interaction.quickReplies": "Quick Replies",
+  "interaction.productCards": "Product Cards",
+  "interaction.prefill": "Prefill",
+  "interaction.prefillMessages": "Prefill Messages",
+  "interaction.inputPlaceholder": "Input Placeholder",
+  "interaction.widgetHeaderAgentAction": "Agent Action",
+  "interaction.widgetHeaderNewConversation": "New Conversation",
+  "interaction.widgetHeaderClose": "Close Button",
+  "interaction.threePhasePrompt": "3-Phase Prompt",
+  "interaction.threePhasePromptShowConfirmed": "Show Confirmed",
+  "interaction.threePhasePromptShowConfirming": "Show Confirming",
+  "interaction.threePhasePromptShowNext": "Show Next",
+  "interaction.threePhasePromptHideLabels": "Hide Labels",
+  "interaction.inputSubmit": "입력/전송",
+  "setup.modeExisting": "기존 모델",
+  "setup.sessionIdSearch": "세션 ID 직접 조회",
+  "setup.agentSelector": "에이전트 선택",
+  "setup.modeNew": "신규 모델",
+  "setup.modelSelector": "모델 선택 UI",
+  "setup.llmSelector": "LLM 선택",
+  "setup.defaultLlm": "기본 LLM",
+  "setup.defaultSetupMode": "기본 모드",
+  "setup.kbSelector": "KB 선택",
+  "setup.adminKbSelector": "관리자 KB 선택",
+  "setup.routeSelector": "Runtime 선택",
+  "setup.inlineUserKbInput": "사용자 KB입력란",
+  "mcp.providerSelector": "MCP 프로바이더 선택",
+  "mcp.actionSelector": "MCP 액션 선택",
+};
+
+function hasOwnPath(target: unknown, path: string[]) {
+  let cursor = target as Record<string, unknown> | undefined;
+  for (const key of path) {
+    if (!cursor || typeof cursor !== "object" || !(key in cursor)) return false;
+    cursor = cursor[key] as Record<string, unknown> | undefined;
+  }
+  return true;
+}
+
+function hasNullPath(target: unknown, path: string[]) {
+  let cursor = target as Record<string, unknown> | undefined;
+  for (const key of path) {
+    if (!cursor || typeof cursor !== "object" || !(key in cursor)) return false;
+    const value = cursor[key];
+    if (value === null) return true;
+    cursor = value as Record<string, unknown> | undefined;
+  }
+  return false;
+}
+
+function buildReviewFlagsForPage(
+  providerPage?: ConversationPageFeaturesOverride,
+  resolvedPage?: ConversationPageFeatures
+): ReviewFlagMap {
+  const flags: ReviewFlagMap = {};
+  const target = providerPage ?? resolvedPage;
+  if (!target) return flags;
+  REVIEWABLE_FIELDS.forEach(({ key, paths }) => {
+    const hasNull = paths.some((path) => hasNullPath(target, path));
+    if (hasNull) flags[key] = true;
+  });
+  return flags;
+}
+
 async function parseJsonBody<T>(res: Response): Promise<T | null> {
   const text = await res.text().catch(() => "");
   if (!text.trim()) return null;
@@ -304,6 +452,10 @@ type ToggleFieldProps = {
   visibility: FeatureVisibilityMode;
   onChange: (checked: boolean) => void;
   onChangeVisibility: (mode: FeatureVisibilityMode) => void;
+  needsReview?: boolean;
+  activeReview?: boolean;
+  reviewKey?: string;
+  reviewPage?: ConversationPageKey;
   expandable?: boolean;
   expanded?: boolean;
   onToggleExpanded?: () => void;
@@ -319,6 +471,10 @@ function ToggleField({
   visibility,
   onChange,
   onChangeVisibility,
+  needsReview = false,
+  activeReview = false,
+  reviewKey,
+  reviewPage,
   expandable = false,
   expanded = false,
   onToggleExpanded,
@@ -330,13 +486,14 @@ function ToggleField({
   const displayLabel = (label || "").trim() || "setup.unknown";
   return (
     <div
-      className={
-        neutralStyle
+      className={`${neutralStyle
           ? "flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs"
           : checked
             ? "flex h-12 items-center justify-between gap-3 rounded-lg border border-emerald-500 bg-emerald-100 px-3 text-xs ring-1 ring-emerald-200"
             : "flex h-12 items-center justify-between gap-3 rounded-lg border border-rose-400 bg-rose-100 px-3 text-xs ring-1 ring-rose-200"
-      }
+        }${needsReview ? " ring-2 ring-amber-400 border-amber-400" : ""}${activeReview ? " ring-4 ring-amber-500" : ""}`}
+      data-review-key={reviewKey}
+      data-review-page={reviewPage}
     >
       <button
         type="button"
@@ -418,6 +575,10 @@ type GroupToggleFieldProps = {
   onChange: (checked: boolean) => void;
   visibility?: FeatureVisibilityMode;
   onChangeVisibility?: (mode: FeatureVisibilityMode) => void;
+  needsReview?: boolean;
+  activeReview?: boolean;
+  reviewKey?: string;
+  reviewPage?: ConversationPageKey;
   expandable?: boolean;
   expanded?: boolean;
   onToggleExpanded?: () => void;
@@ -431,6 +592,10 @@ function GroupToggleField({
   onChange,
   visibility,
   onChangeVisibility,
+  needsReview = false,
+  activeReview = false,
+  reviewKey,
+  reviewPage,
   expandable = false,
   expanded = false,
   onToggleExpanded,
@@ -440,13 +605,14 @@ function GroupToggleField({
   const displayLabel = (label || "").trim() || "group.unknown";
   return (
     <div
-      className={
-        neutralStyle
+      className={`${neutralStyle
           ? "flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs"
           : checked
             ? "flex h-12 items-center justify-between gap-3 rounded-lg border border-emerald-500 bg-emerald-100 px-3 text-xs ring-1 ring-emerald-200"
             : "flex h-12 items-center justify-between gap-3 rounded-lg border border-rose-400 bg-rose-100 px-3 text-xs ring-1 ring-rose-200"
-      }
+        }${needsReview ? " ring-2 ring-amber-400 border-amber-400" : ""}${activeReview ? " ring-4 ring-amber-500" : ""}`}
+      data-review-key={reviewKey}
+      data-review-page={reviewPage}
     >
       <button
         type="button"
@@ -912,6 +1078,8 @@ export function ChatSettingsPanel({
   const [draftByPage, setDraftByPage] = useState<Record<ConversationPageKey, ConversationPageFeatures>>(
     buildInitialDraftByPage(initialPages)
   );
+  const [reviewFlagsByPage, setReviewFlagsByPage] = useState<ReviewFlagsByPage>({});
+  const [activeReview, setActiveReview] = useState<ReviewTarget>(null);
   const [debugCopyDraftByPage, setDebugCopyDraftByPage] =
     useState<Record<ConversationPageKey, DebugTranscriptOptions>>(buildInitialDebugByPage(initialPages));
   const [setupUiByPage, setSetupUiByPage] =
@@ -939,6 +1107,71 @@ export function ChatSettingsPanel({
   const [draggingExistingSetupFieldByPage, setDraggingExistingSetupFieldByPage] = useState<
     Partial<Record<ConversationPageKey, ExistingSetupFieldKey | null>>
   >({});
+  const reviewTargetPages = useMemo(
+    () => (visiblePages && visiblePages.length > 0 ? visiblePages : registeredPages),
+    [registeredPages, visiblePages]
+  );
+  const hasPendingReview = useMemo(
+    () => Object.values(reviewFlagsByPage).some((pageFlags) => Object.values(pageFlags).some(Boolean)),
+    [reviewFlagsByPage]
+  );
+  const activeReviewLabel = useMemo(() => {
+    if (!activeReview) return null;
+    return REVIEW_LABELS[activeReview.key] || activeReview.key;
+  }, [activeReview]);
+  const pickFirstPendingReview = useCallback(() => {
+    for (const page of reviewTargetPages) {
+      if (page === "/") continue;
+      const flags = reviewFlagsByPage[page];
+      if (!flags) continue;
+      for (const field of REVIEWABLE_FIELDS) {
+        if (flags[field.key]) return { page, key: field.key };
+      }
+    }
+    return null;
+  }, [reviewFlagsByPage, reviewTargetPages]);
+  const ensureReviewSectionVisible = useCallback((page: ConversationPageKey, key: string) => {
+    if (
+      key === "setup.modeExisting" ||
+      key === "setup.sessionIdSearch" ||
+      key === "setup.agentSelector"
+    ) {
+      setSetupExistingDetailsOpenByPage((prev) => ({ ...prev, [page]: true }));
+    }
+    if (
+      key === "setup.modeNew" ||
+      key.startsWith("setup.") ||
+      key.startsWith("mcp.")
+    ) {
+      setSetupNewDetailsOpenByPage((prev) => ({ ...prev, [page]: true }));
+    }
+    if (key.startsWith("interaction.threePhasePrompt")) {
+      setThreePhaseDetailsOpenByPage((prev) => ({ ...prev, [page]: true }));
+    }
+  }, []);
+  const scrollToFirstPendingReview = useCallback(() => {
+    const target = pickFirstPendingReview();
+    if (!target || typeof document === "undefined") return;
+    ensureReviewSectionVisible(target.page, target.key);
+    setActiveReview(target);
+    setTimeout(() => {
+      const selector = `[data-review-key="${target.key}"][data-review-page="${target.page}"]`;
+      const el = document.querySelector(selector) as HTMLElement | null;
+      if (el && "scrollIntoView" in el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+        if ("focus" in el) {
+          try {
+            (el as HTMLElement).focus();
+          } catch {
+            // ignore focus errors
+          }
+        }
+      }
+    }, 0);
+    window.setTimeout(() => {
+      setActiveReview(null);
+    }, 2500);
+  }, [ensureReviewSectionVisible, pickFirstPendingReview]);
   const setExpandAll = useCallback(
     (setter: (value: Record<ConversationPageKey, boolean>) => void, next: boolean) => {
       setter(
@@ -1025,6 +1258,12 @@ export function ChatSettingsPanel({
     setDraftByPage(next);
     setDebugCopyDraftByPage(nextDebug);
     setSetupUiByPage(nextSetupUi);
+    setReviewFlagsByPage(
+      discoveredPages.reduce<ReviewFlagsByPage>((acc, page) => {
+        acc[page] = buildReviewFlagsForPage(providerValue?.pages?.[page], next[page]);
+        return acc;
+      }, {})
+    );
     setSetupExistingDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
     setSetupNewDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
     setDebugHeaderDetailsOpenByPage(buildOpenStateByPage(discoveredPages));
@@ -1045,6 +1284,89 @@ export function ChatSettingsPanel({
       setDraftByPage((prev) => ({ ...prev, [page]: updater(prev[page]) }));
     },
     []
+  );
+
+  const clearReviewFlag = useCallback((page: ConversationPageKey, key: string) => {
+    setReviewFlagsByPage((prev) => {
+      const pageFlags = prev[page];
+      if (!pageFlags || !pageFlags[key]) return prev;
+      const nextPageFlags = { ...pageFlags };
+      delete nextPageFlags[key];
+      if (Object.keys(nextPageFlags).length === 0) {
+        const next = { ...prev };
+        delete next[page];
+        return next;
+      }
+      return { ...prev, [page]: nextPageFlags };
+    });
+  }, []);
+
+  const clearReviewFlagAllPages = useCallback((key: string) => {
+    setReviewFlagsByPage((prev) => {
+      const next: ReviewFlagsByPage = {};
+      Object.keys(prev).forEach((page) => {
+        const pageFlags = { ...prev[page as ConversationPageKey] };
+        if (!pageFlags[key]) {
+          next[page as ConversationPageKey] = pageFlags;
+          return;
+        }
+        delete pageFlags[key];
+        if (Object.keys(pageFlags).length > 0) {
+          next[page as ConversationPageKey] = pageFlags;
+        }
+      });
+      return next;
+    });
+  }, []);
+
+  const renderAllowDenyBlock = useCallback(
+    (
+      opts: {
+        page: ConversationPageKey;
+        isHeader: boolean;
+        key: string;
+        label: string;
+        value: { allowlist?: string[]; denylist?: string[] };
+        onChange: (next: { allowlist?: string[]; denylist?: string[] }) => void;
+      }
+    ) => (
+      <div
+        className="rounded-lg border border-slate-200 bg-white p-2"
+        data-review-key={!opts.isHeader ? opts.key : undefined}
+        data-review-page={!opts.isHeader ? opts.page : undefined}
+      >
+        <div className="text-[11px] font-semibold text-slate-700">{opts.isHeader ? opts.key : opts.label}</div>
+        <div className="mt-2 grid grid-cols-1 gap-2">
+          <label className="block">
+            <div className="mb-1 text-[11px] text-slate-500">Allowlist (줄바꿈)</div>
+            <textarea
+              disabled={opts.isHeader}
+              value={(opts.value.allowlist || []).join("\n")}
+              onChange={(e) => {
+                const list = parseCsv(e.target.value.replace(/\r?\n/g, ","));
+                opts.onChange({ ...opts.value, allowlist: list.length ? list : undefined });
+              }}
+              className="min-h-[60px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+              placeholder="예: item_a"
+            />
+          </label>
+          <label className="block">
+            <div className="mb-1 text-[11px] text-slate-500">Denylist (줄바꿈)</div>
+            <textarea
+              disabled={opts.isHeader}
+              value={(opts.value.denylist || []).join("\n")}
+              onChange={(e) => {
+                const list = parseCsv(e.target.value.replace(/\r?\n/g, ","));
+                opts.onChange({ ...opts.value, denylist: list.length ? list : undefined });
+              }}
+              className="min-h-[60px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+              placeholder="예: item_b"
+            />
+          </label>
+        </div>
+      </div>
+    ),
+    [clearReviewFlag]
   );
 
   const updateAllPages = useCallback(
@@ -1292,10 +1614,16 @@ export function ChatSettingsPanel({
         return acc;
       }, {} as Record<ConversationPageKey, Record<string, boolean>>)
     );
+    setReviewFlagsByPage({});
     setError(null);
   };
 
   const handleSave = async () => {
+    if (hasPendingReview) {
+      setError("기본값으로 채워진 항목이 있습니다. 강조 표시된 항목을 확인/변경한 뒤 저장하세요.");
+      scrollToFirstPendingReview();
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -1380,6 +1708,12 @@ export function ChatSettingsPanel({
           {description ||
             "서비스 전역 대화 정책을 폼으로 수정합니다. 저장 시 A_iam_auth_settings.providers.chat_policy (org 최신 값)에 반영됩니다."}
         </div>
+        {hasPendingReview ? (
+          <div className="mt-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            기본값으로 채워진 항목이 있습니다. 노란색으로 강조된 항목을 확인/변경해야 저장할 수 있습니다.
+            {activeReviewLabel ? <div className="mt-1 font-semibold">현재 미입력: {activeReviewLabel}</div> : null}
+          </div>
+        ) : null}
         {loading ? <div className="mt-2 text-xs text-slate-500">불러오는 중...</div> : null}
         {error ? <div className="mt-2 text-xs text-rose-600">{error}</div> : null}
         {savedAt ? <div className="mt-2 text-xs text-slate-500">저장됨: {savedAt}</div> : null}
@@ -1390,7 +1724,17 @@ export function ChatSettingsPanel({
           <Button type="button" variant="outline" onClick={handleResetToDefaults} disabled={loading || saving}>
             기본값으로 채우기
           </Button>
-          <Button type="button" onClick={handleSave} disabled={loading || saving}>
+          {hasPendingReview ? (
+            <Button
+              type="button"
+              onClick={scrollToFirstPendingReview}
+              disabled={loading || saving}
+              className="border-amber-500 bg-amber-500 text-white hover:bg-amber-600"
+            >
+              미입력 항목 보기
+            </Button>
+          ) : null}
+          <Button type="button" onClick={handleSave} disabled={loading || saving || hasPendingReview}>
             {saving ? "저장 중..." : "저장"}
           </Button>
         </div>
@@ -1444,6 +1788,9 @@ export function ChatSettingsPanel({
             const responseSchemaDetailFields = debugTurn?.responseSchemaDetailFields;
             const renderPlanDetailFields = debugTurn?.renderPlanDetailFields;
             const debugTreeCollapsed = debugDetailTreeCollapsedByPage[page] || {};
+            const reviewFlags = reviewFlagsByPage[page] || {};
+            const isReviewing = (key: string) => !isHeader && Boolean(reviewFlags[key]);
+            const isActiveReview = (key: string) => !isHeader && activeReview?.page === page && activeReview?.key === key;
             const showDebugHeaderDetails = Boolean(debugHeaderDetailsOpenByPage[page]);
             const showDebugTurnDetails = Boolean(debugTurnDetailsOpenByPage[page]);
             const showDebugLogsDetails = Boolean(debugLogsDetailsOpenByPage[page]);
@@ -1468,34 +1815,69 @@ export function ChatSettingsPanel({
                     <div className="text-xs font-semibold text-slate-900">Admin Panel</div>
                     <ToggleField
                       neutralStyle={isHeader}
+                      label={isHeader ? "adminPanel.enabled" : "Admin Panel 활성화"}
+                      checked={draft.adminPanel.enabled}
+                      visibility={draft.visibility.adminPanel.enabled}
+                      needsReview={isReviewing("adminPanel.enabled")}
+                      activeReview={isActiveReview("adminPanel.enabled")}
+                      reviewKey={!isHeader ? "adminPanel.enabled" : undefined}
+                      reviewPage={!isHeader ? page : undefined}
+                      onChange={(v) => {
+                        updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, enabled: v } }));
+                        if (!isHeader) clearReviewFlag(page, "adminPanel.enabled");
+                      }}
+                      onChangeVisibility={(mode) => {
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, enabled: mode } },
+                        }));
+                        if (!isHeader) clearReviewFlag(page, "adminPanel.enabled");
+                      }}
+                    />
+                    <ToggleField
+                      neutralStyle={isHeader}
                       label={isHeader ? "adminPanel.logsToggle" : "로그 OFF"}
                       checked={draft.adminPanel.logsToggle}
                       visibility={draft.visibility.adminPanel.logsToggle}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, logsToggle: v } }))}
-                      onChangeVisibility={(mode) =>
+                      needsReview={isReviewing("adminPanel.logsToggle")}
+                      activeReview={isActiveReview("adminPanel.logsToggle")}
+                      reviewKey={!isHeader ? "adminPanel.logsToggle" : undefined}
+                      reviewPage={!isHeader ? page : undefined}
+                      onChange={(v) => {
+                        updatePage(page, (prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, logsToggle: v } }));
+                        if (!isHeader) clearReviewFlag(page, "adminPanel.logsToggle");
+                      }}
+                      onChangeVisibility={(mode) => {
                         updatePage(page, (prev) => ({
                           ...prev,
                           visibility: { ...prev.visibility, adminPanel: { ...prev.visibility.adminPanel, logsToggle: mode } },
-                        }))
-                      }
+                        }));
+                        if (!isHeader) clearReviewFlag(page, "adminPanel.logsToggle");
+                      }}
                     />
                     <ToggleField
                       neutralStyle={isHeader}
                       label={isHeader ? "adminPanel.copyConversation" : "대화 복사"}
                       checked={draft.adminPanel.copyConversation}
                       visibility={draft.visibility.adminPanel.copyConversation}
-                      onChange={(v) =>
-                        updateAllPages((prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, copyConversation: v } }))
-                      }
-                      onChangeVisibility={(mode) =>
+                      needsReview={isReviewing("adminPanel.copyConversation")}
+                      activeReview={isActiveReview("adminPanel.copyConversation")}
+                      reviewKey={!isHeader ? "adminPanel.copyConversation" : undefined}
+                      reviewPage={!isHeader ? page : undefined}
+                      onChange={(v) => {
+                        updateAllPages((prev) => ({ ...prev, adminPanel: { ...prev.adminPanel, copyConversation: v } }));
+                        if (!isHeader) clearReviewFlagAllPages("adminPanel.copyConversation");
+                      }}
+                      onChangeVisibility={(mode) => {
                         updateAllPages((prev) => ({
                           ...prev,
                           visibility: {
                             ...prev.visibility,
                             adminPanel: { ...prev.visibility.adminPanel, copyConversation: mode },
                           },
-                        }))
-                      }
+                        }));
+                        if (!isHeader) clearReviewFlagAllPages("adminPanel.copyConversation");
+                      }}
                     />
                   </div>
 
@@ -1509,32 +1891,48 @@ export function ChatSettingsPanel({
                       label={isHeader ? "interaction.quickReplies" : "Quick Replies"}
                       checked={draft.interaction.quickReplies}
                       visibility={draft.visibility.interaction.quickReplies}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, quickReplies: v } }))}
-                      onChangeVisibility={(mode) =>
+                      needsReview={isReviewing("interaction.quickReplies")}
+                      activeReview={isActiveReview("interaction.quickReplies")}
+                      reviewKey={!isHeader ? "interaction.quickReplies" : undefined}
+                      reviewPage={!isHeader ? page : undefined}
+                      onChange={(v) => {
+                        updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, quickReplies: v } }));
+                        if (!isHeader) clearReviewFlag(page, "interaction.quickReplies");
+                      }}
+                      onChangeVisibility={(mode) => {
                         updatePage(page, (prev) => ({
                           ...prev,
                           visibility: {
                             ...prev.visibility,
                             interaction: { ...prev.visibility.interaction, quickReplies: mode },
                           },
-                        }))
-                      }
+                        }));
+                        if (!isHeader) clearReviewFlag(page, "interaction.quickReplies");
+                      }}
                     />
                     <ToggleField
                       neutralStyle={isHeader}
                       label={isHeader ? "interaction.productCards" : "Product Cards"}
                       checked={draft.interaction.productCards}
                       visibility={draft.visibility.interaction.productCards}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, productCards: v } }))}
-                      onChangeVisibility={(mode) =>
+                      needsReview={isReviewing("interaction.productCards")}
+                      activeReview={isActiveReview("interaction.productCards")}
+                      reviewKey={!isHeader ? "interaction.productCards" : undefined}
+                      reviewPage={!isHeader ? page : undefined}
+                      onChange={(v) => {
+                        updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, productCards: v } }));
+                        if (!isHeader) clearReviewFlag(page, "interaction.productCards");
+                      }}
+                      onChangeVisibility={(mode) => {
                         updatePage(page, (prev) => ({
                           ...prev,
                           visibility: {
                             ...prev.visibility,
                             interaction: { ...prev.visibility.interaction, productCards: mode },
                           },
-                        }))
-                      }
+                        }));
+                        if (!isHeader) clearReviewFlag(page, "interaction.productCards");
+                      }}
                     />
 
                     <ToggleField
@@ -1542,25 +1940,35 @@ export function ChatSettingsPanel({
                       label={isHeader ? "interaction.prefill" : "Prefill"}
                       checked={draft.interaction.prefill}
                       visibility={draft.visibility.interaction.prefill}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, prefill: v } }))}
-                      onChangeVisibility={(mode) =>
+                      needsReview={isReviewing("interaction.prefill")}
+                      activeReview={isActiveReview("interaction.prefill")}
+                      reviewKey={!isHeader ? "interaction.prefill" : undefined}
+                      reviewPage={!isHeader ? page : undefined}
+                      onChange={(v) => {
+                        updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, prefill: v } }));
+                        if (!isHeader) clearReviewFlag(page, "interaction.prefill");
+                      }}
+                      onChangeVisibility={(mode) => {
                         updatePage(page, (prev) => ({
                           ...prev,
                           visibility: {
                             ...prev.visibility,
                             interaction: { ...prev.visibility.interaction, prefill: mode },
                           },
-                        }))
-                      }
+                        }));
+                        if (!isHeader) clearReviewFlag(page, "interaction.prefill");
+                      }}
                     />
                     <label className="block">
                       <div className="mb-1 text-[11px] font-semibold text-slate-600">
                         {isHeader ? "interaction.prefillMessages" : "Prefill Messages (줄바꿈)"}
                       </div>
                       <textarea
+                        data-review-key={!isHeader ? "interaction.prefillMessages" : undefined}
+                        data-review-page={!isHeader ? page : undefined}
                         value={(draft.interaction.prefillMessages || []).join("\n")}
                         disabled={isHeader}
-                        onChange={(e) =>
+                        onChange={(e) => {
                           updatePage(page, (prev) => ({
                             ...prev,
                             interaction: {
@@ -1570,9 +1978,12 @@ export function ChatSettingsPanel({
                                 .map((item) => item.trim())
                                 .filter(Boolean),
                             },
-                          }))
-                        }
-                        className="config-input min-h-[70px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                          }));
+                          if (!isHeader) clearReviewFlag(page, "interaction.prefillMessages");
+                        }}
+                        className={`config-input min-h-[70px] w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500${
+                          isReviewing("interaction.prefillMessages") ? " border-amber-400 ring-1 ring-amber-200" : ""
+                        }${isActiveReview("interaction.prefillMessages") ? " ring-4 ring-amber-500" : ""}`}
                         placeholder="예: 기록한대로 응대하는 AI 상담사를"
                       />
                       {/* {!isHeader ? <div className="mt-1 text-[10px] text-slate-500">줄바꿈으로 여러 줄 입력</div> : null} */}
@@ -1582,15 +1993,20 @@ export function ChatSettingsPanel({
                         {isHeader ? "interaction.inputPlaceholder" : "Input Placeholder"}
                       </div>
                       <input
+                        data-review-key={!isHeader ? "interaction.inputPlaceholder" : undefined}
+                        data-review-page={!isHeader ? page : undefined}
                         value={draft.interaction.inputPlaceholder || ""}
                         disabled={isHeader}
-                        onChange={(e) =>
+                        onChange={(e) => {
                           updatePage(page, (prev) => ({
                             ...prev,
                             interaction: { ...prev.interaction, inputPlaceholder: e.target.value },
-                          }))
-                        }
-                        className="config-input h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500"
+                          }));
+                          if (!isHeader) clearReviewFlag(page, "interaction.inputPlaceholder");
+                        }}
+                        className={`config-input h-9 w-full rounded-md border border-slate-200 bg-white px-3 text-xs text-slate-700 disabled:bg-slate-100 disabled:text-slate-500${
+                          isReviewing("interaction.inputPlaceholder") ? " border-amber-400 ring-1 ring-amber-200" : ""
+                        }${isActiveReview("interaction.inputPlaceholder") ? " ring-4 ring-amber-500" : ""}`}
                         placeholder="예: 문의 내용을 입력해주세요"
                       />
                     </label>
@@ -1604,63 +2020,81 @@ export function ChatSettingsPanel({
                           label={isHeader ? "interaction.widgetHeaderAgentAction" : "Agent Action"}
                           checked={draft.interaction.widgetHeaderAgentAction}
                           visibility={draft.visibility.interaction.widgetHeaderAgentAction}
-                          onChange={(v) =>
+                          needsReview={isReviewing("interaction.widgetHeaderAgentAction")}
+                          activeReview={isActiveReview("interaction.widgetHeaderAgentAction")}
+                          reviewKey={!isHeader ? "interaction.widgetHeaderAgentAction" : undefined}
+                          reviewPage={!isHeader ? page : undefined}
+                          onChange={(v) => {
                             updatePage(page, (prev) => ({
                               ...prev,
                               interaction: { ...prev.interaction, widgetHeaderAgentAction: v },
-                            }))
-                          }
-                          onChangeVisibility={(mode) =>
+                            }));
+                            if (!isHeader) clearReviewFlag(page, "interaction.widgetHeaderAgentAction");
+                          }}
+                          onChangeVisibility={(mode) => {
                             updatePage(page, (prev) => ({
                               ...prev,
                               visibility: {
                                 ...prev.visibility,
                                 interaction: { ...prev.visibility.interaction, widgetHeaderAgentAction: mode },
                               },
-                            }))
-                          }
+                            }));
+                            if (!isHeader) clearReviewFlag(page, "interaction.widgetHeaderAgentAction");
+                          }}
                         />
                         <ToggleField
                           neutralStyle={isHeader}
                           label={isHeader ? "interaction.widgetHeaderNewConversation" : "New Conversation"}
                           checked={draft.interaction.widgetHeaderNewConversation}
                           visibility={draft.visibility.interaction.widgetHeaderNewConversation}
-                          onChange={(v) =>
+                          needsReview={isReviewing("interaction.widgetHeaderNewConversation")}
+                          activeReview={isActiveReview("interaction.widgetHeaderNewConversation")}
+                          reviewKey={!isHeader ? "interaction.widgetHeaderNewConversation" : undefined}
+                          reviewPage={!isHeader ? page : undefined}
+                          onChange={(v) => {
                             updatePage(page, (prev) => ({
                               ...prev,
                               interaction: { ...prev.interaction, widgetHeaderNewConversation: v },
-                            }))
-                          }
-                          onChangeVisibility={(mode) =>
+                            }));
+                            if (!isHeader) clearReviewFlag(page, "interaction.widgetHeaderNewConversation");
+                          }}
+                          onChangeVisibility={(mode) => {
                             updatePage(page, (prev) => ({
                               ...prev,
                               visibility: {
                                 ...prev.visibility,
                                 interaction: { ...prev.visibility.interaction, widgetHeaderNewConversation: mode },
                               },
-                            }))
-                          }
+                            }));
+                            if (!isHeader) clearReviewFlag(page, "interaction.widgetHeaderNewConversation");
+                          }}
                         />
                         <ToggleField
                           neutralStyle={isHeader}
                           label={isHeader ? "interaction.widgetHeaderClose" : "Close Button"}
                           checked={draft.interaction.widgetHeaderClose}
                           visibility={draft.visibility.interaction.widgetHeaderClose}
-                          onChange={(v) =>
+                          needsReview={isReviewing("interaction.widgetHeaderClose")}
+                          activeReview={isActiveReview("interaction.widgetHeaderClose")}
+                          reviewKey={!isHeader ? "interaction.widgetHeaderClose" : undefined}
+                          reviewPage={!isHeader ? page : undefined}
+                          onChange={(v) => {
                             updatePage(page, (prev) => ({
                               ...prev,
                               interaction: { ...prev.interaction, widgetHeaderClose: v },
-                            }))
-                          }
-                          onChangeVisibility={(mode) =>
+                            }));
+                            if (!isHeader) clearReviewFlag(page, "interaction.widgetHeaderClose");
+                          }}
+                          onChangeVisibility={(mode) => {
                             updatePage(page, (prev) => ({
                               ...prev,
                               visibility: {
                                 ...prev.visibility,
                                 interaction: { ...prev.visibility.interaction, widgetHeaderClose: mode },
                               },
-                            }))
-                          }
+                            }));
+                            if (!isHeader) clearReviewFlag(page, "interaction.widgetHeaderClose");
+                          }}
                         />
                       </div>
                     </div>
@@ -1670,21 +2104,27 @@ export function ChatSettingsPanel({
                         label={isHeader ? "interaction.threePhasePrompt" : "3-Phase Prompt"}
                         checked={draft.interaction.threePhasePrompt}
                         visibility={draft.visibility.interaction.threePhasePrompt}
-                        onChange={(v) =>
+                        needsReview={isReviewing("interaction.threePhasePrompt")}
+                        activeReview={isActiveReview("interaction.threePhasePrompt")}
+                        reviewKey={!isHeader ? "interaction.threePhasePrompt" : undefined}
+                        reviewPage={!isHeader ? page : undefined}
+                        onChange={(v) => {
                           updatePage(page, (prev) => ({
                             ...prev,
                             interaction: { ...prev.interaction, threePhasePrompt: v },
-                          }))
-                        }
-                        onChangeVisibility={(mode) =>
+                          }));
+                          if (!isHeader) clearReviewFlag(page, "interaction.threePhasePrompt");
+                        }}
+                        onChangeVisibility={(mode) => {
                           updatePage(page, (prev) => ({
                             ...prev,
                             visibility: {
                               ...prev.visibility,
                               interaction: { ...prev.visibility.interaction, threePhasePrompt: mode },
                             },
-                          }))
-                        }
+                          }));
+                          if (!isHeader) clearReviewFlag(page, "interaction.threePhasePrompt");
+                        }}
                         expandable={isHeader}
                         expanded={showThreePhaseDetails}
                         onToggleExpanded={() => {
@@ -1709,7 +2149,11 @@ export function ChatSettingsPanel({
                               checked={draft.interaction.threePhasePromptShowConfirmed}
                               visibility={draft.visibility.interaction.threePhasePromptShowConfirmed}
                               editableLabel={!isHeader}
-                              onLabelChange={(value) =>
+                              needsReview={isReviewing("interaction.threePhasePromptShowConfirmed")}
+                              activeReview={isActiveReview("interaction.threePhasePromptShowConfirmed")}
+                              reviewKey={!isHeader ? "interaction.threePhasePromptShowConfirmed" : undefined}
+                              reviewPage={!isHeader ? page : undefined}
+                              onLabelChange={(value) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   interaction: {
@@ -1719,23 +2163,26 @@ export function ChatSettingsPanel({
                                       confirmed: value,
                                     },
                                   },
-                                }))
-                              }
-                              onChange={(v) =>
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptShowConfirmed");
+                              }}
+                              onChange={(v) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   interaction: { ...prev.interaction, threePhasePromptShowConfirmed: v },
-                                }))
-                              }
-                              onChangeVisibility={(mode) =>
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptShowConfirmed");
+                              }}
+                              onChangeVisibility={(mode) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   visibility: {
                                     ...prev.visibility,
                                     interaction: { ...prev.visibility.interaction, threePhasePromptShowConfirmed: mode },
                                   },
-                                }))
-                              }
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptShowConfirmed");
+                              }}
                             />
                             <ToggleField
                               neutralStyle={isHeader}
@@ -1747,7 +2194,11 @@ export function ChatSettingsPanel({
                               checked={draft.interaction.threePhasePromptShowConfirming}
                               visibility={draft.visibility.interaction.threePhasePromptShowConfirming}
                               editableLabel={!isHeader}
-                              onLabelChange={(value) =>
+                              needsReview={isReviewing("interaction.threePhasePromptShowConfirming")}
+                              activeReview={isActiveReview("interaction.threePhasePromptShowConfirming")}
+                              reviewKey={!isHeader ? "interaction.threePhasePromptShowConfirming" : undefined}
+                              reviewPage={!isHeader ? page : undefined}
+                              onLabelChange={(value) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   interaction: {
@@ -1757,23 +2208,26 @@ export function ChatSettingsPanel({
                                       confirming: value,
                                     },
                                   },
-                                }))
-                              }
-                              onChange={(v) =>
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptShowConfirming");
+                              }}
+                              onChange={(v) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   interaction: { ...prev.interaction, threePhasePromptShowConfirming: v },
-                                }))
-                              }
-                              onChangeVisibility={(mode) =>
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptShowConfirming");
+                              }}
+                              onChangeVisibility={(mode) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   visibility: {
                                     ...prev.visibility,
                                     interaction: { ...prev.visibility.interaction, threePhasePromptShowConfirming: mode },
                                   },
-                                }))
-                              }
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptShowConfirming");
+                              }}
                             />
                             <ToggleField
                               neutralStyle={isHeader}
@@ -1785,7 +2239,11 @@ export function ChatSettingsPanel({
                               checked={draft.interaction.threePhasePromptShowNext}
                               visibility={draft.visibility.interaction.threePhasePromptShowNext}
                               editableLabel={!isHeader}
-                              onLabelChange={(value) =>
+                              needsReview={isReviewing("interaction.threePhasePromptShowNext")}
+                              activeReview={isActiveReview("interaction.threePhasePromptShowNext")}
+                              reviewKey={!isHeader ? "interaction.threePhasePromptShowNext" : undefined}
+                              reviewPage={!isHeader ? page : undefined}
+                              onLabelChange={(value) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   interaction: {
@@ -1795,44 +2253,53 @@ export function ChatSettingsPanel({
                                       next: value,
                                     },
                                   },
-                                }))
-                              }
-                              onChange={(v) =>
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptShowNext");
+                              }}
+                              onChange={(v) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   interaction: { ...prev.interaction, threePhasePromptShowNext: v },
-                                }))
-                              }
-                              onChangeVisibility={(mode) =>
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptShowNext");
+                              }}
+                              onChangeVisibility={(mode) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   visibility: {
                                     ...prev.visibility,
                                     interaction: { ...prev.visibility.interaction, threePhasePromptShowNext: mode },
                                   },
-                                }))
-                              }
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptShowNext");
+                              }}
                             />
                             <ToggleField
                               neutralStyle={isHeader}
                               label={isHeader ? "interaction.threePhasePromptHideLabels" : "Hide Labels"}
                               checked={draft.interaction.threePhasePromptHideLabels}
                               visibility={draft.visibility.interaction.threePhasePromptHideLabels}
-                              onChange={(v) =>
+                              needsReview={isReviewing("interaction.threePhasePromptHideLabels")}
+                              activeReview={isActiveReview("interaction.threePhasePromptHideLabels")}
+                              reviewKey={!isHeader ? "interaction.threePhasePromptHideLabels" : undefined}
+                              reviewPage={!isHeader ? page : undefined}
+                              onChange={(v) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   interaction: { ...prev.interaction, threePhasePromptHideLabels: v },
-                                }))
-                              }
-                              onChangeVisibility={(mode) =>
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptHideLabels");
+                              }}
+                              onChangeVisibility={(mode) => {
                                 updatePage(page, (prev) => ({
                                   ...prev,
                                   visibility: {
                                     ...prev.visibility,
                                     interaction: { ...prev.visibility.interaction, threePhasePromptHideLabels: mode },
                                   },
-                                }))
-                              }
+                                }));
+                                if (!isHeader) clearReviewFlag(page, "interaction.threePhasePromptHideLabels");
+                              }}
                             />
                           </div>
                         </div>
@@ -1843,21 +2310,78 @@ export function ChatSettingsPanel({
                       label={isHeader ? "interaction.inputSubmit" : "입력/전송"}
                       checked={draft.interaction.inputSubmit}
                       visibility={draft.visibility.interaction.inputSubmit}
-                      onChange={(v) => updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, inputSubmit: v } }))}
-                      onChangeVisibility={(mode) =>
+                      needsReview={isReviewing("interaction.inputSubmit")}
+                      activeReview={isActiveReview("interaction.inputSubmit")}
+                      reviewKey={!isHeader ? "interaction.inputSubmit" : undefined}
+                      reviewPage={!isHeader ? page : undefined}
+                      onChange={(v) => {
+                        updatePage(page, (prev) => ({ ...prev, interaction: { ...prev.interaction, inputSubmit: v } }));
+                        if (!isHeader) clearReviewFlag(page, "interaction.inputSubmit");
+                      }}
+                      onChangeVisibility={(mode) => {
                         updatePage(page, (prev) => ({
                           ...prev,
                           visibility: {
                             ...prev.visibility,
                             interaction: { ...prev.visibility.interaction, inputSubmit: mode },
                           },
-                        }))
-                      }
+                        }));
+                        if (!isHeader) clearReviewFlag(page, "interaction.inputSubmit");
+                      }}
                     />
                   </div>
 
                   <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="text-xs font-semibold text-slate-900">Setup</div>
+                    <ToggleField
+                      neutralStyle={isHeader}
+                      label={isHeader ? "setup.modelSelector" : "모델 선택 UI"}
+                      checked={draft.setup.modelSelector}
+                      visibility={draft.visibility.setup.modelSelector}
+                      needsReview={isReviewing("setup.modelSelector")}
+                      activeReview={isActiveReview("setup.modelSelector")}
+                      reviewKey={!isHeader ? "setup.modelSelector" : undefined}
+                      reviewPage={!isHeader ? page : undefined}
+                      onChange={(v) => {
+                        updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modelSelector: v } }));
+                        if (!isHeader) clearReviewFlag(page, "setup.modelSelector");
+                      }}
+                      onChangeVisibility={(mode) => {
+                        updatePage(page, (prev) => ({
+                          ...prev,
+                          visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modelSelector: mode } },
+                        }));
+                        if (!isHeader) clearReviewFlag(page, "setup.modelSelector");
+                      }}
+                    />
+                    <div
+                      className={`rounded-lg border border-slate-200 bg-white p-2${
+                        isReviewing("setup.defaultSetupMode") ? " border-amber-400 ring-1 ring-amber-200" : ""
+                      }${isActiveReview("setup.defaultSetupMode") ? " ring-4 ring-amber-500" : ""}`}
+                      data-review-key={!isHeader ? "setup.defaultSetupMode" : undefined}
+                      data-review-page={!isHeader ? page : undefined}
+                    >
+                      <div className="mb-1 text-[11px] font-semibold text-slate-600">
+                        {isHeader ? "setup.defaultSetupMode" : "기본 모드"}
+                      </div>
+                      <SelectPopover
+                        value={draft.setup.defaultSetupMode}
+                        disabled={isHeader}
+                        options={[
+                          { id: "new", label: "신규 모델" },
+                          { id: "existing", label: "기존 모델" },
+                        ]}
+                        onChange={(value) => {
+                          updatePage(page, (prev) => ({
+                            ...prev,
+                            setup: { ...prev.setup, defaultSetupMode: value as "existing" | "new" },
+                          }));
+                          if (!isHeader) clearReviewFlag(page, "setup.defaultSetupMode");
+                        }}
+                        className="w-full"
+                        buttonClassName="h-9 text-xs"
+                      />
+                    </div>
                     <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
                       <div className="flex items-center text-xs font-semibold text-slate-900">
                         <span>{isHeader ? "runtime.selfUpdate" : "Runtime Self Update"}</span>
@@ -1922,13 +2446,21 @@ export function ChatSettingsPanel({
                                 }
                                 checked={draft.setup.modeExisting}
                                 visibility={draft.visibility.setup.modeExisting}
-                                onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeExisting: v } }))}
-                                onChangeVisibility={(mode) =>
+                                needsReview={isReviewing("setup.modeExisting")}
+                                activeReview={isActiveReview("setup.modeExisting")}
+                                reviewKey={!isHeader ? "setup.modeExisting" : undefined}
+                                reviewPage={!isHeader ? page : undefined}
+                                onChange={(v) => {
+                                  updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeExisting: v } }));
+                                  if (!isHeader) clearReviewFlag(page, "setup.modeExisting");
+                                }}
+                                onChangeVisibility={(mode) => {
                                   updatePage(page, (prev) => ({
                                     ...prev,
                                     visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeExisting: mode } },
-                                  }))
-                                }
+                                  }));
+                                  if (!isHeader) clearReviewFlag(page, "setup.modeExisting");
+                                }}
                                 expandable={isHeader}
                                 expanded={showSetupExistingDetails}
                                 onToggleExpanded={() => {
@@ -1965,36 +2497,48 @@ export function ChatSettingsPanel({
                                           {...keyProps}
                                           checked={draft.setup.sessionIdSearch}
                                           visibility={draft.visibility.setup.sessionIdSearch}
-                                          onChange={(v) =>
-                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, sessionIdSearch: v } }))
-                                          }
-                                          onChangeVisibility={(mode) =>
+                                          needsReview={isReviewing("setup.sessionIdSearch")}
+                                          activeReview={isActiveReview("setup.sessionIdSearch")}
+                                          reviewKey={!isHeader ? "setup.sessionIdSearch" : undefined}
+                                          reviewPage={!isHeader ? page : undefined}
+                                          onChange={(v) => {
+                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, sessionIdSearch: v } }));
+                                            if (!isHeader) clearReviewFlag(page, "setup.sessionIdSearch");
+                                          }}
+                                          onChangeVisibility={(mode) => {
                                             updatePage(page, (prev) => ({
                                               ...prev,
                                               visibility: {
                                                 ...prev.visibility,
                                                 setup: { ...prev.visibility.setup, sessionIdSearch: mode },
                                               },
-                                            }))
-                                          }
+                                            }));
+                                            if (!isHeader) clearReviewFlag(page, "setup.sessionIdSearch");
+                                          }}
                                         />
                                       ) : existingKey === "agentSelector" ? (
                                         <ToggleField
                                           {...keyProps}
                                           checked={draft.setup.agentSelector}
                                           visibility={draft.visibility.setup.agentSelector}
-                                          onChange={(v) =>
-                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, agentSelector: v } }))
-                                          }
-                                          onChangeVisibility={(mode) =>
+                                          needsReview={isReviewing("setup.agentSelector")}
+                                          activeReview={isActiveReview("setup.agentSelector")}
+                                          reviewKey={!isHeader ? "setup.agentSelector" : undefined}
+                                          reviewPage={!isHeader ? page : undefined}
+                                          onChange={(v) => {
+                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, agentSelector: v } }));
+                                            if (!isHeader) clearReviewFlag(page, "setup.agentSelector");
+                                          }}
+                                          onChangeVisibility={(mode) => {
                                             updatePage(page, (prev) => ({
                                               ...prev,
                                               visibility: {
                                                 ...prev.visibility,
                                                 setup: { ...prev.visibility.setup, agentSelector: mode },
                                               },
-                                            }))
-                                          }
+                                            }));
+                                            if (!isHeader) clearReviewFlag(page, "setup.agentSelector");
+                                          }}
                                         />
                                       ) : (
                                         <div className="flex h-12 items-center justify-between gap-3 rounded-lg border border-slate-300 bg-slate-100 px-3 text-xs">
@@ -2062,13 +2606,21 @@ export function ChatSettingsPanel({
                                 }
                                 checked={draft.setup.modeNew}
                                 visibility={draft.visibility.setup.modeNew}
-                                onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeNew: v } }))}
-                                onChangeVisibility={(mode) =>
+                                needsReview={isReviewing("setup.modeNew")}
+                                activeReview={isActiveReview("setup.modeNew")}
+                                reviewKey={!isHeader ? "setup.modeNew" : undefined}
+                                reviewPage={!isHeader ? page : undefined}
+                                onChange={(v) => {
+                                  updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, modeNew: v } }));
+                                  if (!isHeader) clearReviewFlag(page, "setup.modeNew");
+                                }}
+                                onChangeVisibility={(mode) => {
                                   updatePage(page, (prev) => ({
                                     ...prev,
                                     visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, modeNew: mode } },
-                                  }))
-                                }
+                                  }));
+                                  if (!isHeader) clearReviewFlag(page, "setup.modeNew");
+                                }}
                                 expandable={isHeader}
                                 expanded={showSetupNewDetails}
                                 onToggleExpanded={() => {
@@ -2103,30 +2655,41 @@ export function ChatSettingsPanel({
                                               }
                                               checked={draft.setup.llmSelector}
                                               visibility={draft.visibility.setup.llmSelector}
-                                              onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, llmSelector: v } }))}
-                                              onChangeVisibility={(mode) =>
+                                              needsReview={isReviewing("setup.llmSelector")}
+                                              activeReview={isActiveReview("setup.llmSelector")}
+                                              reviewKey={!isHeader ? "setup.llmSelector" : undefined}
+                                              reviewPage={!isHeader ? page : undefined}
+                                              onChange={(v) => {
+                                                updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, llmSelector: v } }));
+                                                if (!isHeader) clearReviewFlag(page, "setup.llmSelector");
+                                              }}
+                                              onChangeVisibility={(mode) => {
                                                 updatePage(page, (prev) => ({
                                                   ...prev,
                                                   visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, llmSelector: mode } },
-                                                }))
-                                              }
+                                                }));
+                                                if (!isHeader) clearReviewFlag(page, "setup.llmSelector");
+                                              }}
                                             />
                                             <div className="border-l-2 border-slate-200 pl-3">
                                               <label className="block">
                                                 <div className="mb-1 text-[11px] font-semibold text-slate-600">기본 LLM</div>
-                                                <SelectPopover
-                                                  value={draft.setup.defaultLlm}
-                                                  disabled={isHeader}
-                                                  options={DEFAULT_LLM_OPTIONS}
-                                                  onChange={(value) =>
-                                                    updatePage(page, (prev) => ({
-                                                      ...prev,
-                                                      setup: { ...prev.setup, defaultLlm: value as "chatgpt" | "gemini" },
-                                                    }))
-                                                  }
-                                                  className="w-full"
-                                                  buttonClassName="h-9 text-xs"
-                                                />
+                                                <div data-review-key={!isHeader ? "setup.defaultLlm" : undefined} data-review-page={!isHeader ? page : undefined}>
+                                                  <SelectPopover
+                                                    value={draft.setup.defaultLlm}
+                                                    disabled={isHeader}
+                                                    options={DEFAULT_LLM_OPTIONS}
+                                                    onChange={(value) => {
+                                                      updatePage(page, (prev) => ({
+                                                        ...prev,
+                                                        setup: { ...prev.setup, defaultLlm: value as "chatgpt" | "gemini" },
+                                                      }));
+                                                      if (!isHeader) clearReviewFlag(page, "setup.defaultLlm");
+                                                    }}
+                                                    className="w-full"
+                                                    buttonClassName={`h-9 text-xs${isReviewing("setup.defaultLlm") ? " border-amber-400 ring-1 ring-amber-200" : ""}${isActiveReview("setup.defaultLlm") ? " ring-4 ring-amber-500" : ""}`}
+                                                  />
+                                                </div>
                                               </label>
                                             </div>
                                           </>
@@ -2150,13 +2713,21 @@ export function ChatSettingsPanel({
                                             }
                                             checked={draft.setup.kbSelector}
                                             visibility={draft.visibility.setup.kbSelector}
-                                            onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, kbSelector: v } }))}
-                                            onChangeVisibility={(mode) =>
+                                            needsReview={isReviewing("setup.kbSelector")}
+                                            activeReview={isActiveReview("setup.kbSelector")}
+                                            reviewKey={!isHeader ? "setup.kbSelector" : undefined}
+                                            reviewPage={!isHeader ? page : undefined}
+                                            onChange={(v) => {
+                                              updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, kbSelector: v } }));
+                                              if (!isHeader) clearReviewFlag(page, "setup.kbSelector");
+                                            }}
+                                            onChangeVisibility={(mode) => {
                                               updatePage(page, (prev) => ({
                                                 ...prev,
                                                 visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, kbSelector: mode } },
-                                              }))
-                                            }
+                                              }));
+                                              if (!isHeader) clearReviewFlag(page, "setup.kbSelector");
+                                            }}
                                           />
                                         );
                                       }
@@ -2178,15 +2749,21 @@ export function ChatSettingsPanel({
                                             }
                                             checked={draft.setup.adminKbSelector}
                                             visibility={draft.visibility.setup.adminKbSelector}
-                                            onChange={(v) =>
-                                              updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, adminKbSelector: v } }))
-                                            }
-                                            onChangeVisibility={(mode) =>
+                                            needsReview={isReviewing("setup.adminKbSelector")}
+                                            activeReview={isActiveReview("setup.adminKbSelector")}
+                                            reviewKey={!isHeader ? "setup.adminKbSelector" : undefined}
+                                            reviewPage={!isHeader ? page : undefined}
+                                            onChange={(v) => {
+                                              updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, adminKbSelector: v } }));
+                                              if (!isHeader) clearReviewFlag(page, "setup.adminKbSelector");
+                                            }}
+                                            onChangeVisibility={(mode) => {
                                               updatePage(page, (prev) => ({
                                                 ...prev,
                                                 visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, adminKbSelector: mode } },
-                                              }))
-                                            }
+                                              }));
+                                              if (!isHeader) clearReviewFlag(page, "setup.adminKbSelector");
+                                            }}
                                           />
                                         );
                                       }
@@ -2208,13 +2785,21 @@ export function ChatSettingsPanel({
                                             }
                                             checked={draft.setup.routeSelector}
                                             visibility={draft.visibility.setup.routeSelector}
-                                            onChange={(v) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, routeSelector: v } }))}
-                                            onChangeVisibility={(mode) =>
+                                            needsReview={isReviewing("setup.routeSelector")}
+                                            activeReview={isActiveReview("setup.routeSelector")}
+                                            reviewKey={!isHeader ? "setup.routeSelector" : undefined}
+                                            reviewPage={!isHeader ? page : undefined}
+                                            onChange={(v) => {
+                                              updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, routeSelector: v } }));
+                                              if (!isHeader) clearReviewFlag(page, "setup.routeSelector");
+                                            }}
+                                            onChangeVisibility={(mode) => {
                                               updatePage(page, (prev) => ({
                                                 ...prev,
                                                 visibility: { ...prev.visibility, setup: { ...prev.visibility.setup, routeSelector: mode } },
-                                              }))
-                                            }
+                                              }));
+                                              if (!isHeader) clearReviewFlag(page, "setup.routeSelector");
+                                            }}
                                           />
                                         );
                                       }
@@ -2236,18 +2821,24 @@ export function ChatSettingsPanel({
                                             }
                                             checked={draft.mcp.providerSelector}
                                             visibility={draft.visibility.mcp.providerSelector}
-                                            onChange={(v) =>
-                                              updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, providerSelector: v } }))
-                                            }
-                                            onChangeVisibility={(mode) =>
+                                            needsReview={isReviewing("mcp.providerSelector")}
+                                            activeReview={isActiveReview("mcp.providerSelector")}
+                                            reviewKey={!isHeader ? "mcp.providerSelector" : undefined}
+                                            reviewPage={!isHeader ? page : undefined}
+                                            onChange={(v) => {
+                                              updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, providerSelector: v } }));
+                                              if (!isHeader) clearReviewFlag(page, "mcp.providerSelector");
+                                            }}
+                                            onChangeVisibility={(mode) => {
                                               updatePage(page, (prev) => ({
                                                 ...prev,
                                                 visibility: {
                                                   ...prev.visibility,
                                                   mcp: { ...prev.visibility.mcp, providerSelector: mode },
                                                 },
-                                              }))
-                                            }
+                                              }));
+                                              if (!isHeader) clearReviewFlag(page, "mcp.providerSelector");
+                                            }}
                                           />
                                         );
                                       }
@@ -2269,18 +2860,24 @@ export function ChatSettingsPanel({
                                             }
                                             checked={draft.mcp.actionSelector}
                                             visibility={draft.visibility.mcp.actionSelector}
-                                            onChange={(v) =>
-                                              updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, actionSelector: v } }))
-                                            }
-                                            onChangeVisibility={(mode) =>
+                                            needsReview={isReviewing("mcp.actionSelector")}
+                                            activeReview={isActiveReview("mcp.actionSelector")}
+                                            reviewKey={!isHeader ? "mcp.actionSelector" : undefined}
+                                            reviewPage={!isHeader ? page : undefined}
+                                            onChange={(v) => {
+                                              updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, actionSelector: v } }));
+                                              if (!isHeader) clearReviewFlag(page, "mcp.actionSelector");
+                                            }}
+                                            onChangeVisibility={(mode) => {
                                               updatePage(page, (prev) => ({
                                                 ...prev,
                                                 visibility: {
                                                   ...prev.visibility,
                                                   mcp: { ...prev.visibility.mcp, actionSelector: mode },
                                                 },
-                                              }))
-                                            }
+                                              }));
+                                              if (!isHeader) clearReviewFlag(page, "mcp.actionSelector");
+                                            }}
                                           />
                                         );
                                       }
@@ -2301,18 +2898,24 @@ export function ChatSettingsPanel({
                                           }
                                           checked={draft.setup.inlineUserKbInput}
                                           visibility={draft.visibility.setup.inlineUserKbInput}
-                                          onChange={(v) =>
-                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, inlineUserKbInput: v } }))
-                                          }
-                                          onChangeVisibility={(mode) =>
+                                          needsReview={isReviewing("setup.inlineUserKbInput")}
+                                          activeReview={isActiveReview("setup.inlineUserKbInput")}
+                                          reviewKey={!isHeader ? "setup.inlineUserKbInput" : undefined}
+                                          reviewPage={!isHeader ? page : undefined}
+                                          onChange={(v) => {
+                                            updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, inlineUserKbInput: v } }));
+                                            if (!isHeader) clearReviewFlag(page, "setup.inlineUserKbInput");
+                                          }}
+                                          onChangeVisibility={(mode) => {
                                             updatePage(page, (prev) => ({
                                               ...prev,
                                               visibility: {
                                                 ...prev.visibility,
                                                 setup: { ...prev.visibility.setup, inlineUserKbInput: mode },
                                               },
-                                            }))
-                                          }
+                                            }));
+                                            if (!isHeader) clearReviewFlag(page, "setup.inlineUserKbInput");
+                                          }}
                                         />
                                       );
                                     };
@@ -2337,6 +2940,58 @@ export function ChatSettingsPanel({
                         ) : null}
                       </>
                     ) : null}
+
+                    <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
+                      <div className="text-[11px] font-semibold text-slate-700">Allow/Deny</div>
+                      {renderAllowDenyBlock({
+                        page,
+                        isHeader,
+                        key: "mcp.providers.allowDeny",
+                        label: "MCP Providers",
+                        value: draft.mcp.providers,
+                        onChange: (next) => updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, providers: next } })),
+                      })}
+                      {renderAllowDenyBlock({
+                        page,
+                        isHeader,
+                        key: "mcp.tools.allowDeny",
+                        label: "MCP Tools",
+                        value: draft.mcp.tools,
+                        onChange: (next) => updatePage(page, (prev) => ({ ...prev, mcp: { ...prev.mcp, tools: next } })),
+                      })}
+                      {renderAllowDenyBlock({
+                        page,
+                        isHeader,
+                        key: "setup.llms.allowDeny",
+                        label: "LLM IDs",
+                        value: draft.setup.llms,
+                        onChange: (next) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, llms: next } })),
+                      })}
+                      {renderAllowDenyBlock({
+                        page,
+                        isHeader,
+                        key: "setup.kbIds.allowDeny",
+                        label: "KB IDs",
+                        value: draft.setup.kbIds,
+                        onChange: (next) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, kbIds: next } })),
+                      })}
+                      {renderAllowDenyBlock({
+                        page,
+                        isHeader,
+                        key: "setup.adminKbIds.allowDeny",
+                        label: "Admin KB IDs",
+                        value: draft.setup.adminKbIds,
+                        onChange: (next) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, adminKbIds: next } })),
+                      })}
+                      {renderAllowDenyBlock({
+                        page,
+                        isHeader,
+                        key: "setup.routes.allowDeny",
+                        label: "Runtime Routes",
+                        value: draft.setup.routes,
+                        onChange: (next) => updatePage(page, (prev) => ({ ...prev, setup: { ...prev.setup, routes: next } })),
+                      })}
+                    </div>
                   </div>
                 </div>
 

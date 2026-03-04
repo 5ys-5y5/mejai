@@ -8,7 +8,10 @@ import {
   stripWidgetMeta,
   type WidgetSetupConfig,
 } from "@/lib/widgetTemplateMeta";
-import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
+import {
+  normalizeWidgetChatPolicyProvider,
+  normalizeWidgetChatPolicyRecordFromProvider,
+} from "@/lib/widgetChatPolicyShape";
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
   if ("error" in context) return { ok: false, status: 401, error: context.error };
@@ -25,14 +28,14 @@ async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>
 
 function mapTemplateRow(row: Record<string, any>) {
   const meta = readWidgetMeta(row.theme);
-  const legacyPolicy = (meta.chat_policy || null) as ConversationFeaturesProviderShape | null;
+  const legacyPolicy = normalizeWidgetChatPolicyProvider(meta.chat_policy || null);
   return {
     ...row,
     theme: stripWidgetMeta(row.theme),
     widget_type: meta.type || "template",
     template_id: meta.template_id || null,
     setup_config: (meta.setup_config || null) as WidgetSetupConfig | null,
-    chat_policy: (row.chat_policy || legacyPolicy || null) as ConversationFeaturesProviderShape | null,
+    chat_policy: normalizeWidgetChatPolicyProvider(row.chat_policy || legacyPolicy || null),
   };
 }
 
@@ -108,9 +111,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const setupConfig = (body.setup_config && typeof body.setup_config === "object" ? body.setup_config : meta.setup_config) as
     | WidgetSetupConfig
     | null;
-  const chatPolicy = (body.chat_policy && typeof body.chat_policy === "object" ? body.chat_policy : existing.chat_policy) as
-    | ConversationFeaturesProviderShape
-    | null;
+  const chatPolicy = normalizeWidgetChatPolicyRecordFromProvider(
+    body.chat_policy && typeof body.chat_policy === "object" ? body.chat_policy : existing.chat_policy
+  );
 
   const nextTheme = applyWidgetMeta(theme, {
     type: meta.type || "template",

@@ -244,6 +244,9 @@ export default function WidgetEmbedPage() {
   const visitorId = useMemo(() => String(searchParams?.get("vid") || "").trim(), [searchParams]);
   const sessionSeed = useMemo(() => String(searchParams?.get("sid") || "").trim(), [searchParams]);
   const overridesParam = useMemo(() => String(searchParams?.get("ovr") || "").trim(), [searchParams]);
+  const previewOrigin = useMemo(() => String(searchParams?.get("origin") || "").trim(), [searchParams]);
+  const previewPageUrl = useMemo(() => String(searchParams?.get("page_url") || "").trim(), [searchParams]);
+  const previewReferrer = useMemo(() => String(searchParams?.get("referrer") || "").trim(), [searchParams]);
   const initialOverrides = useMemo(() => decodeWidgetOverrides(overridesParam), [overridesParam]);
 
   const [activeTab, setActiveTab] = useState<WidgetConversationTab>("chat");
@@ -256,7 +259,17 @@ export default function WidgetEmbedPage() {
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState("연결 중");
   const [pendingUser, setPendingUser] = useState<Record<string, any> | null>(null);
-  const [pendingMeta, setPendingMeta] = useState<Record<string, any> | null>(null);
+  const [pendingMeta, setPendingMeta] = useState<Record<string, any> | null>(() => {
+    if (previewOrigin || previewPageUrl || previewReferrer) {
+      return {
+        origin: previewOrigin,
+        page_url: previewPageUrl,
+        referrer: previewReferrer,
+        visitor_id: visitorId || undefined,
+      };
+    }
+    return null;
+  });
   const [pendingOverrides, setPendingOverrides] = useState<Record<string, any> | null>(initialOverrides);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [showAdminLogs, setShowAdminLogs] = useState(false);
@@ -273,6 +286,16 @@ export default function WidgetEmbedPage() {
     llm: "chatgpt",
     inlineKb: "",
   });
+  useEffect(() => {
+    if (!previewOrigin && !previewPageUrl && !previewReferrer) return;
+    setPendingMeta((prev) => ({
+      ...prev,
+      origin: previewOrigin || prev?.origin,
+      page_url: previewPageUrl || prev?.page_url,
+      referrer: previewReferrer || prev?.referrer,
+      visitor_id: visitorId || prev?.visitor_id,
+    }));
+  }, [previewOrigin, previewPageUrl, previewReferrer, visitorId]);
   useEffect(() => {
     if (typeof window === "undefined") return;
     const root = document.documentElement;
@@ -496,11 +519,25 @@ export default function WidgetEmbedPage() {
       setStatus(options?.forceNew ? "새 대화 준비 중" : "초기화 중");
       const referrer = typeof document !== "undefined" ? document.referrer : "";
       const meta = pendingMeta || {};
+      const resolveOrigin = () => {
+        const explicit = String(meta.origin || "").trim();
+        if (explicit) return explicit;
+        const candidates = [meta.page_url, meta.referrer, referrer].map((value) => String(value || "").trim());
+        for (const candidate of candidates) {
+          if (!candidate) continue;
+          try {
+            return new URL(candidate).origin;
+          } catch {
+            // ignore invalid URL
+          }
+        }
+        return "";
+      };
       const seedSession = options?.forceNew ? "" : sessionSeedRef.current;
       if (seedSession) sessionSeedRef.current = "";
       const payload = {
         public_key: key,
-        origin: meta.origin || "",
+        origin: resolveOrigin(),
         page_url: meta.page_url || referrer || "",
         referrer: meta.referrer || referrer || "",
         session_id: seedSession || undefined,
@@ -669,11 +706,13 @@ export default function WidgetEmbedPage() {
   }, []);
 
   useEffect(() => {
+    const hasPreviewMeta = Boolean(pendingMeta?.origin || pendingMeta?.page_url || pendingMeta?.referrer);
+    if (visitorId === "preview" && !hasPreviewMeta) return;
     const timer = setTimeout(() => {
       void callInit(pendingUser);
     }, 200);
     return () => clearTimeout(timer);
-  }, [callInit, pendingUser]);
+  }, [callInit, pendingUser, pendingMeta, visitorId]);
 
   useEffect(() => {
     const el = chatScrollRef.current;

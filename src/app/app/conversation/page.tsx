@@ -351,11 +351,11 @@ export default function ConversationWidgetPage() {
             },
             saveProvider: async (_authToken: string, values: any) => {
               const provider = {
-                pages: values.pages,
-                debug_copy: values.debug_copy,
-                page_registry: values.page_registry,
-                settings_ui: values.settings_ui,
-              } as ConversationFeaturesProviderShape;
+                page: values.pages?.[WIDGET_PAGE_KEY],
+                settings_ui: {
+                  setup_fields: values.settings_ui?.setup_fields?.[WIDGET_PAGE_KEY],
+                },
+              };
               await apiFetch(`/api/widget-templates/${policyTemplateId}/chat-policy`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

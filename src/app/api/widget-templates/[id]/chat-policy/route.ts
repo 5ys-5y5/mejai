@@ -1,12 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
+import {
+  normalizeWidgetChatPolicyProvider,
+  normalizeWidgetChatPolicyRecordFromProvider,
+} from "@/lib/widgetChatPolicyShape";
 
 function normalizeId(value: string | string[] | null | undefined) {
   if (Array.isArray(value)) return String(value[0] || "").trim();
   return String(value || "").trim();
 }
+
+function readTemplateId(req: NextRequest, params?: { id?: string }) {
+  const byParams = normalizeId(params?.id);
+  if (byParams) return byParams;
+  const parts = req.nextUrl.pathname.split("/").filter(Boolean);
+  const idIndex = parts.indexOf("widget-templates") + 1;
+  return idIndex > 0 ? normalizeId(parts[idIndex]) : "";
+}
+
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
   if ("error" in context) return { ok: false, status: 401, error: context.error };
@@ -22,7 +34,7 @@ async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>
 }
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const templateId = normalizeId(params?.id);
+  const templateId = readTemplateId(req, params);
   if (!templateId) {
     return NextResponse.json({ error: "INVALID_TEMPLATE_ID" }, { status: 400 });
   }
@@ -46,12 +58,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  const provider = (data.chat_policy || null) as ConversationFeaturesProviderShape | null;
+  const provider = normalizeWidgetChatPolicyProvider(data.chat_policy || null);
   return NextResponse.json({ provider });
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const templateId = normalizeId(params?.id);
+  const templateId = readTemplateId(req, params);
   if (!templateId) {
     return NextResponse.json({ error: "INVALID_TEMPLATE_ID" }, { status: 400 });
   }
@@ -95,7 +107,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  const provider = (body.provider || null) as ConversationFeaturesProviderShape | null;
+  const provider = normalizeWidgetChatPolicyRecordFromProvider(body.provider || null);
 
   const { error } = await supabaseAdmin
     .from("B_chat_widgets")
