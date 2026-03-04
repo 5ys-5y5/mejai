@@ -1,0 +1,294 @@
+{
+  "debug": {
+    "sections": {
+      "logs": {
+        "mcp": {
+          "enabled": true,
+          "request": true,
+          "response": true,
+          "includeError": true,
+          "includeSuccess": true
+        },
+        "debug": {
+          "enabled": true,
+          "usedOnly": true,
+          "prefixJson": true,
+          "prefixJsonSections": {
+            "slotFlow": true,
+            "intentScope": true,
+            "requestMeta": true,
+            "kbResolution": true,
+            "resolvedAgent": true,
+            "toolAllowlist": true,
+            "modelResolution": true,
+            "policyConflicts": true,
+            "conflictResolution": true,
+            "toolAllowlistQueryError": true,
+            "toolAllowlistQueryErrorById": true,
+            "toolAllowlistToolsByIdCount": true,
+            "toolAllowlistValidToolCount": true,
+            "toolAllowlistResolvedToolIds": true,
+            "toolAllowlistAllowedToolCount": true,
+            "toolAllowlistAllowedToolNames": true,
+            "toolAllowlistResolvedToolCount": true,
+            "toolAllowlistProviderSelections": true,
+            "toolAllowlistRequestedToolCount": true,
+            "toolAllowlistMissingExpectedTools": true,
+            "toolAllowlistQueryErrorByProvider": true,
+            "toolAllowlistToolsByProviderCount": true,
+            "toolAllowlistProviderSelectionCount": true
+          },
+          "dedupeGlobalPrefixJson": true
+        },
+        "event": {
+          "enabled": true,
+          "payload": true,
+          "allowlist": []
+        },
+        "enabled": true,
+        "issueSummary": true
+      },
+      "turn": {
+        "turnId": true,
+        "enabled": true,
+        "tokenUsed": true,
+        "messageText": true,
+        "tokenUnused": true,
+        "quickReplyRule": true,
+        "renderPlanDetail": true,
+        "renderPlanSummary": true,
+        "responseSchemaDetail": true,
+        "responseSchemaSummary": true,
+        "renderPlanDetailFields": {},
+        "responseSchemaDetailFields": {}
+      },
+      "header": {
+        "enabled": false,
+        "principle": true,
+        "auditStatus": true,
+        "expectedLists": true,
+        "runtimeModules": true
+      }
+    },
+    "outputMode": "used_only",
+    "auditBotScope": "runtime_turns_only",
+    "includeTurnId": true,
+    "includeTurnLogs": true,
+    "includeRenderPlan": true,
+    "includeTokenUnused": true,
+    "includeQuickReplyRule": true,
+    "includeResponseSchema": true,
+    "includePrincipleHeader": true
+  },
+  "widget": {
+    "cfg": {
+      "position": "bottom-right",
+      "launcherLabel": "상담"
+    },
+    "name": "Web Widget",
+    "theme": {
+      "greeting": "반가워요!",
+      "launcher_bg": "",
+      "primary_color": "",
+      "allowed_accounts": [],
+      "launcher_logo_id": "",
+      "input_placeholder": "안녕하세요. 대화를 시작해주세요"
+    },
+    "iframe": {
+      "width": "360px",
+      "height": "560px",
+      "layout": "absolute",
+      "boxShadow": "0 20px 40px rgba(15, 23, 42, 0.2)",
+      "background": "#fff",
+      "sideOffset": "0",
+      "borderRadius": "16px",
+      "bottomOffset": "72px"
+    },
+    "agent_id": "339f6e47-4239-49ee-9972-a7069038fe08",
+    "launcher": {
+      "size": 56,
+      "container": {
+        "gap": "12px",
+        "left": "24px",
+        "right": "24px",
+        "bottom": "24px",
+        "zIndex": 2147483647
+      }
+    },
+    "is_active": true,
+    "embed_view": "both",
+    "entry_mode": "launcher",
+    "allowed_domains": [
+      "https://sungjy2020.cafe24.com/",
+      "https://mejai.cafe24.com/",
+      "http://localhost:3000/",
+      "http://localhost:3000/app/conversation"
+    ]
+  },
+  "features": {
+    "mcp": {
+      "tools": {},
+      "providers": {
+        "denylist": [
+          "cafe24"
+        ]
+      },
+      "actionSelector": true,
+      "providerSelector": true
+    },
+    "setup": {
+      "llms": {},
+      "kbIds": {},
+      "routes": {},
+      "modeNew": true,
+      "adminKbIds": {},
+      "defaultLlm": "chatgpt",
+      "kbSelector": false,
+      "llmSelector": true,
+      "modeExisting": false,
+      "agentSelector": false,
+      "modelSelector": false,
+      "routeSelector": false,
+      "adminKbSelector": false,
+      "sessionIdSearch": false,
+      "defaultSetupMode": "new",
+      "inlineUserKbInput": true
+    },
+    "widget": {
+      "header": {
+        "logo": true,
+        "close": true,
+        "status": true,
+        "enabled": true,
+        "agentAction": true,
+        "newConversation": true
+      },
+      "tabBar": {
+        "chat": true,
+        "list": true,
+        "policy": true,
+        "enabled": true
+      },
+      "chatPanel": true,
+      "setupPanel": true,
+      "historyPanel": true
+    },
+    "adminPanel": {
+      "enabled": true,
+      "copyIssue": true,
+      "logsToggle": true,
+      "messageMeta": true,
+      "selectionToggle": true,
+      "copyConversation": true,
+      "messageSelection": true
+    },
+    "visibility": {
+      "mcp": {
+        "actionSelector": "user",
+        "providerSelector": "user"
+      },
+      "setup": {
+        "modeNew": "user",
+        "kbSelector": "user",
+        "llmSelector": "user",
+        "modeExisting": "user",
+        "agentSelector": "user",
+        "modelSelector": "user",
+        "routeSelector": "user",
+        "adminKbSelector": "admin",
+        "sessionIdSearch": "user",
+        "inlineUserKbInput": "user"
+      },
+      "widget": {
+        "header": {
+          "logo": "user",
+          "close": "user",
+          "status": "user",
+          "enabled": "user",
+          "agentAction": "user",
+          "newConversation": "user"
+        },
+        "tabBar": {
+          "chat": "user",
+          "list": "user",
+          "policy": "user",
+          "enabled": "user"
+        },
+        "launcher": "user",
+        "chatPanel": "user",
+        "setupPanel": "user",
+        "historyPanel": "user"
+      },
+      "adminPanel": {
+        "enabled": "user",
+        "copyIssue": "admin",
+        "logsToggle": "user",
+        "messageMeta": "user",
+        "selectionToggle": "user",
+        "copyConversation": "user",
+        "messageSelection": "admin"
+      },
+      "interaction": {
+        "inputSubmit": "user",
+        "productCards": "user",
+        "quickReplies": "user",
+        "threePhasePrompt": "user",
+        "threePhasePromptShowNext": "user",
+        "threePhasePromptHideLabels": "user",
+        "threePhasePromptShowConfirmed": "user",
+        "threePhasePromptShowConfirming": "user"
+      }
+    },
+    "interaction": {
+      "inputSubmit": true,
+      "productCards": true,
+      "quickReplies": true,
+      "threePhasePrompt": true,
+      "threePhasePromptLabels": {
+        "next": "그 다음으로 확인할 것",
+        "confirmed": "확인한 것",
+        "confirming": "확인할 것"
+      },
+      "threePhasePromptShowNext": false,
+      "threePhasePromptHideLabels": true,
+      "threePhasePromptShowConfirmed": false,
+      "threePhasePromptShowConfirming": true
+    }
+  },
+  "setup_ui": {
+    "order": [
+      "kbSelector",
+      "inlineUserKbInput",
+      "adminKbSelector",
+      "llmSelector",
+      "routeSelector",
+      "mcpProviderSelector",
+      "mcpActionSelector"
+    ],
+    "labels": {
+      "kbSelector": "KB 선택",
+      "llmSelector": "LLM 선택",
+      "routeSelector": "Runtime 선택",
+      "adminKbSelector": "관리자 KB 선택",
+      "inlineUserKbInput": "사용자 KB입력란",
+      "mcpActionSelector": "MCP 액션 선택",
+      "mcpProviderSelector": "MCP 프로바이더 선택"
+    },
+    "existing_order": [
+      "sessionIdSearch",
+      "agentSelector",
+      "versionSelector",
+      "conversationMode",
+      "sessionSelector"
+    ],
+    "existing_labels": {
+      "modeNew": "신규 모델",
+      "modeExisting": "기존 모델",
+      "agentSelector": "에이전트 선택",
+      "sessionIdSearch": "세션 ID 직접 조회",
+      "sessionSelector": "세션 선택",
+      "versionSelector": "버전 선택",
+      "conversationMode": "모드 선택"
+    }
+  }
+}

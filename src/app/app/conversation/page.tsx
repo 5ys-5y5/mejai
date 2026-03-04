@@ -559,10 +559,12 @@ export default function ConversationWidgetPage() {
                     <div>
                       <div className="text-xs font-semibold text-slate-700">KB 모드</div>
                       <div className="mt-2 flex gap-2">
-                        {[
-                          { key: "inline", label: "사용자 입력 KB" },
-                          { key: "select", label: "KB 선택" },
-                        ].map((item) => (
+                        {(
+                          [
+                            { key: "inline", label: "사용자 입력 KB" },
+                            { key: "select", label: "KB 선택" },
+                          ] as const
+                        ).map((item) => (
                           <button
                             key={item.key}
                             type="button"

@@ -30,13 +30,14 @@ async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>
 
 function mapTemplateRow(row: Record<string, any>) {
   const meta = readWidgetMeta(row.theme);
+  const legacyPolicy = (meta.chat_policy || null) as ConversationFeaturesProviderShape | null;
   return {
     ...row,
     theme: stripWidgetMeta(row.theme),
     widget_type: meta.type || "template",
     template_id: meta.template_id || null,
     setup_config: (meta.setup_config || null) as WidgetSetupConfig | null,
-    chat_policy: (meta.chat_policy || null) as ConversationFeaturesProviderShape | null,
+    chat_policy: (row.chat_policy || legacyPolicy || null) as ConversationFeaturesProviderShape | null,
   };
 }
 
@@ -117,7 +118,8 @@ export async function POST(req: NextRequest) {
       agent_id: agentId,
       allowed_domains: allowedDomains,
       allowed_paths: allowedPaths,
-      theme: applyWidgetMeta(theme, { type: "template", setup_config: setupConfig, chat_policy: chatPolicy }),
+      theme: applyWidgetMeta(theme, { type: "template", setup_config: setupConfig }),
+      chat_policy: chatPolicy,
       is_active: isActive,
       public_key: publicKey,
       created_at: nowIso,

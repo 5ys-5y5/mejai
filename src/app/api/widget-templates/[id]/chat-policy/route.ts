@@ -1,20 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import { applyWidgetMeta, readWidgetMeta, stripWidgetMeta } from "@/lib/widgetTemplateMeta";
 import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
 
 function normalizeId(value: string | string[] | null | undefined) {
   if (Array.isArray(value)) return String(value[0] || "").trim();
   return String(value || "").trim();
-}
-
-function isUuid(value: string | null | undefined) {
-  const normalized = String(value || "").trim();
-  if (!normalized) return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    normalized
-  );
 }
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
@@ -32,7 +23,7 @@ async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>
 
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   const templateId = normalizeId(params?.id);
-  if (!isUuid(templateId)) {
+  if (!templateId) {
     return NextResponse.json({ error: "INVALID_TEMPLATE_ID" }, { status: 400 });
   }
   const authHeader = req.headers.get("authorization") || "";
@@ -41,13 +32,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   if ("error" in context) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }
-  if (!isUuid(context.orgId)) {
-    return NextResponse.json({ error: "INVALID_ORG_ID" }, { status: 400 });
-  }
-
   const { data, error } = await context.supabase
     .from("B_chat_widgets")
-    .select("id, org_id, theme")
+    .select("id, org_id, theme, chat_policy")
     .eq("id", templateId)
     .eq("org_id", context.orgId)
     .maybeSingle();
@@ -59,14 +46,13 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  const meta = readWidgetMeta(data.theme);
-  const provider = (meta.chat_policy || null) as ConversationFeaturesProviderShape | null;
+  const provider = (data.chat_policy || null) as ConversationFeaturesProviderShape | null;
   return NextResponse.json({ provider });
 }
 
 export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
   const templateId = normalizeId(params?.id);
-  if (!isUuid(templateId)) {
+  if (!templateId) {
     return NextResponse.json({ error: "INVALID_TEMPLATE_ID" }, { status: 400 });
   }
   const authHeader = req.headers.get("authorization") || "";
@@ -75,10 +61,6 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if ("error" in context) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }
-  if (!isUuid(context.orgId)) {
-    return NextResponse.json({ error: "INVALID_ORG_ID" }, { status: 400 });
-  }
-
   const adminCheck = await ensureAdmin(context);
   if (!adminCheck.ok) {
     return NextResponse.json({ error: adminCheck.error }, { status: adminCheck.status });
@@ -101,7 +83,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const { data: existing, error: existingError } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, theme")
+    .select("id, org_id, theme, chat_policy")
     .eq("id", templateId)
     .eq("org_id", context.orgId)
     .maybeSingle();
@@ -113,17 +95,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  const meta = readWidgetMeta(existing.theme);
   const provider = (body.provider || null) as ConversationFeaturesProviderShape | null;
-  const nextTheme = applyWidgetMeta(stripWidgetMeta(existing.theme), {
-    ...meta,
-    chat_policy: provider,
-  });
 
   const { error } = await supabaseAdmin
     .from("B_chat_widgets")
     .update({
-      theme: nextTheme,
+      chat_policy: provider,
       updated_at: new Date().toISOString(),
     })
     .eq("id", templateId)
