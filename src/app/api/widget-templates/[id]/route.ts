@@ -32,7 +32,6 @@ function mapTemplateRow(row: Record<string, any>) {
   return {
     ...row,
     theme: stripWidgetMeta(row.theme),
-    widget_type: row.widget_type || meta.type || "template",
     template_id: meta.template_id || null,
     setup_config: (meta.setup_config || null) as WidgetSetupConfig | null,
     chat_policy: normalizeWidgetChatPolicyProvider(row.chat_policy || legacyPolicy || null),
@@ -53,7 +52,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     .select("*")
     .eq("id", resolvedParams.id)
     .eq("org_id", context.orgId)
-    .eq("widget_type", "template")
     .maybeSingle();
 
   if (error) {
@@ -100,7 +98,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .select("*")
     .eq("id", resolvedParams.id)
     .eq("org_id", context.orgId)
-    .eq("widget_type", "template")
     .maybeSingle();
 
   if (existingError) {
@@ -120,7 +117,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   );
 
   const nextTheme = applyWidgetMeta(theme, {
-    type: meta.type || "template",
     template_id: meta.template_id || null,
     setup_config: setupConfig,
     chat_policy: meta.chat_policy,
@@ -141,7 +137,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       allowed_domains: allowedDomains,
       allowed_paths: allowedPaths,
       theme: nextTheme,
-      widget_type: "template",
       chat_policy: chatPolicy,
       is_active: isActive,
       updated_at: new Date().toISOString(),
@@ -185,8 +180,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     .from("B_chat_widgets")
     .delete()
     .eq("id", resolvedParams.id)
-    .eq("org_id", context.orgId)
-    .eq("widget_type", "template");
+    .eq("org_id", context.orgId);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

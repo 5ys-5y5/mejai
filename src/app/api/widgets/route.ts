@@ -48,7 +48,6 @@ export async function GET(req: NextRequest) {
     .from("B_chat_widgets")
     .select("*")
     .eq("org_id", context.orgId)
-    .eq("widget_type", "instance")
     .maybeSingle();
 
   if (error) {
@@ -99,7 +98,6 @@ export async function POST(req: NextRequest) {
     .from("B_chat_widgets")
     .select("*")
     .eq("org_id", context.orgId)
-    .eq("widget_type", "instance")
     .maybeSingle();
 
   if (existing?.id) {
@@ -137,7 +135,6 @@ export async function POST(req: NextRequest) {
       theme,
       is_active: isActive,
       public_key: publicKey,
-      widget_type: "instance",
       created_at: nowIso,
       updated_at: nowIso,
     })

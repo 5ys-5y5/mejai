@@ -29,7 +29,6 @@ export type WidgetOverrides = {
 };
 
 export type WidgetTemplateMeta = {
-  type?: "template" | "instance";
   template_id?: string | null;
   setup_config?: WidgetSetupConfig | null;
   chat_policy?: WidgetChatPolicyInput | null;
