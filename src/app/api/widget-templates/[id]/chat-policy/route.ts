@@ -33,8 +33,9 @@ async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>
   return { ok: true as const };
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const templateId = readTemplateId(req, params);
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params;
+  const templateId = readTemplateId(req, resolvedParams);
   if (!templateId) {
     return NextResponse.json({ error: "INVALID_TEMPLATE_ID" }, { status: 400 });
   }
@@ -62,8 +63,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ provider });
 }
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const templateId = readTemplateId(req, params);
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params;
+  const templateId = readTemplateId(req, resolvedParams);
   if (!templateId) {
     return NextResponse.json({ error: "INVALID_TEMPLATE_ID" }, { status: 400 });
   }

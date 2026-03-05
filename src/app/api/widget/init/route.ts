@@ -6,7 +6,7 @@ import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
 import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
 import { WIDGET_PAGE_KEY, type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
 import { normalizeWidgetOverrides, readWidgetMeta } from "@/lib/widgetTemplateMeta";
-import { resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
+import { filterWidgetOverridesByPolicy, resolveWidgetBasePolicy, resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
 
 function nowIso() {
   return new Date().toISOString();
@@ -102,7 +102,9 @@ export async function POST(req: NextRequest) {
     ? await supabaseAdmin.from("B_chat_widgets").select("*").eq("id", templateId).maybeSingle()
     : { data: null };
 
-  const resolved = resolveWidgetRuntimeConfig(widget, template || null, overrides);
+  const basePolicy = resolveWidgetBasePolicy(widget, template || null);
+  const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
+  const resolved = resolveWidgetRuntimeConfig(widget, template || null, filteredOverrides);
   const origin = readOrigin(body);
   const pageUrl = String(body.page_url || body.pageUrl || body.referrer || "").trim();
   const host = extractHostFromUrl(origin || pageUrl);

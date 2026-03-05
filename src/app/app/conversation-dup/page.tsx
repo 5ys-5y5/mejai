@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
-import { ChatSettingsPanel } from "@/components/settings/ChatSettingsPanel";
+import { ChatSettingsPanel } from "@/components/conversation/ChatSettingsPanel";
 import { apiFetch } from "@/lib/apiClient";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { encodeWidgetOverrides } from "@/lib/widgetOverrides";
@@ -33,6 +34,7 @@ type TemplateItem = {
 type KbItem = {
   id: string;
   title: string;
+  is_active?: boolean | null;
   is_admin?: boolean | string | null;
 };
 
@@ -41,6 +43,7 @@ type AgentItem = {
   name?: string | null;
   version?: string | null;
   is_active?: boolean | null;
+  kb_id?: string | null;
 };
 
 type McpTool = {
@@ -72,8 +75,13 @@ function isValidUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function StatusDot({ active }: { active?: boolean | null }) {
+  const color =
+    active === true ? "bg-emerald-500" : active === false ? "bg-rose-500" : "bg-slate-300";
+  return <span className={`inline-flex h-[5px] w-[5px] rounded-full ${color}`} />;
+}
+
 export default function ConversationWidgetPage() {
-  const [authToken, setAuthToken] = useState("");
   const [adminReady, setAdminReady] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -102,6 +110,72 @@ export default function ConversationWidgetPage() {
   const [previewHost, setPreviewHost] = useState<HTMLDivElement | null>(null);
   const widgetsPreviewRef = useRef<HTMLDivElement | null>(null);
   const [launcherHighlight, setLauncherHighlight] = useState(false);
+  const [policyValue, setPolicyValue] = useState<ConversationFeaturesProviderShape | null>(null);
+  const [policyLoading, setPolicyLoading] = useState(false);
+  const [policySaving, setPolicySaving] = useState(false);
+  const [policyRefreshNonce, setPolicyRefreshNonce] = useState(0);
+  const selectedTemplate = useMemo(
+    () => templates.find((item) => item.id === selectedId) || null,
+    [selectedId, templates]
+  );
+  const agentsById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
+  const kbById = useMemo(() => new Map(kbItems.map((kb) => [kb.id, kb])), [kbItems]);
+
+  const handleCopy = useCallback((value?: string | null) => {
+    const text = String(value || "").trim();
+    if (!text) return;
+    void navigator.clipboard?.writeText(text);
+  }, []);
+
+  const normalizeThemeValue = useCallback(
+    (value: Record<string, unknown> | null | undefined) => ({
+      greeting: readThemeString(value || null, "greeting"),
+      input_placeholder: readThemeString(value || null, "input_placeholder"),
+      launcher_icon_url: readThemeString(value || null, "launcher_icon_url"),
+    }),
+    []
+  );
+
+  const buildTemplateFingerprint = useCallback(
+    (input: {
+      name?: string | null;
+      agent_id?: string | null;
+      allowed_domains?: string[] | null;
+      allowed_paths?: string[] | null;
+      theme?: Record<string, unknown> | null;
+      setup_config?: WidgetSetupConfig | null;
+      is_active?: boolean | null;
+    }) =>
+      JSON.stringify({
+        name: String(input.name || "").trim(),
+        agent_id: input.agent_id ? String(input.agent_id) : null,
+        allowed_domains: (input.allowed_domains || []).map((item) => String(item || "").trim()),
+        allowed_paths: (input.allowed_paths || []).map((item) => String(item || "").trim()),
+        theme: normalizeThemeValue(input.theme || null),
+        setup_config: input.setup_config || null,
+        is_active: input.is_active !== false,
+      }),
+    [normalizeThemeValue]
+  );
+
+  const buildDraftFingerprint = useCallback(
+    (current: TemplateItem | null) =>
+      JSON.stringify({
+        name: String(current?.name || "").trim(),
+        agent_id: current?.agent_id ? String(current.agent_id) : null,
+        allowed_domains: normalizeListInput(domainText),
+        allowed_paths: normalizeListInput(pathText),
+        theme: normalizeThemeValue(current?.theme || null),
+        setup_config: setupConfig,
+        is_active: current?.is_active !== false,
+      }),
+    [domainText, normalizeThemeValue, pathText, setupConfig]
+  );
+
+  const isDirty = useMemo(() => {
+    if (!selectedTemplate || !draft) return false;
+    return buildDraftFingerprint(draft) !== buildTemplateFingerprint(selectedTemplate);
+  }, [buildDraftFingerprint, buildTemplateFingerprint, draft, selectedTemplate]);
 
   useEffect(() => {
     let mounted = true;
@@ -114,9 +188,6 @@ export default function ConversationWidgetPage() {
         return;
       }
       const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData.session?.access_token) {
-        setAuthToken(sessionData.session.access_token);
-      }
       const { data: access } = await supabase
         .from("A_iam_user_access_maps")
         .select("is_admin")
@@ -129,7 +200,6 @@ export default function ConversationWidgetPage() {
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
-      setAuthToken(session?.access_token || "");
     });
 
     return () => {
@@ -274,7 +344,13 @@ export default function ConversationWidgetPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "New Widget Template" }),
       });
-      setTemplates((prev) => [res.item, ...prev]);
+      setTemplates((prev) => {
+        const exists = prev.some((item) => item.id === res.item.id);
+        if (exists) {
+          return prev.map((item) => (item.id === res.item.id ? res.item : item));
+        }
+        return [res.item, ...prev];
+      });
       setSelectedId(res.item.id);
       setActiveTab("base");
     } finally {
@@ -370,33 +446,54 @@ export default function ConversationWidgetPage() {
   }, [draft?.public_key, installOverrides]);
 
   const policyTemplateId = draft?.id && isValidUuid(String(draft.id)) ? String(draft.id) : "";
-  const policyDataSource = useMemo(
-    () =>
-      policyTemplateId
-        ? {
-            loadProvider: async () => {
-              const res = await apiFetch<{ provider?: ConversationFeaturesProviderShape | null }>(
-                `/api/widget-templates/${policyTemplateId}/chat-policy`
-              );
-              return res.provider || null;
-            },
-            saveProvider: async (_authToken: string, values: any) => {
-              const provider = {
-                page: values.pages?.[WIDGET_PAGE_KEY],
-                settings_ui: {
-                  setup_fields: values.settings_ui?.setup_fields?.[WIDGET_PAGE_KEY],
-                },
-              };
-              await apiFetch(`/api/widget-templates/${policyTemplateId}/chat-policy`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ provider }),
-              });
-            },
-          }
-        : undefined,
-    [policyTemplateId]
-  );
+  useEffect(() => {
+    if (!policyTemplateId) {
+      setPolicyValue(null);
+      setPolicyLoading(false);
+      return;
+    }
+    let active = true;
+    setPolicyLoading(true);
+    apiFetch<{ provider?: ConversationFeaturesProviderShape | null }>(
+      `/api/widget-templates/${policyTemplateId}/chat-policy`
+    )
+      .then((res) => {
+        if (!active) return;
+        setPolicyValue(res.provider || null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPolicyValue(null);
+      })
+      .finally(() => {
+        if (!active) return;
+        setPolicyLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [policyTemplateId, policyRefreshNonce]);
+
+  const handleRefresh = useCallback(async () => {
+    await loadTemplates();
+    await loadDependencies();
+    setPolicyRefreshNonce((prev) => prev + 1);
+    setPreviewInitNonce((prev) => prev + 1);
+  }, [loadDependencies, loadTemplates]);
+
+  const handlePolicySave = useCallback(async () => {
+    if (!policyTemplateId) return;
+    setPolicySaving(true);
+    try {
+      await apiFetch(`/api/widget-templates/${policyTemplateId}/chat-policy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: policyValue }),
+      });
+    } finally {
+      setPolicySaving(false);
+    }
+  }, [policyTemplateId, policyValue]);
 
   if (adminReady && !isAdmin) {
     return (
@@ -414,35 +511,159 @@ export default function ConversationWidgetPage() {
             <div className="text-lg font-semibold text-slate-900">위젯 관리 (Conversation)</div>
             <div className="text-xs text-slate-500">템플릿을 관리하고 설치 코드를 생성합니다.</div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => void loadTemplates()} disabled={loading}>
-              새로고침
-            </Button>
-            <Button type="button" onClick={handleCreate} disabled={loading}>
-              새 템플릿
-            </Button>
-          </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
-          <Card className="p-3 space-y-2">
-            <div className="text-xs font-semibold text-slate-600">템플릿</div>
-            {templates.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSelectedId(item.id)}
-                className={`w-full rounded-lg border px-3 py-2 text-left text-xs ${
-                  item.id === selectedId
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
-                }`}
-              >
-                <div className="font-semibold">{item.name || item.id}</div>
-                <div className="text-[10px] opacity-70">{item.public_key || "-"}</div>
-              </button>
-            ))}
-            {templates.length === 0 ? <div className="text-xs text-slate-400">템플릿이 없습니다.</div> : null}
+        <div className="mt-6 grid grid-cols-1 gap-4">
+          <Card className="p-0">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <div className="text-sm font-semibold text-slate-900">템플릿</div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => void handleRefresh()}
+                  disabled={loading}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="새로고침"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCreate()}
+                  disabled={loading}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="새 템플릿"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            {templates.length === 0 ? <div className="p-4 text-xs text-slate-400">템플릿이 없습니다.</div> : null}
+            {templates.length > 0 ? (
+              <ul className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_max-content] gap-x-0 divide-y divide-slate-200">
+                <li className="contents">
+                  <span className="flex min-h-[40px] items-center px-4 py-2 text-left text-[11px] font-semibold text-slate-500">
+                    Widget
+                  </span>
+                  <span className="flex min-h-[40px] items-center px-4 py-2 text-left text-[11px] font-semibold text-slate-500">
+                    Agent
+                  </span>
+                  <span className="flex min-h-[40px] items-center px-4 py-2 text-left text-[11px] font-semibold text-slate-500">
+                    KB
+                  </span>
+                  <span className="flex min-h-[40px] items-center px-0 py-2 text-left text-[11px] font-semibold text-slate-500" />
+                </li>
+                <li className="col-span-full border-b border-slate-200" />
+                {templates.map((item) => {
+                  const isSelected = item.id === selectedId;
+                  const agent = item.agent_id ? agentsById.get(item.agent_id) : null;
+                  const kb = agent?.kb_id ? kbById.get(agent.kb_id) : null;
+                  const cellBase =
+                    "flex min-h-[44px] items-center px-4 py-3 text-left text-xs text-slate-700";
+                  const cellSelected = "hover:bg-slate-50";
+                  return (
+                    <li
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedId(item.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedId(item.id);
+                        }
+                      }}
+                      className="contents cursor-pointer"
+                    >
+                      <div className={`${cellBase} ${cellSelected}`}>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleCopy(item.id);
+                          }}
+                          title="클릭하여 위젯 ID 복사"
+                          className="inline-flex min-w-0 items-center gap-2 truncate text-left font-semibold text-slate-900 hover:underline cursor-copy"
+                        >
+                          <StatusDot active={item.is_active} />
+                          {item.name || item.id}
+                        </button>
+                      </div>
+                      <div className={`${cellBase} ${cellSelected}`}>
+                        {agent ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleCopy(agent.id);
+                            }}
+                            title="클릭하여 agent_id 복사"
+                            className="inline-flex min-w-0 items-center gap-2 truncate text-left font-medium text-slate-800 hover:underline cursor-copy"
+                          >
+                            <StatusDot active={agent.is_active} />
+                            {agent.name || agent.id}
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </div>
+                      <div className={`${cellBase} ${cellSelected}`}>
+                        {kb ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleCopy(kb.id);
+                            }}
+                            title="클릭하여 KB ID 복사"
+                            className="inline-flex min-w-0 items-center gap-2 truncate text-left font-medium text-slate-800 hover:underline cursor-copy"
+                          >
+                            <StatusDot active={kb.is_active} />
+                            {kb.title}
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </div>
+                      <div className={`${cellBase} ${cellSelected} px-0 pr-4`}>
+                        {isSelected ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (isDirty) void handleSave();
+                              }}
+                              disabled={!draft || loading || !isDirty}
+                              aria-label={isDirty ? "저장" : "수정"}
+                              className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border text-slate-700 ${
+                                isDirty
+                                  ? "border-amber-300 bg-amber-300 text-amber-950 hover:bg-amber-400"
+                                  : "border-slate-200 bg-white text-slate-500"
+                              } disabled:cursor-not-allowed disabled:opacity-60`}
+                            >
+                              {isDirty ? <Save className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleDelete();
+                              }}
+                              disabled={!draft || loading}
+                              aria-label="삭제"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
           </Card>
 
           <div className="space-y-4">
@@ -465,14 +686,6 @@ export default function ConversationWidgetPage() {
                     {tab.label}
                   </Button>
                 ))}
-                <div className="ml-auto flex items-center gap-2">
-                  <Button type="button" variant="outline" onClick={handleSave} disabled={!draft || loading}>
-                    저장
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleDelete} disabled={!draft || loading}>
-                    삭제
-                  </Button>
-                </div>
               </div>
             </Card>
 
@@ -719,21 +932,41 @@ export default function ConversationWidgetPage() {
             ) : null}
 
             {draft && activeTab === "policy" ? (
-              <ChatSettingsPanel
-                key={policyTemplateId || "policy-empty"}
-                authToken={authToken}
-                dataSource={policyDataSource}
-                title="대화 설정 관리 (위젯 템플릿)"
-                description="선택한 위젯 템플릿에만 적용되는 대화 정책을 편집합니다."
-                visiblePages={[WIDGET_PAGE_KEY]}
-                showRegisteredPages={false}
-              />
+              <div className="space-y-3">
+                <Card className="p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-semibold text-slate-900">대화 정책 (dup)</div>
+                      <div className="text-[11px] text-slate-500">
+                        docs/guide/ref/conversation 기준 UI
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handlePolicySave()}
+                      disabled={!policyTemplateId || policyLoading || policySaving}
+                    >
+                      {policySaving ? "저장 중..." : "정책 저장"}
+                    </Button>
+                  </div>
+                </Card>
+                {policyLoading ? (
+                  <Card className="p-4 text-xs text-slate-500">정책을 불러오는 중...</Card>
+                ) : (
+                  <ChatSettingsPanel
+                    value={policyValue}
+                    onChange={setPolicyValue}
+                    pageScope={[WIDGET_PAGE_KEY]}
+                  />
+                )}
+              </div>
             ) : null}
 
             {draft && activeTab === "preview" ? (
               <div className="space-y-4">
                 <Card className="p-4 space-y-3">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3">
                     <label className="block">
                       <div className="mb-1 text-xs text-slate-600">Origin</div>
                       <Input
@@ -807,7 +1040,7 @@ export default function ConversationWidgetPage() {
                     <span>위젯 UI 3분할 프리뷰</span>
                     <span className="text-[11px] font-normal text-slate-500">chat / list / policy</span>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3">
                     {([
                       { tab: "chat", label: "Conversation" },
                       { tab: "list", label: "List" },

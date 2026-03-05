@@ -32,14 +32,15 @@ function mapTemplateRow(row: Record<string, any>) {
   return {
     ...row,
     theme: stripWidgetMeta(row.theme),
-    widget_type: meta.type || "template",
+    widget_type: row.widget_type || meta.type || "template",
     template_id: meta.template_id || null,
     setup_config: (meta.setup_config || null) as WidgetSetupConfig | null,
     chat_policy: normalizeWidgetChatPolicyProvider(row.chat_policy || legacyPolicy || null),
   };
 }
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params;
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
   const context = await getServerContext(authHeader, cookieHeader);
@@ -50,8 +51,9 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   const { data, error } = await context.supabase
     .from("B_chat_widgets")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", resolvedParams.id)
     .eq("org_id", context.orgId)
+    .eq("widget_type", "template")
     .maybeSingle();
 
   if (error) {
@@ -64,7 +66,8 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
   return NextResponse.json({ item: mapTemplateRow(data as Record<string, any>) });
 }
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params;
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
   const context = await getServerContext(authHeader, cookieHeader);
@@ -95,8 +98,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   const { data: existing, error: existingError } = await supabaseAdmin
     .from("B_chat_widgets")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", resolvedParams.id)
     .eq("org_id", context.orgId)
+    .eq("widget_type", "template")
     .maybeSingle();
 
   if (existingError) {
@@ -137,11 +141,12 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       allowed_domains: allowedDomains,
       allowed_paths: allowedPaths,
       theme: nextTheme,
+      widget_type: "template",
       chat_policy: chatPolicy,
       is_active: isActive,
       updated_at: new Date().toISOString(),
     })
-    .eq("id", params.id)
+    .eq("id", resolvedParams.id)
     .select("*")
     .single();
 
@@ -152,7 +157,8 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   return NextResponse.json({ item: mapTemplateRow(data as Record<string, any>) });
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = await params;
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
   const context = await getServerContext(authHeader, cookieHeader);
@@ -178,8 +184,9 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
   const { error } = await supabaseAdmin
     .from("B_chat_widgets")
     .delete()
-    .eq("id", params.id)
-    .eq("org_id", context.orgId);
+    .eq("id", resolvedParams.id)
+    .eq("org_id", context.orgId)
+    .eq("widget_type", "template");
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

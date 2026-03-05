@@ -37,7 +37,7 @@ function mapTemplateRow(row: Record<string, any>) {
   return {
     ...row,
     theme: stripWidgetMeta(row.theme),
-    widget_type: meta.type || "template",
+    widget_type: row.widget_type || meta.type || "template",
     template_id: meta.template_id || null,
     setup_config: (meta.setup_config || null) as WidgetSetupConfig | null,
     chat_policy: normalizeWidgetChatPolicyProvider(row.chat_policy || legacyPolicy || null),
@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
     .from("B_chat_widgets")
     .select("*")
     .eq("org_id", context.orgId)
+    .eq("widget_type", "template")
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -125,6 +126,7 @@ export async function POST(req: NextRequest) {
       chat_policy: chatPolicy,
       is_active: isActive,
       public_key: publicKey,
+      widget_type: "template",
       created_at: nowIso,
       updated_at: nowIso,
     })

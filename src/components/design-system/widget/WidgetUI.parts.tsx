@@ -27,6 +27,7 @@ if (globalScope && typeof globalScope.process === "undefined") {
 // Edit this file to affect widget UI service-wide.
 // ------------------------------------------------------------
 export type WidgetLauncherPosition = "bottom-right" | "bottom-left";
+export type WidgetConversationTab = "chat" | "list" | "policy";
 
 export type WidgetLauncherContainerProps = {
   children?: ReactNode;
@@ -375,6 +376,8 @@ export type WidgetLauncherRuntimeConfig = {
   right?: string;
   zIndex?: number;
   initNonce?: number;
+  disableToggle?: boolean;
+  onLauncherClick?: () => void;
 };
 
 function readThemeValue(theme: Record<string, any> | null, keys: string[]) {
@@ -412,7 +415,7 @@ function resolveLauncherColor(cfg: Record<string, any>, themeConfig: Record<stri
   );
 }
 
-function buildIframeSrc(
+export function buildWidgetEmbedSrc(
   baseUrl: string,
   publicKey: string,
   visitorId: string,
@@ -422,7 +425,8 @@ function buildIframeSrc(
     origin?: string;
     page_url?: string;
     referrer?: string;
-  }
+  },
+  tab?: WidgetConversationTab
 ) {
   let src = `${baseUrl}/embed/${encodeURIComponent(publicKey)}?vid=${encodeURIComponent(visitorId)}`;
   if (sessionId) {
@@ -438,6 +442,9 @@ function buildIframeSrc(
     if (origin) src += `&origin=${encodeURIComponent(origin)}`;
     if (pageUrl) src += `&page_url=${encodeURIComponent(pageUrl)}`;
     if (referrer) src += `&referrer=${encodeURIComponent(referrer)}`;
+  }
+  if (tab) {
+    src += `&tab=${encodeURIComponent(tab)}`;
   }
   return src;
 }
@@ -461,6 +468,8 @@ export function WidgetLauncherRuntime({
   right,
   zIndex,
   initNonce,
+  disableToggle = false,
+  onLauncherClick,
 }: WidgetLauncherRuntimeConfig) {
   const cfgRef = useRef(cfg);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -490,7 +499,7 @@ export function WidgetLauncherRuntime({
   }, []);
 
   const iframeSrc = useMemo(
-    () => buildIframeSrc(baseUrl, publicKey, visitorId, sessionIdRef.current, overridesParam, previewMeta),
+    () => buildWidgetEmbedSrc(baseUrl, publicKey, visitorId, sessionIdRef.current, overridesParam, previewMeta),
     [baseUrl, publicKey, visitorId, overridesParam, previewMeta?.origin, previewMeta?.page_url, previewMeta?.referrer]
   );
 
@@ -518,6 +527,8 @@ export function WidgetLauncherRuntime({
   };
 
   const handleToggle = () => {
+    onLauncherClick?.();
+    if (disableToggle) return;
     setIsOpen((prev) => {
       const next = !prev;
       notify(next ? "open" : "close");
@@ -814,6 +825,8 @@ export type WidgetHeaderLegoProps = {
   brandName: string;
   status?: string;
   iconUrl?: string | null;
+  showLogo?: boolean;
+  showStatus?: boolean;
   headerActions?: ReactNode;
   onNewConversation?: () => void;
   showNewConversation?: boolean;
@@ -826,6 +839,8 @@ export function WidgetHeaderLego({
   brandName,
   status,
   iconUrl,
+  showLogo = true,
+  showStatus = true,
   headerActions,
   onNewConversation,
   showNewConversation,
@@ -834,7 +849,7 @@ export function WidgetHeaderLego({
   closeLabel = "\uB2EB\uAE30",
 }: WidgetHeaderLegoProps) {
   const resolvedIcon = iconUrl || "/brand/logo.png";
-  const showStatus = Boolean(status && status.trim().length > 0);
+  const canShowStatus = showStatus && Boolean(status && status.trim().length > 0);
   const canStartNew = Boolean(onNewConversation && showNewConversation);
   const canClose = Boolean(onClose && showClose);
 
@@ -844,13 +859,15 @@ export function WidgetHeaderLego({
       parts-lego="WidgetHeaderLego"
     >
       <div className="flex items-center gap-3">
-        <div className="h-9 w-9 rounded-full border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={resolvedIcon} alt="" className="block h-full w-full object-cover" />
-        </div>
+        {showLogo ? (
+          <div className="h-9 w-9 rounded-full border border-slate-200 bg-white flex items-center justify-center overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={resolvedIcon} alt="" className="block h-full w-full object-cover" />
+          </div>
+        ) : null}
         <div>
           <div className="text-sm font-semibold">{brandName}</div>
-          {showStatus ? <div className="text-[11px] text-slate-500">{status}</div> : null}
+          {canShowStatus ? <div className="text-[11px] text-slate-500">{status}</div> : null}
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -881,47 +898,55 @@ export function WidgetHeaderLego({
   );
 }
 
-export type WidgetConversationTab = "chat" | "list" | "policy";
-
 export type WidgetTabBarLegoProps = {
   activeTab: WidgetConversationTab;
   onTabChange: (tab: WidgetConversationTab) => void;
+  showChatTab?: boolean;
+  showListTab?: boolean;
   showPolicyTab?: boolean;
 };
 
 export function WidgetTabBarLego({
   activeTab,
   onTabChange,
+  showChatTab = true,
+  showListTab = true,
   showPolicyTab = false,
 }: WidgetTabBarLegoProps) {
-  const tabGridClass = showPolicyTab ? "grid-cols-3" : "grid-cols-2";
+  const tabs = [showChatTab, showListTab, showPolicyTab].filter(Boolean).length;
+  if (tabs === 0) return null;
+  const tabGridClass = tabs === 3 ? "grid-cols-3" : "grid-cols-2";
   return (
     <div
       className={cn("grid h-[50px] items-center gap-1 border-t border-slate-200 bg-white px-2 py-1", tabGridClass)}
       parts-lego="WidgetTabBarLego"
     >
-      <button
-        type="button"
-        onClick={() => onTabChange("chat")}
-        className={cn(
-          "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
-          activeTab === "chat" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
-        )}
-      >
-        <MessageCircle className="h-4 w-4" />
-        <span>대화</span>
-      </button>
-      <button
-        type="button"
-        onClick={() => onTabChange("list")}
-        className={cn(
-          "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
-          activeTab === "list" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
-        )}
-      >
-        <List className="h-4 w-4" />
-        <span>리스트</span>
-      </button>
+      {showChatTab ? (
+        <button
+          type="button"
+          onClick={() => onTabChange("chat")}
+          className={cn(
+            "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
+            activeTab === "chat" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
+          )}
+        >
+          <MessageCircle className="h-4 w-4" />
+          <span>대화</span>
+        </button>
+      ) : null}
+      {showListTab ? (
+        <button
+          type="button"
+          onClick={() => onTabChange("list")}
+          className={cn(
+            "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
+            activeTab === "list" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
+          )}
+        >
+          <List className="h-4 w-4" />
+          <span>리스트</span>
+        </button>
+      ) : null}
       {showPolicyTab ? (
         <button
           type="button"
@@ -1080,6 +1105,9 @@ export type WidgetConversationLayoutProps = {
   brandName: string;
   status: string;
   iconUrl?: string | null;
+  showHeader?: boolean;
+  showHeaderLogo?: boolean;
+  showHeaderStatus?: boolean;
   headerActions?: ReactNode;
   onNewConversation?: () => void;
   showNewConversation?: boolean;
@@ -1090,7 +1118,13 @@ export type WidgetConversationLayoutProps = {
   setupLegoProps: ConversationModelSetupColumnLegoProps;
   activeTab: WidgetConversationTab;
   onTabChange: (tab: WidgetConversationTab) => void;
+  showTabBar?: boolean;
+  showChatTab?: boolean;
+  showListTab?: boolean;
   showPolicyTab?: boolean;
+  showChatPanel?: boolean;
+  showListPanel?: boolean;
+  showPolicyPanel?: boolean;
   policyFallback?: ReactNode;
   sessions: WidgetConversationSession[];
   sessionsLoading?: boolean;
@@ -1107,6 +1141,9 @@ export function WidgetConversationLayout({
   brandName,
   status,
   iconUrl,
+  showHeader = true,
+  showHeaderLogo = true,
+  showHeaderStatus = true,
   headerActions,
   onNewConversation,
   showNewConversation,
@@ -1117,7 +1154,13 @@ export function WidgetConversationLayout({
   setupLegoProps,
   activeTab,
   onTabChange,
+  showTabBar = true,
+  showChatTab = true,
+  showListTab = true,
   showPolicyTab = false,
+  showChatPanel = true,
+  showListPanel = true,
+  showPolicyPanel = true,
   policyFallback,
   sessions,
   sessionsLoading = false,
@@ -1147,20 +1190,24 @@ export function WidgetConversationLayout({
       )}
       parts-lego="WidgetConversationLayout"
     >
-      <WidgetHeaderLego
-        brandName={brandName}
-        status={status}
-        iconUrl={iconUrl}
-        headerActions={headerActions}
-        onNewConversation={onNewConversation}
-        showNewConversation={canStartNew}
-        onClose={onClose}
-        showClose={showClose}
-        closeLabel={closeLabel}
-      />
+      {showHeader ? (
+        <WidgetHeaderLego
+          brandName={brandName}
+          status={status}
+          iconUrl={iconUrl}
+          showLogo={showHeaderLogo}
+          showStatus={showHeaderStatus}
+          headerActions={headerActions}
+          onNewConversation={onNewConversation}
+          showNewConversation={canStartNew}
+          onClose={onClose}
+          showClose={showClose}
+          closeLabel={closeLabel}
+        />
+      ) : null}
       <div className="flex-1 min-h-0 overflow-hidden" panel-lego="WidgetConversationLayout.Panel">
-        {activeTab === "chat" ? <ConversationModelChatColumnLego {...chatLegoProps} /> : null}
-        {activeTab === "list" ? (
+        {activeTab === "chat" && showChatPanel ? <ConversationModelChatColumnLego {...chatLegoProps} /> : null}
+        {activeTab === "list" && showListPanel ? (
           <WidgetHistoryPanelLego
             sessions={sessions}
             sessionsLoading={sessionsLoading}
@@ -1171,9 +1218,21 @@ export function WidgetConversationLayout({
             historyLoading={historyLoading}
           />
         ) : null}
-        {activeTab === "policy" ? (showPolicyTab ? <ConversationModelSetupColumnLego {...setupLegoProps} /> : fallbackPanel) : null}
+        {activeTab === "policy"
+          ? showPolicyTab && showPolicyPanel
+            ? <ConversationModelSetupColumnLego {...setupLegoProps} />
+            : fallbackPanel
+          : null}
       </div>
-      <WidgetTabBarLego activeTab={activeTab} onTabChange={onTabChange} showPolicyTab={showPolicyTab} />
+      {showTabBar ? (
+        <WidgetTabBarLego
+          activeTab={activeTab}
+          onTabChange={onTabChange}
+          showChatTab={showChatTab}
+          showListTab={showListTab}
+          showPolicyTab={showPolicyTab}
+        />
+      ) : null}
     </div>
   );
 }

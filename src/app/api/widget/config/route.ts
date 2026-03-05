@@ -4,7 +4,7 @@ import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
 import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
 import { decodeWidgetOverrides } from "@/lib/widgetOverrides";
 import { normalizeWidgetOverrides, readWidgetMeta } from "@/lib/widgetTemplateMeta";
-import { resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
+import { filterWidgetOverridesByPolicy, resolveWidgetBasePolicy, resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
 
 function withCors(res: NextResponse, origin?: string | null) {
   res.headers.set("Access-Control-Allow-Origin", origin || "*");
@@ -61,7 +61,9 @@ export async function GET(req: NextRequest) {
   const { data: template } = templateId
     ? await supabaseAdmin.from("B_chat_widgets").select("*").eq("id", templateId).maybeSingle()
     : { data: null };
-  const resolved = resolveWidgetRuntimeConfig(widget, template || null, overrides);
+  const basePolicy = resolveWidgetBasePolicy(widget, template || null);
+  const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
+  const resolved = resolveWidgetRuntimeConfig(widget, template || null, filteredOverrides);
 
   const allowedDomains = resolved.allowed_domains;
   const originHost = extractHostFromUrl(originHeader || "");

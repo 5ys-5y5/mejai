@@ -12,7 +12,7 @@ import {
 } from "@/lib/conversation/pageFeaturePolicy";
 import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
 import { normalizeWidgetOverrides, readWidgetMeta, normalizeStringArray } from "@/lib/widgetTemplateMeta";
-import { resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
+import { filterWidgetOverridesByPolicy, resolveWidgetBasePolicy, resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
 
 function getWidgetRuntimeSecret() {
   return String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
@@ -79,7 +79,9 @@ async function handleStream(
     : { data: null };
 
   const overrides = normalizeWidgetOverrides(extras?.overrides);
-  const resolved = resolveWidgetRuntimeConfig(widget, template || null, overrides);
+  const basePolicy = resolveWidgetBasePolicy(widget, template || null);
+  const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
+  const resolved = resolveWidgetRuntimeConfig(widget, template || null, filteredOverrides);
 
   let providerValue: ConversationFeaturesProviderShape | null = null;
   try {

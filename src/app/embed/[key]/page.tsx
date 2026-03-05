@@ -247,9 +247,16 @@ export default function WidgetEmbedPage() {
   const previewOrigin = useMemo(() => String(searchParams?.get("origin") || "").trim(), [searchParams]);
   const previewPageUrl = useMemo(() => String(searchParams?.get("page_url") || "").trim(), [searchParams]);
   const previewReferrer = useMemo(() => String(searchParams?.get("referrer") || "").trim(), [searchParams]);
+  const forcedTab = useMemo(() => {
+    const raw = String(searchParams?.get("tab") || "").trim().toLowerCase();
+    if (raw === "chat" || raw === "list" || raw === "policy") {
+      return raw as WidgetConversationTab;
+    }
+    return null;
+  }, [searchParams]);
   const initialOverrides = useMemo(() => decodeWidgetOverrides(overridesParam), [overridesParam]);
 
-  const [activeTab, setActiveTab] = useState<WidgetConversationTab>("chat");
+  const [activeTab, setActiveTab] = useState<WidgetConversationTab>(() => forcedTab || "chat");
   const [widgetToken, setWidgetToken] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [config, setConfig] = useState<WidgetConfig | null>(null);
@@ -286,6 +293,10 @@ export default function WidgetEmbedPage() {
     llm: "chatgpt",
     inlineKb: "",
   });
+  useEffect(() => {
+    if (!forcedTab) return;
+    setActiveTab(forcedTab);
+  }, [forcedTab]);
   useEffect(() => {
     if (!previewOrigin && !previewPageUrl && !previewReferrer) return;
     setPendingMeta((prev) => ({
@@ -435,17 +446,49 @@ export default function WidgetEmbedPage() {
 
   const allowedDomains = Array.isArray(config?.allowed_domains) ? config.allowed_domains : [];
   const domainAllowed = allowedDomains.length === 0 ? true : matchAllowedDomain(originHost, allowedDomains);
-  const showPolicyTab = debugBypass || (domainAllowed && accountAllowed);
+  const policyAccessAllowed = debugBypass || (domainAllowed && accountAllowed);
+  const policyFeatureAllowed = pageFeatures.widget?.tabBar?.policy || pageFeatures.widget?.setupPanel;
+  const showPolicyTab = forcedTab === "policy" ? true : Boolean(policyAccessAllowed && policyFeatureAllowed);
   const policyFeatures = useMemo(
     () => applyConversationFeatureVisibility(baseFeatures, isAdminOrDebug || showPolicyTab),
     [baseFeatures, isAdminOrDebug, showPolicyTab]
   );
 
+  const showChatTab = Boolean(pageFeatures.widget?.tabBar?.chat || pageFeatures.widget?.chatPanel);
+  const showListTab = Boolean(pageFeatures.widget?.tabBar?.list || pageFeatures.widget?.historyPanel);
+  const showHeader = Boolean(pageFeatures.widget?.header?.enabled);
+  const showHeaderLogo = Boolean(pageFeatures.widget?.header?.logo);
+  const showHeaderStatus = Boolean(pageFeatures.widget?.header?.status);
+  const showTabBar = Boolean(pageFeatures.widget?.tabBar?.enabled);
+  const allowChatPanel = Boolean(pageFeatures.widget?.chatPanel);
+  const allowListPanel = Boolean(pageFeatures.widget?.historyPanel);
+  const allowPolicyPanel = Boolean(pageFeatures.widget?.setupPanel);
+
+  const allowedTabs = useMemo<WidgetConversationTab[]>(() => {
+    const tabs: WidgetConversationTab[] = [];
+    if (allowChatPanel && showChatTab) tabs.push("chat");
+    if (allowListPanel && showListTab) tabs.push("list");
+    if (allowPolicyPanel && showPolicyTab) tabs.push("policy");
+    return tabs.length > 0 ? tabs : ["chat"];
+  }, [allowChatPanel, allowListPanel, allowPolicyPanel, showChatTab, showListTab, showPolicyTab]);
+
   useEffect(() => {
-    if (!showPolicyTab && activeTab === "policy") {
-      setActiveTab("chat");
+    if (forcedTab) {
+      setActiveTab(forcedTab);
+      return;
     }
-  }, [showPolicyTab, activeTab]);
+    if (allowedTabs.includes(activeTab)) return;
+    setActiveTab(allowedTabs[0]);
+  }, [activeTab, allowedTabs, forcedTab]);
+
+  const handleTabChange = useCallback(
+    (tab: WidgetConversationTab) => {
+      if (forcedTab) return;
+      if (!allowedTabs.includes(tab)) return;
+      setActiveTab(tab);
+    },
+    [allowedTabs, forcedTab]
+  );
 
   useEffect(() => {
     widgetTokenRef.current = widgetToken;
@@ -1220,16 +1263,31 @@ export default function WidgetEmbedPage() {
         brandName={brandName}
         status={statusLabel}
         iconUrl={headerIcon}
+        showHeader={showHeader}
+        showHeaderLogo={showHeaderLogo}
+        showHeaderStatus={showHeaderStatus}
         onNewConversation={handleNewConversation}
-        showNewConversation={pageFeatures.interaction.widgetHeaderNewConversation}
+        showNewConversation={
+          pageFeatures.interaction.widgetHeaderNewConversation && pageFeatures.widget?.header?.newConversation
+        }
         onClose={handleCloseWidget}
-        showClose={pageFeatures.interaction.widgetHeaderClose}
-        headerActions={pageFeatures.interaction.widgetHeaderAgentAction ? headerActions : null}
+        showClose={pageFeatures.interaction.widgetHeaderClose && pageFeatures.widget?.header?.close}
+        headerActions={
+          pageFeatures.interaction.widgetHeaderAgentAction && pageFeatures.widget?.header?.agentAction
+            ? headerActions
+            : null
+        }
         fill={false}
         className="h-full"
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
+        showTabBar={showTabBar}
+        showChatTab={showChatTab}
+        showListTab={showListTab}
         showPolicyTab={showPolicyTab}
+        showChatPanel={allowChatPanel}
+        showListPanel={allowListPanel}
+        showPolicyPanel={allowPolicyPanel}
         chatLegoProps={chatLegoProps}
         setupLegoProps={setupLegoProps}
         sessions={sessions}

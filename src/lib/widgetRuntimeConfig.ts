@@ -1,4 +1,9 @@
-import type { ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
+import {
+  applyConversationFeatureVisibility,
+  resolveConversationPageFeatures,
+  WIDGET_PAGE_KEY,
+  type ConversationFeaturesProviderShape,
+} from "@/lib/conversation/pageFeaturePolicy";
 import { normalizeWidgetChatPolicyProvider, type WidgetChatPolicyInput } from "@/lib/widgetChatPolicyShape";
 import {
   type WidgetOverrides,
@@ -34,6 +39,10 @@ export type ResolvedWidgetConfig = {
   chat_policy: ConversationFeaturesProviderShape | null;
 };
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
 function mergeSetupConfig(base?: WidgetSetupConfig | null, override?: WidgetSetupConfig | null) {
   if (!base && !override) return null;
   return {
@@ -43,6 +52,48 @@ function mergeSetupConfig(base?: WidgetSetupConfig | null, override?: WidgetSetu
     mcp: { ...(base?.mcp || {}), ...(override?.mcp || {}) },
     llm: { ...(base?.llm || {}), ...(override?.llm || {}) },
   } satisfies WidgetSetupConfig;
+}
+
+export function resolveWidgetBasePolicy(
+  widget: WidgetRow,
+  template: WidgetRow | null
+): ConversationFeaturesProviderShape | null {
+  const widgetMeta = readWidgetMeta(widget.theme);
+  const templateMeta = template ? readWidgetMeta(template.theme) : {};
+  const templatePolicy = normalizeWidgetChatPolicyProvider(template?.chat_policy || templateMeta.chat_policy || null);
+  if (templatePolicy) return templatePolicy;
+  const widgetPolicy = normalizeWidgetChatPolicyProvider(widget.chat_policy || widgetMeta.chat_policy || null);
+  return widgetPolicy || null;
+}
+
+export function filterWidgetOverridesByPolicy(
+  overrides: WidgetOverrides | null | undefined,
+  policy: ConversationFeaturesProviderShape | null
+): WidgetOverrides | null {
+  if (!overrides || !isPlainObject(overrides)) return overrides || null;
+  const features = applyConversationFeatureVisibility(resolveConversationPageFeatures(WIDGET_PAGE_KEY, policy), false);
+  const allowAgentOverride = Boolean(features.setup.agentSelector || features.setup.modelSelector);
+  const allowLlmOverride = Boolean(features.setup.llmSelector);
+  const allowKbOverride = Boolean(
+    features.setup.kbSelector || features.setup.inlineUserKbInput || features.setup.adminKbSelector
+  );
+  const allowMcpOverride = Boolean(features.mcp.providerSelector || features.mcp.actionSelector);
+
+  let nextSetup: WidgetSetupConfig | null = overrides.setup_config || null;
+  if (nextSetup && typeof nextSetup === "object") {
+    const mutable = { ...nextSetup };
+    if (!allowAgentOverride) delete (mutable as WidgetSetupConfig).agent_id;
+    if (!allowKbOverride) delete (mutable as WidgetSetupConfig).kb;
+    if (!allowMcpOverride) delete (mutable as WidgetSetupConfig).mcp;
+    if (!allowLlmOverride) delete (mutable as WidgetSetupConfig).llm;
+    nextSetup = Object.keys(mutable).length > 0 ? mutable : null;
+  }
+
+  return {
+    ...overrides,
+    agent_id: allowAgentOverride ? overrides.agent_id : null,
+    setup_config: nextSetup,
+  };
 }
 
 export function resolveWidgetRuntimeConfig(
