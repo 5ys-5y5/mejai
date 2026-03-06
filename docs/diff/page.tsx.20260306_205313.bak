@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -80,12 +80,6 @@ function isValidUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-function buildPolicyFingerprint(value: ConversationFeaturesProviderShape | null | undefined) {
-  const normalized = normalizeConversationFeatureProvider(value);
-  const merged = withNullFeatureDefaults(normalized, WIDGET_PAGE_KEY);
-  return JSON.stringify(merged);
-}
-
 function StatusDot({ active }: { active?: boolean | null }) {
   const color =
     active === true ? "bg-emerald-500" : active === false ? "bg-rose-500" : "bg-slate-300";
@@ -125,11 +119,7 @@ export default function ConversationWidgetPage() {
   const [policyLoading, setPolicyLoading] = useState(false);
   const [policySaving, setPolicySaving] = useState(false);
   const [policyRefreshNonce, setPolicyRefreshNonce] = useState(0);
-  const [policyBaselineFingerprint, setPolicyBaselineFingerprint] = useState("");
-  const [saveSyncing, setSaveSyncing] = useState(false);
   const policySyncRef = useRef(false);
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const [saveBarRect, setSaveBarRect] = useState<{ left: number; width: number } | null>(null);
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedId) || null,
     [selectedId, templates]
@@ -192,37 +182,6 @@ export default function ConversationWidgetPage() {
     if (!selectedTemplate || !draft) return false;
     return buildDraftFingerprint(draft) !== buildTemplateFingerprint(selectedTemplate);
   }, [buildDraftFingerprint, buildTemplateFingerprint, draft, selectedTemplate]);
-  const policyFingerprint = useMemo(() => buildPolicyFingerprint(policyValue), [policyValue]);
-  const policyDirty = useMemo(() => {
-    if (!policyBaselineFingerprint) return false;
-    return policyFingerprint !== policyBaselineFingerprint;
-  }, [policyBaselineFingerprint, policyFingerprint]);
-  const hasUnsavedChanges = isDirty || policyDirty;
-  const showSaveBar = (draft && hasUnsavedChanges) || saveSyncing;
-  const isSaving = policySaving || policyLoading;
-
-  useEffect(() => {
-    if (!showSaveBar) return;
-    const node = contentRef.current;
-    if (!node) return;
-
-    const updateRect = () => {
-      const rect = node.getBoundingClientRect();
-      setSaveBarRect({
-        left: rect.left,
-        width: rect.width,
-      });
-    };
-
-    updateRect();
-    const resizeObserver = new ResizeObserver(updateRect);
-    resizeObserver.observe(node);
-    window.addEventListener("resize", updateRect);
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", updateRect);
-    };
-  }, [showSaveBar]);
 
   useEffect(() => {
     let mounted = true;
@@ -302,11 +261,7 @@ export default function ConversationWidgetPage() {
       );
       setInstallOverridesText("");
       setInstallOverrides({});
-      const hasPolicyField = Object.prototype.hasOwnProperty.call(current, "chat_policy");
-      if (hasPolicyField) {
-        setPolicyValue(current.chat_policy || null);
-        setPolicyBaselineFingerprint(buildPolicyFingerprint(current.chat_policy || null));
-      }
+      setPolicyValue(current.chat_policy || null);
     }
   }, [selectedId, templates]);
 
@@ -490,6 +445,10 @@ export default function ConversationWidgetPage() {
     }
   };
 
+  const handleSave = async () => {
+    await handlePolicySave();
+  };
+
   const handleDelete = async () => {
     if (!draft) return;
     if (!window.confirm("이 위젯 템플릿을 삭제할까요?")) return;
@@ -586,12 +545,10 @@ export default function ConversationWidgetPage() {
       .then((res) => {
         if (!active) return;
         setPolicyValue(res.provider || null);
-        setPolicyBaselineFingerprint(buildPolicyFingerprint(res.provider || null));
       })
       .catch(() => {
         if (!active) return;
         setPolicyValue(null);
-        setPolicyBaselineFingerprint(buildPolicyFingerprint(null));
       })
       .finally(() => {
         if (!active) return;
@@ -612,7 +569,6 @@ export default function ConversationWidgetPage() {
   const handlePolicySave = useCallback(async () => {
     if (!policyTemplateId) return;
     setPolicySaving(true);
-    setSaveSyncing(true);
     try {
       if (draft) {
         const res = await apiFetch<{ item: TemplateItem }>(`/api/widget-templates/${policyTemplateId}`, {
@@ -626,23 +582,15 @@ export default function ConversationWidgetPage() {
         setTemplates((prev) => prev.map((item) => (item.id === res.item.id ? res.item : item)));
         setDraft(res.item);
       }
-      const normalizedPolicy = normalizeConversationFeatureProvider(policyValue);
-      const mergedPolicy = withNullFeatureDefaults(normalizedPolicy, WIDGET_PAGE_KEY);
+      let mergedPolicy = policyValue || null;
+      mergedPolicy = withNullFeatureDefaults(mergedPolicy, WIDGET_PAGE_KEY);
       await apiFetch(`/api/widget-templates/${policyTemplateId}/chat-policy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: mergedPolicy }),
       });
-      setPolicyLoading(true);
-      const latestPolicy = await apiFetch<{ provider?: ConversationFeaturesProviderShape | null }>(
-        `/api/widget-templates/${policyTemplateId}/chat-policy`
-      );
-      setPolicyValue(latestPolicy.provider || null);
-      setPolicyBaselineFingerprint(buildPolicyFingerprint(latestPolicy.provider || null));
     } finally {
-      setPolicyLoading(false);
       setPolicySaving(false);
-      setSaveSyncing(false);
     }
   }, [policyTemplateId, policyValue, draft, setupConfig, domainText, pathText]);
 
@@ -656,7 +604,7 @@ export default function ConversationWidgetPage() {
 
   return (
     <div className="px-5 md:px-8 pt-6 pb-[100px]">
-      <div ref={contentRef} className="mx-auto w-full max-w-6xl">
+      <div className="mx-auto w-full max-w-6xl">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-lg font-semibold text-slate-900">위젯 관리 (Conversation)</div>
@@ -778,18 +726,36 @@ export default function ConversationWidgetPage() {
                       </div>
                       <div className={`${cellBase} ${cellSelected} px-0 pr-4`}>
                         {isSelected ? (
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              void handleDelete();
-                            }}
-                            disabled={!draft || loading}
-                            aria-label="삭제"
-                            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (isDirty) void handleSave();
+                              }}
+                              disabled={!draft || loading || !isDirty}
+                              aria-label={isDirty ? "저장" : "수정"}
+                              className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border text-slate-700 ${
+                                isDirty
+                                  ? "border-amber-300 bg-amber-300 text-amber-950 hover:bg-amber-400"
+                                  : "border-slate-200 bg-white text-slate-500"
+                              } disabled:cursor-not-allowed disabled:opacity-60`}
+                            >
+                              {isDirty ? <Save className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleDelete();
+                              }}
+                              disabled={!draft || loading}
+                              aria-label="삭제"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         ) : null}
                       </div>
                     </li>
@@ -810,6 +776,14 @@ export default function ConversationWidgetPage() {
                         docs/guide/ref/conversation 기준 UI
                       </div>
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handlePolicySave()}
+                      disabled={!policyTemplateId || policyLoading || policySaving}
+                    >
+                      {policySaving ? "저장 중..." : "정책 저장"}
+                    </Button>
                   </div>
                   {draft ? null : null}
                 </Card>
@@ -981,34 +955,6 @@ export default function ConversationWidgetPage() {
             ) : null}
           </div>
         </div>
-        {showSaveBar ? (
-          <div
-            className="fixed bottom-4 z-50 pointer-events-none"
-            style={{
-              left: saveBarRect?.left ?? 0,
-              width: saveBarRect?.width ?? "auto",
-            }}
-          >
-            <Button
-              type="button"
-              onClick={() => void handlePolicySave()}
-              disabled={!policyTemplateId || isSaving}
-              aria-label="저장하기"
-              className={`h-12 w-full rounded-2xl border pointer-events-auto ${
-                isSaving
-                  ? "border-slate-300 bg-slate-300 text-slate-600 cursor-not-allowed"
-                  : "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
-              } !opacity-100 disabled:!opacity-100 disabled:bg-slate-300 disabled:text-slate-600`}
-              style={
-                isSaving
-                  ? { opacity: 1, backgroundColor: "#d1d5db", color: "#475569" }
-                  : { opacity: 1 }
-              }
-            >
-              {isSaving ? "저장중" : "저장하기"}
-            </Button>
-          </div>
-        ) : null}
       </div>
     </div>
   );

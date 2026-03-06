@@ -51,7 +51,6 @@ export function isRestockInquiry(text: string) {
 export function detectIntent(text: string) {
   const action = parseActionToken(text);
   if (action === "restock_subscribe") return "restock_subscribe";
-  if (INTENT_KEYWORDS.adminLogin.test(text)) return "admin_login";
   if (isRestockSubscribe(text)) return "restock_subscribe";
   if (isRestockInquiry(text)) return "restock_inquiry";
   if (isAddressChangeUtterance(text)) return "order_change";
@@ -64,7 +63,6 @@ export function detectIntentCandidates(text: string) {
   const out: string[] = [];
   const action = parseActionToken(text);
   if (action === "restock_subscribe") out.push("restock_subscribe");
-  if (INTENT_KEYWORDS.adminLogin.test(text)) out.push("admin_login");
   if (isRestockSubscribe(text)) out.push("restock_subscribe");
   if (isRestockInquiry(text)) out.push("restock_inquiry");
   if (INTENT_KEYWORDS.faq.test(text)) out.push("faq");
@@ -77,8 +75,6 @@ export function detectIntentCandidates(text: string) {
 
 export function intentLabel(intent: string) {
   switch (intent) {
-    case "admin_login":
-      return "관리자 로그인";
     case "restock_inquiry":
       return "재입고 문의";
     case "restock_subscribe":
@@ -98,8 +94,6 @@ export function intentLabel(intent: string) {
 
 export function intentSupportScope(intent: string) {
   switch (intent) {
-    case "admin_login":
-      return "관리자 로그인";
     case "restock_inquiry":
       return "재입고 일정 확인";
     case "restock_subscribe":

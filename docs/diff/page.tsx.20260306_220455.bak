@@ -128,8 +128,6 @@ export default function ConversationWidgetPage() {
   const [policyBaselineFingerprint, setPolicyBaselineFingerprint] = useState("");
   const [saveSyncing, setSaveSyncing] = useState(false);
   const policySyncRef = useRef(false);
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const [saveBarRect, setSaveBarRect] = useState<{ left: number; width: number } | null>(null);
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedId) || null,
     [selectedId, templates]
@@ -200,29 +198,6 @@ export default function ConversationWidgetPage() {
   const hasUnsavedChanges = isDirty || policyDirty;
   const showSaveBar = (draft && hasUnsavedChanges) || saveSyncing;
   const isSaving = policySaving || policyLoading;
-
-  useEffect(() => {
-    if (!showSaveBar) return;
-    const node = contentRef.current;
-    if (!node) return;
-
-    const updateRect = () => {
-      const rect = node.getBoundingClientRect();
-      setSaveBarRect({
-        left: rect.left,
-        width: rect.width,
-      });
-    };
-
-    updateRect();
-    const resizeObserver = new ResizeObserver(updateRect);
-    resizeObserver.observe(node);
-    window.addEventListener("resize", updateRect);
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", updateRect);
-    };
-  }, [showSaveBar]);
 
   useEffect(() => {
     let mounted = true;
@@ -656,7 +631,7 @@ export default function ConversationWidgetPage() {
 
   return (
     <div className="px-5 md:px-8 pt-6 pb-[100px]">
-      <div ref={contentRef} className="mx-auto w-full max-w-6xl">
+      <div className="mx-auto w-full max-w-6xl">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-lg font-semibold text-slate-900">위젯 관리 (Conversation)</div>
@@ -982,28 +957,17 @@ export default function ConversationWidgetPage() {
           </div>
         </div>
         {showSaveBar ? (
-          <div
-            className="fixed bottom-4 z-50 pointer-events-none"
-            style={{
-              left: saveBarRect?.left ?? 0,
-              width: saveBarRect?.width ?? "auto",
-            }}
-          >
+          <div className="sticky bottom-4 z-50">
             <Button
               type="button"
               onClick={() => void handlePolicySave()}
               disabled={!policyTemplateId || isSaving}
               aria-label="저장하기"
-              className={`h-12 w-full rounded-2xl border pointer-events-auto ${
+              className={`h-12 w-full rounded-2xl border ${
                 isSaving
                   ? "border-slate-300 bg-slate-300 text-slate-600 cursor-not-allowed"
                   : "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
               } !opacity-100 disabled:!opacity-100 disabled:bg-slate-300 disabled:text-slate-600`}
-              style={
-                isSaving
-                  ? { opacity: 1, backgroundColor: "#d1d5db", color: "#475569" }
-                  : { opacity: 1 }
-              }
             >
               {isSaving ? "저장중" : "저장하기"}
             </Button>

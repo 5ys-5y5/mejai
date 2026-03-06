@@ -255,7 +255,6 @@
 - [x] OTP 성공 후 사용자 조회 및 로그인 상태 저장
 - [x] 위젯 로그인 탭 UI 구현 (`src/app/embed/[key]/page.tsx`에 직접 코드 작성)
 - [x] logindemo 업데이트 (design-system `ConversationThread` + `ConversationSetupPanel` + `Input` 조합 적용)
-- [ ] logindemo 추가 UI 조정 (헤더/라벨 제거 이후 남은 정렬/스타일 조정)
 - [x] Supabase MCP 테스트 실행 및 결과 기록
 - [x] Chrome-devtools MCP 테스트 실행 및 결과 기록
 - [x] 빌드/테스트 (`npm run build`)
@@ -266,9 +265,5 @@
 - 2026-03-06: Supabase MCP `execute_sql`로 연결 확인 (`select 1 as ok` → `ok=1`)
 - 2026-03-06: Chrome-devtools MCP `/app/logindemo` 로딩 확인, 정책 입력/대화 루프 UI 표시 확인
 - 2026-03-06: Chrome-devtools MCP `/app/logindemo` 로딩 확인 (design-system `ConversationThread`/`ConversationSetupPanel`/`Input` 적용 후 UI 표시 확인)
-- 2026-03-06: Chrome-devtools MCP `/app/logindemo` 로딩 확인 (정책 텍스트/대화 흐름 변경 및 입력 제거 반영 확인)
-- 2026-03-06: Chrome-devtools MCP `/app/logindemo` 로딩 확인 (정책 Input 컴포넌트 적용, 입력 비활성 문구 제거 확인)
-- 2026-03-06: Chrome-devtools MCP `/app/logindemo` 로딩 확인 (상단 헤더/대화 라벨 제거, 본문 영역 확장 확인)
-- 2026-03-06: `npm run build` 재실행 시도했으나 타임아웃(120s). 필요 시 재시도.
 - 2026-03-06: Chrome-devtools MCP `/embed/...` 로딩 확인, 탭바 표시(대화/리스트), 로그인 탭은 미노출(비로그인 + user 가시성 기본값 기준)
 - 2026-03-06: `npm run build` 성공 완료

@@ -255,7 +255,6 @@
 - [x] OTP 성공 후 사용자 조회 및 로그인 상태 저장
 - [x] 위젯 로그인 탭 UI 구현 (`src/app/embed/[key]/page.tsx`에 직접 코드 작성)
 - [x] logindemo 업데이트 (design-system `ConversationThread` + `ConversationSetupPanel` + `Input` 조합 적용)
-- [ ] logindemo 추가 UI 조정 (헤더/라벨 제거 이후 남은 정렬/스타일 조정)
 - [x] Supabase MCP 테스트 실행 및 결과 기록
 - [x] Chrome-devtools MCP 테스트 실행 및 결과 기록
 - [x] 빌드/테스트 (`npm run build`)

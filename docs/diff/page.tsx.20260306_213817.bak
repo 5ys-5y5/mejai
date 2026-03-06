@@ -129,7 +129,7 @@ export default function ConversationWidgetPage() {
   const [saveSyncing, setSaveSyncing] = useState(false);
   const policySyncRef = useRef(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const [saveBarRect, setSaveBarRect] = useState<{ left: number; width: number } | null>(null);
+  const [saveButtonRightOffset, setSaveButtonRightOffset] = useState<number | null>(null);
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedId) || null,
     [selectedId, templates]
@@ -199,28 +199,32 @@ export default function ConversationWidgetPage() {
   }, [policyBaselineFingerprint, policyFingerprint]);
   const hasUnsavedChanges = isDirty || policyDirty;
   const showSaveBar = (draft && hasUnsavedChanges) || saveSyncing;
-  const isSaving = policySaving || policyLoading;
 
   useEffect(() => {
     if (!showSaveBar) return;
     const node = contentRef.current;
     if (!node) return;
 
-    const updateRect = () => {
-      const rect = node.getBoundingClientRect();
-      setSaveBarRect({
-        left: rect.left,
-        width: rect.width,
-      });
+    const readPaddingRight = () => {
+      const style = window.getComputedStyle(node);
+      const value = Number.parseFloat(style.paddingRight || "0");
+      return Number.isFinite(value) ? value : 0;
     };
 
-    updateRect();
-    const resizeObserver = new ResizeObserver(updateRect);
+    const updateOffset = () => {
+      const rect = node.getBoundingClientRect();
+      const paddingRight = readPaddingRight();
+      const right = Math.max(0, window.innerWidth - rect.right + paddingRight);
+      setSaveButtonRightOffset(Number.isFinite(right) ? right : 0);
+    };
+
+    updateOffset();
+    const resizeObserver = new ResizeObserver(updateOffset);
     resizeObserver.observe(node);
-    window.addEventListener("resize", updateRect);
+    window.addEventListener("resize", updateOffset);
     return () => {
       resizeObserver.disconnect();
-      window.removeEventListener("resize", updateRect);
+      window.removeEventListener("resize", updateOffset);
     };
   }, [showSaveBar]);
 
@@ -982,32 +986,21 @@ export default function ConversationWidgetPage() {
           </div>
         </div>
         {showSaveBar ? (
-          <div
-            className="fixed bottom-4 z-50 pointer-events-none"
+          <Button
+            type="button"
+            onClick={() => void handlePolicySave()}
+            disabled={!policyTemplateId || policyLoading || policySaving}
+            aria-label="저장하기"
+            className="fixed bottom-4 left-auto z-50 inline-flex h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
             style={{
-              left: saveBarRect?.left ?? 0,
-              width: saveBarRect?.width ?? "auto",
+              position: "fixed",
+              right: saveButtonRightOffset ?? 32,
+              bottom: 16,
+              left: "auto",
             }}
           >
-            <Button
-              type="button"
-              onClick={() => void handlePolicySave()}
-              disabled={!policyTemplateId || isSaving}
-              aria-label="저장하기"
-              className={`h-12 w-full rounded-2xl border pointer-events-auto ${
-                isSaving
-                  ? "border-slate-300 bg-slate-300 text-slate-600 cursor-not-allowed"
-                  : "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
-              } !opacity-100 disabled:!opacity-100 disabled:bg-slate-300 disabled:text-slate-600`}
-              style={
-                isSaving
-                  ? { opacity: 1, backgroundColor: "#d1d5db", color: "#475569" }
-                  : { opacity: 1 }
-              }
-            >
-              {isSaving ? "저장중" : "저장하기"}
-            </Button>
-          </div>
+            {policySaving || policyLoading ? "저장중" : "저장하기"}
+          </Button>
         ) : null}
       </div>
     </div>

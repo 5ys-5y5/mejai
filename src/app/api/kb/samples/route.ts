@@ -18,6 +18,9 @@ export async function GET(req: NextRequest) {
     .order("created_at", { ascending: false });
 
   if (error) {
+    if (error.message.includes("is_sample") && error.message.includes("does not exist")) {
+      return NextResponse.json({ items: [] });
+    }
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 

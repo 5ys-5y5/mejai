@@ -172,7 +172,6 @@ export type ConversationPageFeatures = {
       chat: boolean;
       list: boolean;
       policy: boolean;
-      login: boolean;
     };
     chatPanel: boolean;
     historyPanel: boolean;
@@ -616,7 +615,6 @@ export function mergeConversationPageFeatures(
         chat: override.widget?.tabBar?.chat ?? base.widget.tabBar.chat,
         list: override.widget?.tabBar?.list ?? base.widget.tabBar.list,
         policy: override.widget?.tabBar?.policy ?? base.widget.tabBar.policy,
-        login: override.widget?.tabBar?.login ?? base.widget.tabBar.login,
       },
       chatPanel: override.widget?.chatPanel ?? base.widget.chatPanel,
       historyPanel: override.widget?.historyPanel ?? base.widget.historyPanel,
@@ -683,7 +681,6 @@ export function mergeConversationPageFeatures(
           chat: override.visibility?.widget?.tabBar?.chat ?? base.visibility.widget.tabBar.chat,
           list: override.visibility?.widget?.tabBar?.list ?? base.visibility.widget.tabBar.list,
           policy: override.visibility?.widget?.tabBar?.policy ?? base.visibility.widget.tabBar.policy,
-          login: override.visibility?.widget?.tabBar?.login ?? base.visibility.widget.tabBar.login,
         },
         chatPanel: override.visibility?.widget?.chatPanel ?? base.visibility.widget.chatPanel,
         historyPanel: override.visibility?.widget?.historyPanel ?? base.visibility.widget.historyPanel,
@@ -729,22 +726,15 @@ export function isToolEnabled(toolId: string, features: ConversationPageFeatures
   return isEnabledByGate(toolId, features.mcp.tools);
 }
 
-function withVisibilityFlag(
-  enabled: boolean,
-  visibility: FeatureVisibilityMode,
-  isAdminUser: boolean,
-  isUserLoggedIn: boolean
-) {
+function withVisibilityFlag(enabled: boolean, visibility: FeatureVisibilityMode, isAdminUser: boolean) {
   if (!enabled) return false;
   if (visibility === "admin" && !isAdminUser) return false;
-  if (visibility === "user" && !(isAdminUser || isUserLoggedIn)) return false;
   return true;
 }
 
 export function applyConversationFeatureVisibility(
   features: ConversationPageFeatures,
-  isAdminUser: boolean,
-  isUserLoggedIn = false
+  isAdminUser: boolean
 ): ConversationPageFeatures {
   return {
     ...features,
@@ -753,34 +743,17 @@ export function applyConversationFeatureVisibility(
       providerSelector: withVisibilityFlag(
         features.mcp.providerSelector,
         features.visibility.mcp.providerSelector,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
-      actionSelector: withVisibilityFlag(
-        features.mcp.actionSelector,
-        features.visibility.mcp.actionSelector,
-        isAdminUser,
-        isUserLoggedIn
-      ),
+      actionSelector: withVisibilityFlag(features.mcp.actionSelector, features.visibility.mcp.actionSelector, isAdminUser),
     },
     adminPanel: {
-      enabled: withVisibilityFlag(
-        features.adminPanel.enabled,
-        features.visibility.adminPanel.enabled,
-        isAdminUser,
-        isUserLoggedIn
-      ),
-      logsToggle: withVisibilityFlag(
-        features.adminPanel.logsToggle,
-        features.visibility.adminPanel.logsToggle,
-        isAdminUser,
-        isUserLoggedIn
-      ),
+      enabled: withVisibilityFlag(features.adminPanel.enabled, features.visibility.adminPanel.enabled, isAdminUser),
+      logsToggle: withVisibilityFlag(features.adminPanel.logsToggle, features.visibility.adminPanel.logsToggle, isAdminUser),
       copyConversation: withVisibilityFlag(
         features.adminPanel.copyConversation,
         features.visibility.adminPanel.copyConversation,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
     },
     interaction: {
@@ -788,230 +761,126 @@ export function applyConversationFeatureVisibility(
       quickReplies: withVisibilityFlag(
         features.interaction.quickReplies,
         features.visibility.interaction.quickReplies,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       productCards: withVisibilityFlag(
         features.interaction.productCards,
         features.visibility.interaction.productCards,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       threePhasePrompt: withVisibilityFlag(
         features.interaction.threePhasePrompt,
         features.visibility.interaction.threePhasePrompt,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       threePhasePromptShowConfirmed: withVisibilityFlag(
         features.interaction.threePhasePromptShowConfirmed,
         features.visibility.interaction.threePhasePromptShowConfirmed,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       threePhasePromptShowConfirming: withVisibilityFlag(
         features.interaction.threePhasePromptShowConfirming,
         features.visibility.interaction.threePhasePromptShowConfirming,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       threePhasePromptShowNext: withVisibilityFlag(
         features.interaction.threePhasePromptShowNext,
         features.visibility.interaction.threePhasePromptShowNext,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       threePhasePromptHideLabels: withVisibilityFlag(
         features.interaction.threePhasePromptHideLabels,
         features.visibility.interaction.threePhasePromptHideLabels,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       threePhasePromptLabels: features.interaction.threePhasePromptLabels,
       inputPlaceholder: features.interaction.inputPlaceholder,
-      prefill: withVisibilityFlag(
-        features.interaction.prefill,
-        features.visibility.interaction.prefill,
-        isAdminUser,
-        isUserLoggedIn
-      ),
+      prefill: withVisibilityFlag(features.interaction.prefill, features.visibility.interaction.prefill, isAdminUser),
       prefillMessages: features.interaction.prefillMessages,
-      inputSubmit: withVisibilityFlag(
-        features.interaction.inputSubmit,
-        features.visibility.interaction.inputSubmit,
-        isAdminUser,
-        isUserLoggedIn
-      ),
+      inputSubmit: withVisibilityFlag(features.interaction.inputSubmit, features.visibility.interaction.inputSubmit, isAdminUser),
       widgetHeaderAgentAction: withVisibilityFlag(
         features.interaction.widgetHeaderAgentAction,
         features.visibility.interaction.widgetHeaderAgentAction,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       widgetHeaderNewConversation: withVisibilityFlag(
         features.interaction.widgetHeaderNewConversation,
         features.visibility.interaction.widgetHeaderNewConversation,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       widgetHeaderClose: withVisibilityFlag(
         features.interaction.widgetHeaderClose,
         features.visibility.interaction.widgetHeaderClose,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
     },
     setup: {
       ...features.setup,
-      modelSelector: withVisibilityFlag(
-        features.setup.modelSelector,
-        features.visibility.setup.modelSelector,
-        isAdminUser,
-        isUserLoggedIn
-      ),
-      agentSelector: withVisibilityFlag(
-        features.setup.agentSelector,
-        features.visibility.setup.agentSelector,
-        isAdminUser,
-        isUserLoggedIn
-      ),
+      modelSelector: withVisibilityFlag(features.setup.modelSelector, features.visibility.setup.modelSelector, isAdminUser),
+      agentSelector: withVisibilityFlag(features.setup.agentSelector, features.visibility.setup.agentSelector, isAdminUser),
       versionSelector: withVisibilityFlag(
         features.setup.versionSelector,
         features.visibility.setup.versionSelector,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       sessionSelector: withVisibilityFlag(
         features.setup.sessionSelector,
         features.visibility.setup.sessionSelector,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
       conversationMode: withVisibilityFlag(
         features.setup.conversationMode,
         features.visibility.setup.conversationMode,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
-      llmSelector: withVisibilityFlag(
-        features.setup.llmSelector,
-        features.visibility.setup.llmSelector,
-        isAdminUser,
-        isUserLoggedIn
-      ),
-      kbSelector: withVisibilityFlag(
-        features.setup.kbSelector,
-        features.visibility.setup.kbSelector,
-        isAdminUser,
-        isUserLoggedIn
-      ),
+      llmSelector: withVisibilityFlag(features.setup.llmSelector, features.visibility.setup.llmSelector, isAdminUser),
+      kbSelector: withVisibilityFlag(features.setup.kbSelector, features.visibility.setup.kbSelector, isAdminUser),
       adminKbSelector: withVisibilityFlag(
         features.setup.adminKbSelector,
         features.visibility.setup.adminKbSelector,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
-      modeExisting: withVisibilityFlag(
-        features.setup.modeExisting,
-        features.visibility.setup.modeExisting,
-        isAdminUser,
-        isUserLoggedIn
-      ),
+      modeExisting: withVisibilityFlag(features.setup.modeExisting, features.visibility.setup.modeExisting, isAdminUser),
       sessionIdSearch: withVisibilityFlag(
         features.setup.sessionIdSearch,
         features.visibility.setup.sessionIdSearch,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
-      modeNew: withVisibilityFlag(
-        features.setup.modeNew,
-        features.visibility.setup.modeNew,
-        isAdminUser,
-        isUserLoggedIn
-      ),
-      routeSelector: withVisibilityFlag(
-        features.setup.routeSelector,
-        features.visibility.setup.routeSelector,
-        isAdminUser,
-        isUserLoggedIn
-      ),
+      modeNew: withVisibilityFlag(features.setup.modeNew, features.visibility.setup.modeNew, isAdminUser),
+      routeSelector: withVisibilityFlag(features.setup.routeSelector, features.visibility.setup.routeSelector, isAdminUser),
       inlineUserKbInput: withVisibilityFlag(
         features.setup.inlineUserKbInput,
         features.visibility.setup.inlineUserKbInput,
-        isAdminUser,
-        isUserLoggedIn
+        isAdminUser
       ),
     },
     widget: {
-      launcher: withVisibilityFlag(features.widget.launcher, features.visibility.widget.launcher, isAdminUser, isUserLoggedIn),
+      launcher: withVisibilityFlag(features.widget.launcher, features.visibility.widget.launcher, isAdminUser),
       header: {
-        enabled: withVisibilityFlag(
-          features.widget.header.enabled,
-          features.visibility.widget.header.enabled,
-          isAdminUser,
-          isUserLoggedIn
-        ),
-        logo: withVisibilityFlag(
-          features.widget.header.logo,
-          features.visibility.widget.header.logo,
-          isAdminUser,
-          isUserLoggedIn
-        ),
-        status: withVisibilityFlag(
-          features.widget.header.status,
-          features.visibility.widget.header.status,
-          isAdminUser,
-          isUserLoggedIn
-        ),
+        enabled: withVisibilityFlag(features.widget.header.enabled, features.visibility.widget.header.enabled, isAdminUser),
+        logo: withVisibilityFlag(features.widget.header.logo, features.visibility.widget.header.logo, isAdminUser),
+        status: withVisibilityFlag(features.widget.header.status, features.visibility.widget.header.status, isAdminUser),
         agentAction: withVisibilityFlag(
           features.widget.header.agentAction,
           features.visibility.widget.header.agentAction,
-          isAdminUser,
-          isUserLoggedIn
+          isAdminUser
         ),
         newConversation: withVisibilityFlag(
           features.widget.header.newConversation,
           features.visibility.widget.header.newConversation,
-          isAdminUser,
-          isUserLoggedIn
+          isAdminUser
         ),
-        close: withVisibilityFlag(
-          features.widget.header.close,
-          features.visibility.widget.header.close,
-          isAdminUser,
-          isUserLoggedIn
-        ),
+        close: withVisibilityFlag(features.widget.header.close, features.visibility.widget.header.close, isAdminUser),
       },
       tabBar: {
-        enabled: withVisibilityFlag(
-          features.widget.tabBar.enabled,
-          features.visibility.widget.tabBar.enabled,
-          isAdminUser,
-          isUserLoggedIn
-        ),
-        chat: withVisibilityFlag(features.widget.tabBar.chat, features.visibility.widget.tabBar.chat, isAdminUser, isUserLoggedIn),
-        list: withVisibilityFlag(features.widget.tabBar.list, features.visibility.widget.tabBar.list, isAdminUser, isUserLoggedIn),
-        policy: withVisibilityFlag(
-          features.widget.tabBar.policy,
-          features.visibility.widget.tabBar.policy,
-          isAdminUser,
-          isUserLoggedIn
-        ),
-        login: withVisibilityFlag(
-          features.widget.tabBar.login,
-          features.visibility.widget.tabBar.login,
-          isAdminUser,
-          isUserLoggedIn
-        ),
+        enabled: withVisibilityFlag(features.widget.tabBar.enabled, features.visibility.widget.tabBar.enabled, isAdminUser),
+        chat: withVisibilityFlag(features.widget.tabBar.chat, features.visibility.widget.tabBar.chat, isAdminUser),
+        list: withVisibilityFlag(features.widget.tabBar.list, features.visibility.widget.tabBar.list, isAdminUser),
+        policy: withVisibilityFlag(features.widget.tabBar.policy, features.visibility.widget.tabBar.policy, isAdminUser),
       },
-      chatPanel: withVisibilityFlag(features.widget.chatPanel, features.visibility.widget.chatPanel, isAdminUser, isUserLoggedIn),
-      historyPanel: withVisibilityFlag(
-        features.widget.historyPanel,
-        features.visibility.widget.historyPanel,
-        isAdminUser,
-        isUserLoggedIn
-      ),
-      setupPanel: withVisibilityFlag(features.widget.setupPanel, features.visibility.widget.setupPanel, isAdminUser, isUserLoggedIn),
+      chatPanel: withVisibilityFlag(features.widget.chatPanel, features.visibility.widget.chatPanel, isAdminUser),
+      historyPanel: withVisibilityFlag(features.widget.historyPanel, features.visibility.widget.historyPanel, isAdminUser),
+      setupPanel: withVisibilityFlag(features.widget.setupPanel, features.visibility.widget.setupPanel, isAdminUser),
     },
   };
 }
@@ -1096,7 +965,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         chat: true,
         list: true,
         policy: true,
-        login: false,
       },
       chatPanel: true,
       historyPanel: true,
@@ -1156,7 +1024,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
           chat: "user",
           list: "user",
           policy: "user",
-          login: "user",
         },
         chatPanel: "user",
         historyPanel: "user",
@@ -1230,7 +1097,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         chat: true,
         list: true,
         policy: true,
-        login: false,
       },
       chatPanel: true,
       historyPanel: true,
@@ -1290,7 +1156,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
           chat: "user",
           list: "user",
           policy: "user",
-          login: "user",
         },
         chatPanel: "user",
         historyPanel: "user",
@@ -1365,7 +1230,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         chat: true,
         list: true,
         policy: true,
-        login: false,
       },
       chatPanel: true,
       historyPanel: true,
@@ -1425,7 +1289,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
           chat: "user",
           list: "user",
           policy: "user",
-          login: "user",
         },
         chatPanel: "user",
         historyPanel: "user",
@@ -1500,7 +1363,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         chat: true,
         list: true,
         policy: true,
-        login: false,
       },
       chatPanel: true,
       historyPanel: true,
@@ -1560,7 +1422,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
           chat: "user",
           list: "user",
           policy: "user",
-          login: "user",
         },
         chatPanel: "user",
         historyPanel: "user",
@@ -1635,7 +1496,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         chat: true,
         list: true,
         policy: true,
-        login: false,
       },
       chatPanel: true,
       historyPanel: true,
@@ -1695,7 +1555,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
           chat: "user",
           list: "user",
           policy: "user",
-          login: "user",
         },
         chatPanel: "user",
         historyPanel: "user",

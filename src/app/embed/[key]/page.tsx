@@ -60,11 +60,25 @@ type PolicyConfig = {
   inlineKb: string;
 };
 
+type AuthState = {
+  status: "logged_in" | "logged_out";
+  user_id?: string | null;
+  phone_masked?: string | null;
+  verified_at?: string | null;
+  expires_at?: string | null;
+  customer_verification_token?: string | null;
+};
+
 const TEMPLATE_KEY_PREFIX = "template_key=";
 const PUBLIC_KEY_PREFIX = "public_key=";
 const PARAMETER_FLAG_KEYS = ["parameter", "paremeter"];
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PUBLIC_KEY_REGEX = /^mw_pk_/i;
+const AUTH_STATE_STORAGE_KEY = "mejai_widget_auth_state";
+const LOGIN_POLICY_TEXT = "관리자 로그인: 휴대폰 번호를 인증해 주세요. 인증 후 사용자 전용 정보 제공.";
+const LOGIN_USER_TEXT = "관리자 로그인";
+const LOGIN_BOT_TEXT = "휴대폰 번호를 입력해주세요.";
+const LOGIN_PHASES = ["policy_typing", "user_message", "bot_message", "reset_pause"] as const;
 
 function buildId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -213,6 +227,44 @@ function normalizeOriginList(value: unknown) {
 
 function normalizeAccountValue(value: unknown) {
   return String(value || "").trim().toLowerCase();
+}
+
+function normalizeAuthState(raw: unknown): AuthState | null {
+  if (!raw || typeof raw !== "object") return null;
+  const record = raw as Record<string, unknown>;
+  const status = record.status === "logged_in" || record.status === "logged_out" ? record.status : null;
+  if (!status) return null;
+  return {
+    status,
+    user_id: typeof record.user_id === "string" ? record.user_id : null,
+    phone_masked: typeof record.phone_masked === "string" ? record.phone_masked : null,
+    verified_at: typeof record.verified_at === "string" ? record.verified_at : null,
+    expires_at: typeof record.expires_at === "string" ? record.expires_at : null,
+    customer_verification_token:
+      typeof record.customer_verification_token === "string" ? record.customer_verification_token : null,
+  };
+}
+
+function isAuthStateActive(state: AuthState | null) {
+  if (!state || state.status !== "logged_in") return false;
+  if (!state.expires_at) return true;
+  const expiresAt = Date.parse(state.expires_at);
+  if (!Number.isFinite(expiresAt)) return false;
+  return Date.now() < expiresAt;
+}
+
+function readStoredAuthState() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(AUTH_STATE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const normalized = normalizeAuthState(parsed);
+    if (!normalized) return null;
+    return isAuthStateActive(normalized) ? normalized : null;
+  } catch {
+    return null;
+  }
 }
 
 function parseBooleanParam(value: string) {
@@ -373,7 +425,7 @@ export default function WidgetEmbedPage() {
   );
   const forcedTab = useMemo(() => {
     const raw = String(searchParams?.get("tab") || "").trim().toLowerCase();
-    if (raw === "chat" || raw === "list" || raw === "policy") {
+    if (raw === "chat" || raw === "list" || raw === "policy" || raw === "login") {
       return raw as WidgetConversationTab;
     }
     return null;
@@ -424,10 +476,73 @@ export default function WidgetEmbedPage() {
     llm: "chatgpt",
     inlineKb: "",
   });
+  const [authState, setAuthState] = useState<AuthState | null>(() => readStoredAuthState());
+  const [loginPhaseIndex, setLoginPhaseIndex] = useState(0);
+  const [loginPolicyChars, setLoginPolicyChars] = useState(0);
+  const loginTimerRef = useRef<number | null>(null);
+  const loginPhase = LOGIN_PHASES[loginPhaseIndex] ?? "policy_typing";
+  const loginPolicyValue = useMemo(
+    () => LOGIN_POLICY_TEXT.slice(0, loginPolicyChars),
+    [loginPolicyChars]
+  );
   useEffect(() => {
     if (!forcedTab) return;
     setActiveTab(forcedTab);
   }, [forcedTab]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (loginTimerRef.current) window.clearTimeout(loginTimerRef.current);
+    if (loginPhase === "policy_typing") {
+      if (loginPolicyChars < LOGIN_POLICY_TEXT.length) {
+        loginTimerRef.current = window.setTimeout(() => setLoginPolicyChars((value) => value + 1), 40);
+        return;
+      }
+      loginTimerRef.current = window.setTimeout(() => setLoginPhaseIndex(1), 600);
+      return;
+    }
+    if (loginPhase === "user_message") {
+      loginTimerRef.current = window.setTimeout(() => setLoginPhaseIndex(2), 700);
+      return;
+    }
+    if (loginPhase === "bot_message") {
+      loginTimerRef.current = window.setTimeout(() => setLoginPhaseIndex(3), 900);
+      return;
+    }
+    loginTimerRef.current = window.setTimeout(() => {
+      setLoginPolicyChars(0);
+      setLoginPhaseIndex(0);
+    }, 600);
+    return () => {
+      if (loginTimerRef.current) window.clearTimeout(loginTimerRef.current);
+    };
+  }, [loginPhase, loginPolicyChars]);
+  const isUserLoggedIn = useMemo(() => isAuthStateActive(authState), [authState]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (authState && isAuthStateActive(authState)) {
+      window.localStorage.setItem(AUTH_STATE_STORAGE_KEY, JSON.stringify(authState));
+    } else {
+      window.localStorage.removeItem(AUTH_STATE_STORAGE_KEY);
+    }
+  }, [authState]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!authState) return;
+    if (!isAuthStateActive(authState)) {
+      setAuthState(null);
+      return;
+    }
+    if (!authState.expires_at) return;
+    const expiresAt = Date.parse(authState.expires_at);
+    if (!Number.isFinite(expiresAt)) return;
+    const remainingMs = expiresAt - Date.now();
+    if (remainingMs <= 0) {
+      setAuthState(null);
+      return;
+    }
+    const timer = window.setTimeout(() => setAuthState(null), remainingMs);
+    return () => window.clearTimeout(timer);
+  }, [authState]);
   useEffect(() => {
     if (!previewOrigin && !previewPageUrl && !previewReferrer) return;
     setPendingMeta((prev) => ({
@@ -527,8 +642,8 @@ export default function WidgetEmbedPage() {
     [providerPolicy]
   );
   const pageFeatures = useMemo(
-    () => applyConversationFeatureVisibility(baseFeatures, isAdminUser || debugBypass),
-    [baseFeatures, debugBypass, isAdminUser]
+    () => applyConversationFeatureVisibility(baseFeatures, isAdminUser || debugBypass, isUserLoggedIn),
+    [baseFeatures, debugBypass, isAdminUser, isUserLoggedIn]
   );
   const setupUi = useMemo(() => resolveConversationSetupUi(WIDGET_PAGE_KEY, providerPolicy), [providerPolicy]);
   const debugOptions = useMemo(
@@ -581,12 +696,13 @@ export default function WidgetEmbedPage() {
   const policyFeatureAllowed = pageFeatures.widget?.tabBar?.policy || pageFeatures.widget?.setupPanel;
   const showPolicyTab = forcedTab === "policy" ? true : Boolean(policyAccessAllowed && policyFeatureAllowed);
   const policyFeatures = useMemo(
-    () => applyConversationFeatureVisibility(baseFeatures, isAdminOrDebug || showPolicyTab),
-    [baseFeatures, isAdminOrDebug, showPolicyTab]
+    () => applyConversationFeatureVisibility(baseFeatures, isAdminOrDebug || showPolicyTab, isUserLoggedIn),
+    [baseFeatures, isAdminOrDebug, isUserLoggedIn, showPolicyTab]
   );
 
   const showChatTab = Boolean(pageFeatures.widget?.tabBar?.chat || pageFeatures.widget?.chatPanel);
   const showListTab = Boolean(pageFeatures.widget?.tabBar?.list || pageFeatures.widget?.historyPanel);
+  const showLoginTab = Boolean(pageFeatures.widget?.tabBar?.login && !isUserLoggedIn);
   const showHeader = Boolean(pageFeatures.widget?.header?.enabled);
   const showHeaderLogo = Boolean(pageFeatures.widget?.header?.logo);
   const showHeaderStatus = Boolean(pageFeatures.widget?.header?.status);
@@ -594,14 +710,16 @@ export default function WidgetEmbedPage() {
   const allowChatPanel = Boolean(pageFeatures.widget?.chatPanel);
   const allowListPanel = Boolean(pageFeatures.widget?.historyPanel);
   const allowPolicyPanel = Boolean(pageFeatures.widget?.setupPanel);
+  const allowLoginPanel = Boolean(pageFeatures.widget?.tabBar?.login && !isUserLoggedIn);
 
   const allowedTabs = useMemo<WidgetConversationTab[]>(() => {
     const tabs: WidgetConversationTab[] = [];
     if (allowChatPanel && showChatTab) tabs.push("chat");
     if (allowListPanel && showListTab) tabs.push("list");
     if (allowPolicyPanel && showPolicyTab) tabs.push("policy");
+    if (allowLoginPanel && showLoginTab) tabs.push("login");
     return tabs.length > 0 ? tabs : ["chat"];
-  }, [allowChatPanel, allowListPanel, allowPolicyPanel, showChatTab, showListTab, showPolicyTab]);
+  }, [allowChatPanel, allowListPanel, allowLoginPanel, allowPolicyPanel, showChatTab, showListTab, showLoginTab, showPolicyTab]);
 
   useEffect(() => {
     if (forcedTab) {
@@ -1069,6 +1187,10 @@ export default function WidgetEmbedPage() {
           }));
           return;
         }
+        const nextAuthState = normalizeAuthState((data as Record<string, unknown>)?.auth_state);
+        if (nextAuthState) {
+          setAuthState(nextAuthState.status === "logged_in" ? nextAuthState : null);
+        }
         const botFields = buildRuntimeBotMessageFields(data || {});
         const normalizedRenderPlan = normalizeChatRenderPlan(botFields.renderPlan);
         const messageText =
@@ -1430,6 +1552,66 @@ export default function WidgetEmbedPage() {
     describeRoute: (value) => (value ? `Runtime: ${value}` : "선택된 Runtime 없음"),
   };
 
+  const loginPanel = useMemo(
+    () => (
+      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-50 via-white to-amber-50 p-4">
+        <div className="flex w-full max-w-[320px] flex-col overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.16)]">
+          <div className="border-b border-slate-200 bg-slate-900 px-4 py-3 text-white">
+            <div className="text-[10px] uppercase tracking-[0.35em] text-amber-200">Widget Login</div>
+            <div className="mt-1 text-base font-semibold">정책 기반 로그인</div>
+          </div>
+
+          <div className="flex-1 p-3">
+            <div className="mb-3">
+              <div className="mb-1 text-[11px] font-semibold text-slate-500">정책</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                <input
+                  className="w-full bg-transparent outline-none"
+                  readOnly
+                  value={loginPolicyValue}
+                  placeholder="정책을 입력합니다..."
+                />
+              </div>
+            </div>
+
+            <div className="flex h-[250px] flex-col rounded-xl border border-slate-200 bg-white">
+              <div className="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                대화
+              </div>
+              <div className="flex-1 space-y-2 overflow-hidden px-3 py-2 text-xs">
+                <div className="rounded-lg bg-slate-100 px-2 py-1 text-slate-600">
+                  정책이 적용 중입니다.
+                </div>
+                {loginPhaseIndex >= 1 ? (
+                  <div className="flex justify-end">
+                    <div className="max-w-[70%] rounded-2xl bg-slate-900 px-3 py-2 text-white shadow-sm">
+                      {LOGIN_USER_TEXT}
+                    </div>
+                  </div>
+                ) : null}
+                {loginPhaseIndex >= 2 ? (
+                  <div className="flex justify-start">
+                    <div className="max-w-[70%] rounded-2xl bg-amber-100 px-3 py-2 text-slate-900 shadow-sm">
+                      {LOGIN_BOT_TEXT}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <div className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400">
+                입력은 비활성화 상태입니다.
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+            320x420 데모 · 루프 재생 중
+          </div>
+        </div>
+      </div>
+    ),
+    [loginPhaseIndex, loginPolicyValue]
+  );
+
   return (
     <div
       className="h-full min-h-0"
@@ -1465,9 +1647,12 @@ export default function WidgetEmbedPage() {
         showChatTab={showChatTab}
         showListTab={showListTab}
         showPolicyTab={showPolicyTab}
+        showLoginTab={showLoginTab}
         showChatPanel={allowChatPanel}
         showListPanel={allowListPanel}
         showPolicyPanel={allowPolicyPanel}
+        showLoginPanel={allowLoginPanel}
+        loginPanel={loginPanel}
         chatLegoProps={chatLegoProps}
         setupLegoProps={setupLegoProps}
         sessions={sessions}

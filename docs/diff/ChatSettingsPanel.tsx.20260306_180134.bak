@@ -426,26 +426,17 @@ export function ChatSettingsPanel({
   const tabBarChatEnabled = features.widget.tabBar.chat || features.widget.chatPanel;
   const tabBarListEnabled = features.widget.tabBar.list || features.widget.historyPanel;
   const tabBarPolicyEnabled = features.widget.tabBar.policy || features.widget.setupPanel;
-  const tabBarLoginEnabled = features.widget.tabBar.login;
 
-  const setTabBarPanelEnabled = (key: "chat" | "list" | "policy" | "login", next: boolean) =>
+  const setTabBarPanelEnabled = (key: "chat" | "list" | "policy", next: boolean) =>
     updateDraft((current) => {
-      if (key === "login") {
-        const withTab = setIn(current.features as any, ["widget", "tabBar", "login"], next);
-        return { ...current, features: withTab };
-      }
       const panelKey = key === "chat" ? "chatPanel" : key === "list" ? "historyPanel" : "setupPanel";
       const withTab = setIn(current.features as any, ["widget", "tabBar", key], next);
       const withPanel = setIn(withTab as any, ["widget", panelKey], next);
       return { ...current, features: withPanel };
     });
 
-  const setTabBarPanelVisibility = (key: "chat" | "list" | "policy" | "login", mode: FeatureVisibilityMode) =>
+  const setTabBarPanelVisibility = (key: "chat" | "list" | "policy", mode: FeatureVisibilityMode) =>
     updateDraft((current) => {
-      if (key === "login") {
-        const withTab = setIn(current.features as any, ["visibility", "widget", "tabBar", "login"], mode);
-        return { ...current, features: withTab };
-      }
       const panelKey = key === "chat" ? "chatPanel" : key === "list" ? "historyPanel" : "setupPanel";
       const withTab = setIn(current.features as any, ["visibility", "widget", "tabBar", key], mode);
       const withPanel = setIn(withTab as any, ["visibility", "widget", panelKey], mode);
@@ -1264,13 +1255,6 @@ export function ChatSettingsPanel({
             visibility={visibility.widget.tabBar.list}
             onToggle={(next) => setTabBarPanelEnabled("list", next)}
             onVisibilityChange={(mode) => setTabBarPanelVisibility("list", mode)}
-          />
-          <ToggleRow
-            label="widget.tabBar.login"
-            checked={tabBarLoginEnabled}
-            visibility={visibility.widget.tabBar.login}
-            onToggle={(next) => setTabBarPanelEnabled("login", next)}
-            onVisibilityChange={(mode) => setTabBarPanelVisibility("login", mode)}
           />
           <ToggleRowGroup
             label="widget.tabBar.policy"

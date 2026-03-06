@@ -37,7 +37,6 @@
 - `src/components/conversation/ChatSettingsPanel.tsx` — widget.tabBar.login 토글/가시성 설정 UI 추가
 - `src/components/design-system/widget/WidgetUI.parts.tsx` — WidgetTabBarLego에 login 탭 추가 및 탭 타입 확장
 - `src/app/embed/[key]/page.tsx` — login 탭 렌더링, 로그인 상태 반영, 데모 UI 직접 구현
-- `src/app/app/logindemo/page.tsx` — 320x420 로그인 데모페이지 UI 구현
 - `src/app/api/runtime/chat/presentation/ui-runtimeResponseRuntime.ts` — 런타임 응답에 로그인 상태 시그널 포함
 - `src/app/api/runtime/chat/runtime/otpRuntime.ts` — 관리자 로그인용 OTP 흐름 추가
 - `src/app/api/runtime/chat/policies/lexicon.ts` — 관리자 로그인 intent 키워드 정의
@@ -60,10 +59,6 @@
 - 사용자가 확정한 범위를 넘어서는 변경을 임의로 수행하지 않는다.
 - 서비스 파괴(인코인, UI)의 주된 원인이므로 절대 금지한다.
 
-4. MCP 테스트 의무
-- 매 실행마다 `supabase` MCP와 `chrome-devtools` MCP로 의도대로 동작하는지 확인한다.
-- 테스트 수행/결과는 문서 하단 체크리스트 및 테스트 기록에 남긴다.
-
 ---
 
 ## 확정된 현재 상태 (서비스 코드 확인 완료)
@@ -71,16 +66,16 @@
 
 1. 탭바 설정 위치와 스키마
 - `widget.tabBar.enabled` 및 개별 탭(`chat/list/policy`)은 `src/components/conversation/ChatSettingsPanel.tsx`에서 설정 UI가 제공된다.
-- `widget.tabBar.enabled` 및 개별 탭(`chat/list/policy/login`)은 `src/components/conversation/ChatSettingsPanel.tsx`에서 설정 UI가 제공된다.
-- `ConversationPageFeatures.widget.tabBar`는 `enabled/chat/list/policy/login` boolean을 가지며, 기본 스키마는 `src/lib/conversation/pageFeaturePolicy.ts`에 정의되어 있다.
+- `ConversationPageFeatures.widget.tabBar`는 `enabled/chat/list/policy` boolean을 가지며, 기본 스키마는 `src/lib/conversation/pageFeaturePolicy.ts`에 정의되어 있다.
 
 2. 탭바 가시성 적용 방식
 - 가시성 모드는 `FeatureVisibilityMode = "user" | "admin" | "public"`이며 타입은 `src/lib/conversation/pageFeaturePolicy.ts`에 정의되어 있다.
-- `applyConversationFeatureVisibility()`는 `admin`과 `user` 가시성을 모두 판정하며, `user` 판정은 `isUserLoggedIn` 인자를 통해 수행된다.
+- 현재 `applyConversationFeatureVisibility()`는 `admin`만 차단하고 `user` 모드는 별도 판정이 없어 사실상 `public`과 동일하게 동작한다.
+  - 이는 로그인 기반 `user` 가시성을 구현하기 위해 계약/로직 확장이 필요함을 의미한다.
 
 3. 위젯 탭 목록 결정
 - 위젯 탭 노출/활성은 `src/app/embed/[key]/page.tsx`의 `allowedTabs` 로직에서 `widget.tabBar.*` 및 `widget.*Panel` 플래그로 결정된다.
-- 현재 탭 목록은 `chat/list/policy/login`으로 확장되어 있다.
+- 현재 탭 목록은 `chat/list/policy`에 한정되어 있다.
 
 4. Solapi OTP MCP 구현
 - OTP 발송/검증은 `src/lib/mcpAdapters.ts`의 `send_otp` / `verify_otp`에 구현되어 있다.
@@ -128,9 +123,7 @@
 로그인 상태 기준(신규 계약):
 - OTP 인증 성공 후 `customer_verification_token`이 유효하고,
 - 해당 인증 토큰으로 조회된 사용자(휴대폰 번호 기반)가 존재할 때 `loggedIn = true`.
-- 로그인 상태는 `D_conv_sessions.metadata.auth_login`에 저장하고,
-- 위젯에서는 `auth_state` 응답을 `localStorage`에 유지해 만료(`expires_at`) 시 자동 해제한다.
-- `auth_state`가 유효한 동안 `login` 탭을 숨긴다.
+- 로그인 상태는 세션 스코프에 저장한다(예: D_conv_sessions.metadata 또는 별도 세션 테이블).
 
 ### 4. 대화 기반 로그인 런타임
 - “관리자 로그인” 맥락이 감지되면 OTP 런타임에 진입한다.
@@ -138,7 +131,6 @@
 - OTP 완료 후 휴대폰 번호로 가입된 사용자 조회.
   - 존재: 로그인 완료
   - 미존재: 실패 처리
- - 로그인 완료 시 `auth_state`를 응답에 포함하여 위젯 로그인 상태로 반영한다.
 
 ### 5. 실패 케이스 (일반적 방식)
 기존 OTP 런타임의 실패 규칙을 그대로 활용한다.
@@ -164,7 +156,6 @@
 - `otp_ref: string | null`
 - `expected_input: "phone" | "otp_code" | null`
 - `customer_verification_token: string | null`
-- `auth_flow: "admin_login" | null` (관리자 로그인 OTP 플로우 식별용)
 
 2. OTP 저장 테이블 (`H_auth_otp_verifications`)
 - `id`, `org_id`, `user_id`, `destination`, `otp_ref`, `code_hash`, `expires_at`, `verified_at`, `verification_token`
@@ -179,12 +170,6 @@
   - `authenticated_phone`
   - `auth_verified_at`
   - `customer_verification_token`
-  - `auth_expires_at`
-  - `phone_masked`
-
-5. 런타임 응답/컨텍스트
-- `auth_state` (응답): `status`, `user_id`, `phone_masked`, `verified_at`, `expires_at`, `customer_verification_token`
-- `auth_login` (bot_context): `status`, `user_id`, `phone`, `verified_at`, `expires_at`, `customer_verification_token`
 
 ---
 
@@ -209,7 +194,6 @@
 - 이 페이지는 임시 데모이다.
 - 추후 로그인 탭 실제 구현 시 UI 코드는 `src/app/embed/[key]/page.tsx`에 **직접 작성**해야 한다.
 - 데모 페이지 UI를 import하거나 끌어다 쓰지 않는다.
- - 현재 구현은 `src/app/embed/[key]/page.tsx`에 동일 UI를 직접 작성한 상태이다.
 
 ---
 
@@ -229,7 +213,9 @@
 ---
 
 ## 오픈 이슈
-- 현재 오픈 이슈 없음
+- 로그인 완료 사용자 식별 테이블/쿼리 확정
+- 로그인 상태 저장 위치(D_conv_sessions.metadata vs 별도 테이블)
+- 로그인 상태 판정 기준 확정(토큰 유효성, 만료 정책)
 
 ---
 
@@ -240,35 +226,16 @@
 
 - [ ] 수정 시작 전 `docs/widget_login_tab_design.md` 화이트리스트 재확인 (망각 방지 하드 게이트)
 - [ ] 화이트리스트 외 파일 수정 시 즉시 중단 + 사용자 승인 절차
-- [x] 수정 시작 전 `docs/widget_login_tab_design.md` 화이트리스트 재확인 (망각 방지 하드 게이트)
-- [x] 화이트리스트 외 파일 수정 시 즉시 중단 + 사용자 승인 절차
 - [x] 설계 문서 업데이트 (`docs/widget_login_tab_design.md`)
 - [x] 로그인 데모페이지 구현 (`src/app/app/logindemo/page.tsx`)
-- [x] 수정 전 이해확정 절차 수행 (사용자 확정 완료)
-- [x] 변경 전 백업 기록 (`C:\dev\1227\mejai3\mejai\docs\diff`)
-- [x] `ConversationPageFeatures.widget.tabBar`에 `login` 탭 추가
-- [x] `visibility.widget.tabBar.login` 추가
-- [x] `applyConversationFeatureVisibility()`에 `user` 가시성 판정 추가
-- [x] 로그인 상태 판정 로직 추가 (OTP + 사용자 매핑 기준)
-- [x] 로그인 상태 시 `login` 탭 숨김 처리
-- [x] “관리자 로그인” 맥락 감지 → Solapi OTP 런타임 진입
-- [x] OTP 성공 후 사용자 조회 및 로그인 상태 저장
-- [x] 위젯 로그인 탭 UI 구현 (`src/app/embed/[key]/page.tsx`에 직접 코드 작성)
-- [x] logindemo 업데이트 (design-system `ConversationThread` + `ConversationSetupPanel` + `Input` 조합 적용)
-- [ ] logindemo 추가 UI 조정 (헤더/라벨 제거 이후 남은 정렬/스타일 조정)
-- [x] Supabase MCP 테스트 실행 및 결과 기록
-- [x] Chrome-devtools MCP 테스트 실행 및 결과 기록
-- [x] 빌드/테스트 (`npm run build`)
-
----
-
-## 테스트 기록
-- 2026-03-06: Supabase MCP `execute_sql`로 연결 확인 (`select 1 as ok` → `ok=1`)
-- 2026-03-06: Chrome-devtools MCP `/app/logindemo` 로딩 확인, 정책 입력/대화 루프 UI 표시 확인
-- 2026-03-06: Chrome-devtools MCP `/app/logindemo` 로딩 확인 (design-system `ConversationThread`/`ConversationSetupPanel`/`Input` 적용 후 UI 표시 확인)
-- 2026-03-06: Chrome-devtools MCP `/app/logindemo` 로딩 확인 (정책 텍스트/대화 흐름 변경 및 입력 제거 반영 확인)
-- 2026-03-06: Chrome-devtools MCP `/app/logindemo` 로딩 확인 (정책 Input 컴포넌트 적용, 입력 비활성 문구 제거 확인)
-- 2026-03-06: Chrome-devtools MCP `/app/logindemo` 로딩 확인 (상단 헤더/대화 라벨 제거, 본문 영역 확장 확인)
-- 2026-03-06: `npm run build` 재실행 시도했으나 타임아웃(120s). 필요 시 재시도.
-- 2026-03-06: Chrome-devtools MCP `/embed/...` 로딩 확인, 탭바 표시(대화/리스트), 로그인 탭은 미노출(비로그인 + user 가시성 기본값 기준)
-- 2026-03-06: `npm run build` 성공 완료
+- [ ] 수정 전 이해확정 절차 수행 (사용자 확정 필요)
+- [ ] 변경 전 백업 기록 (`C:\dev\1227\mejai3\mejai\docs\diff`)
+- [ ] `ConversationPageFeatures.widget.tabBar`에 `login` 탭 추가
+- [ ] `visibility.widget.tabBar.login` 추가
+- [ ] `applyConversationFeatureVisibility()`에 `user` 가시성 판정 추가
+- [ ] 로그인 상태 판정 로직 추가 (OTP + 사용자 매핑 기준)
+- [ ] 로그인 상태 시 `login` 탭 숨김 처리
+- [ ] “관리자 로그인” 맥락 감지 → Solapi OTP 런타임 진입
+- [ ] OTP 성공 후 사용자 조회 및 로그인 상태 저장
+- [ ] 위젯 로그인 탭 UI 구현 (`src/app/embed/[key]/page.tsx`에 직접 코드 작성)
+- [ ] 빌드/테스트 (`npm run build`)

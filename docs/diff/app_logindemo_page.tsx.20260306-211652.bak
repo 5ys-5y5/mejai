@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ConversationThread, ConversationSetupPanel, Input } from "@/components/design-system";
+import { ConversationThread, ConversationSetupPanel } from "@/components/design-system";
 
 const POLICY_TEXT = "재입고: 코듀로이 볼캡 12/4";
 const USER_TEXT = "볼캡 재입고 일정을 알고 싶어요";
@@ -70,18 +70,21 @@ export default function LoginDemoPage() {
         <div className="w-full text-center text-xs font-semibold tracking-[0.2em] text-slate-500">LOGIN DEMO</div>
         <div className="h-[420px] w-[320px] overflow-hidden rounded-[20px] border border-slate-200 bg-white shadow-[0_24px_60px_rgba(15,23,42,0.15)]">
           <div className="flex h-full flex-col">
+            <div className="border-b border-slate-200 bg-slate-900 px-4 py-3 text-white">
+              <div className="text-[11px] uppercase tracking-[0.3em] text-amber-200">Widget Login</div>
+              <div className="mt-1 text-base font-semibold">정책 기반 로그인</div>
+            </div>
+
             <div className="flex-1 p-3">
               <div className="mb-3">
                 <div className="mb-1 text-[11px] font-semibold text-slate-500">정책</div>
-                <Input
-                  className="h-7 bg-transparent text-xs"
-                  readOnly
-                  value={policyValue}
-                  placeholder="정책을 입력합니다..."
-                />
+                <div className="text-xs text-slate-700">{policyValue || "정책을 입력합니다..."}</div>
               </div>
 
               <ConversationSetupPanel className="flex h-[250px] flex-col rounded-xl border-slate-200 bg-white">
+                <div className="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                  대화
+                </div>
                 <div className="flex-1 overflow-hidden px-3 py-2">
                   <ConversationThread
                     messages={messages}
@@ -154,6 +157,9 @@ export default function LoginDemoPage() {
                       ) : null
                     }
                   />
+                </div>
+                <div className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400">
+                  입력은 비활성화 상태입니다.
                 </div>
               </ConversationSetupPanel>
             </div>

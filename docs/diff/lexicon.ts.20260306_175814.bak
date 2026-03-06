@@ -7,7 +7,6 @@ export const INTENT_KEYWORDS = {
     /(\ubc30\uc1a1|\ucd9c\uace0|\uc6b4\uc1a1\uc7a5|\uc1a1\uc7a5|\ubc30\uc1a1\uc870\ud68c|\ubc30\uc1a1\s*\uc0c1\ud0dc|\ubc30\uc1a1\s*\uc5b8\uc81c|\ub3c4\ucc29|\uc9c0\uc5f0)/i,
   refund: /(\ud658\ubd88|\ubc18\ud488|\uad50\ud658|\ucde8\uc18c)/i,
   faq: /(\ubb38\uc758|\uc9c8\ubb38|faq|\uc0ac\uc6a9\ubc95|\ubc29\ubc95|\uc548\ub0b4|\uac00\ub2a5\ud55c\uac00|\uc54c\ub824\uc918)/i,
-  adminLogin: /(관리자\s*로그인|admin\s*login|admin\s*sign\s*in)/i,
 } as const;
 
 export const RESTOCK_LEAD_DAY_OPTIONS = [1, 2, 3, 7, 14] as const;

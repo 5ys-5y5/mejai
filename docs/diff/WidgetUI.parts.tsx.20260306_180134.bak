@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode, Ref } from "react";
 import { createRoot } from "react-dom/client";
-import { List, LogIn, MessageCircle, Shield, X } from "lucide-react";
+import { List, MessageCircle, Shield, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import {
   ConversationModelChatColumnLego,
@@ -27,7 +27,7 @@ if (globalScope && typeof globalScope.process === "undefined") {
 // Edit this file to affect widget UI service-wide.
 // ------------------------------------------------------------
 export type WidgetLauncherPosition = "bottom-right" | "bottom-left";
-export type WidgetConversationTab = "chat" | "list" | "policy" | "login";
+export type WidgetConversationTab = "chat" | "list" | "policy";
 
 export type WidgetLauncherContainerProps = {
   children?: ReactNode;
@@ -932,7 +932,6 @@ export type WidgetTabBarLegoProps = {
   showChatTab?: boolean;
   showListTab?: boolean;
   showPolicyTab?: boolean;
-  showLoginTab?: boolean;
 };
 
 export function WidgetTabBarLego({
@@ -941,12 +940,10 @@ export function WidgetTabBarLego({
   showChatTab = true,
   showListTab = true,
   showPolicyTab = false,
-  showLoginTab = false,
 }: WidgetTabBarLegoProps) {
-  const tabs = [showChatTab, showListTab, showPolicyTab, showLoginTab].filter(Boolean).length;
+  const tabs = [showChatTab, showListTab, showPolicyTab].filter(Boolean).length;
   if (tabs === 0) return null;
-  const tabGridClass =
-    tabs === 4 ? "grid-cols-4" : tabs === 3 ? "grid-cols-3" : tabs === 1 ? "grid-cols-1" : "grid-cols-2";
+  const tabGridClass = tabs === 3 ? "grid-cols-3" : "grid-cols-2";
   return (
     <div
       className={cn("grid h-[50px] items-center gap-1 border-t border-slate-200 bg-white px-2 py-1", tabGridClass)}
@@ -989,19 +986,6 @@ export function WidgetTabBarLego({
         >
           <Shield className="h-4 w-4" />
           <span>정책</span>
-        </button>
-      ) : null}
-      {showLoginTab ? (
-        <button
-          type="button"
-          onClick={() => onTabChange("login")}
-          className={cn(
-            "flex h-full flex-col items-center justify-center gap-0.5 rounded-lg px-2 text-xs font-semibold leading-tight transition-colors",
-            activeTab === "login" ? "text-slate-900" : "text-slate-500 hover:text-slate-900"
-          )}
-        >
-          <LogIn className="h-4 w-4" />
-          <span>로그인</span>
         </button>
       ) : null}
     </div>
@@ -1166,12 +1150,9 @@ export type WidgetConversationLayoutProps = {
   showChatTab?: boolean;
   showListTab?: boolean;
   showPolicyTab?: boolean;
-  showLoginTab?: boolean;
   showChatPanel?: boolean;
   showListPanel?: boolean;
   showPolicyPanel?: boolean;
-  showLoginPanel?: boolean;
-  loginPanel?: ReactNode;
   policyFallback?: ReactNode;
   sessions: WidgetConversationSession[];
   sessionsLoading?: boolean;
@@ -1205,12 +1186,9 @@ export function WidgetConversationLayout({
   showChatTab = true,
   showListTab = true,
   showPolicyTab = false,
-  showLoginTab = false,
   showChatPanel = true,
   showListPanel = true,
   showPolicyPanel = true,
-  showLoginPanel = true,
-  loginPanel,
   policyFallback,
   sessions,
   sessionsLoading = false,
@@ -1273,11 +1251,6 @@ export function WidgetConversationLayout({
             ? <ConversationModelSetupColumnLego {...setupLegoProps} />
             : fallbackPanel
           : null}
-        {activeTab === "login"
-          ? showLoginTab && showLoginPanel
-            ? (loginPanel || fallbackPanel)
-            : fallbackPanel
-          : null}
       </div>
       {showTabBar ? (
         <WidgetTabBarLego
@@ -1286,7 +1259,6 @@ export function WidgetConversationLayout({
           showChatTab={showChatTab}
           showListTab={showListTab}
           showPolicyTab={showPolicyTab}
-          showLoginTab={showLoginTab}
         />
       ) : null}
     </div>

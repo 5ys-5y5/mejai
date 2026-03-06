@@ -126,10 +126,7 @@ export default function ConversationWidgetPage() {
   const [policySaving, setPolicySaving] = useState(false);
   const [policyRefreshNonce, setPolicyRefreshNonce] = useState(0);
   const [policyBaselineFingerprint, setPolicyBaselineFingerprint] = useState("");
-  const [saveSyncing, setSaveSyncing] = useState(false);
   const policySyncRef = useRef(false);
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const [saveBarRect, setSaveBarRect] = useState<{ left: number; width: number } | null>(null);
   const selectedTemplate = useMemo(
     () => templates.find((item) => item.id === selectedId) || null,
     [selectedId, templates]
@@ -198,31 +195,6 @@ export default function ConversationWidgetPage() {
     return policyFingerprint !== policyBaselineFingerprint;
   }, [policyBaselineFingerprint, policyFingerprint]);
   const hasUnsavedChanges = isDirty || policyDirty;
-  const showSaveBar = (draft && hasUnsavedChanges) || saveSyncing;
-  const isSaving = policySaving || policyLoading;
-
-  useEffect(() => {
-    if (!showSaveBar) return;
-    const node = contentRef.current;
-    if (!node) return;
-
-    const updateRect = () => {
-      const rect = node.getBoundingClientRect();
-      setSaveBarRect({
-        left: rect.left,
-        width: rect.width,
-      });
-    };
-
-    updateRect();
-    const resizeObserver = new ResizeObserver(updateRect);
-    resizeObserver.observe(node);
-    window.addEventListener("resize", updateRect);
-    return () => {
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", updateRect);
-    };
-  }, [showSaveBar]);
 
   useEffect(() => {
     let mounted = true;
@@ -612,7 +584,6 @@ export default function ConversationWidgetPage() {
   const handlePolicySave = useCallback(async () => {
     if (!policyTemplateId) return;
     setPolicySaving(true);
-    setSaveSyncing(true);
     try {
       if (draft) {
         const res = await apiFetch<{ item: TemplateItem }>(`/api/widget-templates/${policyTemplateId}`, {
@@ -633,16 +604,9 @@ export default function ConversationWidgetPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: mergedPolicy }),
       });
-      setPolicyLoading(true);
-      const latestPolicy = await apiFetch<{ provider?: ConversationFeaturesProviderShape | null }>(
-        `/api/widget-templates/${policyTemplateId}/chat-policy`
-      );
-      setPolicyValue(latestPolicy.provider || null);
-      setPolicyBaselineFingerprint(buildPolicyFingerprint(latestPolicy.provider || null));
+      setPolicyBaselineFingerprint(buildPolicyFingerprint(mergedPolicy));
     } finally {
-      setPolicyLoading(false);
       setPolicySaving(false);
-      setSaveSyncing(false);
     }
   }, [policyTemplateId, policyValue, draft, setupConfig, domainText, pathText]);
 
@@ -656,7 +620,7 @@ export default function ConversationWidgetPage() {
 
   return (
     <div className="px-5 md:px-8 pt-6 pb-[100px]">
-      <div ref={contentRef} className="mx-auto w-full max-w-6xl">
+      <div className="mx-auto w-full max-w-6xl">
         <div className="flex items-center justify-between">
           <div>
             <div className="text-lg font-semibold text-slate-900">위젯 관리 (Conversation)</div>
@@ -981,35 +945,29 @@ export default function ConversationWidgetPage() {
             ) : null}
           </div>
         </div>
-        {showSaveBar ? (
-          <div
-            className="fixed bottom-4 z-50 pointer-events-none"
-            style={{
-              left: saveBarRect?.left ?? 0,
-              width: saveBarRect?.width ?? "auto",
-            }}
-          >
-            <Button
-              type="button"
-              onClick={() => void handlePolicySave()}
-              disabled={!policyTemplateId || isSaving}
-              aria-label="저장하기"
-              className={`h-12 w-full rounded-2xl border pointer-events-auto ${
-                isSaving
-                  ? "border-slate-300 bg-slate-300 text-slate-600 cursor-not-allowed"
-                  : "border-slate-900 bg-slate-900 text-white hover:bg-slate-800"
-              } !opacity-100 disabled:!opacity-100 disabled:bg-slate-300 disabled:text-slate-600`}
-              style={
-                isSaving
-                  ? { opacity: 1, backgroundColor: "#d1d5db", color: "#475569" }
-                  : { opacity: 1 }
-              }
-            >
-              {isSaving ? "저장중" : "저장하기"}
-            </Button>
-          </div>
-        ) : null}
       </div>
+      {draft && hasUnsavedChanges ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/90 backdrop-blur">
+          <div className="mx-auto w-full max-w-6xl px-5 md:px-8 py-3">
+            <Card className="flex items-center justify-between gap-3 px-4 py-3">
+              <div>
+                <div className="text-xs font-semibold text-slate-900">변경 사항이 있습니다.</div>
+                <div className="text-[11px] text-slate-500">
+                  저장하기를 눌러 현재 변경 내용을 반영하세요.
+                </div>
+              </div>
+              <Button
+                type="button"
+                onClick={() => void handlePolicySave()}
+                disabled={!policyTemplateId || policyLoading || policySaving}
+                aria-label="저장하기"
+              >
+                {policySaving ? "저장 중..." : "저장하기"}
+              </Button>
+            </Card>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

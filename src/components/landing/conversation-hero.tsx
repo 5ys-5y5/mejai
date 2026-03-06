@@ -2,6 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import { MatrixRainBackground } from "@/components/landing/matrix-rain-background";
+import { HomeWidgetInstallBox } from "@/components/landing/home-widget-install-box";
 import {
   createConversationModelLegos,
   ConversationModelChatColumnLego,
@@ -80,6 +81,7 @@ export function LandingConversationHero() {
                   <Loader2 className="h-5 w-5 animate-spin" />
                   <span>로딩 중... {ctrl.loadingHints.join(", ")}</span>
                 </div>
+
               ) : null}
               {ctrl.error ? <div className="text-sm text-rose-600">{ctrl.error}</div> : null}
               {!ctrl.loading && !ctrl.error
@@ -102,7 +104,10 @@ export function LandingConversationHero() {
                 : null}
             </div>
           </div>
+
+          <HomeWidgetInstallBox />
         </div>
+
       </div>
     </section>
   );

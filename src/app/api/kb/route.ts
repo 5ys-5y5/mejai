@@ -93,6 +93,9 @@ export async function GET(req: NextRequest) {
   const { data, error, count } = await query;
 
   if (error) {
+    if (isAdmin === "sample" && error.message.includes("is_sample") && error.message.includes("does not exist")) {
+      return NextResponse.json({ items: [], total: 0 });
+    }
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
