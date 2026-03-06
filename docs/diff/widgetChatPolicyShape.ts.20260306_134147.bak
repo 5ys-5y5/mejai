@@ -23,6 +23,7 @@ export type WidgetChatPolicyRecord = {
   widget?: WidgetChatPolicyConfig;
   features?: ConversationPageFeaturesOverride;
   debug?: DebugTranscriptOptions;
+  setup_ui?: ConversationSetupUiOverride;
 };
 
 export type WidgetChatPolicyInput =
@@ -205,20 +206,13 @@ export function normalizeWidgetChatPolicyRecord(input: unknown): WidgetChatPolic
           existing_labels: setupFields.existing_labels,
         }
       : undefined;
-    const setupFieldsFromLegacy = provider.setup_ui
-      ? {
-          order: provider.setup_ui.order,
-          labels: provider.setup_ui.labels,
-          existing_order: provider.setup_ui.existing_order,
-          existing_labels: provider.setup_ui.existing_labels,
-        }
-      : undefined;
     return {
       ...(provider.widget ? { widget: provider.widget } : {}),
       ...(provider.features ? { features: provider.features } : {}),
       ...(provider.debug ? { debug: provider.debug } : debugCopy ? { debug: debugCopy } : {}),
+      ...(provider.setup_ui ? { setup_ui: provider.setup_ui } : setupUiFromSettings ? { setup_ui: setupUiFromSettings } : {}),
       ...(page ? { page } : {}),
-      ...(setupFields ? { settings_ui: { setup_fields: setupFields } } : setupFieldsFromLegacy ? { settings_ui: { setup_fields: setupFieldsFromLegacy } } : {}),
+      ...(setupFields ? { settings_ui: { setup_fields: setupFields } } : {}),
     };
   }
   if (isPlainObject(input) && ("page" in input || "settings_ui" in input || "widget" in input || "features" in input || "debug" in input || "setup_ui" in input)) {
@@ -226,20 +220,13 @@ export function normalizeWidgetChatPolicyRecord(input: unknown): WidgetChatPolic
     const setupFields = isPlainObject((input as WidgetChatPolicyRecord).settings_ui)
       ? (input as WidgetChatPolicyRecord).settings_ui?.setup_fields
       : undefined;
-    const setupFieldsFromLegacy = isPlainObject((input as { setup_ui?: ConversationSetupUiOverride }).setup_ui)
-      ? {
-          order: (input as { setup_ui?: ConversationSetupUiOverride }).setup_ui?.order,
-          labels: (input as { setup_ui?: ConversationSetupUiOverride }).setup_ui?.labels,
-          existing_order: (input as { setup_ui?: ConversationSetupUiOverride }).setup_ui?.existing_order,
-          existing_labels: (input as { setup_ui?: ConversationSetupUiOverride }).setup_ui?.existing_labels,
-        }
-      : undefined;
     return {
       ...(isPlainObject((input as WidgetChatPolicyRecord).widget) ? { widget: (input as WidgetChatPolicyRecord).widget } : {}),
       ...(isPlainObject((input as WidgetChatPolicyRecord).features) ? { features: (input as WidgetChatPolicyRecord).features } : {}),
       ...(isPlainObject((input as WidgetChatPolicyRecord).debug) ? { debug: (input as WidgetChatPolicyRecord).debug } : {}),
+      ...(isPlainObject((input as WidgetChatPolicyRecord).setup_ui) ? { setup_ui: (input as WidgetChatPolicyRecord).setup_ui } : {}),
       ...(page ? { page } : {}),
-      ...(setupFields ? { settings_ui: { setup_fields: setupFields } } : setupFieldsFromLegacy ? { settings_ui: { setup_fields: setupFieldsFromLegacy } } : {}),
+      ...(setupFields ? { settings_ui: { setup_fields: setupFields } } : {}),
     };
   }
   if (isPageOverrideCandidate(input)) {
@@ -257,12 +244,22 @@ export function normalizeWidgetChatPolicyProvider(input: unknown): ConversationF
   const pages = pageOverride ? { [WIDGET_PAGE_KEY]: pageOverride } : undefined;
   const setupFields = record.settings_ui?.setup_fields
     ? { [WIDGET_PAGE_KEY]: record.settings_ui.setup_fields }
-    : undefined;
+    : record.setup_ui
+      ? {
+          [WIDGET_PAGE_KEY]: {
+            order: record.setup_ui.order,
+            labels: record.setup_ui.labels,
+            existing_order: record.setup_ui.existing_order,
+            existing_labels: record.setup_ui.existing_labels,
+          },
+        }
+      : undefined;
   const debugCopy = record.debug ? { [WIDGET_PAGE_KEY]: record.debug } : undefined;
   const provider: ConversationFeaturesProviderShape = {
     ...(record.widget ? { widget: record.widget } : {}),
     ...(record.features ? { features: record.features } : {}),
     ...(record.debug ? { debug: record.debug } : {}),
+    ...(record.setup_ui ? { setup_ui: record.setup_ui } : {}),
     ...(pages ? { pages } : {}),
     ...(debugCopy ? { debug_copy: debugCopy } : {}),
     ...(setupFields ? { settings_ui: { setup_fields: setupFields } } : {}),
@@ -278,6 +275,7 @@ export function normalizeWidgetChatPolicyRecordFromProvider(input: unknown): Wid
     ...(record.widget ? { widget: record.widget } : {}),
     ...(record.features ? { features: record.features } : {}),
     ...(record.debug ? { debug: record.debug } : {}),
+    ...(record.setup_ui ? { setup_ui: record.setup_ui } : {}),
     ...(record.page ? { page: record.page } : {}),
     ...(record.settings_ui?.setup_fields ? { settings_ui: { setup_fields: record.settings_ui.setup_fields } } : {}),
   };

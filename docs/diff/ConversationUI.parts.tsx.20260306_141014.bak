@@ -1182,12 +1182,6 @@ export type ConversationExistingSetupProps = {
   showModelSelector: boolean;
   modelSelectorAdminOnly?: boolean;
   showAgentSelector?: boolean;
-  showVersionSelector?: boolean;
-  versionSelectorAdminOnly?: boolean;
-  showSessionSelector?: boolean;
-  sessionSelectorAdminOnly?: boolean;
-  showConversationMode?: boolean;
-  conversationModeAdminOnly?: boolean;
   showModeExisting: boolean;
   modeExistingAdminOnly?: boolean;
   showSessionIdSearch?: boolean;
@@ -1222,12 +1216,6 @@ export function ConversationExistingSetup({
   showModelSelector,
   modelSelectorAdminOnly = false,
   showAgentSelector = true,
-  showVersionSelector = true,
-  versionSelectorAdminOnly = false,
-  showSessionSelector = true,
-  sessionSelectorAdminOnly = false,
-  showConversationMode = true,
-  conversationModeAdminOnly = false,
   showModeExisting,
   modeExistingAdminOnly = false,
   showSessionIdSearch = true,
@@ -1332,13 +1320,10 @@ export function ConversationExistingSetup({
               );
             }
             if (key === "versionSelector") {
-              if (!showAgentSelector || !showVersionSelector || !selectedAgentGroupId) return null;
+              if (!showAgentSelector || !selectedAgentGroupId) return null;
               return (
                 <div key={key}>
-                  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                    <span>{labelOf(key, "버전 선택")}</span>
-                    {versionSelectorAdminOnly ? <AdminBadge /> : null}
-                  </div>
+                  <div className="mb-1 text-[11px] font-semibold text-slate-600">{labelOf(key, "버전 선택")}</div>
                   <SelectPopover
                     value={selectedAgentId}
                     onChange={onSelectAgentVersion}
@@ -1350,13 +1335,10 @@ export function ConversationExistingSetup({
               );
             }
             if (key === "sessionSelector") {
-              if (!showAgentSelector || !showSessionSelector || !selectedAgentId || conversationMode === "new") return null;
+              if (!showAgentSelector || !selectedAgentId || conversationMode === "new") return null;
               return (
                 <div key={key}>
-                  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                    <span>{labelOf(key, "세션 선택")}</span>
-                    {sessionSelectorAdminOnly ? <AdminBadge /> : null}
-                  </div>
+                  <div className="mb-1 text-[11px] font-semibold text-slate-600">{labelOf(key, "세션 선택")}</div>
                   <SelectPopover
                     value={selectedSessionId || ""}
                     onChange={onSelectSession}
@@ -1405,13 +1387,10 @@ export function ConversationExistingSetup({
               );
             }
             if (key === "conversationMode") {
-              if (!showAgentSelector || !showConversationMode || !selectedAgentId) return null;
+              if (!showAgentSelector || !selectedAgentId) return null;
               return (
                 <div key={key} className="space-y-1">
-                  <div className="mb-1 flex items-center gap-1 text-[11px] font-semibold text-slate-600">
-                    <span>{labelOf(key, "모드 선택")}</span>
-                    {conversationModeAdminOnly ? <AdminBadge /> : null}
-                  </div>
+                  <div className="mb-1 text-[11px] font-semibold text-slate-600">{labelOf(key, "모드 선택")}</div>
                   <div className="grid grid-cols-3 gap-2 w-full">
                     <button
                       type="button"
@@ -2258,12 +2237,6 @@ export function ConversationModelSetupColumnLego({
             showModelSelector={showModeSelector}
             modelSelectorAdminOnly={pageFeatures.visibility.setup.modelSelector === "admin"}
             showAgentSelector={pageFeatures.setup.agentSelector || forceExistingSetupControls}
-            showVersionSelector={pageFeatures.setup.versionSelector || forceExistingSetupControls}
-            versionSelectorAdminOnly={pageFeatures.visibility.setup.versionSelector === "admin"}
-            showSessionSelector={pageFeatures.setup.sessionSelector || forceExistingSetupControls}
-            sessionSelectorAdminOnly={pageFeatures.visibility.setup.sessionSelector === "admin"}
-            showConversationMode={pageFeatures.setup.conversationMode || forceExistingSetupControls}
-            conversationModeAdminOnly={pageFeatures.visibility.setup.conversationMode === "admin"}
             showModeExisting={pageFeatures.setup.modeExisting}
             modeExistingAdminOnly={pageFeatures.visibility.setup.modeExisting === "admin"}
             showSessionIdSearch={pageFeatures.setup.sessionIdSearch || forceExistingSetupControls}

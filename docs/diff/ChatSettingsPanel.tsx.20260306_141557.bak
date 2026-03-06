@@ -83,7 +83,6 @@ type RowProps = {
   onLabelClick?: () => void;
   ariaExpanded?: boolean;
   right?: ReactNode;
-  reserveRightSpace?: boolean;
   alignTop?: boolean;
   variant?: "policy" | "base";
   showDragHandle?: boolean;
@@ -444,16 +443,12 @@ export function ChatSettingsPanel({
     });
 
   const renderAllowDenyBlock = (
-    codeLabel: string,
-    displayLabel: string,
+    label: string,
     value: { allowlist?: string[]; denylist?: string[] },
     onChange: (next: { allowlist?: string[]; denylist?: string[] }) => void
   ) => (
     <div className="rounded-lg border border-slate-200 bg-white p-2">
-      <div className="text-[11px] font-semibold text-slate-700">
-        <div className="text-[11px] font-medium text-slate-500">{codeLabel}</div>
-        <div className="text-[11px] text-slate-900">{displayLabel}</div>
-      </div>
+      <div className="text-[11px] font-semibold text-slate-700">{label}</div>
       <div className="mt-2 grid grid-cols-1 gap-2">
         <label className="block">
           <div className="mb-1 text-[11px] text-slate-500">Allowlist (줄바꿈)</div>
@@ -489,8 +484,7 @@ export function ChatSettingsPanel({
     <PanelVariantContext.Provider value={variant}>
       <div className="space-y-4">
         <ToggleRowGroup
-          label="B_chat_widgets.is_active"
-          displayLabel={widgetActiveLabel}
+          label={widgetActiveLabel || "B_chat_widgets.is_active"}
           checked={widgetActiveChecked}
           onToggle={handleWidgetActiveToggle}
           visibility={visibility.widget.launcher}
@@ -499,11 +493,10 @@ export function ChatSettingsPanel({
         >
           <div className="text-[11px] text-slate-600">false면 런처/임베드 모두 완전 숨김</div>
           {showWidgetBasics ? (
-            <RowGroup label="widget.base" displayLabel="기본 세팅">
+            <RowGroup label="기본 세팅">
               {onWidgetNameChange ? (
                 <Row
-                  label="B_chat_widgets.name"
-                  displayLabel={widgetNameLabel}
+                  label={widgetNameLabel || "B_chat_widgets.name"}
                   variant={variant}
                   right={
                     <Input
@@ -577,7 +570,7 @@ export function ChatSettingsPanel({
             </RowGroup>
           ) : null}
 
-          <RowGroup label="widget.setup_config" displayLabel="구성">
+          <RowGroup label="구성">
             {isHidden("setup_config.kb.mode") ? null : (
               <Row
                 label="setup_config.kb.mode"
@@ -676,7 +669,7 @@ export function ChatSettingsPanel({
           </RowGroup>
 
           {showThemeBasics ? (
-            <RowGroup label="widget.theme" displayLabel="대화 기본값">
+            <RowGroup label="대화 기본값">
               {isHidden("theme.greeting") ? null : (
             <Row
               label="theme.greeting"
@@ -706,7 +699,7 @@ export function ChatSettingsPanel({
             </RowGroup>
           ) : null}
 
-          <RowGroup label="widget.launcher" displayLabel="런처 디자인">
+          <RowGroup label="런처 디자인">
             <Row
               label="cfg.launcherLabel"
               variant={variant}
@@ -743,8 +736,7 @@ export function ChatSettingsPanel({
               }
             />
             <Row
-              label="theme.primary_color / theme.launcher_bg"
-              displayLabel="primary_color | launcher_bg"
+              label="theme.primary_color | launcher_bg"
               variant={variant}
               right={
                 <div className="flex items-center gap-2">
@@ -849,7 +841,7 @@ export function ChatSettingsPanel({
             />
           </RowGroup>
 
-          <RowGroup label="widget.iframe" displayLabel="위젯 디자인">
+          <RowGroup label="위젯 디자인">
             <Row
               label="iframe.width"
               right={
@@ -939,7 +931,7 @@ export function ChatSettingsPanel({
             />
           </RowGroup>
 
-          <RowGroup label="widget.access" displayLabel="노출/권한">
+          <RowGroup label="노출/권한">
             {isHidden("widget.allowed_domains") ? null : (
               <Row
                 label="widget.allowed_domains"
@@ -1037,207 +1029,13 @@ export function ChatSettingsPanel({
           onToggle={(next) => updateFeatures(["widget", "tabBar", "enabled"], next)}
           onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "enabled"], mode)}
         >
-          <ToggleRowGroup
+          <ToggleRow
             label="widget.tabBar.chat"
             checked={tabBarChatEnabled}
             visibility={visibility.widget.tabBar.chat}
             onToggle={(next) => setTabBarPanelEnabled("chat", next)}
             onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
-            defaultOpen
-          >
-            <RowGroup label="adminPanel" displayLabel="Admin Panel">
-              <ToggleRow
-                label="adminPanel.enabled"
-                checked={features.adminPanel.enabled}
-                visibility={visibility.adminPanel.enabled}
-                onToggle={(next) => updateFeatures(["adminPanel", "enabled"], next)}
-                onVisibilityChange={(mode) => updateVisibility(["adminPanel", "enabled"], mode)}
-              />
-              <ToggleRow
-                label="adminPanel.logsToggle"
-                checked={features.adminPanel.logsToggle}
-                visibility={visibility.adminPanel.logsToggle}
-                onToggle={(next) => updateFeatures(["adminPanel", "logsToggle"], next)}
-                onVisibilityChange={(mode) => updateVisibility(["adminPanel", "logsToggle"], mode)}
-              />
-              <ToggleRow
-                label="adminPanel.copyConversation"
-                checked={features.adminPanel.copyConversation}
-                visibility={visibility.adminPanel.copyConversation}
-                onToggle={(next) => updateFeatures(["adminPanel", "copyConversation"], next)}
-                onVisibilityChange={(mode) => updateVisibility(["adminPanel", "copyConversation"], mode)}
-              />
-            </RowGroup>
-
-            <RowGroup label="interaction" displayLabel="Interaction">
-              <ToggleRow
-                label="interaction.quickReplies"
-                checked={features.interaction.quickReplies}
-                visibility={visibility.interaction.quickReplies}
-                onToggle={(next) => updateFeatures(["interaction", "quickReplies"], next)}
-                onVisibilityChange={(mode) => updateVisibility(["interaction", "quickReplies"], mode)}
-              />
-              <ToggleRow
-                label="interaction.productCards"
-                checked={features.interaction.productCards}
-                visibility={visibility.interaction.productCards}
-                onToggle={(next) => updateFeatures(["interaction", "productCards"], next)}
-                onVisibilityChange={(mode) => updateVisibility(["interaction", "productCards"], mode)}
-              />
-              <ToggleRow
-                label="interaction.inputSubmit"
-                checked={features.interaction.inputSubmit}
-                visibility={visibility.interaction.inputSubmit}
-                onToggle={(next) => updateFeatures(["interaction", "inputSubmit"], next)}
-                onVisibilityChange={(mode) => updateVisibility(["interaction", "inputSubmit"], mode)}
-              />
-              <ToggleRowGroup
-                label="interaction.threePhasePrompt"
-                checked={features.interaction.threePhasePrompt}
-                visibility={visibility.interaction.threePhasePrompt}
-                onToggle={(next) => updateFeatures(["interaction", "threePhasePrompt"], next)}
-                onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePrompt"], mode)}
-              >
-                <ToggleRow
-                  label="interaction.threePhasePromptShowConfirmed"
-                  displayLabel={
-                    features.interaction.threePhasePromptLabels.confirmed ||
-                    "interaction.threePhasePromptShowConfirmed"
-                  }
-                  checked={features.interaction.threePhasePromptShowConfirmed}
-                  visibility={visibility.interaction.threePhasePromptShowConfirmed}
-                  onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowConfirmed"], next)}
-                  onVisibilityChange={(mode) =>
-                    updateVisibility(["interaction", "threePhasePromptShowConfirmed"], mode)
-                  }
-                  editableLabel
-                  onLabelChange={(value) =>
-                    updateFeatures(["interaction", "threePhasePromptLabels", "confirmed"], value)
-                  }
-                />
-                <ToggleRow
-                  label="interaction.threePhasePromptShowConfirming"
-                  displayLabel={
-                    features.interaction.threePhasePromptLabels.confirming ||
-                    "interaction.threePhasePromptShowConfirming"
-                  }
-                  checked={features.interaction.threePhasePromptShowConfirming}
-                  visibility={visibility.interaction.threePhasePromptShowConfirming}
-                  onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowConfirming"], next)}
-                  onVisibilityChange={(mode) =>
-                    updateVisibility(["interaction", "threePhasePromptShowConfirming"], mode)
-                  }
-                  editableLabel
-                  onLabelChange={(value) =>
-                    updateFeatures(["interaction", "threePhasePromptLabels", "confirming"], value)
-                  }
-                />
-                <ToggleRow
-                  label="interaction.threePhasePromptShowNext"
-                  displayLabel={
-                    features.interaction.threePhasePromptLabels.next ||
-                    "interaction.threePhasePromptShowNext"
-                  }
-                  checked={features.interaction.threePhasePromptShowNext}
-                  visibility={visibility.interaction.threePhasePromptShowNext}
-                  onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowNext"], next)}
-                  onVisibilityChange={(mode) =>
-                    updateVisibility(["interaction", "threePhasePromptShowNext"], mode)
-                  }
-                  editableLabel
-                  onLabelChange={(value) =>
-                    updateFeatures(["interaction", "threePhasePromptLabels", "next"], value)
-                  }
-                />
-                <ToggleRow
-                  label="interaction.threePhasePromptHideLabels"
-                  checked={features.interaction.threePhasePromptHideLabels}
-                  visibility={visibility.interaction.threePhasePromptHideLabels}
-                  onToggle={(next) => updateFeatures(["interaction", "threePhasePromptHideLabels"], next)}
-                  onVisibilityChange={(mode) =>
-                    updateVisibility(["interaction", "threePhasePromptHideLabels"], mode)
-                  }
-                />
-              </ToggleRowGroup>
-            </RowGroup>
-
-            <RowGroup label="allowDeny" displayLabel="Allow/Deny">
-              {renderAllowDenyBlock(
-                "mcp.providers",
-                "MCP Providers",
-                features.mcp.providers,
-                (next) => updateFeatures(["mcp", "providers"], next)
-              )}
-              {renderAllowDenyBlock(
-                "mcp.tools",
-                "MCP Tools",
-                features.mcp.tools,
-                (next) => updateFeatures(["mcp", "tools"], next)
-              )}
-              {renderAllowDenyBlock(
-                "setup.llms",
-                "LLM IDs",
-                features.setup.llms,
-                (next) => updateFeatures(["setup", "llms"], next)
-              )}
-              {renderAllowDenyBlock(
-                "setup.kbIds",
-                "KB IDs",
-                features.setup.kbIds,
-                (next) => updateFeatures(["setup", "kbIds"], next)
-              )}
-              {renderAllowDenyBlock(
-                "setup.adminKbIds",
-                "Admin KB IDs",
-                features.setup.adminKbIds,
-                (next) => updateFeatures(["setup", "adminKbIds"], next)
-              )}
-              {renderAllowDenyBlock(
-                "setup.routes",
-                "Runtime Routes",
-                features.setup.routes,
-                (next) => updateFeatures(["setup", "routes"], next)
-              )}
-            </RowGroup>
-
-            <RowGroup label="mcp" displayLabel="MCP">
-              <ToggleRow
-                label="mcp.providerSelector"
-                checked={features.mcp.providerSelector}
-                visibility={visibility.mcp.providerSelector}
-                onToggle={(next) => updateFeatures(["mcp", "providerSelector"], next)}
-                onVisibilityChange={(mode) => updateVisibility(["mcp", "providerSelector"], mode)}
-              />
-              <ToggleRow
-                label="mcp.actionSelector"
-                checked={features.mcp.actionSelector}
-                visibility={visibility.mcp.actionSelector}
-                onToggle={(next) => updateFeatures(["mcp", "actionSelector"], next)}
-                onVisibilityChange={(mode) => updateVisibility(["mcp", "actionSelector"], mode)}
-              />
-            </RowGroup>
-
-            <RowGroup label="runtime" displayLabel="Runtime">
-              <ToggleRow
-                label="runtime.selfUpdate.enabled"
-                checked={Boolean(governanceConfig?.enabled)}
-                visibility={governanceConfig?.visibility_mode || "admin"}
-                onToggle={(next) =>
-                  void handleGovernanceChange({
-                    enabled: next,
-                    visibility_mode: governanceConfig?.visibility_mode || "admin",
-                  })
-                }
-                onVisibilityChange={(mode) =>
-                  void handleGovernanceChange({
-                    enabled: governanceConfig?.enabled ?? true,
-                    visibility_mode: mode === "public" ? "user" : mode,
-                  })
-                }
-              />
-              {governanceSaving ? <div className="text-[11px] text-slate-500">저장 중...</div> : null}
-            </RowGroup>
-          </ToggleRowGroup>
+          />
           <ToggleRow
             label="widget.tabBar.list"
             checked={tabBarListEnabled}
@@ -1253,7 +1051,7 @@ export function ChatSettingsPanel({
             onVisibilityChange={(mode) => setTabBarPanelVisibility("policy", mode)}
           >
             {tabBarPolicyEnabled ? (
-              <RowGroup label="setup" displayLabel="Setup">
+              <RowGroup label="Setup">
                 <ToggleRow
                   label="setup.modelSelector"
                   codeLabel="setup.modelSelector"
@@ -1594,6 +1392,173 @@ export function ChatSettingsPanel({
               </RowGroup>
             ) : null}
           </ToggleRowGroup>
+        <RowGroup label="Admin Panel">
+          <ToggleRow
+            label="adminPanel.enabled"
+            checked={features.adminPanel.enabled}
+            visibility={visibility.adminPanel.enabled}
+            onToggle={(next) => updateFeatures(["adminPanel", "enabled"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "enabled"], mode)}
+          />
+          <ToggleRow
+            label="adminPanel.logsToggle"
+            checked={features.adminPanel.logsToggle}
+            visibility={visibility.adminPanel.logsToggle}
+            onToggle={(next) => updateFeatures(["adminPanel", "logsToggle"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "logsToggle"], mode)}
+          />
+          <ToggleRow
+            label="adminPanel.copyConversation"
+            checked={features.adminPanel.copyConversation}
+            visibility={visibility.adminPanel.copyConversation}
+            onToggle={(next) => updateFeatures(["adminPanel", "copyConversation"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "copyConversation"], mode)}
+          />
+        </RowGroup>
+
+        <RowGroup label="Interaction">
+          <ToggleRow
+            label="interaction.quickReplies"
+            checked={features.interaction.quickReplies}
+            visibility={visibility.interaction.quickReplies}
+            onToggle={(next) => updateFeatures(["interaction", "quickReplies"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["interaction", "quickReplies"], mode)}
+          />
+          <ToggleRow
+            label="interaction.productCards"
+            checked={features.interaction.productCards}
+            visibility={visibility.interaction.productCards}
+            onToggle={(next) => updateFeatures(["interaction", "productCards"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["interaction", "productCards"], mode)}
+          />
+          <ToggleRow
+            label="interaction.inputSubmit"
+            checked={features.interaction.inputSubmit}
+            visibility={visibility.interaction.inputSubmit}
+            onToggle={(next) => updateFeatures(["interaction", "inputSubmit"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["interaction", "inputSubmit"], mode)}
+          />
+          <ToggleRowGroup
+            label="interaction.threePhasePrompt"
+            checked={features.interaction.threePhasePrompt}
+            visibility={visibility.interaction.threePhasePrompt}
+            onToggle={(next) => updateFeatures(["interaction", "threePhasePrompt"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePrompt"], mode)}
+          >
+            <ToggleRow
+              label={
+                features.interaction.threePhasePromptLabels.confirmed ||
+                "interaction.threePhasePromptShowConfirmed"
+              }
+              checked={features.interaction.threePhasePromptShowConfirmed}
+              visibility={visibility.interaction.threePhasePromptShowConfirmed}
+              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowConfirmed"], next)}
+              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptShowConfirmed"], mode)}
+              editableLabel
+              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "confirmed"], value)}
+            />
+            <ToggleRow
+              label={
+                features.interaction.threePhasePromptLabels.confirming ||
+                "interaction.threePhasePromptShowConfirming"
+              }
+              checked={features.interaction.threePhasePromptShowConfirming}
+              visibility={visibility.interaction.threePhasePromptShowConfirming}
+              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowConfirming"], next)}
+              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptShowConfirming"], mode)}
+              editableLabel
+              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "confirming"], value)}
+            />
+            <ToggleRow
+              label={features.interaction.threePhasePromptLabels.next || "interaction.threePhasePromptShowNext"}
+              checked={features.interaction.threePhasePromptShowNext}
+              visibility={visibility.interaction.threePhasePromptShowNext}
+              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowNext"], next)}
+              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptShowNext"], mode)}
+              editableLabel
+              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "next"], value)}
+            />
+            <ToggleRow
+              label="interaction.threePhasePromptHideLabels"
+              checked={features.interaction.threePhasePromptHideLabels}
+              visibility={visibility.interaction.threePhasePromptHideLabels}
+              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptHideLabels"], next)}
+              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptHideLabels"], mode)}
+            />
+          </ToggleRowGroup>
+        </RowGroup>
+
+        <RowGroup label="Allow/Deny">
+          {renderAllowDenyBlock(
+            "MCP Providers",
+            features.mcp.providers,
+            (next) => updateFeatures(["mcp", "providers"], next)
+          )}
+          {renderAllowDenyBlock(
+            "MCP Tools",
+            features.mcp.tools,
+            (next) => updateFeatures(["mcp", "tools"], next)
+          )}
+          {renderAllowDenyBlock(
+            "LLM IDs",
+            features.setup.llms,
+            (next) => updateFeatures(["setup", "llms"], next)
+          )}
+          {renderAllowDenyBlock(
+            "KB IDs",
+            features.setup.kbIds,
+            (next) => updateFeatures(["setup", "kbIds"], next)
+          )}
+          {renderAllowDenyBlock(
+            "Admin KB IDs",
+            features.setup.adminKbIds,
+            (next) => updateFeatures(["setup", "adminKbIds"], next)
+          )}
+          {renderAllowDenyBlock(
+            "Runtime Routes",
+            features.setup.routes,
+            (next) => updateFeatures(["setup", "routes"], next)
+          )}
+        </RowGroup>
+
+        <RowGroup label="MCP">
+          <ToggleRow
+            label="mcp.providerSelector"
+            checked={features.mcp.providerSelector}
+            visibility={visibility.mcp.providerSelector}
+            onToggle={(next) => updateFeatures(["mcp", "providerSelector"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["mcp", "providerSelector"], mode)}
+          />
+          <ToggleRow
+            label="mcp.actionSelector"
+            checked={features.mcp.actionSelector}
+            visibility={visibility.mcp.actionSelector}
+            onToggle={(next) => updateFeatures(["mcp", "actionSelector"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["mcp", "actionSelector"], mode)}
+          />
+        </RowGroup>
+
+        <RowGroup label="Runtime">
+          <ToggleRow
+            label="runtime.selfUpdate.enabled"
+            checked={Boolean(governanceConfig?.enabled)}
+            visibility={governanceConfig?.visibility_mode || "admin"}
+            onToggle={(next) =>
+              void handleGovernanceChange({
+                enabled: next,
+                visibility_mode: governanceConfig?.visibility_mode || "admin",
+              })
+            }
+            onVisibilityChange={(mode) =>
+              void handleGovernanceChange({
+                enabled: governanceConfig?.enabled ?? true,
+                visibility_mode: mode === "public" ? "user" : mode,
+              })
+            }
+          />
+          {governanceSaving ? <div className="text-[11px] text-slate-500">저장 중...</div> : null}
+        </RowGroup>
+
         </ToggleRowGroup>
 
       </div>
@@ -1703,7 +1668,6 @@ function Row({
   onLabelClick,
   ariaExpanded,
   right,
-  reserveRightSpace = true,
   alignTop = false,
   variant,
   showDragHandle = false,
@@ -1718,9 +1682,6 @@ function Row({
   const isBaseVariant = resolvedVariant === "base";
   const resolvedCodeLabel = codeLabel || (displayLabel ? label : undefined);
   const resolvedDisplayLabel = displayLabel ?? label;
-  const hasRight = right !== undefined && right !== null;
-  const rightPlaceholder = <span className="inline-flex h-7 w-[114px]" aria-hidden />;
-  const showChevron = Boolean(onLabelClick);
   return (
     <div
       className={`flex ${alignTop ? "items-start" : "items-center"} justify-between gap-3 rounded-lg border px-3 ${
@@ -1742,7 +1703,7 @@ function Row({
         }}
       >
         <span className="inline-flex min-w-0 items-center gap-2">
-          {showChevron ? (
+          {onLabelClick ? (
             <ChevronDown
               className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${
                 ariaExpanded ? "rotate-180" : ""
@@ -1750,14 +1711,10 @@ function Row({
             />
           ) : null}
           {showDragHandle ? (
-            <span className="inline-flex h-4 w-4 items-center justify-center text-slate-400">
+            <span className="text-slate-400">
               <GripVertical className="h-4 w-4" />
             </span>
-          ) : showChevron ? null : (
-            <span className="inline-flex h-4 w-4 items-center justify-center text-slate-400">
-              <span className="h-4 w-4" />
-            </span>
-          )}
+          ) : null}
           {resolvedCodeLabel ? (
             <span className="min-w-0">
               <span className="block text-xs font-medium text-slate-500">{resolvedCodeLabel}</span>
@@ -1814,17 +1771,7 @@ function Row({
           )}
         </span>
       </button>
-      {hasRight || reserveRightSpace ? (
-        <div
-          className={
-            hasRight
-              ? "flex items-center gap-2"
-              : "flex min-w-[114px] items-center justify-end gap-2"
-          }
-        >
-          {hasRight ? right : rightPlaceholder}
-        </div>
-      ) : null}
+      {right ? <div className="flex items-center gap-2">{right}</div> : null}
     </div>
   );
 }
@@ -2006,15 +1953,11 @@ function ToggleRowGroup({
 
 function RowGroup({
   label,
-  codeLabel,
-  displayLabel,
   defaultOpen = false,
   variant,
   children,
 }: {
   label: string;
-  codeLabel?: string;
-  displayLabel?: string;
   defaultOpen?: boolean;
   variant?: "policy" | "base";
   children: ReactNode;
@@ -2029,8 +1972,6 @@ function RowGroup({
     <div className="space-y-2">
       <Row
         label={label}
-        codeLabel={codeLabel}
-        displayLabel={displayLabel}
         tone="neutral"
         variant={resolvedVariant}
         onLabelClick={isBaseVariant ? undefined : () => setOpen((prev) => !prev)}

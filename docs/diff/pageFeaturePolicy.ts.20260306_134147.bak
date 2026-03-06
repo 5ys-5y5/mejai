@@ -122,12 +122,6 @@ export type ConversationPageFeatures = {
     modelSelector: boolean;
     /** existing 모드 하위 에이전트 선택 UI 노출 */
     agentSelector: boolean;
-    /** existing 모드 하위 버전 선택 UI 노출 */
-    versionSelector: boolean;
-    /** existing 모드 하위 세션 선택 UI 노출 */
-    sessionSelector: boolean;
-    /** existing 모드 하위 모드 선택 UI 노출 */
-    conversationMode: boolean;
     /** LLM 선택 UI 노출 */
     llmSelector: boolean;
     /** LLM 선택 UI 하위 항목 허용/차단 (llm id) */
@@ -355,16 +349,7 @@ export function resolveConversationSetupUi(
   providerValue?: ConversationFeaturesProviderShape | null
 ): ConversationSetupUi {
   const resolvedPage = resolveRegisteredPageKey(page, providerValue);
-  const override =
-    providerValue?.settings_ui?.setup_fields?.[resolvedPage] ||
-    (providerValue?.setup_ui
-      ? {
-          order: providerValue.setup_ui.order,
-          labels: providerValue.setup_ui.labels,
-          existing_order: providerValue.setup_ui.existing_order,
-          existing_labels: providerValue.setup_ui.existing_labels,
-        }
-      : undefined);
+  const override = providerValue?.settings_ui?.setup_fields?.[resolvedPage];
   return {
     order: normalizeSetupOrder(override?.order),
     labels: {
@@ -505,6 +490,9 @@ export function normalizeConversationFeatureProvider(
   if (pickedDebug && !nextProvider.debug) {
     nextProvider.debug = pickedDebug;
   }
+  if (setupUiFromSettings && !nextProvider.setup_ui) {
+    nextProvider.setup_ui = setupUiFromSettings;
+  }
 
   if (nextProvider.features && !nextProvider.pages?.[resolvedPage]) {
     nextProvider.pages = {
@@ -531,9 +519,6 @@ export function normalizeConversationFeatureProvider(
         },
       },
     };
-  }
-  if (nextProvider.setup_ui) {
-    delete (nextProvider as { setup_ui?: ConversationSetupUiOverride }).setup_ui;
   }
 
   return nextProvider;
@@ -582,9 +567,6 @@ export function mergeConversationPageFeatures(
     setup: {
       modelSelector: override.setup?.modelSelector ?? base.setup.modelSelector,
       agentSelector: override.setup?.agentSelector ?? base.setup.agentSelector,
-      versionSelector: override.setup?.versionSelector ?? base.setup.versionSelector,
-      sessionSelector: override.setup?.sessionSelector ?? base.setup.sessionSelector,
-      conversationMode: override.setup?.conversationMode ?? base.setup.conversationMode,
       llmSelector: override.setup?.llmSelector ?? base.setup.llmSelector,
       llms: mergeIdGate(base.setup.llms, override.setup?.llms),
       kbSelector: override.setup?.kbSelector ?? base.setup.kbSelector,
@@ -652,9 +634,6 @@ export function mergeConversationPageFeatures(
       setup: {
         modelSelector: override.visibility?.setup?.modelSelector ?? base.visibility.setup.modelSelector,
         agentSelector: override.visibility?.setup?.agentSelector ?? base.visibility.setup.agentSelector,
-        versionSelector: override.visibility?.setup?.versionSelector ?? base.visibility.setup.versionSelector,
-        sessionSelector: override.visibility?.setup?.sessionSelector ?? base.visibility.setup.sessionSelector,
-        conversationMode: override.visibility?.setup?.conversationMode ?? base.visibility.setup.conversationMode,
         llmSelector: override.visibility?.setup?.llmSelector ?? base.visibility.setup.llmSelector,
         kbSelector: override.visibility?.setup?.kbSelector ?? base.visibility.setup.kbSelector,
         adminKbSelector: override.visibility?.setup?.adminKbSelector ?? base.visibility.setup.adminKbSelector,
@@ -818,21 +797,6 @@ export function applyConversationFeatureVisibility(
       ...features.setup,
       modelSelector: withVisibilityFlag(features.setup.modelSelector, features.visibility.setup.modelSelector, isAdminUser),
       agentSelector: withVisibilityFlag(features.setup.agentSelector, features.visibility.setup.agentSelector, isAdminUser),
-      versionSelector: withVisibilityFlag(
-        features.setup.versionSelector,
-        features.visibility.setup.versionSelector,
-        isAdminUser
-      ),
-      sessionSelector: withVisibilityFlag(
-        features.setup.sessionSelector,
-        features.visibility.setup.sessionSelector,
-        isAdminUser
-      ),
-      conversationMode: withVisibilityFlag(
-        features.setup.conversationMode,
-        features.visibility.setup.conversationMode,
-        isAdminUser
-      ),
       llmSelector: withVisibilityFlag(features.setup.llmSelector, features.visibility.setup.llmSelector, isAdminUser),
       kbSelector: withVisibilityFlag(features.setup.kbSelector, features.visibility.setup.kbSelector, isAdminUser),
       adminKbSelector: withVisibilityFlag(
@@ -932,9 +896,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     setup: {
       modelSelector: false,
       agentSelector: false,
-      versionSelector: true,
-      sessionSelector: true,
-      conversationMode: true,
       llmSelector: true,
       llms: {},
       kbSelector: false,
@@ -997,9 +958,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       setup: {
         modelSelector: "user",
         agentSelector: "user",
-        versionSelector: "user",
-        sessionSelector: "user",
-        conversationMode: "user",
         llmSelector: "user",
         kbSelector: "user",
         adminKbSelector: "admin",
@@ -1064,9 +1022,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     setup: {
       modelSelector: true,
       agentSelector: true,
-      versionSelector: true,
-      sessionSelector: true,
-      conversationMode: true,
       llmSelector: true,
       llms: {},
       kbSelector: true,
@@ -1129,9 +1084,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       setup: {
         modelSelector: "user",
         agentSelector: "user",
-        versionSelector: "user",
-        sessionSelector: "user",
-        conversationMode: "user",
         llmSelector: "user",
         kbSelector: "user",
         adminKbSelector: "admin",
@@ -1197,9 +1149,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     setup: {
       modelSelector: false,
       agentSelector: false,
-      versionSelector: true,
-      sessionSelector: true,
-      conversationMode: true,
       llmSelector: true,
       llms: {},
       kbSelector: false,
@@ -1262,9 +1211,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       setup: {
         modelSelector: "user",
         agentSelector: "user",
-        versionSelector: "user",
-        sessionSelector: "user",
-        conversationMode: "user",
         llmSelector: "user",
         kbSelector: "user",
         adminKbSelector: "admin",
@@ -1330,9 +1276,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     setup: {
       modelSelector: false,
       agentSelector: false,
-      versionSelector: true,
-      sessionSelector: true,
-      conversationMode: true,
       llmSelector: true,
       llms: {},
       kbSelector: false,
@@ -1395,9 +1338,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       setup: {
         modelSelector: "user",
         agentSelector: "user",
-        versionSelector: "user",
-        sessionSelector: "user",
-        conversationMode: "user",
         llmSelector: "user",
         kbSelector: "user",
         adminKbSelector: "admin",
@@ -1463,9 +1403,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     setup: {
       modelSelector: false,
       agentSelector: false,
-      versionSelector: true,
-      sessionSelector: true,
-      conversationMode: true,
       llmSelector: true,
       llms: {},
       kbSelector: false,
@@ -1528,9 +1465,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       setup: {
         modelSelector: "user",
         agentSelector: "user",
-        versionSelector: "user",
-        sessionSelector: "user",
-        conversationMode: "user",
         llmSelector: "user",
         kbSelector: "user",
         adminKbSelector: "admin",

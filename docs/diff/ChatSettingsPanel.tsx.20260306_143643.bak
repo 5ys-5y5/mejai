@@ -1720,7 +1720,6 @@ function Row({
   const resolvedDisplayLabel = displayLabel ?? label;
   const hasRight = right !== undefined && right !== null;
   const rightPlaceholder = <span className="inline-flex h-7 w-[114px]" aria-hidden />;
-  const showChevron = Boolean(onLabelClick);
   return (
     <div
       className={`flex ${alignTop ? "items-start" : "items-center"} justify-between gap-3 rounded-lg border px-3 ${
@@ -1742,22 +1741,16 @@ function Row({
         }}
       >
         <span className="inline-flex min-w-0 items-center gap-2">
-          {showChevron ? (
+          {onLabelClick ? (
             <ChevronDown
               className={`h-4 w-4 text-slate-500 transition-transform duration-200 ${
                 ariaExpanded ? "rotate-180" : ""
               }`}
             />
           ) : null}
-          {showDragHandle ? (
-            <span className="inline-flex h-4 w-4 items-center justify-center text-slate-400">
-              <GripVertical className="h-4 w-4" />
-            </span>
-          ) : showChevron ? null : (
-            <span className="inline-flex h-4 w-4 items-center justify-center text-slate-400">
-              <span className="h-4 w-4" />
-            </span>
-          )}
+          <span className="inline-flex h-4 w-4 items-center justify-center text-slate-400">
+            {showDragHandle ? <GripVertical className="h-4 w-4" /> : <span className="h-4 w-4" />}
+          </span>
           {resolvedCodeLabel ? (
             <span className="min-w-0">
               <span className="block text-xs font-medium text-slate-500">{resolvedCodeLabel}</span>

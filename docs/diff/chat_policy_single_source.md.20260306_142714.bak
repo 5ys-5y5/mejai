@@ -142,7 +142,7 @@
 
 5. 정책 탭 및 관련 UI 라벨을 **원천 정의명**으로 통일
 - 실행 여부: 진행 중
-- 비고: 대화 정책 UI 항목을 정의명(회색)/표시명(검은색) 구조로 전환. `widget.tabBar.chat` 하위로 Admin Panel/Interaction/Allow-Deny/MCP/Runtime 이동. 핸들/토글 자리 고정 렌더링 적용. 추가 점검 필요.
+- 비고: `name`, `is_active` 라벨/입력은 `B_chat_widgets.*`로 통일됨. 나머지 항목 점검 필요.
 
 6. `docs/chat_policy_single_source_conversation_items.md`와 실제 코드 변경의 불일치 점검
 - 실행 여부: 미시작
