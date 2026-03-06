@@ -1,4 +1,5 @@
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
+import type { WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 
 export type ConversationPageKey = string;
 
@@ -47,7 +48,7 @@ type IdGate = {
   denylist?: string[];
 };
 
-export type FeatureVisibilityMode = "user" | "admin";
+export type FeatureVisibilityMode = "user" | "admin" | "public";
 
 type VisibilityFields<T extends Record<string, unknown>> = {
   [K in keyof T as T[K] extends boolean ? K : never]: FeatureVisibilityMode;
@@ -82,18 +83,10 @@ export type ConversationPageFeatures = {
   adminPanel: {
     /** 관리자 메뉴 자체 노출 여부 */
     enabled: boolean;
-    /** 대화 선택 ON/OFF */
-    selectionToggle: boolean;
     /** "로그 ON/OFF" 토글 버튼 노출 및 동작 */
     logsToggle: boolean;
-    /** 메시지 선택 기능 */
-    messageSelection: boolean;
-    /** 메시지 메타 정보 */
-    messageMeta: boolean;
     /** "대화 복사" 버튼 노출/동작 */
     copyConversation: boolean;
-    /** 이슈 복사 */
-    copyIssue: boolean;
   };
   interaction: {
     /** quick reply 선택 UI 활성화 */
@@ -219,6 +212,11 @@ export type WidgetChatPolicyConfig = {
   is_active?: boolean;
   name?: string;
   agent_id?: string;
+  setup_config?: WidgetSetupConfig | null;
+  access?: {
+    allowed_domains?: string[] | null;
+    allowed_paths?: string[] | null;
+  };
   entry_mode?: "launcher" | "embed";
   embed_view?: "chat" | "setup" | "both" | "list";
   theme?: Record<string, unknown>;
@@ -540,12 +538,8 @@ export function mergeConversationPageFeatures(
     },
     adminPanel: {
       enabled: override.adminPanel?.enabled ?? base.adminPanel.enabled,
-      selectionToggle: override.adminPanel?.selectionToggle ?? base.adminPanel.selectionToggle,
       logsToggle: override.adminPanel?.logsToggle ?? base.adminPanel.logsToggle,
-      messageSelection: override.adminPanel?.messageSelection ?? base.adminPanel.messageSelection,
-      messageMeta: override.adminPanel?.messageMeta ?? base.adminPanel.messageMeta,
       copyConversation: override.adminPanel?.copyConversation ?? base.adminPanel.copyConversation,
-      copyIssue: override.adminPanel?.copyIssue ?? base.adminPanel.copyIssue,
     },
     interaction: {
       quickReplies: override.interaction?.quickReplies ?? base.interaction.quickReplies,
@@ -615,15 +609,9 @@ export function mergeConversationPageFeatures(
       },
       adminPanel: {
         enabled: override.visibility?.adminPanel?.enabled ?? base.visibility.adminPanel.enabled,
-        selectionToggle:
-          override.visibility?.adminPanel?.selectionToggle ?? base.visibility.adminPanel.selectionToggle,
         logsToggle: override.visibility?.adminPanel?.logsToggle ?? base.visibility.adminPanel.logsToggle,
-        messageSelection:
-          override.visibility?.adminPanel?.messageSelection ?? base.visibility.adminPanel.messageSelection,
-        messageMeta: override.visibility?.adminPanel?.messageMeta ?? base.visibility.adminPanel.messageMeta,
         copyConversation:
           override.visibility?.adminPanel?.copyConversation ?? base.visibility.adminPanel.copyConversation,
-        copyIssue: override.visibility?.adminPanel?.copyIssue ?? base.visibility.adminPanel.copyIssue,
       },
       interaction: {
         quickReplies: override.visibility?.interaction?.quickReplies ?? base.visibility.interaction.quickReplies,
@@ -739,32 +727,11 @@ export function applyConversationFeatureVisibility(
       actionSelector: withVisibilityFlag(features.mcp.actionSelector, features.visibility.mcp.actionSelector, isAdminUser),
     },
     adminPanel: {
-      ...features.adminPanel,
       enabled: withVisibilityFlag(features.adminPanel.enabled, features.visibility.adminPanel.enabled, isAdminUser),
-      selectionToggle: withVisibilityFlag(
-        features.adminPanel.selectionToggle,
-        features.visibility.adminPanel.selectionToggle,
-        isAdminUser
-      ),
       logsToggle: withVisibilityFlag(features.adminPanel.logsToggle, features.visibility.adminPanel.logsToggle, isAdminUser),
-      messageSelection: withVisibilityFlag(
-        features.adminPanel.messageSelection,
-        features.visibility.adminPanel.messageSelection,
-        isAdminUser
-      ),
-      messageMeta: withVisibilityFlag(
-        features.adminPanel.messageMeta,
-        features.visibility.adminPanel.messageMeta,
-        isAdminUser
-      ),
       copyConversation: withVisibilityFlag(
         features.adminPanel.copyConversation,
         features.visibility.adminPanel.copyConversation,
-        isAdminUser
-      ),
-      copyIssue: withVisibilityFlag(
-        features.adminPanel.copyIssue,
-        features.visibility.adminPanel.copyIssue,
         isAdminUser
       ),
     },
@@ -906,12 +873,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
     adminPanel: {
       enabled: true,
-      selectionToggle: true,
       logsToggle: true,
-      messageSelection: true,
-      messageMeta: true,
       copyConversation: true,
-      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -975,12 +938,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       adminPanel: {
         enabled: "user",
-        selectionToggle: "user",
         logsToggle: "user",
-        messageSelection: "user",
-        messageMeta: "user",
         copyConversation: "user",
-        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",
@@ -1040,12 +999,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
     adminPanel: {
       enabled: true,
-      selectionToggle: true,
       logsToggle: true,
-      messageSelection: true,
-      messageMeta: true,
       copyConversation: true,
-      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -1109,12 +1064,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       adminPanel: {
         enabled: "admin",
-        selectionToggle: "admin",
         logsToggle: "admin",
-        messageSelection: "admin",
-        messageMeta: "admin",
         copyConversation: "admin",
-        copyIssue: "admin",
       },
       interaction: {
         quickReplies: "user",
@@ -1175,12 +1126,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
     adminPanel: {
       enabled: true,
-      selectionToggle: true,
       logsToggle: true,
-      messageSelection: true,
-      messageMeta: true,
       copyConversation: true,
-      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -1244,12 +1191,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       adminPanel: {
         enabled: "user",
-        selectionToggle: "user",
         logsToggle: "user",
-        messageSelection: "user",
-        messageMeta: "user",
         copyConversation: "user",
-        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",
@@ -1310,12 +1253,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
     adminPanel: {
       enabled: true,
-      selectionToggle: true,
       logsToggle: true,
-      messageSelection: true,
-      messageMeta: true,
       copyConversation: true,
-      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -1379,12 +1318,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       adminPanel: {
         enabled: "user",
-        selectionToggle: "user",
         logsToggle: "user",
-        messageSelection: "user",
-        messageMeta: "user",
         copyConversation: "user",
-        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",
@@ -1445,12 +1380,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
     adminPanel: {
       enabled: true,
-      selectionToggle: true,
       logsToggle: true,
-      messageSelection: true,
-      messageMeta: true,
       copyConversation: true,
-      copyIssue: true,
     },
     interaction: {
       quickReplies: true,
@@ -1514,12 +1445,8 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       },
       adminPanel: {
         enabled: "user",
-        selectionToggle: "user",
         logsToggle: "user",
-        messageSelection: "user",
-        messageMeta: "user",
         copyConversation: "user",
-        copyIssue: "user",
       },
       interaction: {
         quickReplies: "user",

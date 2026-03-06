@@ -1,22 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import {
-  applyWidgetMeta,
-  normalizeStringArray,
-  readWidgetMeta,
-  stripWidgetMeta,
-  type WidgetSetupConfig,
-} from "@/lib/widgetTemplateMeta";
+import { normalizeStringArray, type WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 import {
   normalizeWidgetChatPolicyProvider,
   normalizeWidgetChatPolicyRecordFromProvider,
 } from "@/lib/widgetChatPolicyShape";
-
-function makePublicKey() {
-  return `mw_pk_${crypto.randomBytes(16).toString("hex")}`;
-}
+import {
+  getPolicyWidgetAccess,
+  getPolicyWidgetSetupConfig,
+  getPolicyWidgetTheme,
+  setPolicyWidgetAccess,
+  setPolicyWidgetSetupConfig,
+  setPolicyWidgetTheme,
+} from "@/lib/widgetPolicyUtils";
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
   if ("error" in context) return { ok: false, status: 401, error: context.error };
@@ -31,15 +28,35 @@ async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>
   return { ok: true as const };
 }
 
+function ensureTemplateWidgetFields(
+  provider: ReturnType<typeof normalizeWidgetChatPolicyProvider> | null,
+  template: { name?: string | null; is_active?: boolean | null }
+) {
+  if (!provider || typeof provider !== "object") return provider;
+  const widget =
+    provider.widget && typeof provider.widget === "object" && !Array.isArray(provider.widget)
+      ? { ...provider.widget }
+      : {};
+  return { ...provider, widget } as ReturnType<typeof normalizeWidgetChatPolicyProvider>;
+}
+
 function mapTemplateRow(row: Record<string, any>) {
-  const meta = readWidgetMeta(row.theme);
-  const legacyPolicy = normalizeWidgetChatPolicyProvider(meta.chat_policy || null);
+  const basePolicy = ensureTemplateWidgetFields(
+    normalizeWidgetChatPolicyProvider(row.chat_policy || null),
+    { name: row.name, is_active: row.is_active }
+  );
+  const setupConfig = getPolicyWidgetSetupConfig(basePolicy);
+  const theme = getPolicyWidgetTheme(basePolicy);
+  const access = getPolicyWidgetAccess(basePolicy);
   return {
     ...row,
-    theme: stripWidgetMeta(row.theme),
-    template_id: meta.template_id || null,
-    setup_config: (meta.setup_config || null) as WidgetSetupConfig | null,
-    chat_policy: normalizeWidgetChatPolicyProvider(row.chat_policy || legacyPolicy || null),
+    theme,
+    template_id: null,
+    agent_id: setupConfig?.agent_id ?? null,
+    setup_config: (setupConfig || null) as WidgetSetupConfig | null,
+    allowed_domains: access.allowed_domains || [],
+    allowed_paths: access.allowed_paths || [],
+    chat_policy: basePolicy,
   };
 }
 
@@ -54,7 +71,6 @@ export async function GET(req: NextRequest) {
   const { data, error } = await context.supabase
     .from("B_chat_widgets")
     .select("*")
-    .eq("org_id", context.orgId)
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -62,9 +78,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  const items = (data || [])
-    .filter((row: Record<string, any>) => (readWidgetMeta(row.theme).type || "template") === "template")
-    .map(mapTemplateRow);
+  const items = (data || []).map(mapTemplateRow);
 
   return NextResponse.json({ items });
 }
@@ -89,17 +103,35 @@ export async function POST(req: NextRequest) {
 
   const nowIso = new Date().toISOString();
   const name = String(body.name || "").trim() || "Widget Template";
-  const agentId = String(body.agent_id || "").trim() || null;
-  const allowedDomains = normalizeStringArray(body.allowed_domains);
-  const allowedPaths = normalizeStringArray(body.allowed_paths);
   const theme = typeof body.theme === "object" && body.theme ? body.theme : {};
-  const setupConfig = (body.setup_config && typeof body.setup_config === "object" ? body.setup_config : null) as
+  const agentIdProvided = body.agent_id !== undefined;
+  const normalizedAgentId = agentIdProvided ? (String(body.agent_id || "").trim() || null) : null;
+  const setupConfigBase = (body.setup_config && typeof body.setup_config === "object" ? body.setup_config : null) as
     | WidgetSetupConfig
     | null;
+  const setupConfig = setupConfigBase
+    ? {
+        ...setupConfigBase,
+        ...(agentIdProvided ? { agent_id: normalizedAgentId } : {}),
+      }
+    : agentIdProvided
+      ? { agent_id: normalizedAgentId }
+      : null;
+  const access = {
+    allowed_domains: normalizeStringArray(body.allowed_domains),
+    allowed_paths: normalizeStringArray(body.allowed_paths),
+  };
   const chatPolicy = normalizeWidgetChatPolicyRecordFromProvider(
     body.chat_policy && typeof body.chat_policy === "object" ? body.chat_policy : null
   );
   const isActive = typeof body.is_active === "boolean" ? body.is_active : true;
+  const isPublic = typeof body.is_public === "boolean" ? body.is_public : false;
+  const pageKeys = Array.isArray(body.page_keys) ? normalizeStringArray(body.page_keys) : [];
+
+  const chatPolicyShape = normalizeWidgetChatPolicyProvider(chatPolicy);
+  const policyWithTheme = setPolicyWidgetTheme(chatPolicyShape, theme);
+  const policyWithSetup = setPolicyWidgetSetupConfig(policyWithTheme, setupConfig);
+  const policyWithAccess = setPolicyWidgetAccess(policyWithSetup, access);
 
   let supabaseAdmin;
   try {
@@ -111,19 +143,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const publicKey = makePublicKey();
   const { data, error } = await supabaseAdmin
     .from("B_chat_widgets")
     .insert({
-      org_id: context.orgId,
       name,
-      agent_id: agentId,
-      allowed_domains: allowedDomains,
-      allowed_paths: allowedPaths,
-      theme: applyWidgetMeta(theme, { setup_config: setupConfig }),
-      chat_policy: chatPolicy,
+      chat_policy: policyWithAccess,
       is_active: isActive,
-      public_key: publicKey,
+      is_public: isPublic,
+      page_keys: pageKeys,
+      created_by: context.user.id,
       created_at: nowIso,
       updated_at: nowIso,
     })

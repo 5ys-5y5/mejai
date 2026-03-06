@@ -1,7 +1,7 @@
 import crypto from "crypto";
 
 type WidgetTokenPayload = {
-  org_id: string;
+  org_id: string | null;
   widget_id: string;
   session_id: string;
   visitor_id: string | null;

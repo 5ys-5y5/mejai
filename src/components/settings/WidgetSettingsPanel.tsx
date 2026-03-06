@@ -17,6 +17,7 @@ type WidgetConfig = {
   allowed_paths?: string[] | null;
   theme?: Record<string, unknown> | null;
   is_active?: boolean | null;
+  page_keys?: string[] | null;
 };
 
 type AgentItem = {
@@ -46,7 +47,8 @@ function normalizeThemeList(value: unknown) {
 export function WidgetSettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [widget, setWidget] = useState<WidgetConfig | null>(null);
+  const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
+  const [selectedId, setSelectedId] = useState<string>("");
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [draft, setDraft] = useState<WidgetConfig>({
     name: "Web Widget",
@@ -59,6 +61,12 @@ export function WidgetSettingsPanel() {
   const [domainText, setDomainText] = useState("");
   const [pathText, setPathText] = useState("");
   const [allowedAccountsText, setAllowedAccountsText] = useState("");
+  const [pageKeysText, setPageKeysText] = useState("");
+
+  const selectedWidget = useMemo(
+    () => widgets.find((item) => item.id && item.id === selectedId) || null,
+    [widgets, selectedId]
+  );
 
   const agentOptions = useMemo<SelectOption[]>(
     () =>
@@ -70,60 +78,88 @@ export function WidgetSettingsPanel() {
     [agents]
   );
 
+  const applyWidgetToDraft = useCallback((current: WidgetConfig | null) => {
+    if (current) {
+      const nextDomains = current.allowed_domains || [];
+      const nextPaths = current.allowed_paths || [];
+      const nextPageKeys = current.page_keys || [];
+      const nextAccounts = normalizeThemeList(
+        (current.theme || {}).allowed_accounts || (current.theme || {}).allowedAccounts
+      );
+      setDraft({
+        name: current.name || "Web Widget",
+        agent_id: current.agent_id || "",
+        allowed_domains: nextDomains,
+        allowed_paths: nextPaths,
+        theme: current.theme || {},
+        is_active: typeof current.is_active === "boolean" ? current.is_active : true,
+      });
+      setDomainText(nextDomains.join("\n"));
+      setPathText(nextPaths.join("\n"));
+      setPageKeysText(nextPageKeys.join("\n"));
+      setAllowedAccountsText(nextAccounts.join("\n"));
+    } else {
+      setDraft({
+        name: "Web Widget",
+        agent_id: "",
+        allowed_domains: [],
+        allowed_paths: [],
+        theme: {},
+        is_active: true,
+      });
+      setDomainText("");
+      setPathText("");
+      setPageKeysText("");
+      setAllowedAccountsText("");
+    }
+  }, []);
+
   const loadWidget = useCallback(async () => {
     setLoading(true);
     try {
       const [widgetRes, agentRes] = await Promise.all([
-        apiFetch<{ item: WidgetConfig | null }>("/api/widgets"),
+        apiFetch<{ items: WidgetConfig[] }>("/api/widgets"),
         apiFetch<{ items: AgentItem[] }>("/api/agents?is_active=true&limit=200"),
       ]);
-      setWidget(widgetRes.item || null);
+      const list = widgetRes.items || [];
+      setWidgets(list);
       setAgents(agentRes.items || []);
-      const current = widgetRes.item;
-      if (current) {
-        const nextDomains = current.allowed_domains || [];
-        const nextPaths = current.allowed_paths || [];
-        const nextAccounts = normalizeThemeList(
-          (current.theme || {}).allowed_accounts || (current.theme || {}).allowedAccounts
-        );
-        setDraft({
-          name: current.name || "Web Widget",
-          agent_id: current.agent_id || "",
-          allowed_domains: nextDomains,
-          allowed_paths: nextPaths,
-          theme: current.theme || {},
-          is_active: typeof current.is_active === "boolean" ? current.is_active : true,
-        });
-        setDomainText(nextDomains.join("\n"));
-        setPathText(nextPaths.join("\n"));
-        setAllowedAccountsText(nextAccounts.join("\n"));
-      } else {
-        setDomainText("");
-        setPathText("");
-        setAllowedAccountsText("");
-      }
+      const fallbackId = list[0]?.id || "";
+      const nextSelectedId = selectedId && list.some((item) => item.id === selectedId) ? selectedId : fallbackId;
+      setSelectedId(nextSelectedId);
+      const current = list.find((item) => item.id && item.id === nextSelectedId) || null;
+      applyWidgetToDraft(current);
     } catch (error) {
-      setWidget(null);
+      setWidgets([]);
+      setSelectedId("");
+      applyWidgetToDraft(null);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyWidgetToDraft, selectedId]);
 
   useEffect(() => {
     void loadWidget();
   }, [loadWidget]);
+
+  useEffect(() => {
+    applyWidgetToDraft(selectedWidget);
+  }, [applyWidgetToDraft, selectedWidget]);
 
   const handleSave = async (rotateKey = false) => {
     setSaving(true);
     try {
       const allowedDomains = normalizeListInput(domainText);
       const allowedPaths = normalizeListInput(pathText);
+      const pageKeys = normalizeListInput(pageKeysText);
       const allowedAccounts = normalizeListInput(allowedAccountsText);
       const payload = {
+        template_id: selectedWidget?.id,
         name: draft.name,
         agent_id: draft.agent_id || null,
         allowed_domains: allowedDomains,
         allowed_paths: allowedPaths,
+        page_keys: pageKeys,
         theme: { ...(draft.theme || {}), allowed_accounts: allowedAccounts },
         is_active: Boolean(draft.is_active),
         rotate_key: rotateKey,
@@ -133,7 +169,19 @@ export function WidgetSettingsPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      setWidget(res.item);
+      setWidgets((prev) => {
+        const next = [...prev];
+        const idx = next.findIndex((item) => item.id === res.item.id);
+        if (idx >= 0) {
+          next[idx] = { ...next[idx], ...res.item };
+        } else {
+          next.unshift(res.item);
+        }
+        return next;
+      });
+      if (!selectedId) {
+        setSelectedId(res.item.id || "");
+      }
       setDraft((prev) => ({
         ...prev,
         allowed_domains: allowedDomains,
@@ -155,6 +203,20 @@ export function WidgetSettingsPanel() {
   return (
     <div className="space-y-4">
       <Card className="p-4 space-y-3">
+        <label className="block">
+          <div className="mb-1 text-xs text-slate-600">템플릿 선택</div>
+          <SelectPopover
+            value={selectedId}
+            options={widgets.map((item) => ({
+              id: String(item.id || ""),
+              label: String(item.name || item.id || "템플릿"),
+              description: item.public_key ? `키: ${item.public_key}` : undefined,
+            }))}
+            onChange={(value) => setSelectedId(value)}
+            className="w-full"
+            buttonClassName="h-9 text-xs"
+          />
+        </label>
         <div className="text-sm font-semibold text-slate-900">기본 설정</div>
         <label className="block">
           <div className="mb-1 text-xs text-slate-600">위젯 이름</div>
@@ -200,6 +262,17 @@ export function WidgetSettingsPanel() {
             도메인 안에서 위젯이 보일 페이지를 제한합니다. 비워두면 도메인 내 모든 페이지에서 작동합니다.{" "}
             <span className="font-mono">/support</span>처럼 입력하면 해당 경로로 시작하는 페이지에서만 보이고,{" "}
             <span className="font-mono">*</span>는 모든 경로 허용입니다.
+          </div>
+        </label>
+        <label className="block">
+          <div className="mb-1 text-xs text-slate-600">템플릿 사용 페이지 키 (줄바꿈 또는 콤마)</div>
+          <textarea
+            value={pageKeysText}
+            onChange={(e) => setPageKeysText(e.target.value)}
+            className="w-full min-h-[70px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
+          />
+          <div className="mt-1 text-[11px] text-slate-500">
+            예: <span className="font-mono">/app/install</span>, <span className="font-mono">/app/conversation-dup</span>
           </div>
         </label>
         <label className="block">
@@ -274,9 +347,9 @@ export function WidgetSettingsPanel() {
         <Button type="button" variant="outline" onClick={() => handleSave(true)} disabled={saving}>
           키 재발급
         </Button>
-        {widget?.public_key ? (
+        {selectedWidget?.public_key ? (
           <div className="text-xs text-slate-500 flex items-center">
-            현재 키: <span className="ml-1 font-mono text-slate-700">{widget.public_key}</span>
+            현재 키: <span className="ml-1 font-mono text-slate-700">{selectedWidget.public_key}</span>
           </div>
         ) : null}
       </Card>

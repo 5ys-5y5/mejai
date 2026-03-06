@@ -552,14 +552,20 @@ function ToggleField({
         </button>
         <button
           type="button"
-          onClick={() => onChangeVisibility(visibility === "user" ? "admin" : "user")}
+          onClick={() =>
+            onChangeVisibility(
+              visibility === "admin" ? "public" : visibility === "public" ? "user" : "admin"
+            )
+          }
           className={
             visibility === "admin"
               ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-amber-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
-              : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+              : visibility === "public"
+                ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-sky-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+                : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
           }
         >
-          {visibility === "admin" ? "ADMIN" : "USER"}
+          {visibility === "admin" ? "ADMIN" : visibility === "public" ? "PUBLIC" : "USER"}
         </button>
       </span>
     </div>
@@ -647,14 +653,20 @@ function GroupToggleField({
           {visibility ? (
             <button
               type="button"
-              onClick={() => onChangeVisibility?.(visibility === "user" ? "admin" : "user")}
+              onClick={() =>
+                onChangeVisibility?.(
+                  visibility === "admin" ? "public" : visibility === "public" ? "user" : "admin"
+                )
+              }
               className={
                 visibility === "admin"
                   ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-amber-600 px-2 py-1 text-[11px] font-bold text-white"
-                  : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white"
+                  : visibility === "public"
+                    ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-sky-600 px-2 py-1 text-[11px] font-bold text-white"
+                    : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white"
               }
             >
-              {visibility === "admin" ? "ADMIN" : "USER"}
+              {visibility === "admin" ? "ADMIN" : visibility === "public" ? "PUBLIC" : "USER"}
             </button>
           ) : null}
         </span>
@@ -2188,7 +2200,7 @@ export function ChatSettingsPanel({
                         onChangeVisibility={(mode) =>
                           void handleGovernanceChange({
                             enabled: governanceConfig?.enabled ?? true,
-                            visibility_mode: mode,
+                            visibility_mode: mode === "public" ? "user" : mode,
                           })
                         }
                       />

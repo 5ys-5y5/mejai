@@ -60,6 +60,12 @@ type PolicyConfig = {
   inlineKb: string;
 };
 
+const TEMPLATE_KEY_PREFIX = "template_key=";
+const PUBLIC_KEY_PREFIX = "public_key=";
+const PARAMETER_FLAG_KEYS = ["parameter", "paremeter"];
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PUBLIC_KEY_REGEX = /^mw_pk_/i;
+
 function buildId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
@@ -209,6 +215,112 @@ function normalizeAccountValue(value: unknown) {
   return String(value || "").trim().toLowerCase();
 }
 
+function parseBooleanParam(value: string) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return null;
+}
+
+function setByPath(target: Record<string, unknown>, path: string[], value: unknown) {
+  if (path.length === 0) return;
+  let cursor: Record<string, unknown> = target;
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const key = path[i];
+    const existing = cursor[key];
+    if (!existing || typeof existing !== "object" || Array.isArray(existing)) {
+      cursor[key] = {};
+    }
+    cursor = cursor[key] as Record<string, unknown>;
+  }
+  cursor[path[path.length - 1]] = value;
+}
+
+function mergeObjects(base: Record<string, unknown>, next: Record<string, unknown>) {
+  const result: Record<string, unknown> = { ...base };
+  Object.entries(next).forEach(([key, value]) => {
+    const current = result[key];
+    if (
+      current &&
+      value &&
+      typeof current === "object" &&
+      typeof value === "object" &&
+      !Array.isArray(current) &&
+      !Array.isArray(value)
+    ) {
+      result[key] = mergeObjects(current as Record<string, unknown>, value as Record<string, unknown>);
+    } else {
+      result[key] = value;
+    }
+  });
+  return result;
+}
+
+function normalizeDomain(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw.startsWith("http") ? raw : `http://${raw}`);
+    return url.hostname;
+  } catch {
+    return raw
+      .replace(/^https?:\/\//, "")
+      .replace(/\/.*$/, "")
+      .replace(/:\d+$/, "");
+  }
+}
+
+function extractKeyMode(rawKey: string) {
+  const trimmed = String(rawKey || "").trim();
+  let decoded = trimmed;
+  try {
+    decoded = decodeURIComponent(trimmed);
+  } catch {
+    decoded = trimmed;
+  }
+  if (decoded.startsWith(PUBLIC_KEY_PREFIX)) {
+    return { key: decoded.slice(PUBLIC_KEY_PREFIX.length), mode: "public" as const };
+  }
+  if (decoded.startsWith(TEMPLATE_KEY_PREFIX)) {
+    return { key: decoded.slice(TEMPLATE_KEY_PREFIX.length), mode: "template" as const };
+  }
+  return { key: decoded, mode: "auto" as const };
+}
+
+function isParameterEnabled(searchParams: URLSearchParams | null) {
+  if (!searchParams) return false;
+  return PARAMETER_FLAG_KEYS.some((key) => parseBooleanParam(String(searchParams.get(key) || "")) === true);
+}
+
+function extractQueryOverrides(searchParams: URLSearchParams | null) {
+  if (!searchParams) return null;
+  const overrides: Record<string, unknown> = {};
+  const chatPolicy: Record<string, unknown> = {};
+  const features: Record<string, unknown> = {};
+  const featurePrefix = "widget.";
+
+  for (const [rawKey, rawValue] of Array.from(searchParams.entries())) {
+    if (!rawKey || !rawValue) continue;
+    if (PARAMETER_FLAG_KEYS.includes(rawKey)) continue;
+    if (rawKey === "ovr" || rawKey === "origin" || rawKey === "page_url" || rawKey === "referrer") continue;
+    if (rawKey === "preview" || rawKey === "tab" || rawKey === "template_id" || rawKey === "public_key") continue;
+    if (!rawKey.startsWith(featurePrefix)) continue;
+    const keyPath = ["widget", ...rawKey.slice(featurePrefix.length).split(".").filter(Boolean)];
+    if (keyPath.length === 0) continue;
+    const parsedValue = parseBooleanParam(rawValue);
+    setByPath(features, keyPath, parsedValue ?? rawValue);
+  }
+
+  if (Object.keys(features).length > 0) {
+    const pages: Record<string, unknown> = {};
+    pages[WIDGET_PAGE_KEY] = { features };
+    chatPolicy.pages = pages;
+    overrides.chat_policy = chatPolicy;
+  }
+
+  return Object.keys(overrides).length > 0 ? overrides : null;
+}
+
 function collectUserIdentifiers(user?: Record<string, any> | null) {
   if (!user) return [] as string[];
   const values: Array<unknown> = [
@@ -240,13 +352,25 @@ function collectUserIdentifiers(user?: Record<string, any> | null) {
 export default function WidgetEmbedPage() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const key = useMemo(() => String(params?.key || ""), [params]);
+  const rawKey = useMemo(() => String(params?.key || "").trim(), [params]);
+  const extracted = useMemo(() => extractKeyMode(rawKey), [rawKey]);
+  const key = extracted.key;
+  const keyMode = extracted.mode;
   const visitorId = useMemo(() => String(searchParams?.get("vid") || "").trim(), [searchParams]);
   const sessionSeed = useMemo(() => String(searchParams?.get("sid") || "").trim(), [searchParams]);
   const overridesParam = useMemo(() => String(searchParams?.get("ovr") || "").trim(), [searchParams]);
   const previewOrigin = useMemo(() => String(searchParams?.get("origin") || "").trim(), [searchParams]);
   const previewPageUrl = useMemo(() => String(searchParams?.get("page_url") || "").trim(), [searchParams]);
   const previewReferrer = useMemo(() => String(searchParams?.get("referrer") || "").trim(), [searchParams]);
+  const isPreview = useMemo(() => {
+    const raw = String(searchParams?.get("preview") || "").trim().toLowerCase();
+    return raw === "1" || raw === "true";
+  }, [searchParams]);
+  const parameterEnabled = useMemo(() => isParameterEnabled(searchParams || null), [searchParams]);
+  const queryOverrides = useMemo(
+    () => (parameterEnabled ? extractQueryOverrides(searchParams || null) : null),
+    [parameterEnabled, searchParams]
+  );
   const forcedTab = useMemo(() => {
     const raw = String(searchParams?.get("tab") || "").trim().toLowerCase();
     if (raw === "chat" || raw === "list" || raw === "policy") {
@@ -255,6 +379,13 @@ export default function WidgetEmbedPage() {
     return null;
   }, [searchParams]);
   const initialOverrides = useMemo(() => decodeWidgetOverrides(overridesParam), [overridesParam]);
+  const mergedOverrides = useMemo(() => {
+    if (!initialOverrides && !queryOverrides) return null;
+    if (initialOverrides && queryOverrides) {
+      return mergeObjects(initialOverrides, queryOverrides);
+    }
+    return initialOverrides || queryOverrides;
+  }, [initialOverrides, queryOverrides]);
 
   const [activeTab, setActiveTab] = useState<WidgetConversationTab>(() => forcedTab || "chat");
   const [widgetToken, setWidgetToken] = useState("");
@@ -277,7 +408,7 @@ export default function WidgetEmbedPage() {
     }
     return null;
   });
-  const [pendingOverrides, setPendingOverrides] = useState<Record<string, any> | null>(initialOverrides);
+  const [pendingOverrides, setPendingOverrides] = useState<Record<string, any> | null>(mergedOverrides);
   const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const [showAdminLogs, setShowAdminLogs] = useState(false);
   const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
@@ -578,18 +709,54 @@ export default function WidgetEmbedPage() {
       };
       const seedSession = options?.forceNew ? "" : sessionSeedRef.current;
       if (seedSession) sessionSeedRef.current = "";
+      const requestPreview =
+        isPreview || keyMode === "template" || (keyMode === "auto" && UUID_REGEX.test(key) && !PUBLIC_KEY_REGEX.test(key));
+      const fallbackOrigin =
+        typeof window !== "undefined" ? String(window.location.origin || "").trim() : "";
+      const fallbackPageUrl =
+        typeof window !== "undefined" ? String(window.location.href || "").trim() : "";
+      const resolvedOrigin = resolveOrigin() || fallbackOrigin;
+      const resolvedPageUrl = meta.page_url || referrer || fallbackPageUrl;
+      const resolvedReferrer = meta.referrer || referrer || "";
+      let resolvedOverrides = pendingOverrides || mergedOverrides || undefined;
+      if (parameterEnabled && resolvedOrigin) {
+        const normalizedOrigin = normalizeDomain(resolvedOrigin);
+        const existing = resolvedOverrides && typeof resolvedOverrides === "object" ? resolvedOverrides : null;
+        const allowed =
+          existing && Array.isArray((existing as Record<string, unknown>).allowed_domains)
+            ? ((existing as Record<string, unknown>).allowed_domains as string[])
+            : [];
+        if (allowed.length === 0 && normalizedOrigin) {
+          resolvedOverrides = mergeObjects(existing || {}, {
+            allowed_domains: [normalizedOrigin],
+          });
+        }
+      }
       const payload = {
-        public_key: key,
-        origin: resolveOrigin(),
-        page_url: meta.page_url || referrer || "",
-        referrer: meta.referrer || referrer || "",
+        public_key: undefined as string | undefined,
+        template_id: undefined as string | undefined,
+        preview: requestPreview,
+        origin: resolvedOrigin,
+        page_url: resolvedPageUrl,
+        referrer: resolvedReferrer,
         session_id: seedSession || undefined,
-        overrides: pendingOverrides || undefined,
+        overrides: resolvedOverrides,
         visitor: {
           id: meta.visitor_id || visitorId || undefined,
           ...user,
         },
       };
+      if (keyMode === "template") {
+        payload.template_id = key || undefined;
+      } else if (keyMode === "public") {
+        payload.public_key = key || undefined;
+      } else if (PUBLIC_KEY_REGEX.test(key)) {
+        payload.public_key = key || undefined;
+      } else if (isPreview || parameterEnabled || UUID_REGEX.test(key)) {
+        payload.template_id = key || undefined;
+      } else {
+        payload.public_key = key || undefined;
+      }
       try {
         const res = await fetch("/api/widget/init", {
           method: "POST",
@@ -662,7 +829,18 @@ export default function WidgetEmbedPage() {
         });
       }
     },
-    [appendBotNotice, fetchHistory, key, pendingMeta, pendingOverrides, visitorId]
+    [
+      appendBotNotice,
+      fetchHistory,
+      isPreview,
+      key,
+      keyMode,
+      mergedOverrides,
+      parameterEnabled,
+      pendingMeta,
+      pendingOverrides,
+      visitorId,
+    ]
   );
 
   useEffect(() => {
@@ -678,7 +856,7 @@ export default function WidgetEmbedPage() {
         };
         const overrides = data.overrides && typeof data.overrides === "object" ? data.overrides : null;
         setPendingMeta(nextMeta);
-        setPendingOverrides(overrides || initialOverrides);
+        setPendingOverrides(overrides || mergedOverrides);
         if (!initCalledRef.current && data.session_id) {
           sessionSeedRef.current = String(data.session_id || "").trim();
         }
@@ -848,6 +1026,7 @@ export default function WidgetEmbedPage() {
             message: text,
             session_id: sessionId,
             overrides: pendingOverrides || undefined,
+            preview: isPreview,
             llm: shouldSendLlm ? policyConfig.llm || undefined : undefined,
             inline_kb: shouldSendInlineKb ? policyConfig.inlineKb.trim() || undefined : undefined,
             visitor: pendingUser || undefined,
@@ -961,6 +1140,7 @@ export default function WidgetEmbedPage() {
       }
     },
     [
+      isPreview,
       policyFeatures,
       pendingUser,
       pendingOverrides,

@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import {
-  applyWidgetMeta,
-  normalizeStringArray,
-  readWidgetMeta,
-  stripWidgetMeta,
-  type WidgetSetupConfig,
-} from "@/lib/widgetTemplateMeta";
+import { normalizeStringArray, type WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 import {
   normalizeWidgetChatPolicyProvider,
   normalizeWidgetChatPolicyRecordFromProvider,
 } from "@/lib/widgetChatPolicyShape";
+import {
+  getPolicyWidgetAccess,
+  getPolicyWidgetSetupConfig,
+  getPolicyWidgetTheme,
+  setPolicyWidgetAccess,
+  setPolicyWidgetSetupConfig,
+  setPolicyWidgetTheme,
+} from "@/lib/widgetPolicyUtils";
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
   if ("error" in context) return { ok: false, status: 401, error: context.error };
@@ -27,14 +29,19 @@ async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>
 }
 
 function mapTemplateRow(row: Record<string, any>) {
-  const meta = readWidgetMeta(row.theme);
-  const legacyPolicy = normalizeWidgetChatPolicyProvider(meta.chat_policy || null);
+  const basePolicy = normalizeWidgetChatPolicyProvider(row.chat_policy || null);
+  const setupConfig = getPolicyWidgetSetupConfig(basePolicy);
+  const theme = getPolicyWidgetTheme(basePolicy);
+  const access = getPolicyWidgetAccess(basePolicy);
   return {
     ...row,
-    theme: stripWidgetMeta(row.theme),
-    template_id: meta.template_id || null,
-    setup_config: (meta.setup_config || null) as WidgetSetupConfig | null,
-    chat_policy: normalizeWidgetChatPolicyProvider(row.chat_policy || legacyPolicy || null),
+    theme,
+    template_id: null,
+    agent_id: setupConfig?.agent_id ?? null,
+    setup_config: (setupConfig || null) as WidgetSetupConfig | null,
+    allowed_domains: access.allowed_domains || [],
+    allowed_paths: access.allowed_paths || [],
+    chat_policy: basePolicy,
   };
 }
 
@@ -51,7 +58,6 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     .from("B_chat_widgets")
     .select("*")
     .eq("id", resolvedParams.id)
-    .eq("org_id", context.orgId)
     .maybeSingle();
 
   if (error) {
@@ -97,7 +103,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .from("B_chat_widgets")
     .select("*")
     .eq("id", resolvedParams.id)
-    .eq("org_id", context.orgId)
     .maybeSingle();
 
   if (existingError) {
@@ -107,38 +112,55 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  const meta = readWidgetMeta(existing.theme);
-  const theme = typeof body.theme === "object" && body.theme ? body.theme : stripWidgetMeta(existing.theme);
-  const setupConfig = (body.setup_config && typeof body.setup_config === "object" ? body.setup_config : meta.setup_config) as
+  const basePolicy = normalizeWidgetChatPolicyProvider(existing.chat_policy || null);
+  const theme = typeof body.theme === "object" && body.theme ? body.theme : getPolicyWidgetTheme(basePolicy);
+  const baseSetup = getPolicyWidgetSetupConfig(basePolicy);
+  const agentIdProvided = body.agent_id !== undefined;
+  const normalizedAgentId = agentIdProvided ? (String(body.agent_id || "").trim() || null) : null;
+  const setupConfigBase = (body.setup_config && typeof body.setup_config === "object" ? body.setup_config : baseSetup) as
     | WidgetSetupConfig
     | null;
+  const setupConfig = setupConfigBase
+    ? {
+        ...setupConfigBase,
+        ...(agentIdProvided ? { agent_id: normalizedAgentId } : {}),
+      }
+    : agentIdProvided
+      ? { agent_id: normalizedAgentId }
+      : null;
+  const access = {
+    allowed_domains:
+      body.allowed_domains !== undefined
+        ? normalizeStringArray(body.allowed_domains)
+        : getPolicyWidgetAccess(basePolicy).allowed_domains || [],
+    allowed_paths:
+      body.allowed_paths !== undefined
+        ? normalizeStringArray(body.allowed_paths)
+        : getPolicyWidgetAccess(basePolicy).allowed_paths || [],
+  };
   const chatPolicy = normalizeWidgetChatPolicyRecordFromProvider(
     body.chat_policy && typeof body.chat_policy === "object" ? body.chat_policy : existing.chat_policy
   );
 
-  const nextTheme = applyWidgetMeta(theme, {
-    template_id: meta.template_id || null,
-    setup_config: setupConfig,
-    chat_policy: meta.chat_policy,
-  });
+  const chatPolicyShape = normalizeWidgetChatPolicyProvider(chatPolicy);
+  const policyWithTheme = setPolicyWidgetTheme(chatPolicyShape, theme);
+  const policyWithSetup = setPolicyWidgetSetupConfig(policyWithTheme, setupConfig);
+  const policyWithAccess = setPolicyWidgetAccess(policyWithSetup, access);
 
   const name = body.name !== undefined ? String(body.name || "").trim() || existing.name : existing.name;
-  const agentId =
-    body.agent_id !== undefined ? String(body.agent_id || "").trim() || null : (existing.agent_id as string | null);
-  const allowedDomains = body.allowed_domains !== undefined ? normalizeStringArray(body.allowed_domains) : existing.allowed_domains;
-  const allowedPaths = body.allowed_paths !== undefined ? normalizeStringArray(body.allowed_paths) : existing.allowed_paths;
   const isActive = body.is_active !== undefined ? Boolean(body.is_active) : existing.is_active;
+  const isPublic = body.is_public !== undefined ? Boolean(body.is_public) : existing.is_public;
+  const pageKeysProvided = Array.isArray(body.page_keys);
+  const nextPageKeys = pageKeysProvided ? normalizeStringArray(body.page_keys) : null;
 
   const { data, error } = await supabaseAdmin
     .from("B_chat_widgets")
     .update({
       name,
-      agent_id: agentId,
-      allowed_domains: allowedDomains,
-      allowed_paths: allowedPaths,
-      theme: nextTheme,
-      chat_policy: chatPolicy,
+      chat_policy: policyWithAccess,
       is_active: isActive,
+      is_public: isPublic,
+      ...(pageKeysProvided ? { page_keys: nextPageKeys } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", resolvedParams.id)
@@ -180,7 +202,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     .from("B_chat_widgets")
     .delete()
     .eq("id", resolvedParams.id)
-    .eq("org_id", context.orgId);
+    .eq("created_by", context.user.id);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });

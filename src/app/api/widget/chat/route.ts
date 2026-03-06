@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
+import { getServerContext } from "@/lib/serverAuth";
 import { verifyWidgetToken } from "@/lib/widgetToken";
 import { resolveRuntimeFlags } from "@/lib/runtimeFlags";
 import {
@@ -11,9 +12,10 @@ import {
   WIDGET_PAGE_KEY,
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
-import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
-import { normalizeWidgetOverrides, readWidgetMeta, normalizeStringArray } from "@/lib/widgetTemplateMeta";
+import { normalizeWidgetOverrides, normalizeStringArray } from "@/lib/widgetTemplateMeta";
 import { filterWidgetOverridesByPolicy, resolveWidgetBasePolicy, resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
+
+const WIDGET_CHAT_ERROR_EVENT = "WIDGET_CHAT_ERROR";
 
 function encodeHeaderValue(input: string) {
   const value = String(input || "").trim();
@@ -36,7 +38,14 @@ function encodeHeaderJson(input: unknown) {
 
 function resolveRuntimeBaseUrl(req: NextRequest) {
   const override = String(process.env.WIDGET_RUNTIME_BASE_URL || "").trim();
-  if (override) return override.replace(/\/+$/, "");
+  if (override) {
+    try {
+      new URL(override);
+      return override.replace(/\/+$/, "");
+    } catch {
+      // ignore invalid override
+    }
+  }
   const forwardedHost = String(req.headers.get("x-forwarded-host") || "").trim();
   const forwardedProto = String(req.headers.get("x-forwarded-proto") || "").trim();
   if (forwardedHost) {
@@ -55,7 +64,7 @@ async function logWidgetProxyEvent(input: {
   supabase: ReturnType<typeof createAdminSupabaseClient>;
   sessionId: string;
   widgetId: string;
-  orgId: string;
+  orgId?: string | null;
   agentId?: string | null;
   eventType: string;
   payload: Record<string, unknown>;
@@ -68,7 +77,7 @@ async function logWidgetProxyEvent(input: {
       event_type: eventType,
       payload: {
         widget_id: widgetId,
-        org_id: orgId,
+        org_id: orgId || null,
         agent_id: agentId || null,
         ...payload,
       },
@@ -89,6 +98,52 @@ function getWidgetRuntimeSecret() {
   return String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
 }
 
+function readVisitorUserId(input: Record<string, any> | null | undefined) {
+  if (!input || typeof input !== "object") return "";
+  const candidate =
+    input.id ||
+    input.user_id ||
+    input.userId ||
+    input.account_id ||
+    input.accountId ||
+    input.external_user_id ||
+    input.externalUserId;
+  return String(candidate || "").trim();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isUsableByVisitor(row: { is_public?: boolean | null; usable_id?: string[] | null }, visitorId: string) {
+  if (row.is_public) return true;
+  if (!visitorId) return false;
+  const usable = Array.isArray(row.usable_id) ? row.usable_id.map((id) => String(id || "").trim()) : [];
+  return usable.includes(visitorId);
+}
+
+async function isPreviewAdmin(req: NextRequest) {
+  const authHeader = req.headers.get("authorization") || "";
+  const cookieHeader = req.headers.get("cookie") || "";
+  const context = await getServerContext(authHeader, cookieHeader);
+  if ("error" in context) return false;
+  const { data: access } = await context.supabase
+    .from("A_iam_user_access_maps")
+    .select("is_admin")
+    .eq("user_id", context.user.id)
+    .maybeSingle();
+  return Boolean(access?.is_admin);
+}
+
+function isSameOriginPreview(req: NextRequest) {
+  const requestOrigin = String(req.headers.get("origin") || "").trim();
+  const requestReferer = String(req.headers.get("referer") || "").trim();
+  const serverOrigin = new URL(req.url).origin;
+  if (requestOrigin && requestOrigin === serverOrigin) return true;
+  if (requestReferer && requestReferer.startsWith(serverOrigin)) return true;
+  return false;
+}
+
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
@@ -101,6 +156,10 @@ export async function POST(req: NextRequest) {
   if (!body || !body.message) {
     return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
   }
+  const previewMode = body.preview === true || body.preview === "true";
+  const previewAllowed = previewMode
+    ? (await isPreviewAdmin(req)) || isSameOriginPreview(req)
+    : false;
   const message = String(body.message || "").trim();
   if (!message) {
     return NextResponse.json({ error: "EMPTY_MESSAGE" }, { status: 400 });
@@ -131,37 +190,61 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { data: widget } = await supabaseAdmin
-    .from("B_chat_widgets")
-    .select("id, org_id, agent_id, is_active, name, public_key, allowed_domains, allowed_paths, theme")
+  const { data: instance } = await supabaseAdmin
+    .from("B_chat_widget_instances")
+    .select("id, template_id, public_key, name, is_active, chat_policy, is_public, editable_id, usable_id, created_by")
     .eq("id", payload.widget_id)
     .maybeSingle();
-  if (!widget || !widget.is_active) {
+  if (!instance || !instance.is_active) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
 
-  const widgetMeta = readWidgetMeta(widget.theme);
-  const templateId = widgetMeta.template_id ? String(widgetMeta.template_id) : "";
-  const { data: template } = templateId
-    ? await supabaseAdmin.from("B_chat_widgets").select("*").eq("id", templateId).maybeSingle()
-    : { data: null };
-
-  const basePolicy = resolveWidgetBasePolicy(widget, template || null);
-  const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
-  const resolved = resolveWidgetRuntimeConfig(widget, template || null, filteredOverrides);
-
-  let providerValue: ConversationFeaturesProviderShape | null = null;
-  try {
-    providerValue = resolved.chat_policy || (await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")));
-  } catch {
-    providerValue = null;
+  const { data: template } = await supabaseAdmin
+    .from("B_chat_widgets")
+    .select("id, name, is_active, chat_policy, is_public, created_by")
+    .eq("id", instance.template_id)
+    .maybeSingle();
+  if (!template || !template.is_active) {
+    return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
+  if ((!template.is_public || !instance.is_public) && !previewAllowed) {
+    return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+  }
+
+  let orgId = "";
+  if (template.created_by) {
+    const createdBy = String(template.created_by);
+    const { data: accessRow } = await supabaseAdmin
+      .from("A_iam_user_access_maps")
+      .select("org_id")
+      .eq("user_id", createdBy)
+      .maybeSingle();
+    orgId = accessRow?.org_id ? String(accessRow.org_id) : createdBy;
+  }
+
+  const basePolicy = resolveWidgetBasePolicy(template, instance);
+  const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
+  const resolved = resolveWidgetRuntimeConfig(template, instance, filteredOverrides);
+
+  const providerValue: ConversationFeaturesProviderShape | null = resolved.chat_policy || null;
   const featureFlags = applyConversationFeatureVisibility(
     resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
     false
   );
-  const requestToolIds: unknown[] = Array.isArray(mcpToolIds) ? mcpToolIds : [];
-  const requestProviderKeys: unknown[] = Array.isArray(mcpProviderKeys) ? mcpProviderKeys : [];
+  const visitorUserId = readVisitorUserId(visitor);
+  const editableIds = Array.isArray(instance.editable_id)
+    ? instance.editable_id.map((value) => String(value || "").trim())
+    : [];
+  const canEditInstance = Boolean(visitorUserId && editableIds.includes(visitorUserId));
+  const safeLlm = canEditInstance ? llm : undefined;
+  const safeKbId = canEditInstance ? kbId : undefined;
+  const safeInlineKb = canEditInstance ? inlineKb : undefined;
+  const safeAdminKbIds = canEditInstance ? adminKbIds : [];
+  const safeMcpToolIds = canEditInstance ? mcpToolIds : [];
+  const safeMcpProviderKeys = canEditInstance ? mcpProviderKeys : [];
+
+  const requestToolIds: unknown[] = Array.isArray(safeMcpToolIds) ? safeMcpToolIds : [];
+  const requestProviderKeys: unknown[] = Array.isArray(safeMcpProviderKeys) ? safeMcpProviderKeys : [];
   const filteredProviderKeys = featureFlags.mcp.providerSelector
     ? requestProviderKeys
         .map((value: unknown) => String(value || "").trim())
@@ -173,7 +256,7 @@ export async function POST(req: NextRequest) {
         .filter((id: string) => id.length > 0 && isToolEnabled(id, featureFlags))
     : [];
   const setupConfig = resolved.setup_config || {};
-  const resolvedAgentId = resolved.agent_id || null;
+  const resolvedAgentId = setupConfig.agent_id ? String(setupConfig.agent_id) : null;
   const kbConfig = setupConfig.kb || {};
   const mcpConfig = setupConfig.mcp || {};
   const enforcedProviderKeys = normalizeStringArray(mcpConfig.provider_keys);
@@ -200,11 +283,7 @@ export async function POST(req: NextRequest) {
         )
       );
 
-  if (!resolvedAgentId && mergedMcpSelectors.length === 0) {
-    return NextResponse.json({ error: "MCP_REQUIRED" }, { status: 400 });
-  }
-
-  const normalizedLlm = String(llm || "").trim();
+  const normalizedLlm = String(safeLlm || "").trim();
   const effectiveLlmCandidate = enforcedLlm || normalizedLlm;
   const effectiveLlm = featureFlags.setup.llmSelector
     ? effectiveLlmCandidate || featureFlags.setup.defaultLlm
@@ -212,24 +291,95 @@ export async function POST(req: NextRequest) {
 
   const effectiveKbId =
     !resolvedAgentId && featureFlags.setup.kbSelector
-      ? enforcedKbId || String(kbId || "").trim() || undefined
+      ? enforcedKbId || String(safeKbId || "").trim() || undefined
       : undefined;
   const effectiveInlineKb =
     !resolvedAgentId && featureFlags.setup.inlineUserKbInput
-      ? String(inlineKb || "").trim() || undefined
+      ? String(safeInlineKb || "").trim() || undefined
       : undefined;
   const effectiveAdminKbIds =
     !resolvedAgentId && featureFlags.setup.adminKbSelector
       ? Array.from(
           new Set(
-            [...enforcedAdminKbIds, ...(Array.isArray(adminKbIds) ? adminKbIds : [])]
+            [...enforcedAdminKbIds, ...(Array.isArray(safeAdminKbIds) ? safeAdminKbIds : [])]
               .map((value: unknown) => String(value || "").trim())
               .filter((value: string) => value.length > 0)
           )
         )
       : [];
 
-  if (!resolvedAgentId && kbConfig.mode !== "inline" && !effectiveKbId) {
+  const logAndReturn = async (errorCode: string, status: number) => {
+    await logWidgetProxyEvent({
+      supabase: supabaseAdmin,
+      sessionId,
+      widgetId: instance.id,
+      orgId,
+      agentId: resolvedAgentId,
+      eventType: WIDGET_CHAT_ERROR_EVENT,
+      payload: {
+        error: errorCode,
+        message,
+        visitor_id: visitorUserId || null,
+      },
+    });
+    return NextResponse.json({ error: errorCode }, { status });
+  };
+
+  if (resolvedAgentId) {
+    const { data: agent } = await supabaseAdmin
+      .from("B_bot_agents")
+      .select("id, is_public, usable_id")
+      .eq("id", resolvedAgentId)
+      .maybeSingle();
+    if (!agent || (!previewAllowed && !isUsableByVisitor(agent, visitorUserId))) {
+      return await logAndReturn("AGENT_NOT_ALLOWED", 403);
+    }
+  }
+
+  if (effectiveKbId) {
+    const { data: kb } = await supabaseAdmin
+      .from("B_bot_knowledge_bases")
+      .select("id, is_public, usable_id")
+      .eq("id", effectiveKbId)
+      .maybeSingle();
+    if (!kb || (!previewAllowed && !isUsableByVisitor(kb, visitorUserId))) {
+      return await logAndReturn("KB_NOT_ALLOWED", 403);
+    }
+  }
+
+  let allowedAdminKbIds = effectiveAdminKbIds;
+  if (!previewAllowed && effectiveAdminKbIds.length > 0) {
+    const { data: adminKbs } = await supabaseAdmin
+      .from("B_bot_knowledge_bases")
+      .select("id, is_public, usable_id")
+      .in("id", effectiveAdminKbIds);
+    const allowedSet = new Set(
+      (adminKbs || []).filter((row) => isUsableByVisitor(row, visitorUserId)).map((row) => String(row.id))
+    );
+    allowedAdminKbIds = effectiveAdminKbIds.filter((id) => allowedSet.has(id));
+  }
+
+  const mcpToolCandidates = mergedMcpSelectors.filter((value) => isUuid(String(value || "")));
+  let allowedMcpTools = mergedMcpSelectors;
+  if (!previewAllowed && mcpToolCandidates.length > 0) {
+    const { data: tools } = await supabaseAdmin
+      .from("C_mcp_tools")
+      .select("id, is_public, usable_id")
+      .in("id", mcpToolCandidates);
+    const allowedSet = new Set(
+      (tools || []).filter((row) => isUsableByVisitor(row, visitorUserId)).map((row) => String(row.id))
+    );
+    allowedMcpTools = mergedMcpSelectors.filter((value) => {
+      const id = String(value || "").trim();
+      return !isUuid(id) || allowedSet.has(id);
+    });
+  }
+
+  if (!previewAllowed && !resolvedAgentId && allowedMcpTools.length === 0) {
+    return await logAndReturn("MCP_REQUIRED", 400);
+  }
+
+  if (!previewAllowed && !resolvedAgentId && kbConfig.mode !== "inline" && !effectiveKbId) {
     return NextResponse.json({ error: "KB_REQUIRED" }, { status: 400 });
   }
 
@@ -254,8 +404,8 @@ export async function POST(req: NextRequest) {
   await logWidgetProxyEvent({
     supabase: supabaseAdmin,
     sessionId,
-    widgetId: String(widget.id),
-    orgId: String(widget.org_id),
+    widgetId: String(instance.id),
+    orgId: orgId || null,
     agentId: effectiveAgentId,
     eventType: "WIDGET_RUNTIME_PROXY_START",
     payload: {
@@ -271,10 +421,10 @@ export async function POST(req: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         "x-widget-secret": secret,
-        "x-widget-org-id": String(widget.org_id),
-        "x-widget-id": String(widget.id || ""),
-        "x-widget-name": encodeHeaderValue(String(resolved.name || widget.name || "")),
-        "x-widget-public-key": String(widget.public_key || ""),
+        "x-widget-org-id": orgId,
+        "x-widget-id": String(instance.id || ""),
+        "x-widget-name": encodeHeaderValue(String(resolved.name || template.name || instance.name || "")),
+        "x-widget-public-key": String(instance.public_key || ""),
         "x-widget-agent-id": String(resolvedAgentId || ""),
         "x-widget-allowed-domains": encodeHeaderJson(resolved.allowed_domains || []),
         "x-widget-allowed-paths": encodeHeaderJson(resolved.allowed_paths || []),
@@ -287,8 +437,8 @@ export async function POST(req: NextRequest) {
         llm: effectiveLlm,
         kb_id: effectiveKbId,
         inline_kb: effectiveInlineKb,
-        admin_kb_ids: effectiveAdminKbIds,
-        mcp_tool_ids: mergedMcpSelectors,
+        admin_kb_ids: allowedAdminKbIds,
+        mcp_tool_ids: allowedMcpTools,
         mcp_provider_keys: filteredProviderKeys,
         page_key: WIDGET_PAGE_KEY,
         visitor,
@@ -299,8 +449,8 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: String(widget.id),
-      orgId: String(widget.org_id),
+      widgetId: String(instance.id),
+      orgId: orgId || null,
       agentId: effectiveAgentId,
       eventType: "WIDGET_RUNTIME_PROXY_FETCH_FAILED",
       payload: {
@@ -311,8 +461,8 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: String(widget.id),
-      orgId: String(widget.org_id),
+      widgetId: String(instance.id),
+      orgId: orgId || null,
       agentId: effectiveAgentId,
       eventType: "WIDGET_RUNTIME_PROXY_END",
       payload: {
@@ -339,8 +489,8 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: String(widget.id),
-      orgId: String(widget.org_id),
+      widgetId: String(instance.id),
+      orgId: orgId || null,
       agentId: effectiveAgentId,
       eventType: "WIDGET_RUNTIME_PROXY_INVALID_JSON",
       payload: {
@@ -352,8 +502,8 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: String(widget.id),
-      orgId: String(widget.org_id),
+      widgetId: String(instance.id),
+      orgId: orgId || null,
       agentId: effectiveAgentId,
       eventType: "WIDGET_RUNTIME_PROXY_END",
       payload: {
@@ -376,8 +526,8 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: String(widget.id),
-      orgId: String(widget.org_id),
+      widgetId: String(instance.id),
+      orgId: orgId || null,
       agentId: effectiveAgentId,
       eventType: "WIDGET_RUNTIME_PROXY_ERROR",
       payload: {
@@ -397,8 +547,8 @@ export async function POST(req: NextRequest) {
   await logWidgetProxyEvent({
     supabase: supabaseAdmin,
     sessionId,
-    widgetId: String(widget.id),
-    orgId: String(widget.org_id),
+    widgetId: String(instance.id),
+    orgId: orgId || null,
     agentId: effectiveAgentId,
     eventType: "WIDGET_RUNTIME_PROXY_END",
     payload: {

@@ -908,6 +908,7 @@ function renderConversationDefinitionMeta(
   const meta = getDefinitionMeta(found.item, found.groupLabel);
   return (
     <DependencyMeta
+      type={meta.type}
       name={found.item.name}
       depends={meta.depends}
       returns={meta.returns}
@@ -2143,6 +2144,7 @@ export function DesignSystemContent() {
                               const meta = getDefinitionMeta(item, group.label);
                               return (
                                 <DependencyMeta
+                                  type={meta.type}
                                   name={item.name}
                                   depends={meta.depends}
                                   returns={meta.returns}

@@ -10,12 +10,35 @@ import {
   WIDGET_PAGE_KEY,
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
-import { fetchWidgetChatPolicy } from "@/lib/widgetChatPolicy";
-import { normalizeWidgetOverrides, readWidgetMeta, normalizeStringArray } from "@/lib/widgetTemplateMeta";
+import { normalizeWidgetOverrides, normalizeStringArray } from "@/lib/widgetTemplateMeta";
 import { filterWidgetOverridesByPolicy, resolveWidgetBasePolicy, resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
 
 function getWidgetRuntimeSecret() {
   return String(process.env.WIDGET_RUNTIME_SECRET || "").trim();
+}
+
+function readVisitorUserId(input: Record<string, any> | null | undefined) {
+  if (!input || typeof input !== "object") return "";
+  const candidate =
+    input.id ||
+    input.user_id ||
+    input.userId ||
+    input.account_id ||
+    input.accountId ||
+    input.external_user_id ||
+    input.externalUserId;
+  return String(candidate || "").trim();
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isUsableByVisitor(row: { is_public?: boolean | null; usable_id?: string[] | null }, visitorId: string) {
+  if (row.is_public) return true;
+  if (!visitorId) return false;
+  const usable = Array.isArray(row.usable_id) ? row.usable_id.map((id) => String(id || "").trim()) : [];
+  return usable.includes(visitorId);
 }
 
 function encodeEvent(event: string, data: unknown) {
@@ -60,43 +83,60 @@ async function handleStream(
     });
   }
 
-  const { data: widget } = await supabaseAdmin
-    .from("B_chat_widgets")
-    .select("id, org_id, agent_id, is_active, theme, allowed_domains, allowed_paths")
+  const { data: instance } = await supabaseAdmin
+    .from("B_chat_widget_instances")
+    .select("id, template_id, public_key, name, is_active, chat_policy, is_public, editable_id, usable_id")
     .eq("id", payload.widget_id)
     .maybeSingle();
-  if (!widget || !widget.is_active) {
+  if (!instance || !instance.is_active) {
     return new Response(encodeEvent("error", { error: "WIDGET_NOT_FOUND" }), {
       status: 404,
       headers: { "Content-Type": "text/event-stream" },
     });
   }
 
-  const widgetMeta = readWidgetMeta(widget.theme);
-  const templateId = widgetMeta.template_id ? String(widgetMeta.template_id) : "";
-  const { data: template } = templateId
-    ? await supabaseAdmin.from("B_chat_widgets").select("*").eq("id", templateId).maybeSingle()
-    : { data: null };
+  const { data: template } = await supabaseAdmin
+    .from("B_chat_widgets")
+    .select("id, name, is_active, chat_policy, is_public, created_by")
+    .eq("id", instance.template_id)
+    .maybeSingle();
+  if (!template || !template.is_active) {
+    return new Response(encodeEvent("error", { error: "WIDGET_NOT_FOUND" }), {
+      status: 404,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
+  if (!template.is_public || !instance.is_public) {
+    return new Response(encodeEvent("error", { error: "WIDGET_NOT_FOUND" }), {
+      status: 404,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
 
   const overrides = normalizeWidgetOverrides(extras?.overrides);
-  const basePolicy = resolveWidgetBasePolicy(widget, template || null);
+  const basePolicy = resolveWidgetBasePolicy(template, instance);
   const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
-  const resolved = resolveWidgetRuntimeConfig(widget, template || null, filteredOverrides);
+  const resolved = resolveWidgetRuntimeConfig(template, instance, filteredOverrides);
 
-  let providerValue: ConversationFeaturesProviderShape | null = null;
-  try {
-    providerValue = resolved.chat_policy || (await fetchWidgetChatPolicy(supabaseAdmin, String(widget.org_id || "")));
-  } catch {
-    providerValue = null;
-  }
+  const providerValue: ConversationFeaturesProviderShape | null = resolved.chat_policy || null;
   const featureFlags = applyConversationFeatureVisibility(
     resolveConversationPageFeatures(WIDGET_PAGE_KEY, providerValue),
     false
   );
-  const requestToolIds: unknown[] = Array.isArray(extras?.mcp_tool_ids) ? extras!.mcp_tool_ids! : [];
-  const requestProviderKeys: unknown[] = Array.isArray(extras?.mcp_provider_keys)
-    ? extras!.mcp_provider_keys!
+  const visitorUserId = readVisitorUserId(extras?.visitor) || String(payload.visitor_id || "").trim();
+  const editableIds = Array.isArray(instance.editable_id)
+    ? instance.editable_id.map((value) => String(value || "").trim())
     : [];
+  const canEditInstance = Boolean(visitorUserId && editableIds.includes(visitorUserId));
+  const safeLlm = canEditInstance ? extras?.llm : undefined;
+  const safeKbId = canEditInstance ? extras?.kb_id : undefined;
+  const safeInlineKb = canEditInstance ? extras?.inline_kb : undefined;
+  const safeAdminKbIds = canEditInstance ? extras?.admin_kb_ids : [];
+  const safeMcpToolIds = canEditInstance ? extras?.mcp_tool_ids : [];
+  const safeMcpProviderKeys = canEditInstance ? extras?.mcp_provider_keys : [];
+
+  const requestToolIds: unknown[] = Array.isArray(safeMcpToolIds) ? safeMcpToolIds : [];
+  const requestProviderKeys: unknown[] = Array.isArray(safeMcpProviderKeys) ? safeMcpProviderKeys : [];
   const filteredProviderKeys = featureFlags.mcp.providerSelector
     ? requestProviderKeys
         .map((value: unknown) => String(value || "").trim())
@@ -108,7 +148,7 @@ async function handleStream(
         .filter((id: string) => id.length > 0 && isToolEnabled(id, featureFlags))
     : [];
   const setupConfig = resolved.setup_config || {};
-  const resolvedAgentId = resolved.agent_id || null;
+  const resolvedAgentId = setupConfig.agent_id ? String(setupConfig.agent_id) : null;
   const kbConfig = setupConfig.kb || {};
   const mcpConfig = setupConfig.mcp || {};
   const enforcedProviderKeys = normalizeStringArray(mcpConfig.provider_keys);
@@ -135,36 +175,92 @@ async function handleStream(
         )
       );
 
-  if (!resolvedAgentId && mergedMcpSelectors.length === 0) {
-    return new Response(encodeEvent("error", { error: "MCP_REQUIRED" }), {
-      status: 400,
-      headers: { "Content-Type": "text/event-stream" },
-    });
-  }
-
-  const normalizedLlm = String(extras?.llm || "").trim();
+  const normalizedLlm = String(safeLlm || "").trim();
   const effectiveLlmCandidate = enforcedLlm || normalizedLlm;
   const effectiveLlm = featureFlags.setup.llmSelector
     ? effectiveLlmCandidate || featureFlags.setup.defaultLlm
     : featureFlags.setup.defaultLlm;
   const effectiveKbId =
     !resolvedAgentId && featureFlags.setup.kbSelector
-      ? enforcedKbId || String(extras?.kb_id || "").trim() || undefined
+      ? enforcedKbId || String(safeKbId || "").trim() || undefined
       : undefined;
   const effectiveInlineKb =
     !resolvedAgentId && featureFlags.setup.inlineUserKbInput
-      ? String(extras?.inline_kb || "").trim() || undefined
+      ? String(safeInlineKb || "").trim() || undefined
       : undefined;
   const effectiveAdminKbIds =
     !resolvedAgentId && featureFlags.setup.adminKbSelector
       ? Array.from(
           new Set(
-            [...enforcedAdminKbIds, ...(Array.isArray(extras?.admin_kb_ids) ? extras!.admin_kb_ids! : [])]
+            [...enforcedAdminKbIds, ...(Array.isArray(safeAdminKbIds) ? safeAdminKbIds : [])]
               .map((value: unknown) => String(value || "").trim())
               .filter((value: string) => value.length > 0)
           )
         )
       : [];
+
+  if (resolvedAgentId) {
+    const { data: agent } = await supabaseAdmin
+      .from("B_bot_agents")
+      .select("id, is_public, usable_id")
+      .eq("id", resolvedAgentId)
+      .maybeSingle();
+    if (!agent || !isUsableByVisitor(agent, visitorUserId)) {
+      return new Response(encodeEvent("error", { error: "AGENT_NOT_ALLOWED" }), {
+        status: 403,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    }
+  }
+
+  if (effectiveKbId) {
+    const { data: kb } = await supabaseAdmin
+      .from("B_bot_knowledge_bases")
+      .select("id, is_public, usable_id")
+      .eq("id", effectiveKbId)
+      .maybeSingle();
+    if (!kb || !isUsableByVisitor(kb, visitorUserId)) {
+      return new Response(encodeEvent("error", { error: "KB_NOT_ALLOWED" }), {
+        status: 403,
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    }
+  }
+
+  let allowedAdminKbIds = effectiveAdminKbIds;
+  if (effectiveAdminKbIds.length > 0) {
+    const { data: adminKbs } = await supabaseAdmin
+      .from("B_bot_knowledge_bases")
+      .select("id, is_public, usable_id")
+      .in("id", effectiveAdminKbIds);
+    const allowedSet = new Set(
+      (adminKbs || []).filter((row) => isUsableByVisitor(row, visitorUserId)).map((row) => String(row.id))
+    );
+    allowedAdminKbIds = effectiveAdminKbIds.filter((id) => allowedSet.has(id));
+  }
+
+  const mcpToolCandidates = mergedMcpSelectors.filter((value) => isUuid(String(value || "")));
+  let allowedMcpTools = mergedMcpSelectors;
+  if (mcpToolCandidates.length > 0) {
+    const { data: tools } = await supabaseAdmin
+      .from("C_mcp_tools")
+      .select("id, is_public, usable_id")
+      .in("id", mcpToolCandidates);
+    const allowedSet = new Set(
+      (tools || []).filter((row) => isUsableByVisitor(row, visitorUserId)).map((row) => String(row.id))
+    );
+    allowedMcpTools = mergedMcpSelectors.filter((value) => {
+      const id = String(value || "").trim();
+      return !isUuid(id) || allowedSet.has(id);
+    });
+  }
+
+  if (!resolvedAgentId && allowedMcpTools.length === 0) {
+    return new Response(encodeEvent("error", { error: "MCP_REQUIRED" }), {
+      status: 400,
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  }
 
   if (!resolvedAgentId && kbConfig.mode !== "inline" && !effectiveKbId) {
     return new Response(encodeEvent("error", { error: "KB_REQUIRED" }), {
@@ -195,7 +291,7 @@ async function handleStream(
           headers: {
             "Content-Type": "application/json",
             "x-widget-secret": secret,
-            "x-widget-org-id": String(widget.org_id),
+            "x-widget-org-id": template.created_by ? String(template.created_by) : "",
           },
           body: JSON.stringify({
             message,
@@ -206,8 +302,8 @@ async function handleStream(
             llm: effectiveLlm,
             kb_id: effectiveKbId,
             inline_kb: effectiveInlineKb,
-            admin_kb_ids: effectiveAdminKbIds,
-            mcp_tool_ids: mergedMcpSelectors,
+            admin_kb_ids: allowedAdminKbIds,
+            mcp_tool_ids: allowedMcpTools,
             mcp_provider_keys: filteredProviderKeys,
             runtime_flags: runtimeFlags,
             ...(extras?.visitor && typeof extras.visitor === "object" ? { visitor: extras.visitor } : {}),

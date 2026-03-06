@@ -56,27 +56,26 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const { data: widget } = await supabaseAdmin
-    .from("B_chat_widgets")
-    .select("id, org_id, is_active")
+  const { data: instance } = await supabaseAdmin
+    .from("B_chat_widget_instances")
+    .select("id, is_active")
     .eq("id", payload.widget_id)
     .maybeSingle();
-  if (!widget || !widget.is_active) {
+  if (!instance || !instance.is_active) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
 
   const { data: session } = await supabaseAdmin
     .from("D_conv_sessions")
-    .select("id, org_id, metadata")
+    .select("id, metadata")
     .eq("id", targetSessionId)
-    .eq("org_id", widget.org_id)
     .maybeSingle();
   if (!session) {
     return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 });
   }
 
   const metadata = session.metadata && typeof session.metadata === "object" ? (session.metadata as Record<string, any>) : null;
-  const metadataWidgetId = metadata ? String(metadata.widget_id || "").trim() : "";
+  const metadataWidgetId = metadata ? String(metadata.widget_instance_id || "").trim() : "";
   if (metadataWidgetId && metadataWidgetId !== String(payload.widget_id)) {
     return NextResponse.json({ error: "SESSION_WIDGET_MISMATCH" }, { status: 403 });
   }
@@ -95,7 +94,6 @@ export async function GET(req: NextRequest) {
           .select(
             "id, tool_name, tool_version, status, request_payload, response_payload, policy_decision, latency_ms, created_at, session_id, turn_id"
           )
-          .eq("org_id", widget.org_id)
           .eq("session_id", targetSessionId)
           .order("created_at", { ascending: false })
           .range(from, to),

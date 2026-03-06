@@ -8,30 +8,45 @@ import { normalizeWidgetChatPolicyProvider, type WidgetChatPolicyInput } from "@
 import {
   type WidgetOverrides,
   type WidgetSetupConfig,
-  readWidgetMeta,
-  stripWidgetMeta,
   mergeTheme,
   normalizeStringArray,
 } from "@/lib/widgetTemplateMeta";
+import {
+  getPolicyWidgetAccess,
+  getPolicyWidgetSetupConfig,
+  getPolicyWidgetTheme,
+  mergeWidgetPolicies,
+  setPolicyWidgetAccess,
+  setPolicyWidgetSetupConfig,
+  setPolicyWidgetTheme,
+} from "@/lib/widgetPolicyUtils";
 
-export type WidgetRow = {
+export type WidgetTemplateRow = {
   id: string;
-  org_id: string;
   name?: string | null;
-  agent_id?: string | null;
-  public_key?: string | null;
-  allowed_domains?: string[] | null;
-  allowed_paths?: string[] | null;
-  theme?: Record<string, unknown> | null;
   chat_policy?: WidgetChatPolicyInput | null;
   is_active?: boolean | null;
+  is_public?: boolean | null;
+  created_by?: string | null;
+};
+
+export type WidgetInstanceRow = {
+  id: string;
+  template_id: string;
+  public_key: string;
+  name?: string | null;
+  is_active?: boolean | null;
+  chat_policy?: WidgetChatPolicyInput | null;
+  is_public?: boolean | null;
+  editable_id?: string[] | null;
+  usable_id?: string[] | null;
+  created_by?: string | null;
 };
 
 export type ResolvedWidgetConfig = {
-  baseWidget: WidgetRow;
-  templateWidget?: WidgetRow | null;
+  template: WidgetTemplateRow;
+  instance: WidgetInstanceRow;
   name: string;
-  agent_id: string | null;
   allowed_domains: string[];
   allowed_paths: string[];
   theme: Record<string, unknown>;
@@ -55,15 +70,12 @@ function mergeSetupConfig(base?: WidgetSetupConfig | null, override?: WidgetSetu
 }
 
 export function resolveWidgetBasePolicy(
-  widget: WidgetRow,
-  template: WidgetRow | null
+  template: WidgetTemplateRow,
+  instance: WidgetInstanceRow
 ): ConversationFeaturesProviderShape | null {
-  const widgetMeta = readWidgetMeta(widget.theme);
-  const templateMeta = template ? readWidgetMeta(template.theme) : {};
-  const templatePolicy = normalizeWidgetChatPolicyProvider(template?.chat_policy || templateMeta.chat_policy || null);
-  if (templatePolicy) return templatePolicy;
-  const widgetPolicy = normalizeWidgetChatPolicyProvider(widget.chat_policy || widgetMeta.chat_policy || null);
-  return widgetPolicy || null;
+  const templatePolicy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
+  const instancePolicy = normalizeWidgetChatPolicyProvider(instance.chat_policy || null);
+  return mergeWidgetPolicies(templatePolicy, instancePolicy);
 }
 
 export function filterWidgetOverridesByPolicy(
@@ -97,63 +109,53 @@ export function filterWidgetOverridesByPolicy(
 }
 
 export function resolveWidgetRuntimeConfig(
-  widget: WidgetRow,
-  template: WidgetRow | null,
+  template: WidgetTemplateRow,
+  instance: WidgetInstanceRow,
   overrides?: WidgetOverrides | null
 ): ResolvedWidgetConfig {
-  const baseWidget = template ?? widget;
-  const templateMeta = readWidgetMeta(baseWidget.theme);
-  const widgetMeta = readWidgetMeta(widget.theme);
-  const baseTheme = stripWidgetMeta(baseWidget.theme);
-  const widgetTheme = template ? stripWidgetMeta(widget.theme) : {};
-  const mergedTheme = mergeTheme(baseTheme, widgetTheme);
+  const templatePolicy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
+  const instancePolicy = normalizeWidgetChatPolicyProvider(instance.chat_policy || null);
+  const basePolicy = mergeWidgetPolicies(templatePolicy, instancePolicy);
+  const overridePolicy = normalizeWidgetChatPolicyProvider(overrides?.chat_policy || null);
+  const resolvedPolicy = mergeWidgetPolicies(basePolicy, overridePolicy);
+
+  const baseTheme = getPolicyWidgetTheme(basePolicy);
   const overrideTheme =
     overrides?.theme && typeof overrides.theme === "object" && !Array.isArray(overrides.theme)
-      ? mergeTheme(mergedTheme, overrides.theme as Record<string, unknown>)
-      : mergedTheme;
+      ? mergeTheme(baseTheme, overrides.theme as Record<string, unknown>)
+      : baseTheme;
 
-  const resolvedName =
-    (typeof overrides?.name === "string" && overrides.name.trim()) ||
-    (template ? widget.name : null) ||
-    baseWidget.name ||
-    "Web Widget";
+  const resolvedName = template.name || "Web Widget";
 
-  const resolvedAgent =
-    (typeof overrides?.agent_id === "string" && overrides.agent_id.trim()) ||
-    (template ? widget.agent_id : null) ||
-    baseWidget.agent_id ||
-    null;
-
-  const baseDomains = normalizeStringArray(baseWidget.allowed_domains);
-  const widgetDomains = template ? normalizeStringArray(widget.allowed_domains) : [];
-  const overrideDomains = normalizeStringArray(overrides?.allowed_domains);
+  const baseAccess = getPolicyWidgetAccess(basePolicy);
   const resolvedDomains =
-    overrideDomains.length > 0 ? overrideDomains : widgetDomains.length > 0 ? widgetDomains : baseDomains;
+    normalizeStringArray(overrides?.allowed_domains).length > 0
+      ? normalizeStringArray(overrides?.allowed_domains)
+      : normalizeStringArray(baseAccess.allowed_domains);
+  const resolvedPaths =
+    normalizeStringArray(overrides?.allowed_paths).length > 0
+      ? normalizeStringArray(overrides?.allowed_paths)
+      : normalizeStringArray(baseAccess.allowed_paths);
 
-  const basePaths = normalizeStringArray(baseWidget.allowed_paths);
-  const widgetPaths = template ? normalizeStringArray(widget.allowed_paths) : [];
-  const overridePaths = normalizeStringArray(overrides?.allowed_paths);
-  const resolvedPaths = overridePaths.length > 0 ? overridePaths : widgetPaths.length > 0 ? widgetPaths : basePaths;
-
-  const baseSetup = templateMeta.setup_config || null;
-  const widgetSetup = widgetMeta.setup_config || null;
+  const baseSetup = getPolicyWidgetSetupConfig(basePolicy) || null;
   const overrideSetup = overrides?.setup_config || null;
-  const mergedSetup = mergeSetupConfig(mergeSetupConfig(baseSetup, widgetSetup), overrideSetup);
+  const mergedSetup = mergeSetupConfig(baseSetup, overrideSetup);
 
-  const basePolicy = normalizeWidgetChatPolicyProvider(template?.chat_policy || templateMeta.chat_policy || null);
-  const widgetPolicy = normalizeWidgetChatPolicyProvider(widget.chat_policy || widgetMeta.chat_policy || null);
-  const overridePolicy = normalizeWidgetChatPolicyProvider(overrides?.chat_policy || null);
-  const resolvedPolicy = overridePolicy || widgetPolicy || basePolicy;
+  const resolvedPolicyWithTheme = setPolicyWidgetTheme(resolvedPolicy, overrideTheme);
+  const resolvedPolicyWithSetup = setPolicyWidgetSetupConfig(resolvedPolicyWithTheme, mergedSetup);
+  const resolvedPolicyWithAccess = setPolicyWidgetAccess(resolvedPolicyWithSetup, {
+    allowed_domains: resolvedDomains,
+    allowed_paths: resolvedPaths,
+  });
 
   return {
-    baseWidget,
-    templateWidget: template,
+    template,
+    instance,
     name: resolvedName,
-    agent_id: resolvedAgent ? String(resolvedAgent) : null,
     allowed_domains: resolvedDomains,
     allowed_paths: resolvedPaths,
     theme: overrideTheme,
     setup_config: mergedSetup,
-    chat_policy: resolvedPolicy,
+    chat_policy: resolvedPolicyWithAccess,
   };
 }

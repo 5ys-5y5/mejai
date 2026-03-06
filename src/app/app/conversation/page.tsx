@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pencil, Plus, RefreshCw, Save, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
-import { ChatSettingsPanel } from "@/components/settings/ChatSettingsPanel";
+import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
+import { ChatSettingsPanel } from "@/components/conversation/ChatSettingsPanel";
 import { apiFetch } from "@/lib/apiClient";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 import { encodeWidgetOverrides } from "@/lib/widgetOverrides";
@@ -14,8 +15,21 @@ import {
   buildWidgetEmbedSrc,
   type WidgetConversationTab,
 } from "@/components/design-system/widget/WidgetUI.parts";
-import { WIDGET_PAGE_KEY, type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
+import {
+  WIDGET_PAGE_KEY,
+  normalizeConversationFeatureProvider,
+  type ConversationFeaturesProviderShape,
+} from "@/lib/conversation/pageFeaturePolicy";
 import type { WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
+import {
+  getPolicyWidgetAccess,
+  getPolicyWidgetSetupConfig,
+  getPolicyWidgetTheme,
+  setPolicyWidgetAccess,
+  setPolicyWidgetSetupConfig,
+  setPolicyWidgetTheme,
+  withNullFeatureDefaults,
+} from "@/lib/widgetPolicyUtils";
 
 type TemplateItem = {
   id: string;
@@ -33,6 +47,7 @@ type TemplateItem = {
 type KbItem = {
   id: string;
   title: string;
+  is_active?: boolean | null;
   is_admin?: boolean | string | null;
 };
 
@@ -41,6 +56,9 @@ type AgentItem = {
   name?: string | null;
   version?: string | null;
   is_active?: boolean | null;
+  kb_id?: string | null;
+  llm?: string | null;
+  editable_id?: string[] | string | null;
 };
 
 type McpTool = {
@@ -56,13 +74,6 @@ function normalizeListInput(value: string) {
     .filter(Boolean);
 }
 
-function toggleArrayValue(list: string[], value: string) {
-  if (list.includes(value)) {
-    return list.filter((item) => item !== value);
-  }
-  return [...list, value];
-}
-
 function readThemeString(theme: Record<string, unknown> | null, key: string) {
   const value = theme?.[key];
   return typeof value === "string" ? value : "";
@@ -72,10 +83,16 @@ function isValidUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function StatusDot({ active }: { active?: boolean | null }) {
+  const color =
+    active === true ? "bg-emerald-500" : active === false ? "bg-rose-500" : "bg-slate-300";
+  return <span className={`inline-flex h-[5px] w-[5px] rounded-full ${color}`} />;
+}
+
 export default function ConversationWidgetPage() {
-  const [authToken, setAuthToken] = useState("");
   const [adminReady, setAdminReady] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userId, setUserId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
@@ -90,7 +107,7 @@ export default function ConversationWidgetPage() {
   const [kbItems, setKbItems] = useState<KbItem[]>([]);
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [mcpTools, setMcpTools] = useState<McpTool[]>([]);
-  const [activeTab, setActiveTab] = useState<"base" | "setup" | "policy" | "preview" | "install">("base");
+  const [activeTab, setActiveTab] = useState<"base" | "policy" | "preview" | "install">("base");
   const [installOverridesText, setInstallOverridesText] = useState("");
   const [installOverrides, setInstallOverrides] = useState<Record<string, unknown>>({});
   const [previewMeta, setPreviewMeta] = useState({
@@ -102,6 +119,73 @@ export default function ConversationWidgetPage() {
   const [previewHost, setPreviewHost] = useState<HTMLDivElement | null>(null);
   const widgetsPreviewRef = useRef<HTMLDivElement | null>(null);
   const [launcherHighlight, setLauncherHighlight] = useState(false);
+  const [policyValue, setPolicyValue] = useState<ConversationFeaturesProviderShape | null>(null);
+  const [policyLoading, setPolicyLoading] = useState(false);
+  const [policySaving, setPolicySaving] = useState(false);
+  const [policyRefreshNonce, setPolicyRefreshNonce] = useState(0);
+  const policySyncRef = useRef(false);
+  const selectedTemplate = useMemo(
+    () => templates.find((item) => item.id === selectedId) || null,
+    [selectedId, templates]
+  );
+  const agentsById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
+  const kbById = useMemo(() => new Map(kbItems.map((kb) => [kb.id, kb])), [kbItems]);
+
+  const handleCopy = useCallback((value?: string | null) => {
+    const text = String(value || "").trim();
+    if (!text) return;
+    void navigator.clipboard?.writeText(text);
+  }, []);
+
+  const normalizeThemeValue = useCallback(
+    (value: Record<string, unknown> | null | undefined) => ({
+      greeting: readThemeString(value || null, "greeting"),
+      input_placeholder: readThemeString(value || null, "input_placeholder"),
+      launcher_icon_url: readThemeString(value || null, "launcher_icon_url"),
+    }),
+    []
+  );
+
+  const buildTemplateFingerprint = useCallback(
+    (input: {
+      name?: string | null;
+      agent_id?: string | null;
+      allowed_domains?: string[] | null;
+      allowed_paths?: string[] | null;
+      theme?: Record<string, unknown> | null;
+      setup_config?: WidgetSetupConfig | null;
+      is_active?: boolean | null;
+    }) =>
+      JSON.stringify({
+        name: String(input.name || "").trim(),
+        agent_id: input.agent_id ? String(input.agent_id) : null,
+        allowed_domains: (input.allowed_domains || []).map((item) => String(item || "").trim()),
+        allowed_paths: (input.allowed_paths || []).map((item) => String(item || "").trim()),
+        theme: normalizeThemeValue(input.theme || null),
+        setup_config: input.setup_config || null,
+        is_active: input.is_active !== false,
+      }),
+    [normalizeThemeValue]
+  );
+
+  const buildDraftFingerprint = useCallback(
+    (current: TemplateItem | null) =>
+      JSON.stringify({
+        name: String(current?.name || "").trim(),
+        agent_id: current?.agent_id ? String(current.agent_id) : null,
+        allowed_domains: normalizeListInput(domainText),
+        allowed_paths: normalizeListInput(pathText),
+        theme: normalizeThemeValue(current?.theme || null),
+        setup_config: setupConfig,
+        is_active: current?.is_active !== false,
+      }),
+    [domainText, normalizeThemeValue, pathText, setupConfig]
+  );
+
+  const isDirty = useMemo(() => {
+    if (!selectedTemplate || !draft) return false;
+    return buildDraftFingerprint(draft) !== buildTemplateFingerprint(selectedTemplate);
+  }, [buildDraftFingerprint, buildTemplateFingerprint, draft, selectedTemplate]);
 
   useEffect(() => {
     let mounted = true;
@@ -113,10 +197,8 @@ export default function ConversationWidgetPage() {
         setAdminReady(true);
         return;
       }
+      setUserId(data.user.id);
       const { data: sessionData } = await supabase.auth.getSession();
-      if (sessionData.session?.access_token) {
-        setAuthToken(sessionData.session.access_token);
-      }
       const { data: access } = await supabase
         .from("A_iam_user_access_maps")
         .select("is_admin")
@@ -129,7 +211,6 @@ export default function ConversationWidgetPage() {
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
-      setAuthToken(session?.access_token || "");
     });
 
     return () => {
@@ -184,8 +265,44 @@ export default function ConversationWidgetPage() {
       );
       setInstallOverridesText("");
       setInstallOverrides({});
+      setPolicyValue(current.chat_policy || null);
     }
   }, [selectedId, templates]);
+
+  useEffect(() => {
+    if (!policyValue) return;
+    policySyncRef.current = true;
+    const theme = getPolicyWidgetTheme(policyValue);
+    const setup = getPolicyWidgetSetupConfig(policyValue);
+    const access = getPolicyWidgetAccess(policyValue);
+    const agentId = typeof policyValue.widget?.agent_id === "string" ? policyValue.widget.agent_id : null;
+    const nextTheme = theme || {};
+    const nextSetup =
+      setup || {
+        kb: { mode: "inline", kb_id: "", admin_kb_ids: [] },
+        mcp: { provider_keys: [], tool_ids: [] },
+        llm: { default: "chatgpt" },
+      };
+    const nextDomainText = (access.allowed_domains || []).join("\n");
+    const nextPathText = (access.allowed_paths || []).join("\n");
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const sameTheme = JSON.stringify(prev.theme || {}) === JSON.stringify(nextTheme);
+      const sameAgent = (prev.agent_id || null) === (agentId || null);
+      if (sameTheme && sameAgent) return prev;
+      return {
+        ...prev,
+        theme: nextTheme,
+        agent_id: agentId,
+      };
+    });
+    setSetupConfig((prev) => (JSON.stringify(prev) === JSON.stringify(nextSetup) ? prev : nextSetup));
+    setDomainText((prev) => (prev === nextDomainText ? prev : nextDomainText));
+    setPathText((prev) => (prev === nextPathText ? prev : nextPathText));
+    setTimeout(() => {
+      policySyncRef.current = false;
+    }, 0);
+  }, [policyValue]);
 
   useEffect(() => {
     if (!draft) return;
@@ -210,6 +327,33 @@ export default function ConversationWidgetPage() {
   }, [draft, previewMeta.origin, previewMeta.page_url, previewMeta.referrer]);
 
   useEffect(() => {
+    if (!draft) return;
+    if (policySyncRef.current) return;
+    const access = {
+      allowed_domains: normalizeListInput(domainText),
+      allowed_paths: normalizeListInput(pathText),
+    };
+    const normalizedSetup: WidgetSetupConfig = {
+      ...setupConfig,
+      ...(draft.agent_id ? { agent_id: draft.agent_id } : {}),
+    };
+    setPolicyValue((prev) => {
+      const base = prev || {};
+      let next = setPolicyWidgetTheme(base, draft.theme || {});
+      next = setPolicyWidgetSetupConfig(next, normalizedSetup);
+      next = setPolicyWidgetAccess(next, access);
+      next = {
+        ...next,
+        widget: {
+          ...(next.widget || {}),
+          agent_id: draft.agent_id || undefined,
+        },
+      };
+      return normalizeConversationFeatureProvider(next) || next;
+    });
+  }, [draft, setupConfig, domainText, pathText]);
+
+  useEffect(() => {
     if (!installOverridesText.trim()) {
       setInstallOverrides({});
       return;
@@ -226,12 +370,42 @@ export default function ConversationWidgetPage() {
 
   const agentOptions = useMemo<SelectOption[]>(
     () =>
-      agents.map((agent) => ({
-        id: agent.id,
-        label: `${agent.name || agent.id}${agent.is_active ? "" : " (비활성)"}`,
-        description: agent.version ? `v${agent.version}` : undefined,
-      })),
-    [agents]
+      agents
+        .filter((agent) => {
+          if (!userId) return false;
+          const editable = agent.editable_id;
+          if (Array.isArray(editable)) {
+            return editable.map((item) => String(item || "")).includes(userId);
+          }
+          if (typeof editable === "string") {
+            return editable === userId;
+          }
+          return false;
+        })
+        .map((agent) => ({
+          id: agent.id,
+          label: `${agent.name || agent.id} ${agent.version ? `v${agent.version}` : "v-"} ${
+            agent.llm || "llm-"
+          }`,
+          description: agent.is_active ? "active" : "inactive",
+        })),
+    [agents, userId]
+  );
+
+  const editableAgents = useMemo(
+    () =>
+      agents.filter((agent) => {
+        if (!userId) return false;
+        const editable = agent.editable_id;
+        if (Array.isArray(editable)) {
+          return editable.map((item) => String(item || "")).includes(userId);
+        }
+        if (typeof editable === "string") {
+          return editable === userId;
+        }
+        return false;
+      }),
+    [agents, userId]
   );
 
   const userKbOptions = useMemo<SelectOption[]>(
@@ -266,6 +440,21 @@ export default function ConversationWidgetPage() {
     return Array.from(map.keys()).sort((a, b) => a.localeCompare(b));
   }, [mcpTools]);
 
+  const providerOptions = useMemo<SelectOption[]>(
+    () => providerKeys.map((key) => ({ id: key, label: key })),
+    [providerKeys]
+  );
+
+  const mcpToolOptions = useMemo<SelectOption[]>(
+    () =>
+      mcpTools.map((tool) => ({
+        id: tool.id,
+        label: tool.name,
+        group: String(tool.provider_key || "").trim() || undefined,
+      })),
+    [mcpTools]
+  );
+
   const handleCreate = async () => {
     setLoading(true);
     try {
@@ -274,7 +463,13 @@ export default function ConversationWidgetPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "New Widget Template" }),
       });
-      setTemplates((prev) => [res.item, ...prev]);
+      setTemplates((prev) => {
+        const exists = prev.some((item) => item.id === res.item.id);
+        if (exists) {
+          return prev.map((item) => (item.id === res.item.id ? res.item : item));
+        }
+        return [res.item, ...prev];
+      });
       setSelectedId(res.item.id);
       setActiveTab("base");
     } finally {
@@ -329,13 +524,18 @@ export default function ConversationWidgetPage() {
     return encodeWidgetOverrides(installOverrides);
   }, [installOverrides]);
 
+  const previewKey = draft?.public_key || draft?.id || "";
+  const previewTemplateId = draft?.id || "";
+
   const buildPreviewSrc = useCallback(
     (tab?: WidgetConversationTab) => {
-      if (!draft?.public_key) return "";
+      if (!previewKey) return "";
       const base = typeof window !== "undefined" ? window.location.origin : "";
-      return buildWidgetEmbedSrc(base, draft.public_key, "preview", "", previewOverridesParam, previewMeta, tab);
+      return buildWidgetEmbedSrc(base, previewKey, "preview", "", previewOverridesParam, previewMeta, tab, {
+        preview: true,
+      });
     },
-    [draft?.public_key, previewOverridesParam, previewMeta]
+    [previewKey, previewOverridesParam, previewMeta]
   );
 
   const handleLauncherClick = useCallback(() => {
@@ -369,34 +569,94 @@ export default function ConversationWidgetPage() {
     return overridesParam ? `${src}?ovr=${encodeURIComponent(overridesParam)}` : src;
   }, [draft?.public_key, installOverrides]);
 
+  const templatePreviewUrl = useMemo(() => {
+    if (!draft?.id) return "";
+    const base = typeof window !== "undefined" ? window.location.origin : "";
+    const overrides = policyValue ? { chat_policy: policyValue } : {};
+    const overridesParam =
+      Object.keys(overrides).length > 0 ? encodeWidgetOverrides(overrides) : "";
+    const url = new URL(`${base}/embed/${draft.id}`);
+    url.searchParams.set("template_id", draft.id);
+    url.searchParams.set("preview", "1");
+    if (overridesParam) url.searchParams.set("ovr", overridesParam);
+    return url.toString();
+  }, [draft?.id, policyValue]);
+
   const policyTemplateId = draft?.id && isValidUuid(String(draft.id)) ? String(draft.id) : "";
-  const policyDataSource = useMemo(
-    () =>
-      policyTemplateId
-        ? {
-            loadProvider: async () => {
-              const res = await apiFetch<{ provider?: ConversationFeaturesProviderShape | null }>(
-                `/api/widget-templates/${policyTemplateId}/chat-policy`
-              );
-              return res.provider || null;
-            },
-            saveProvider: async (_authToken: string, values: any) => {
-              const provider = {
-                page: values.pages?.[WIDGET_PAGE_KEY],
-                settings_ui: {
-                  setup_fields: values.settings_ui?.setup_fields?.[WIDGET_PAGE_KEY],
-                },
-              };
-              await apiFetch(`/api/widget-templates/${policyTemplateId}/chat-policy`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ provider }),
-              });
-            },
-          }
-        : undefined,
-    [policyTemplateId]
-  );
+  useEffect(() => {
+    if (!policyTemplateId) {
+      setPolicyValue(null);
+      setPolicyLoading(false);
+      return;
+    }
+    let active = true;
+    setPolicyLoading(true);
+    apiFetch<{ provider?: ConversationFeaturesProviderShape | null }>(
+      `/api/widget-templates/${policyTemplateId}/chat-policy`
+    )
+      .then((res) => {
+        if (!active) return;
+        setPolicyValue(res.provider || null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPolicyValue(null);
+      })
+      .finally(() => {
+        if (!active) return;
+        setPolicyLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [policyTemplateId, policyRefreshNonce]);
+
+  const handleRefresh = useCallback(async () => {
+    await loadTemplates();
+    await loadDependencies();
+    setPolicyRefreshNonce((prev) => prev + 1);
+    setPreviewInitNonce((prev) => prev + 1);
+  }, [loadDependencies, loadTemplates]);
+
+  const handlePolicySave = useCallback(async () => {
+    if (!policyTemplateId) return;
+    setPolicySaving(true);
+    try {
+      if (draft) {
+        const res = await apiFetch<{ item: TemplateItem }>(`/api/widget-templates/${policyTemplateId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: draft.name,
+            is_active: draft.is_active !== false,
+          }),
+        });
+        setTemplates((prev) => prev.map((item) => (item.id === res.item.id ? res.item : item)));
+        setDraft(res.item);
+      }
+      let mergedPolicy = policyValue || null;
+      if (draft) {
+        const normalizedSetup: WidgetSetupConfig = {
+          ...setupConfig,
+          ...(draft.agent_id ? { agent_id: draft.agent_id } : {}),
+        };
+        mergedPolicy = setPolicyWidgetTheme(mergedPolicy, draft.theme || {});
+        mergedPolicy = setPolicyWidgetSetupConfig(mergedPolicy, normalizedSetup);
+        mergedPolicy = setPolicyWidgetAccess(mergedPolicy, {
+          allowed_domains: normalizeListInput(domainText),
+          allowed_paths: normalizeListInput(pathText),
+        });
+      }
+      mergedPolicy = withNullFeatureDefaults(mergedPolicy, WIDGET_PAGE_KEY);
+      await apiFetch(`/api/widget-templates/${policyTemplateId}/chat-policy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: mergedPolicy }),
+      });
+    } finally {
+      setPolicySaving(false);
+    }
+  }, [policyTemplateId, policyValue, draft, setupConfig, domainText, pathText]);
 
   if (adminReady && !isAdmin) {
     return (
@@ -414,35 +674,159 @@ export default function ConversationWidgetPage() {
             <div className="text-lg font-semibold text-slate-900">위젯 관리 (Conversation)</div>
             <div className="text-xs text-slate-500">템플릿을 관리하고 설치 코드를 생성합니다.</div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => void loadTemplates()} disabled={loading}>
-              새로고침
-            </Button>
-            <Button type="button" onClick={handleCreate} disabled={loading}>
-              새 템플릿
-            </Button>
-          </div>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
-          <Card className="p-3 space-y-2">
-            <div className="text-xs font-semibold text-slate-600">템플릿</div>
-            {templates.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setSelectedId(item.id)}
-                className={`w-full rounded-lg border px-3 py-2 text-left text-xs ${
-                  item.id === selectedId
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-400"
-                }`}
-              >
-                <div className="font-semibold">{item.name || item.id}</div>
-                <div className="text-[10px] opacity-70">{item.public_key || "-"}</div>
-              </button>
-            ))}
-            {templates.length === 0 ? <div className="text-xs text-slate-400">템플릿이 없습니다.</div> : null}
+        <div className="mt-6 grid grid-cols-1 gap-4">
+          <Card className="p-0">
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <div className="text-sm font-semibold text-slate-900">템플릿</div>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => void handleRefresh()}
+                  disabled={loading}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="새로고침"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleCreate()}
+                  disabled={loading}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600 hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-50"
+                  aria-label="새 템플릿"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            {templates.length === 0 ? <div className="p-4 text-xs text-slate-400">템플릿이 없습니다.</div> : null}
+            {templates.length > 0 ? (
+              <ul className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_max-content] gap-x-0 divide-y divide-slate-200">
+                <li className="contents">
+                  <span className="flex min-h-[40px] items-center px-4 py-2 text-left text-[11px] font-semibold text-slate-500">
+                    Widget
+                  </span>
+                  <span className="flex min-h-[40px] items-center px-4 py-2 text-left text-[11px] font-semibold text-slate-500">
+                    Agent
+                  </span>
+                  <span className="flex min-h-[40px] items-center px-4 py-2 text-left text-[11px] font-semibold text-slate-500">
+                    KB
+                  </span>
+                  <span className="flex min-h-[40px] items-center px-0 py-2 text-left text-[11px] font-semibold text-slate-500" />
+                </li>
+                <li className="col-span-full border-b border-slate-200" />
+                {templates.map((item) => {
+                  const isSelected = item.id === selectedId;
+                  const agent = item.agent_id ? agentsById.get(item.agent_id) : null;
+                  const kb = agent?.kb_id ? kbById.get(agent.kb_id) : null;
+                  const cellBase =
+                    "flex min-h-[44px] items-center px-4 py-3 text-left text-xs text-slate-700";
+                  const cellSelected = "hover:bg-slate-50";
+                  return (
+                    <li
+                      key={item.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedId(item.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          setSelectedId(item.id);
+                        }
+                      }}
+                      className="contents cursor-pointer"
+                    >
+                      <div className={`${cellBase} ${cellSelected}`}>
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleCopy(item.id);
+                          }}
+                          title="클릭하여 위젯 ID 복사"
+                          className="inline-flex min-w-0 items-center gap-2 truncate text-left font-semibold text-slate-900 hover:underline cursor-copy"
+                        >
+                          <StatusDot active={item.is_active} />
+                          {item.name || item.id}
+                        </button>
+                      </div>
+                      <div className={`${cellBase} ${cellSelected}`}>
+                        {agent ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleCopy(agent.id);
+                            }}
+                            title="클릭하여 agent_id 복사"
+                            className="inline-flex min-w-0 items-center gap-2 truncate text-left font-medium text-slate-800 hover:underline cursor-copy"
+                          >
+                            <StatusDot active={agent.is_active} />
+                            {agent.name || agent.id}
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </div>
+                      <div className={`${cellBase} ${cellSelected}`}>
+                        {kb ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleCopy(kb.id);
+                            }}
+                            title="클릭하여 KB ID 복사"
+                            className="inline-flex min-w-0 items-center gap-2 truncate text-left font-medium text-slate-800 hover:underline cursor-copy"
+                          >
+                            <StatusDot active={kb.is_active} />
+                            {kb.title}
+                          </button>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
+                      </div>
+                      <div className={`${cellBase} ${cellSelected} px-0 pr-4`}>
+                        {isSelected ? (
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                if (isDirty) void handleSave();
+                              }}
+                              disabled={!draft || loading || !isDirty}
+                              aria-label={isDirty ? "저장" : "수정"}
+                              className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border text-slate-700 ${
+                                isDirty
+                                  ? "border-amber-300 bg-amber-300 text-amber-950 hover:bg-amber-400"
+                                  : "border-slate-200 bg-white text-slate-500"
+                              } disabled:cursor-not-allowed disabled:opacity-60`}
+                            >
+                              {isDirty ? <Save className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void handleDelete();
+                              }}
+                              disabled={!draft || loading}
+                              aria-label="삭제"
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-white text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : null}
           </Card>
 
           <div className="space-y-4">
@@ -450,7 +834,6 @@ export default function ConversationWidgetPage() {
               <div className="flex flex-wrap gap-2 text-xs">
                 {[
                   { key: "base", label: "기본" },
-                  { key: "setup", label: "구성" },
                   { key: "policy", label: "대화 정책" },
                   { key: "preview", label: "미리보기" },
                   { key: "install", label: "설치 코드" },
@@ -465,26 +848,28 @@ export default function ConversationWidgetPage() {
                     {tab.label}
                   </Button>
                 ))}
-                <div className="ml-auto flex items-center gap-2">
-                  <Button type="button" variant="outline" onClick={handleSave} disabled={!draft || loading}>
-                    저장
-                  </Button>
-                  <Button type="button" variant="outline" onClick={handleDelete} disabled={!draft || loading}>
-                    삭제
-                  </Button>
-                </div>
               </div>
             </Card>
 
             {draft && activeTab === "base" ? (
               <Card className="p-4 space-y-3">
                 <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">템플릿 이름</div>
+                  <div className="mb-1 text-xs text-slate-600">B_chat_widgets.name</div>
                   <Input
                     value={draft.name || ""}
                     onChange={(e) => setDraft((prev) => (prev ? { ...prev, name: e.target.value } : prev))}
                     className="h-9"
                   />
+                </label>
+                <label className="flex items-center gap-2 text-xs text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={draft.is_active !== false}
+                    onChange={(e) =>
+                      setDraft((prev) => (prev ? { ...prev, is_active: e.target.checked } : prev))
+                    }
+                  />
+                  B_chat_widgets.is_active
                 </label>
                 <label className="block">
                   <div className="mb-1 text-xs text-slate-600">에이전트</div>
@@ -494,11 +879,155 @@ export default function ConversationWidgetPage() {
                     onChange={(value) => setDraft((prev) => (prev ? { ...prev, agent_id: value } : prev))}
                     className="w-full"
                     buttonClassName="h-9 text-xs"
+                    renderOption={(option) => (
+                      <div className="flex items-center w-full gap-2">
+                        <StatusDot active={option.description === "active"} />
+                        <div className="min-w-0 text-left">
+                          <div className="truncate text-slate-900">{option.label}</div>
+                        </div>
+                      </div>
+                    )}
                   />
                   <div className="mt-1 text-[11px] text-slate-500">
                     에이전트를 선택하면 MCP/KB 설정은 에이전트 설정을 사용합니다.
                   </div>
                 </label>
+                <div className="space-y-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-xs font-semibold text-slate-700">구성 (에이전트 하위)</div>
+                  {draft.agent_id ? (
+                    <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600">
+                      에이전트가 선택되어 있으므로 MCP/KB 설정은 비활성화됩니다.
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="text-xs font-semibold text-slate-700">LLM 기본값</div>
+                        <div className="mt-2 flex gap-2">
+                          {["chatgpt", "gemini"].map((id) => (
+                            <button
+                              key={id}
+                              type="button"
+                              onClick={() =>
+                                setSetupConfig((prev) => ({ ...prev, llm: { ...(prev.llm || {}), default: id } }))
+                              }
+                              className={`rounded-full border px-3 py-1 text-xs ${
+                                setupConfig.llm?.default === id
+                                  ? "border-slate-900 bg-slate-900 text-white"
+                                  : "border-slate-200 bg-white text-slate-600"
+                              }`}
+                            >
+                              {id}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-slate-700">KB 모드</div>
+                        <div className="mt-2 flex gap-2">
+                          {(
+                            [
+                              { key: "inline", label: "사용자 입력 KB" },
+                              { key: "select", label: "KB 선택" },
+                            ] as const
+                          ).map((item) => (
+                            <button
+                              key={item.key}
+                              type="button"
+                              onClick={() =>
+                                setSetupConfig((prev) => ({ ...prev, kb: { ...(prev.kb || {}), mode: item.key } }))
+                              }
+                              className={`rounded-full border px-3 py-1 text-xs ${
+                                setupConfig.kb?.mode === item.key
+                                  ? "border-slate-900 bg-slate-900 text-white"
+                                  : "border-slate-200 bg-white text-slate-600"
+                              }`}
+                            >
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {setupConfig.kb?.mode === "select" ? (
+                        <div className="space-y-3">
+                          <label className="block">
+                            <div className="mb-1 text-xs text-slate-600">사용자 KB</div>
+                            <SelectPopover
+                              value={setupConfig.kb?.kb_id || ""}
+                              options={userKbOptions}
+                              onChange={(value) =>
+                                setSetupConfig((prev) => ({
+                                  ...prev,
+                                  kb: { ...(prev.kb || {}), kb_id: value },
+                                }))
+                              }
+                              className="w-full"
+                              buttonClassName="h-9 text-xs"
+                            />
+                          </label>
+                          <label className="block">
+                            <div className="mb-1 text-xs text-slate-600">관리자 KB</div>
+                            <MultiSelectPopover
+                              values={setupConfig.kb?.admin_kb_ids || []}
+                              onChange={(values) =>
+                                setSetupConfig((prev) => ({
+                                  ...prev,
+                                  kb: { ...(prev.kb || {}), admin_kb_ids: values },
+                                }))
+                              }
+                              options={adminKbOptions}
+                              placeholder="관리자 KB 선택"
+                              displayMode="count"
+                              showBulkActions
+                              className="w-full"
+                              buttonClassName="h-9 text-xs"
+                            />
+                          </label>
+                        </div>
+                      ) : null}
+                      <div>
+                        <div className="text-xs font-semibold text-slate-700">MCP Provider</div>
+                        <div className="mt-2">
+                          <MultiSelectPopover
+                            values={setupConfig.mcp?.provider_keys || []}
+                            onChange={(values) =>
+                              setSetupConfig((prev) => ({
+                                ...prev,
+                                mcp: { ...(prev.mcp || {}), provider_keys: values },
+                              }))
+                            }
+                            options={providerOptions}
+                            placeholder="MCP Provider 선택"
+                            displayMode="count"
+                            showBulkActions
+                            className="w-full"
+                            buttonClassName="h-9 text-xs"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-slate-700">MCP Tool</div>
+                        <div className="mt-2">
+                          <MultiSelectPopover
+                            values={setupConfig.mcp?.tool_ids || []}
+                            onChange={(values) =>
+                              setSetupConfig((prev) => ({
+                                ...prev,
+                                mcp: { ...(prev.mcp || {}), tool_ids: values },
+                              }))
+                            }
+                            options={mcpToolOptions}
+                            placeholder="MCP Tool 선택"
+                            displayMode="count"
+                            showBulkActions
+                            searchable
+                            className="w-full"
+                            buttonClassName="h-9 text-xs"
+                          />
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
                 <label className="block">
                   <div className="mb-1 text-xs text-slate-600">허용 도메인 (줄바꿈)</div>
                   <textarea
@@ -555,185 +1084,71 @@ export default function ConversationWidgetPage() {
                     className="h-9"
                   />
                 </label>
-              </Card>
-            ) : null}
-
-            {draft && activeTab === "setup" ? (
-              <Card className="p-4 space-y-4">
-                {draft.agent_id ? (
-                  <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                    에이전트가 선택되어 있으므로 MCP/KB 설정은 비활성화됩니다.
-                  </div>
-                ) : (
-                  <>
-                    <div>
-                      <div className="text-xs font-semibold text-slate-700">LLM 기본값</div>
-                      <div className="mt-2 flex gap-2">
-                        {["chatgpt", "gemini"].map((id) => (
-                          <button
-                            key={id}
-                            type="button"
-                            onClick={() =>
-                              setSetupConfig((prev) => ({ ...prev, llm: { ...(prev.llm || {}), default: id } }))
-                            }
-                            className={`rounded-full border px-3 py-1 text-xs ${
-                              setupConfig.llm?.default === id
-                                ? "border-slate-900 bg-slate-900 text-white"
-                                : "border-slate-200 bg-white text-slate-600"
-                            }`}
-                          >
-                            {id}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-slate-700">KB 모드</div>
-                      <div className="mt-2 flex gap-2">
-                        {(
-                          [
-                            { key: "inline", label: "사용자 입력 KB" },
-                            { key: "select", label: "KB 선택" },
-                          ] as const
-                        ).map((item) => (
-                          <button
-                            key={item.key}
-                            type="button"
-                            onClick={() =>
-                              setSetupConfig((prev) => ({ ...prev, kb: { ...(prev.kb || {}), mode: item.key } }))
-                            }
-                            className={`rounded-full border px-3 py-1 text-xs ${
-                              setupConfig.kb?.mode === item.key
-                                ? "border-slate-900 bg-slate-900 text-white"
-                                : "border-slate-200 bg-white text-slate-600"
-                            }`}
-                          >
-                            {item.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    {setupConfig.kb?.mode === "select" ? (
-                      <div className="space-y-3">
-                        <label className="block">
-                          <div className="mb-1 text-xs text-slate-600">사용자 KB</div>
-                          <SelectPopover
-                            value={setupConfig.kb?.kb_id || ""}
-                            options={userKbOptions}
-                            onChange={(value) =>
-                              setSetupConfig((prev) => ({
-                                ...prev,
-                                kb: { ...(prev.kb || {}), kb_id: value },
-                              }))
-                            }
-                            className="w-full"
-                            buttonClassName="h-9 text-xs"
-                          />
-                        </label>
-                        <div>
-                          <div className="mb-1 text-xs text-slate-600">관리자 KB</div>
-                          <div className="flex flex-wrap gap-2">
-                            {adminKbOptions.map((kb) => (
-                              <button
-                                key={kb.id}
-                                type="button"
-                                onClick={() =>
-                                  setSetupConfig((prev) => ({
-                                    ...prev,
-                                    kb: {
-                                      ...(prev.kb || {}),
-                                      admin_kb_ids: toggleArrayValue(prev.kb?.admin_kb_ids || [], kb.id),
-                                    },
-                                  }))
-                                }
-                                className={`rounded-full border px-3 py-1 text-xs ${
-                                  (setupConfig.kb?.admin_kb_ids || []).includes(kb.id)
-                                    ? "border-emerald-500 bg-emerald-500 text-white"
-                                    : "border-slate-200 bg-white text-slate-600"
-                                }`}
-                              >
-                                {kb.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                    <div>
-                      <div className="text-xs font-semibold text-slate-700">MCP Provider</div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {providerKeys.map((key) => (
-                          <button
-                            key={key}
-                            type="button"
-                            onClick={() =>
-                              setSetupConfig((prev) => ({
-                                ...prev,
-                                mcp: {
-                                  ...(prev.mcp || {}),
-                                  provider_keys: toggleArrayValue(prev.mcp?.provider_keys || [], key),
-                                },
-                              }))
-                            }
-                            className={`rounded-full border px-3 py-1 text-xs ${
-                              (setupConfig.mcp?.provider_keys || []).includes(key)
-                                ? "border-blue-600 bg-blue-600 text-white"
-                                : "border-slate-200 bg-white text-slate-600"
-                            }`}
-                          >
-                            {key}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-xs font-semibold text-slate-700">MCP Tool</div>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {mcpTools.map((tool) => (
-                          <button
-                            key={tool.id}
-                            type="button"
-                            onClick={() =>
-                              setSetupConfig((prev) => ({
-                                ...prev,
-                                mcp: {
-                                  ...(prev.mcp || {}),
-                                  tool_ids: toggleArrayValue(prev.mcp?.tool_ids || [], tool.id),
-                                },
-                              }))
-                            }
-                            className={`rounded-full border px-3 py-1 text-xs ${
-                              (setupConfig.mcp?.tool_ids || []).includes(tool.id)
-                                ? "border-purple-600 bg-purple-600 text-white"
-                                : "border-slate-200 bg-white text-slate-600"
-                            }`}
-                          >
-                            {tool.name}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </>
-                )}
+                <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-xs font-semibold text-slate-700">대화 정책 (전체)</div>
+                  <ChatSettingsPanel
+                    value={policyValue}
+                    onChange={setPolicyValue}
+                    pageScope={[WIDGET_PAGE_KEY]}
+                    variant="base"
+                    agents={editableAgents}
+                    hiddenLabels={["widget.name"]}
+                    preserveNulls
+                  />
+                </div>
               </Card>
             ) : null}
 
             {draft && activeTab === "policy" ? (
-              <ChatSettingsPanel
-                key={policyTemplateId || "policy-empty"}
-                authToken={authToken}
-                dataSource={policyDataSource}
-                title="대화 설정 관리 (위젯 템플릿)"
-                description="선택한 위젯 템플릿에만 적용되는 대화 정책을 편집합니다."
-                visiblePages={[WIDGET_PAGE_KEY]}
-                showRegisteredPages={false}
-              />
+              <div className="space-y-3">
+                <Card className="p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-semibold text-slate-900">대화 정책 (dup)</div>
+                      <div className="text-[11px] text-slate-500">
+                        docs/guide/ref/conversation 기준 UI
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handlePolicySave()}
+                      disabled={!policyTemplateId || policyLoading || policySaving}
+                    >
+                      {policySaving ? "저장 중..." : "정책 저장"}
+                    </Button>
+                  </div>
+                  {draft ? null : null}
+                </Card>
+                {policyLoading ? (
+                  <Card className="p-4 text-xs text-slate-500">정책을 불러오는 중...</Card>
+                ) : (
+                  <ChatSettingsPanel
+                    value={policyValue}
+                    onChange={setPolicyValue}
+                    pageScope={[WIDGET_PAGE_KEY]}
+                    agents={editableAgents}
+                    hiddenLabels={["widget.name"]}
+                    widgetNameValue={draft?.name ?? ""}
+                    onWidgetNameChange={(next) =>
+                      setDraft((prev) => (prev ? { ...prev, name: next } : prev))
+                    }
+                    widgetNameLabel="B_chat_widgets.name"
+                    widgetActiveValue={draft?.is_active ?? null}
+                    onWidgetActiveChange={(next) =>
+                      setDraft((prev) => (prev ? { ...prev, is_active: next } : prev))
+                    }
+                    widgetActiveLabel="B_chat_widgets.is_active"
+                    preserveNulls
+                  />
+                )}
+              </div>
             ) : null}
 
             {draft && activeTab === "preview" ? (
               <div className="space-y-4">
                 <Card className="p-4 space-y-3">
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3">
                     <label className="block">
                       <div className="mb-1 text-xs text-slate-600">Origin</div>
                       <Input
@@ -765,20 +1180,35 @@ export default function ConversationWidgetPage() {
                   <Button type="button" variant="outline" onClick={handlePreview}>
                     미리보기 적용
                   </Button>
+                  {templatePreviewUrl ? (
+                    <div className="text-xs text-slate-600">
+                      위젯 UI 링크:
+                      <a
+                        href={templatePreviewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="ml-2 break-all text-sky-600 hover:underline"
+                      >
+                        {templatePreviewUrl}
+                      </a>
+                    </div>
+                  ) : null}
                 </Card>
 
                 <Card className="p-4 space-y-3">
                   <div className="text-xs font-semibold text-slate-700">런처 위치 프리뷰</div>
                   <div className="relative h-[260px] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
                     <div ref={setPreviewHost} className="absolute inset-0" />
-                    {previewHost && draft.public_key ? (
+                    {previewHost && previewKey ? (
                       <WidgetLauncherRuntime
                         cfg={{ overrides: installOverrides }}
                         baseUrl={typeof window !== "undefined" ? window.location.origin : ""}
-                        publicKey={draft.public_key}
+                        publicKey={previewKey}
+                        templateId={previewTemplateId || undefined}
+                        previewMode
                         visitorId="preview"
                         sessionId=""
-                        sessionStorageKey={`preview_${draft.public_key}`}
+                        sessionStorageKey={`preview_${previewKey}`}
                         position="bottom-right"
                         brandName={draft.name || "Mejai"}
                         launcherLabel="💬"
@@ -807,7 +1237,7 @@ export default function ConversationWidgetPage() {
                     <span>위젯 UI 3분할 프리뷰</span>
                     <span className="text-[11px] font-normal text-slate-500">chat / list / policy</span>
                   </div>
-                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+                  <div className="grid grid-cols-1 gap-3">
                     {([
                       { tab: "chat", label: "Conversation" },
                       { tab: "list", label: "List" },
@@ -816,9 +1246,9 @@ export default function ConversationWidgetPage() {
                       <div key={panel.tab} className="space-y-2">
                         <div className="text-[11px] font-semibold text-slate-600">{panel.label}</div>
                         <div className="h-[560px] w-full overflow-hidden rounded-xl border border-slate-200 bg-white">
-                          {draft.public_key ? (
+                          {previewKey ? (
                             <iframe
-                              key={`${draft.public_key}-${panel.tab}-${previewInitNonce}`}
+                              key={`${previewKey}-${panel.tab}-${previewInitNonce}`}
                               title={`Widget ${panel.label} Preview`}
                               src={buildPreviewSrc(panel.tab)}
                               className="h-full w-full"

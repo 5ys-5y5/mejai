@@ -29,20 +29,19 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const { data: widget } = await supabaseAdmin
-    .from("B_chat_widgets")
-    .select("id, org_id, is_active")
+  const { data: instance } = await supabaseAdmin
+    .from("B_chat_widget_instances")
+    .select("id, is_active")
     .eq("id", payload.widget_id)
     .maybeSingle();
-  if (!widget || !widget.is_active) {
+  if (!instance || !instance.is_active) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
 
   const { data, error } = await supabaseAdmin
     .from("D_conv_sessions")
     .select("id, session_code, started_at, metadata")
-    .eq("org_id", widget.org_id)
-    .contains("metadata", { visitor_id: visitorId, widget_id: widget.id })
+    .contains("metadata", { visitor_id: visitorId, widget_instance_id: instance.id })
     .order("started_at", { ascending: false })
     .limit(40);
 

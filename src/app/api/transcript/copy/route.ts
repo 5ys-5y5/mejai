@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { appendFile, mkdir } from "node:fs/promises";
+import path from "node:path";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { getServerContext } from "@/lib/serverAuth";
 import { verifyWidgetToken } from "@/lib/widgetToken";
@@ -14,6 +16,7 @@ import { mapRuntimeResponseToTranscriptFields, type RuntimeRunResponseLike } fro
 
 const TRANSCRIPT_SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
 const WIDGET_PROXY_EVENT_PREFIX = "WIDGET_RUNTIME_PROXY_";
+const WIDGET_CHAT_ERROR_EVENT = "WIDGET_CHAT_ERROR";
 
 type CopyRequestBody = {
   session_id?: string;
@@ -33,6 +36,33 @@ type TurnRow = {
 };
 
 type LogsByTurn = Map<string, LogBundle>;
+
+function formatLogSuffix(now = new Date()) {
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const hh = String(now.getHours()).padStart(2, "0");
+  const min = String(now.getMinutes()).padStart(2, "0");
+  return `bot-${yyyy}${mm}${dd}-${hh}${min}`;
+}
+
+async function appendServicePageLog(input: {
+  transcriptText: string;
+  sessionId: string;
+  page: string;
+  kind: string;
+  failureReason?: string | null;
+}) {
+  if (process.env.NODE_ENV === "production") return;
+  const suffix = formatLogSuffix();
+  const logPath = path.join(process.cwd(), "docs", "logs", `servicePageLog(${suffix}).md`);
+  await mkdir(path.dirname(logPath), { recursive: true });
+  const header = `SESSION_ID: ${input.sessionId}\nPAGE: ${input.page}\nKIND: ${input.kind}`;
+  const failure = input.failureReason ? `\nFAIL_REASON: ${input.failureReason}` : "";
+  const body = String(input.transcriptText || "").trim() || "(empty transcript)";
+  const entry = `\n\n${header}${failure}\n\n${body}\n`;
+  await appendFile(logPath, entry, { encoding: "utf-8" });
+}
 
 function parsePageKey(value: unknown): ConversationPageKey {
   const pageKey = String(value || "").trim();
@@ -197,18 +227,28 @@ export async function POST(req: NextRequest) {
       );
     }
     supabase = supabaseAdmin;
-    const { data: widget } = await supabaseAdmin
-      .from("B_chat_widgets")
-      .select("id, org_id, is_active")
+    const { data: instance } = await supabaseAdmin
+      .from("B_chat_widget_instances")
+      .select("id, template_id, is_active, is_public")
       .eq("id", widgetPayload.widget_id)
       .maybeSingle();
-    if (!widget || !widget.is_active) {
+    if (!instance || !instance.is_active) {
       return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
     }
-    orgId = String(widget.org_id || "");
-    if (!orgId) {
-      return NextResponse.json({ error: "ORG_NOT_FOUND" }, { status: 404 });
+
+    const { data: template } = await supabaseAdmin
+      .from("B_chat_widgets")
+      .select("id, is_active, is_public, created_by")
+      .eq("id", instance.template_id)
+      .maybeSingle();
+    if (!template || !template.is_active) {
+      return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
     }
+    if (!template.is_public || !instance.is_public) {
+      return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+    }
+
+    orgId = template.created_by ? String(template.created_by) : String(widgetPayload.org_id || "") || null;
 
     if (sessionOverride && !widgetPayload.visitor_id && sessionOverride !== String(widgetPayload.session_id || "")) {
       return NextResponse.json({ error: "VISITOR_ID_REQUIRED" }, { status: 403 });
@@ -218,14 +258,13 @@ export async function POST(req: NextRequest) {
       .from("D_conv_sessions")
       .select("id, org_id, metadata")
       .eq("id", sessionOverride)
-      .eq("org_id", orgId)
       .maybeSingle();
     if (!session) {
       return NextResponse.json({ error: "SESSION_NOT_FOUND" }, { status: 404 });
     }
 
     const metadata = session.metadata && typeof session.metadata === "object" ? (session.metadata as Record<string, any>) : null;
-    const metadataWidgetId = metadata ? String(metadata.widget_id || "").trim() : "";
+    const metadataWidgetId = metadata ? String(metadata.widget_instance_id || metadata.widget_id || "").trim() : "";
     if (metadataWidgetId && metadataWidgetId !== String(widgetPayload.widget_id)) {
       return NextResponse.json({ error: "SESSION_WIDGET_MISMATCH" }, { status: 403 });
     }
@@ -236,14 +275,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "SESSION_VISITOR_MISMATCH" }, { status: 403 });
     }
     sessionId = sessionOverride;
-    const { data: settings } = await supabaseAdmin
-      .from("A_iam_auth_settings")
-      .select("providers")
-      .eq("org_id", orgId)
-      .is("user_id", null)
-      .maybeSingle();
-    const providers = (settings?.providers || {}) as Record<string, ConversationFeaturesProviderShape | undefined>;
-    providerValue = providers.chat_policy || null;
+    if (orgId) {
+      const { data: settings } = await supabaseAdmin
+        .from("A_iam_auth_settings")
+        .select("providers")
+        .eq("org_id", orgId)
+        .is("user_id", null)
+        .maybeSingle();
+      const providers = (settings?.providers || {}) as Record<string, ConversationFeaturesProviderShape | undefined>;
+      providerValue = providers.chat_policy || null;
+    }
     filterWidgetProxyEvents = true;
   } else {
     const cookieHeader = req.headers.get("cookie") || "";
@@ -276,7 +317,10 @@ export async function POST(req: NextRequest) {
     providerValue = providers.chat_policy || null;
   }
 
-  if (!supabase || !orgId) {
+  if (!supabase) {
+    return NextResponse.json({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 });
+  }
+  if (!orgId && !widgetPayload) {
     return NextResponse.json({ error: "AUTH_CONTEXT_MISSING" }, { status: 401 });
   }
 
@@ -291,19 +335,21 @@ export async function POST(req: NextRequest) {
   }
 
   const [mcpRes, eventRes, debugRes] = await Promise.all([
-    fetchAllRows(
-      async (from, to) =>
-        await supabase!
-          .from("F_audit_mcp_tools")
-          .select(
-            "id, tool_name, tool_version, status, request_payload, response_payload, policy_decision, latency_ms, created_at, session_id, turn_id"
-          )
-          .eq("org_id", orgId)
-          .eq("session_id", sessionId)
-          .order("created_at", { ascending: false })
-          .range(from, to),
-      limit
-    ),
+    orgId
+      ? fetchAllRows(
+          async (from, to) =>
+            await supabase!
+              .from("F_audit_mcp_tools")
+              .select(
+                "id, tool_name, tool_version, status, request_payload, response_payload, policy_decision, latency_ms, created_at, session_id, turn_id"
+              )
+              .eq("org_id", orgId)
+              .eq("session_id", sessionId)
+              .order("created_at", { ascending: false })
+              .range(from, to),
+          limit
+        )
+      : Promise.resolve({ data: [] as any[], error: null }),
     fetchAllRows(
       async (from, to) =>
         await supabase!
@@ -369,6 +415,38 @@ export async function POST(req: NextRequest) {
     kind === "issue"
       ? buildIssueTranscript({ messages, messageLogs })
       : buildDebugTranscript({ messages, messageLogs, options: debugOptions });
+
+  let failureReason: string | null = null;
+  if (!transcriptText.trim()) {
+    failureReason = "NO_TURNS";
+    try {
+      const { data: errorRows } = await supabase
+        .from("F_audit_events")
+        .select("payload, created_at")
+        .eq("session_id", sessionId)
+        .eq("event_type", WIDGET_CHAT_ERROR_EVENT)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const errorPayload = (errorRows && errorRows[0]?.payload) || null;
+      if (errorPayload && typeof errorPayload === "object") {
+        const reason = String((errorPayload as Record<string, any>).error || "").trim();
+        if (reason) failureReason = reason;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  try {
+    await appendServicePageLog({
+      transcriptText,
+      sessionId,
+      page,
+      kind,
+      failureReason,
+    });
+  } catch {
+    // ignore local log errors
+  }
 
   return NextResponse.json({
     ok: true,

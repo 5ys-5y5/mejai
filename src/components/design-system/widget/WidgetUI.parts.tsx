@@ -357,6 +357,7 @@ export type WidgetLauncherRuntimeConfig = {
   cfg: Record<string, any>;
   baseUrl: string;
   publicKey: string;
+  templateId?: string;
   visitorId: string;
   sessionId: string;
   sessionStorageKey: string;
@@ -364,6 +365,7 @@ export type WidgetLauncherRuntimeConfig = {
   brandName: string;
   launcherLabel: string;
   mountNode: HTMLElement;
+  previewMode?: boolean;
   previewMeta?: {
     origin?: string;
     page_url?: string;
@@ -426,7 +428,8 @@ export function buildWidgetEmbedSrc(
     page_url?: string;
     referrer?: string;
   },
-  tab?: WidgetConversationTab
+  tab?: WidgetConversationTab,
+  options?: { preview?: boolean }
 ) {
   let src = `${baseUrl}/embed/${encodeURIComponent(publicKey)}?vid=${encodeURIComponent(visitorId)}`;
   if (sessionId) {
@@ -446,6 +449,9 @@ export function buildWidgetEmbedSrc(
   if (tab) {
     src += `&tab=${encodeURIComponent(tab)}`;
   }
+  if (options?.preview) {
+    src += `&preview=1`;
+  }
   return src;
 }
 
@@ -453,6 +459,7 @@ export function WidgetLauncherRuntime({
   cfg,
   baseUrl,
   publicKey,
+  templateId,
   visitorId,
   sessionId,
   sessionStorageKey,
@@ -460,6 +467,7 @@ export function WidgetLauncherRuntime({
   brandName,
   launcherLabel,
   mountNode,
+  previewMode,
   previewMeta,
   defaultOpen = false,
   layout,
@@ -499,8 +507,20 @@ export function WidgetLauncherRuntime({
   }, []);
 
   const iframeSrc = useMemo(
-    () => buildWidgetEmbedSrc(baseUrl, publicKey, visitorId, sessionIdRef.current, overridesParam, previewMeta),
-    [baseUrl, publicKey, visitorId, overridesParam, previewMeta?.origin, previewMeta?.page_url, previewMeta?.referrer]
+    () =>
+      buildWidgetEmbedSrc(baseUrl, publicKey, visitorId, sessionIdRef.current, overridesParam, previewMeta, undefined, {
+        preview: previewMode,
+      }),
+    [
+      baseUrl,
+      publicKey,
+      visitorId,
+      overridesParam,
+      previewMeta?.origin,
+      previewMeta?.page_url,
+      previewMeta?.referrer,
+      previewMode,
+    ]
   );
 
   const notify = (eventType: "open" | "close") => {
@@ -667,8 +687,8 @@ export function WidgetLauncherRuntime({
   useEffect(() => {
     try {
       const url = `${baseUrl}/api/widget/config?key=${encodeURIComponent(publicKey)}${
-        overridesParam ? `&ovr=${encodeURIComponent(overridesParam)}` : ""
-      }`;
+        templateId ? `&template_id=${encodeURIComponent(templateId)}` : ""
+      }${overridesParam ? `&ovr=${encodeURIComponent(overridesParam)}` : ""}`;
       fetch(url)
         .then((res) => {
           if (!res || !res.ok) return null;
@@ -687,7 +707,7 @@ export function WidgetLauncherRuntime({
     } catch {
       // ignore
     }
-  }, [baseUrl, publicKey, overridesParam]);
+  }, [baseUrl, publicKey, templateId, overridesParam]);
 
   const launcherBottom = isMobile ? "calc(16px + env(safe-area-inset-bottom))" : "24px";
   const launcherRight = isMobile ? "calc(16px + env(safe-area-inset-right))" : "24px";
@@ -753,7 +773,14 @@ export function mountWidgetLauncher() {
 
   const rawCfg = scopedWindow.mejaiWidget;
   const cfg = rawCfg && typeof rawCfg === "object" ? (rawCfg as Record<string, any>) : {};
-  const publicKey = (script && (script as HTMLScriptElement).dataset && (script as HTMLScriptElement).dataset.key) || cfg.key;
+  const scriptDataset = (script as HTMLScriptElement)?.dataset;
+  const templateId =
+    (scriptDataset && (scriptDataset as DOMStringMap).templateId) ||
+    String(cfg.template_id || cfg.templateId || "").trim();
+  const publicKey =
+    (scriptDataset && (scriptDataset as DOMStringMap).key) ||
+    cfg.key ||
+    (templateId ? templateId : "");
   if (!publicKey) return;
   const scriptOverrides = (script as HTMLScriptElement)?.dataset?.overrides;
   if (scriptOverrides && !cfg.overrides) {
@@ -810,6 +837,7 @@ export function mountWidgetLauncher() {
       cfg={cfg}
       baseUrl={baseUrl}
       publicKey={String(publicKey)}
+      templateId={templateId || undefined}
       visitorId={visitorId}
       sessionId={sessionId}
       sessionStorageKey={sessionStorageKey}

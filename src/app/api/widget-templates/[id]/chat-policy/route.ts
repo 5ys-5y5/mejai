@@ -5,6 +5,29 @@ import {
   normalizeWidgetChatPolicyProvider,
   normalizeWidgetChatPolicyRecordFromProvider,
 } from "@/lib/widgetChatPolicyShape";
+import {
+  getPolicyWidgetSetupConfig,
+  getPolicyWidgetTheme,
+  getPolicyWidgetAccess,
+  setPolicyWidgetSetupConfig,
+  setPolicyWidgetTheme,
+  setPolicyWidgetAccess,
+} from "@/lib/widgetPolicyUtils";
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function ensureTemplateWidgetFields(
+  provider: ReturnType<typeof normalizeWidgetChatPolicyProvider> | null,
+  template: { name?: string | null; is_active?: boolean | null }
+) {
+  const base = provider && isPlainObject(provider) ? provider : {};
+  const widget = isPlainObject((base as Record<string, unknown>).widget)
+    ? { ...((base as Record<string, unknown>).widget as Record<string, unknown>) }
+    : {};
+  return { ...(base as Record<string, unknown>), widget } as ReturnType<typeof normalizeWidgetChatPolicyProvider>;
+}
 
 function normalizeId(value: string | string[] | null | undefined) {
   if (Array.isArray(value)) return String(value[0] || "").trim();
@@ -47,9 +70,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   }
   const { data, error } = await context.supabase
     .from("B_chat_widgets")
-    .select("id, org_id, theme, chat_policy")
+    .select("id, name, is_active, chat_policy")
     .eq("id", templateId)
-    .eq("org_id", context.orgId)
     .maybeSingle();
 
   if (error) {
@@ -59,7 +81,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
 
-  const provider = normalizeWidgetChatPolicyProvider(data.chat_policy || null);
+  const baseProvider = normalizeWidgetChatPolicyProvider(data.chat_policy || null);
+  const withTemplate = ensureTemplateWidgetFields(
+    baseProvider,
+    data as { name?: string | null; is_active?: boolean | null }
+  );
+  const provider = normalizeWidgetChatPolicyProvider(withTemplate);
   return NextResponse.json({ provider });
 }
 
@@ -97,9 +124,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: existing, error: existingError } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, org_id, theme, chat_policy")
+    .select("id, name, is_active, chat_policy")
     .eq("id", templateId)
-    .eq("org_id", context.orgId)
     .maybeSingle();
 
   if (existingError) {
@@ -110,11 +136,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const provider = normalizeWidgetChatPolicyRecordFromProvider(body.provider || null);
+  const providerShape = normalizeWidgetChatPolicyProvider(provider);
+  const existingPolicy = normalizeWidgetChatPolicyProvider(existing.chat_policy || null);
+  const existingTheme = getPolicyWidgetTheme(existingPolicy);
+  const existingSetup = getPolicyWidgetSetupConfig(existingPolicy);
+  const existingAccess = getPolicyWidgetAccess(existingPolicy);
+  let mergedProvider = providerShape;
+  if (Object.keys(getPolicyWidgetTheme(providerShape)).length === 0 && Object.keys(existingTheme).length > 0) {
+    mergedProvider = setPolicyWidgetTheme(mergedProvider, existingTheme);
+  }
+  if (!getPolicyWidgetSetupConfig(providerShape) && existingSetup) {
+    mergedProvider = setPolicyWidgetSetupConfig(mergedProvider, existingSetup);
+  }
+  if (Object.keys(getPolicyWidgetAccess(providerShape)).length === 0 && Object.keys(existingAccess).length > 0) {
+    mergedProvider = setPolicyWidgetAccess(mergedProvider, existingAccess);
+  }
 
+  const safeProvider = providerShape || {};
   const { error } = await supabaseAdmin
     .from("B_chat_widgets")
     .update({
-      chat_policy: provider,
+      chat_policy: mergedProvider,
       updated_at: new Date().toISOString(),
     })
     .eq("id", templateId)

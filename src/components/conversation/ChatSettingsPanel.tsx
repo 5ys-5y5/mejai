@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
 import { CollapsibleSection } from "@/components/conversation/CollapsibleSection";
@@ -19,18 +19,14 @@ import {
   type FeatureVisibilityMode,
   type WidgetChatPolicyConfig,
 } from "@/lib/conversation/pageFeaturePolicy";
-import {
-  PREFIX_JSON_SECTIONS_TREE,
-  RENDER_PLAN_DETAIL_TREE,
-  RESPONSE_SCHEMA_DETAIL_TREE,
-  type DebugFieldTree,
-} from "@/lib/debugTranscriptToggle";
+// debug transcript policy UI removed
 
 export type ChatSettingsAgent = {
   id: string;
   name?: string | null;
   version?: string | null;
   is_active?: boolean | null;
+  llm?: string | null;
 };
 
 type GovernanceConfig = {
@@ -51,7 +47,18 @@ type ChatSettingsPanelProps = {
   showRegistryPanel?: boolean;
   includeHeaderColumn?: boolean;
   agents?: ChatSettingsAgent[];
+  hiddenLabels?: string[];
+  variant?: "policy" | "base";
+  preserveNulls?: boolean;
+  widgetActiveValue?: boolean | null;
+  onWidgetActiveChange?: (next: boolean) => void;
+  widgetActiveLabel?: string;
+  widgetNameValue?: string | null;
+  onWidgetNameChange?: (next: string) => void;
+  widgetNameLabel?: string;
 };
+
+const PanelVariantContext = createContext<"policy" | "base">("policy");
 
 type DraftState = {
   widget: WidgetChatPolicyConfig;
@@ -73,6 +80,7 @@ type RowProps = {
   ariaExpanded?: boolean;
   right?: ReactNode;
   alignTop?: boolean;
+  variant?: "policy" | "base";
 };
 
 const ENTRY_MODE_OPTIONS: SelectOption[] = [
@@ -92,15 +100,9 @@ const POSITION_OPTIONS: SelectOption[] = [
   { id: "bottom-right", label: "bottom-right" },
 ];
 
-const OUTPUT_MODE_OPTIONS: SelectOption[] = [
-  { id: "full", label: "full" },
-  { id: "summary", label: "summary" },
-  { id: "used_only", label: "used_only" },
-];
-
-const AUDIT_SCOPE_OPTIONS: SelectOption[] = [
-  { id: "runtime_turns_only", label: "runtime_turns_only" },
-  { id: "all_bot_messages", label: "all_bot_messages" },
+const KB_MODE_OPTIONS: SelectOption[] = [
+  { id: "inline", label: "inline" },
+  { id: "select", label: "select" },
 ];
 
 const DEFAULT_SETUP_MODE_OPTIONS: SelectOption[] = [
@@ -124,7 +126,17 @@ export function ChatSettingsPanel({
   pageScope,
   pageLabelOverride,
   agents,
+  hiddenLabels,
+  variant = "policy",
+  preserveNulls = false,
+  widgetActiveValue,
+  onWidgetActiveChange,
+  widgetActiveLabel,
+  widgetNameValue,
+  onWidgetNameChange,
+  widgetNameLabel,
 }: ChatSettingsPanelProps) {
+  const isBaseVariant = variant === "base";
   const pageKey = pageScope?.[0] || WIDGET_PAGE_KEY;
   const providerValue = useMemo(
     () => normalizeConversationFeatureProvider(value ?? null) ?? null,
@@ -134,14 +146,19 @@ export function ChatSettingsPanel({
   const buildDraft = useCallback(
     (provider: ConversationFeaturesProviderShape | null): DraftState => {
       const baseFeatures = getDefaultConversationPageFeatures(pageKey);
-      const mergedGlobal = mergeConversationPageFeatures(baseFeatures, provider?.features);
-      const features = mergeConversationPageFeatures(mergedGlobal, provider?.pages?.[pageKey]);
+      const rawPageFeatures = provider?.pages?.[pageKey] ?? provider?.features ?? {};
+      const features = preserveNulls
+        ? (fillWithNulls(baseFeatures, rawPageFeatures) as ConversationPageFeatures)
+        : mergeConversationPageFeatures(
+            mergeConversationPageFeatures(baseFeatures, provider?.features),
+            provider?.pages?.[pageKey]
+          );
       const widget = normalizeWidgetChatPolicyConfig(provider?.widget ?? null);
       const debug = provider?.debug ?? {};
       const setupUi = resolveConversationSetupUi(pageKey, provider || null);
       return { widget, features, debug, setupUi };
     },
-    [pageKey]
+    [pageKey, preserveNulls]
   );
 
   const [draft, setDraft] = useState<DraftState>(() => buildDraft(providerValue));
@@ -259,23 +276,33 @@ export function ChatSettingsPanel({
   const widget = draft.widget;
   const features = draft.features;
   const visibility = draft.features.visibility;
-  const debug = draft.debug;
   const setupUi = draft.setupUi;
+  const setupConfig = isObject(widget.setup_config) ? widget.setup_config : {};
+  const kbConfig = isObject(setupConfig.kb) ? setupConfig.kb : {};
+  const mcpConfig = isObject(setupConfig.mcp) ? setupConfig.mcp : {};
+  const llmConfig = isObject(setupConfig.llm) ? setupConfig.llm : {};
+  const hiddenLabelSet = useMemo(() => new Set(hiddenLabels || []), [hiddenLabels]);
+  const isHidden = useCallback((label: string) => hiddenLabelSet.has(label), [hiddenLabelSet]);
+  const showWidgetBasics =
+    !isHidden("widget.agent_id") ||
+    !isHidden("widget.entry_mode") ||
+    !isHidden("widget.embed_view");
+  const showThemeBasics = !isHidden("theme.greeting") || !isHidden("theme.input_placeholder");
+  const widgetActiveChecked = widgetActiveValue ?? true;
+  const handleWidgetActiveToggle = onWidgetActiveChange || (() => {});
 
   const agentOptions = useMemo<SelectOption[]>(() => {
     const base = (agents || []).map((agent) => {
       const versionLabel = agent.version ? `v${agent.version}` : "v-";
+      const llmLabel = (agent as { llm?: string | null }).llm ? (agent as { llm?: string | null }).llm : "llm-";
       const activeLabel = agent.is_active ? "active" : "inactive";
       return {
         id: agent.id,
-        label: `${agent.name || agent.id} ${versionLabel}`,
+        label: `${agent.name || agent.id} ${versionLabel} ${llmLabel}`,
         description: activeLabel,
       };
     });
-    const current = String(widget.agent_id || "").trim();
-    if (!current) return base;
-    if (base.some((opt) => opt.id === current)) return base;
-    return [{ id: current, label: `${current} (current)` }, ...base];
+    return base;
   }, [agents, widget.agent_id]);
 
   const updateWidget = (path: string[], value: unknown) =>
@@ -287,8 +314,6 @@ export function ChatSettingsPanel({
       ...current,
       features: setIn(current.features as any, ["visibility", ...path], value),
     }));
-  const updateDebug = (path: string[], value: unknown) =>
-    updateDraft((current) => ({ ...current, debug: setIn(current.debug as any, path, value) }));
   const updateSetupUi = (path: string[], value: unknown) =>
     updateDraft((current) => ({ ...current, setupUi: setIn(current.setupUi as any, path, value) }));
 
@@ -351,105 +376,228 @@ export function ChatSettingsPanel({
   const pageLabel = pageLabelOverride || pageKey;
 
   return (
-    <div className="space-y-4">
-      <ToggleRowGroup
-          label="widget.is_active"
-          checked={widget.is_active !== false}
-          onToggle={(next) => updateWidget(["is_active"], next)}
+    <PanelVariantContext.Provider value={variant}>
+      <div className="space-y-4">
+        <ToggleRowGroup
+          label={widgetActiveLabel || "B_chat_widgets.is_active"}
+          checked={widgetActiveChecked}
+          onToggle={handleWidgetActiveToggle}
           visibility={visibility.widget.launcher}
           onVisibilityChange={(mode) => updateVisibility(["widget", "launcher"], mode)}
+          variant={variant}
         >
           <div className="text-[11px] text-slate-600">false면 런처/임베드 모두 완전 숨김</div>
-          <RowGroup label="기본 세팅">
-            <Row
-              label="widget.name"
-              right={
-                <Input
-                  value={widget.name || ""}
-                  onChange={(event) => updateWidget(["name"], event.target.value)}
-                  className="h-7 w-[200px] text-[11px]"
+          {showWidgetBasics ? (
+            <RowGroup label="기본 세팅">
+              {onWidgetNameChange ? (
+                <Row
+                  label={widgetNameLabel || "B_chat_widgets.name"}
+                  variant={variant}
+                  right={
+                    <Input
+                      value={widgetNameValue || ""}
+                      onChange={(event) => onWidgetNameChange(event.target.value)}
+                      className="h-7 w-[200px] text-[11px]"
+                    />
+                  }
                 />
-              }
-            />
+              ) : null}
+              {isHidden("widget.agent_id") ? null : (
             <Row
               label="widget.agent_id"
+              variant={variant}
               right={
-                <SelectPopover
-                  value={widget.agent_id || ""}
-                  options={agentOptions}
-                  onChange={(value) => updateWidget(["agent_id"], value)}
-                  buttonClassName="h-7 text-[11px]"
-                  className="w-[200px]"
-                  searchable
-                  renderOption={(option, active) => (
-                    <div className="flex items-center w-full gap-2">
-                      {option.description ? (
-                        <span
-                          className={`inline-block h-[5px] w-[5px] rounded-full ${
-                            option.description === "active" ? "bg-emerald-500" : "bg-slate-400"
-                          }`}
-                        />
-                      ) : null}
-                      <div className="min-w-0 text-left">
-                        <div className="truncate text-slate-900">{option.label}</div>
-                      </div>
-                    </div>
-                  )}
+                    <SelectPopover
+                      value={widget.agent_id || ""}
+                      options={agentOptions}
+                      onChange={(value) => updateWidget(["agent_id"], value)}
+                      buttonClassName="h-7 text-[11px]"
+                      className="w-[200px]"
+                      searchable
+                      renderOption={(option, active) => (
+                        <div className="flex items-center w-full gap-2">
+                          {option.description ? (
+                            <span
+                              className={`inline-block h-[5px] w-[5px] rounded-full ${
+                                option.description === "active" ? "bg-emerald-500" : "bg-slate-400"
+                              }`}
+                            />
+                          ) : null}
+                          <div className="min-w-0 text-left">
+                            <div className="truncate text-slate-900">{option.label}</div>
+                          </div>
+                        </div>
+                      )}
+                    />
+                  }
                 />
-              }
-            />
+              )}
+              {isHidden("widget.entry_mode") ? null : (
             <Row
               label="widget.entry_mode"
+              variant={variant}
               right={
-                <SelectPopover
-                  value={widget.entry_mode || "launcher"}
-                  options={ENTRY_MODE_OPTIONS}
-                  onChange={(value) => updateWidget(["entry_mode"], value)}
-                  buttonClassName="h-7 text-[11px]"
-                  className="w-[140px]"
+                    <SelectPopover
+                      value={widget.entry_mode || "launcher"}
+                      options={ENTRY_MODE_OPTIONS}
+                      onChange={(value) => updateWidget(["entry_mode"], value)}
+                      buttonClassName="h-7 text-[11px]"
+                      className="w-[140px]"
+                    />
+                  }
                 />
-              }
-            />
+              )}
+              {isHidden("widget.embed_view") ? null : (
             <Row
               label="widget.embed_view"
+              variant={variant}
               right={
-                <SelectPopover
-                  value={widget.embed_view || "both"}
-                  options={EMBED_VIEW_OPTIONS}
-                  onChange={(value) => updateWidget(["embed_view"], value)}
-                  buttonClassName="h-7 text-[11px]"
-                  className="w-[140px]"
+                    <SelectPopover
+                      value={widget.embed_view || "both"}
+                      options={EMBED_VIEW_OPTIONS}
+                      onChange={(value) => updateWidget(["embed_view"], value)}
+                      buttonClassName="h-7 text-[11px]"
+                      className="w-[140px]"
+                    />
+                  }
                 />
-              }
-            />
+              )}
+            </RowGroup>
+          ) : null}
+
+          <RowGroup label="구성">
+            {isHidden("setup_config.kb.mode") ? null : (
+              <Row
+                label="setup_config.kb.mode"
+                variant={variant}
+                right={
+                  <SelectPopover
+                    value={typeof kbConfig.mode === "string" ? kbConfig.mode : "inline"}
+                    options={KB_MODE_OPTIONS}
+                    onChange={(value) => updateWidget(["setup_config", "kb", "mode"], value)}
+                    buttonClassName="h-7 text-[11px]"
+                    className="w-[140px]"
+                  />
+                }
+              />
+            )}
+            {isHidden("setup_config.kb.kb_id") ? null : (
+              <Row
+                label="setup_config.kb.kb_id"
+                variant={variant}
+                right={
+                  <Input
+                    value={typeof kbConfig.kb_id === "string" ? kbConfig.kb_id : ""}
+                    onChange={(event) => updateWidget(["setup_config", "kb", "kb_id"], event.target.value)}
+                    className="h-7 w-[220px] text-[11px]"
+                  />
+                }
+              />
+            )}
+            {isHidden("setup_config.kb.admin_kb_ids") ? null : (
+              <Row
+                label="setup_config.kb.admin_kb_ids"
+                alignTop
+                variant={variant}
+                right={
+                  <textarea
+                    value={formatLines(Array.isArray(kbConfig.admin_kb_ids) ? kbConfig.admin_kb_ids : undefined)}
+                    onChange={(event) =>
+                      updateWidget(
+                        ["setup_config", "kb", "admin_kb_ids"],
+                        parseLinesAndComma(event.target.value)
+                      )
+                    }
+                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  />
+                }
+              />
+            )}
+            {isHidden("setup_config.mcp.provider_keys") ? null : (
+              <Row
+                label="setup_config.mcp.provider_keys"
+                alignTop
+                variant={variant}
+                right={
+                  <textarea
+                    value={formatLines(Array.isArray(mcpConfig.provider_keys) ? mcpConfig.provider_keys : undefined)}
+                    onChange={(event) =>
+                      updateWidget(
+                        ["setup_config", "mcp", "provider_keys"],
+                        parseLinesAndComma(event.target.value)
+                      )
+                    }
+                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  />
+                }
+              />
+            )}
+            {isHidden("setup_config.mcp.tool_ids") ? null : (
+              <Row
+                label="setup_config.mcp.tool_ids"
+                alignTop
+                variant={variant}
+                right={
+                  <textarea
+                    value={formatLines(Array.isArray(mcpConfig.tool_ids) ? mcpConfig.tool_ids : undefined)}
+                    onChange={(event) =>
+                      updateWidget(["setup_config", "mcp", "tool_ids"], parseLinesAndComma(event.target.value))
+                    }
+                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  />
+                }
+              />
+            )}
+            {isHidden("setup_config.llm.default") ? null : (
+              <Row
+                label="setup_config.llm.default"
+                variant={variant}
+                right={
+                  <Input
+                    value={typeof llmConfig.default === "string" ? llmConfig.default : ""}
+                    onChange={(event) => updateWidget(["setup_config", "llm", "default"], event.target.value)}
+                    className="h-7 w-[200px] text-[11px]"
+                  />
+                }
+              />
+            )}
           </RowGroup>
 
-          <RowGroup label="대화 기본값">
+          {showThemeBasics ? (
+            <RowGroup label="대화 기본값">
+              {isHidden("theme.greeting") ? null : (
             <Row
               label="theme.greeting"
+              variant={variant}
               right={
-                <Input
-                  value={typeof widget.theme?.greeting === "string" ? widget.theme.greeting : ""}
-                  onChange={(event) => updateWidget(["theme", "greeting"], event.target.value)}
-                  className="h-7 w-[260px] text-[11px]"
+                    <Input
+                      value={typeof widget.theme?.greeting === "string" ? widget.theme.greeting : ""}
+                      onChange={(event) => updateWidget(["theme", "greeting"], event.target.value)}
+                      className="h-7 w-[260px] text-[11px]"
+                    />
+                  }
                 />
-              }
-            />
+              )}
+              {isHidden("theme.input_placeholder") ? null : (
             <Row
               label="theme.input_placeholder"
+              variant={variant}
               right={
-                <Input
-                  value={typeof widget.theme?.input_placeholder === "string" ? widget.theme.input_placeholder : ""}
-                  onChange={(event) => updateWidget(["theme", "input_placeholder"], event.target.value)}
-                  className="h-7 w-[260px] text-[11px]"
+                    <Input
+                      value={typeof widget.theme?.input_placeholder === "string" ? widget.theme.input_placeholder : ""}
+                      onChange={(event) => updateWidget(["theme", "input_placeholder"], event.target.value)}
+                      className="h-7 w-[260px] text-[11px]"
+                    />
+                  }
                 />
-              }
-            />
-          </RowGroup>
+              )}
+            </RowGroup>
+          ) : null}
 
           <RowGroup label="런처 디자인">
             <Row
               label="cfg.launcherLabel"
+              variant={variant}
               right={
                 <Input
                   value={typeof widget.cfg?.launcherLabel === "string" ? widget.cfg.launcherLabel : ""}
@@ -460,6 +608,7 @@ export function ChatSettingsPanel({
             />
             <Row
               label="cfg.position"
+              variant={variant}
               right={
                 <SelectPopover
                   value={typeof widget.cfg?.position === "string" ? widget.cfg.position : "bottom-right"}
@@ -472,6 +621,7 @@ export function ChatSettingsPanel({
             />
             <Row
               label="theme.launcher_logo_id"
+              variant={variant}
               right={
                 <Input
                   value={typeof widget.theme?.launcher_logo_id === "string" ? widget.theme.launcher_logo_id : ""}
@@ -482,6 +632,7 @@ export function ChatSettingsPanel({
             />
             <Row
               label="theme.primary_color | launcher_bg"
+              variant={variant}
               right={
                 <div className="flex items-center gap-2">
                   <input
@@ -507,6 +658,7 @@ export function ChatSettingsPanel({
             />
             <Row
               label="launcher.container.bottom"
+              variant={variant}
               right={
                 <Input
                   value={widget.launcher?.container?.bottom || ""}
@@ -518,6 +670,7 @@ export function ChatSettingsPanel({
             />
             <Row
               label="launcher.container.left"
+              variant={variant}
               right={
                 <Input
                   value={widget.launcher?.container?.left || ""}
@@ -529,6 +682,7 @@ export function ChatSettingsPanel({
             />
             <Row
               label="launcher.container.right"
+              variant={variant}
               right={
                 <Input
                   value={widget.launcher?.container?.right || ""}
@@ -540,6 +694,7 @@ export function ChatSettingsPanel({
             />
             <Row
               label="launcher.container.gap"
+              variant={variant}
               right={
                 <Input
                   value={widget.launcher?.container?.gap || ""}
@@ -551,6 +706,7 @@ export function ChatSettingsPanel({
             />
             <Row
               label="launcher.container.zIndex"
+              variant={variant}
               right={
                 <Input
                   value={widget.launcher?.container?.zIndex?.toString() || ""}
@@ -565,6 +721,7 @@ export function ChatSettingsPanel({
             />
             <Row
               label="launcher.size"
+              variant={variant}
               right={
                 <Input
                   value={widget.launcher?.size?.toString() || ""}
@@ -670,28 +827,32 @@ export function ChatSettingsPanel({
           </RowGroup>
 
           <RowGroup label="노출/권한">
-            <Row
-              label="widget.allowed_domains"
-              alignTop
-              right={
-                <textarea
-                  value={formatLines(widget.allowed_domains)}
-                  onChange={(event) => updateWidget(["allowed_domains"], parseLinesAndComma(event.target.value))}
-                  className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-                />
-              }
-            />
-            <Row
-              label="widget.allowed_paths"
-              alignTop
-              right={
-                <textarea
-                  value={formatLines(widget.allowed_paths)}
-                  onChange={(event) => updateWidget(["allowed_paths"], parseLinesAndComma(event.target.value))}
-                  className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-                />
-              }
-            />
+            {isHidden("widget.allowed_domains") ? null : (
+              <Row
+                label="widget.allowed_domains"
+                alignTop
+                right={
+                  <textarea
+                    value={formatLines(widget.allowed_domains)}
+                    onChange={(event) => updateWidget(["allowed_domains"], parseLinesAndComma(event.target.value))}
+                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  />
+                }
+              />
+            )}
+            {isHidden("widget.allowed_paths") ? null : (
+              <Row
+                label="widget.allowed_paths"
+                alignTop
+                right={
+                  <textarea
+                    value={formatLines(widget.allowed_paths)}
+                    onChange={(event) => updateWidget(["allowed_paths"], parseLinesAndComma(event.target.value))}
+                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  />
+                }
+              />
+            )}
             <Row
               label="theme.allowed_accounts"
               alignTop
@@ -712,7 +873,7 @@ export function ChatSettingsPanel({
           </RowGroup>
         </ToggleRowGroup>
 
-      <ToggleRowGroup
+        <ToggleRowGroup
           label="widget.header.enabled"
           checked={features.widget.header.enabled}
           visibility={visibility.widget.header.enabled}
@@ -756,366 +917,20 @@ export function ChatSettingsPanel({
           />
         </ToggleRowGroup>
 
-      <ToggleRowGroup
+        <ToggleRowGroup
           label="widget.tabBar.enabled"
           checked={features.widget.tabBar.enabled}
           visibility={visibility.widget.tabBar.enabled}
           onToggle={(next) => updateFeatures(["widget", "tabBar", "enabled"], next)}
           onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "enabled"], mode)}
         >
-          <ToggleRowGroup
+          <ToggleRow
             label="widget.tabBar.chat"
             checked={tabBarChatEnabled}
             visibility={visibility.widget.tabBar.chat}
             onToggle={(next) => setTabBarPanelEnabled("chat", next)}
             onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
-          >
-
-
-        
-
-        
-
-        <RowGroup label="Admin Panel">
-          <ToggleRow
-            label="adminPanel.enabled"
-            checked={features.adminPanel.enabled}
-            visibility={visibility.adminPanel.enabled}
-            onToggle={(next) => updateFeatures(["adminPanel", "enabled"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "enabled"], mode)}
           />
-          <ToggleRow
-            label="adminPanel.selectionToggle"
-            checked={features.adminPanel.selectionToggle}
-            visibility={visibility.adminPanel.selectionToggle}
-            onToggle={(next) => updateFeatures(["adminPanel", "selectionToggle"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "selectionToggle"], mode)}
-          />
-          <ToggleRow
-            label="adminPanel.logsToggle"
-            checked={features.adminPanel.logsToggle}
-            visibility={visibility.adminPanel.logsToggle}
-            onToggle={(next) => updateFeatures(["adminPanel", "logsToggle"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "logsToggle"], mode)}
-          />
-          <ToggleRow
-            label="adminPanel.messageSelection"
-            checked={features.adminPanel.messageSelection}
-            visibility={visibility.adminPanel.messageSelection}
-            onToggle={(next) => updateFeatures(["adminPanel", "messageSelection"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "messageSelection"], mode)}
-          />
-          <ToggleRow
-            label="adminPanel.messageMeta"
-            checked={features.adminPanel.messageMeta}
-            visibility={visibility.adminPanel.messageMeta}
-            onToggle={(next) => updateFeatures(["adminPanel", "messageMeta"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "messageMeta"], mode)}
-          />
-          <ToggleRow
-            label="adminPanel.copyConversation"
-            checked={features.adminPanel.copyConversation}
-            visibility={visibility.adminPanel.copyConversation}
-            onToggle={(next) => updateFeatures(["adminPanel", "copyConversation"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "copyConversation"], mode)}
-          />
-          <ToggleRow
-            label="adminPanel.copyIssue"
-            checked={features.adminPanel.copyIssue}
-            visibility={visibility.adminPanel.copyIssue}
-            onToggle={(next) => updateFeatures(["adminPanel", "copyIssue"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "copyIssue"], mode)}
-          />
-        </RowGroup>
-
-        <RowGroup label="Debug Transcript">
-          <Row
-            label="debug.outputMode"
-            right={
-              <SelectPopover
-                value={debug.outputMode || "full"}
-                options={OUTPUT_MODE_OPTIONS}
-                onChange={(value) => updateDebug(["outputMode"], value)}
-                buttonClassName="h-7 text-[11px]"
-                className="w-[160px]"
-              />
-            }
-          />
-          <ToggleRowGroup
-            label="debug.sections.header"
-            checked={getIn(debug, ["sections", "header", "enabled"], true) !== false}
-            onToggle={(next) => updateDebug(["sections", "header", "enabled"], next)}
-          >
-            <ToggleRow
-              label="header.principle 대원칙"
-              checked={getIn(debug, ["sections", "header", "principle"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "header", "principle"], next)}
-            />
-            <ToggleRow
-              label="header.expectedLists 기대 목록"
-              checked={getIn(debug, ["sections", "header", "expectedLists"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "header", "expectedLists"], next)}
-            />
-            <ToggleRow
-              label="header.runtimeModules 사용 모듈"
-              checked={getIn(debug, ["sections", "header", "runtimeModules"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "header", "runtimeModules"], next)}
-            />
-            <ToggleRow
-              label="header.auditStatus 점검 상태"
-              checked={getIn(debug, ["sections", "header", "auditStatus"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "header", "auditStatus"], next)}
-            />
-          </ToggleRowGroup>
-          <ToggleRowGroup
-            label="debug.sections.turn"
-            checked={getIn(debug, ["sections", "turn", "enabled"], true) !== false}
-            onToggle={(next) => updateDebug(["sections", "turn", "enabled"], next)}
-          >
-            <ToggleRow
-              label="turn.turnId TURN_ID"
-              checked={getIn(debug, ["sections", "turn", "turnId"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "turn", "turnId"], next)}
-            />
-            <ToggleRow
-              label="turn.tokenUsed TOKEN_USED"
-              checked={getIn(debug, ["sections", "turn", "tokenUsed"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "turn", "tokenUsed"], next)}
-            />
-            <ToggleRow
-              label="turn.tokenUnused TOKEN_UNUSED"
-              checked={getIn(debug, ["sections", "turn", "tokenUnused"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "turn", "tokenUnused"], next)}
-            />
-            <ToggleRow
-              label="turn.responseSchemaSummary RESPONSE_SCHEMA(요약)"
-              checked={getIn(debug, ["sections", "turn", "responseSchemaSummary"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "turn", "responseSchemaSummary"], next)}
-            />
-            <ToggleRowGroup
-              label="turn.responseSchemaDetail RESPONSE_SCHEMA(상세)"
-              checked={getIn(debug, ["sections", "turn", "responseSchemaDetail"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "turn", "responseSchemaDetail"], next)}
-            >
-              {renderDebugTree(
-                RESPONSE_SCHEMA_DETAIL_TREE,
-                (getIn(debug, ["sections", "turn", "responseSchemaDetailFields"], {}) || {}) as BooleanMap,
-                (key, next) =>
-                  updateDebug(
-                    ["sections", "turn", "responseSchemaDetailFields"],
-                    setBooleanMap(
-                      (getIn(debug, ["sections", "turn", "responseSchemaDetailFields"], {}) || {}) as BooleanMap,
-                      key,
-                      next
-                    )
-                  )
-              )}
-            </ToggleRowGroup>
-            <ToggleRow
-              label="turn.renderPlanSummary RENDER_PLAN(요약)"
-              checked={getIn(debug, ["sections", "turn", "renderPlanSummary"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "turn", "renderPlanSummary"], next)}
-            />
-            <ToggleRowGroup
-              label="turn.renderPlanDetail RENDER_PLAN(상세)"
-              checked={getIn(debug, ["sections", "turn", "renderPlanDetail"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "turn", "renderPlanDetail"], next)}
-            >
-              {renderDebugTree(
-                RENDER_PLAN_DETAIL_TREE,
-                (getIn(debug, ["sections", "turn", "renderPlanDetailFields"], {}) || {}) as BooleanMap,
-                (key, next) =>
-                  updateDebug(
-                    ["sections", "turn", "renderPlanDetailFields"],
-                    setBooleanMap(
-                      (getIn(debug, ["sections", "turn", "renderPlanDetailFields"], {}) || {}) as BooleanMap,
-                      key,
-                      next
-                    )
-                  )
-              )}
-            </ToggleRowGroup>
-            <ToggleRow
-              label="turn.quickReplyRule QUICK_REPLY_RULE"
-              checked={getIn(debug, ["sections", "turn", "quickReplyRule"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "turn", "quickReplyRule"], next)}
-            />
-          </ToggleRowGroup>
-          <ToggleRowGroup
-            label="debug.sections.logs"
-            checked={getIn(debug, ["sections", "logs", "enabled"], true) !== false}
-            onToggle={(next) => updateDebug(["sections", "logs", "enabled"], next)}
-          >
-            <ToggleRow
-              label="logs.issueSummary 문제 요약"
-              checked={getIn(debug, ["sections", "logs", "issueSummary"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "logs", "issueSummary"], next)}
-            />
-            <ToggleRow
-              label="logs.debug.enabled DEBUG 로그"
-              checked={getIn(debug, ["sections", "logs", "debug", "enabled"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "logs", "debug", "enabled"], next)}
-            />
-            <ToggleRowGroup
-              label="logs.debug.prefixJson DEBUG prefix_json"
-              checked={getIn(debug, ["sections", "logs", "debug", "prefixJson"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "logs", "debug", "prefixJson"], next)}
-            >
-              {renderDebugTree(
-                PREFIX_JSON_SECTIONS_TREE,
-                (getIn(debug, ["sections", "logs", "debug", "prefixJsonSections"], {}) || {}) as BooleanMap,
-                (key, next) =>
-                  updateDebug(
-                    ["sections", "logs", "debug", "prefixJsonSections"],
-                    setBooleanMap(
-                      (getIn(debug, ["sections", "logs", "debug", "prefixJsonSections"], {}) || {}) as BooleanMap,
-                      key,
-                      next
-                    )
-                  )
-              )}
-            </ToggleRowGroup>
-            <ToggleRowGroup
-              label="logs.mcp.enabled MCP 로그"
-              checked={getIn(debug, ["sections", "logs", "mcp", "enabled"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "logs", "mcp", "enabled"], next)}
-            >
-              <ToggleRow
-                label="logs.mcp.request"
-                checked={getIn(debug, ["sections", "logs", "mcp", "request"], true) !== false}
-                onToggle={(next) => updateDebug(["sections", "logs", "mcp", "request"], next)}
-              />
-              <ToggleRow
-                label="logs.mcp.response"
-                checked={getIn(debug, ["sections", "logs", "mcp", "response"], true) !== false}
-                onToggle={(next) => updateDebug(["sections", "logs", "mcp", "response"], next)}
-              />
-              <ToggleRow
-                label="logs.mcp.includeSuccess"
-                checked={getIn(debug, ["sections", "logs", "mcp", "includeSuccess"], true) !== false}
-                onToggle={(next) => updateDebug(["sections", "logs", "mcp", "includeSuccess"], next)}
-              />
-              <ToggleRow
-                label="logs.mcp.includeError"
-                checked={getIn(debug, ["sections", "logs", "mcp", "includeError"], true) !== false}
-                onToggle={(next) => updateDebug(["sections", "logs", "mcp", "includeError"], next)}
-              />
-            </ToggleRowGroup>
-            <ToggleRowGroup
-              label="logs.event.enabled"
-              checked={getIn(debug, ["sections", "logs", "event", "enabled"], true) !== false}
-              onToggle={(next) => updateDebug(["sections", "logs", "event", "enabled"], next)}
-            >
-              <ToggleRow
-                label="logs.event.payload"
-                checked={getIn(debug, ["sections", "logs", "event", "payload"], true) !== false}
-                onToggle={(next) => updateDebug(["sections", "logs", "event", "payload"], next)}
-              />
-              <Row
-                label="logs.event.allowlist"
-                alignTop
-                right={
-                  <textarea
-                    value={formatCsv(getIn(debug, ["sections", "logs", "event", "allowlist"], []) as string[])}
-                    onChange={(event) =>
-                      updateDebug(["sections", "logs", "event", "allowlist"], parseCsv(event.target.value))
-                    }
-                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-                  />
-                }
-              />
-            </ToggleRowGroup>
-          </ToggleRowGroup>
-          <Row
-            label="debug.auditBotScope"
-            right={
-              <SelectPopover
-                value={debug.auditBotScope || "runtime_turns_only"}
-                options={AUDIT_SCOPE_OPTIONS}
-                onChange={(value) => updateDebug(["auditBotScope"], value)}
-                buttonClassName="h-7 text-[11px]"
-                className="w-[180px]"
-              />
-            }
-          />
-          <div className="text-[11px] text-slate-500">OFF이면 대화 복사 시 해당 디버그 출력이 제외됨</div>
-        </RowGroup>
-
-        <RowGroup label="Interaction">
-          <ToggleRow
-            label="interaction.quickReplies"
-            checked={features.interaction.quickReplies}
-            visibility={visibility.interaction.quickReplies}
-            onToggle={(next) => updateFeatures(["interaction", "quickReplies"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["interaction", "quickReplies"], mode)}
-          />
-          <ToggleRow
-            label="interaction.productCards"
-            checked={features.interaction.productCards}
-            visibility={visibility.interaction.productCards}
-            onToggle={(next) => updateFeatures(["interaction", "productCards"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["interaction", "productCards"], mode)}
-          />
-          <ToggleRow
-            label="interaction.inputSubmit"
-            checked={features.interaction.inputSubmit}
-            visibility={visibility.interaction.inputSubmit}
-            onToggle={(next) => updateFeatures(["interaction", "inputSubmit"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["interaction", "inputSubmit"], mode)}
-          />
-          <ToggleRowGroup
-            label="interaction.threePhasePrompt"
-            checked={features.interaction.threePhasePrompt}
-            visibility={visibility.interaction.threePhasePrompt}
-            onToggle={(next) => updateFeatures(["interaction", "threePhasePrompt"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePrompt"], mode)}
-          >
-            <ToggleRow
-              label="interaction.threePhasePromptShowConfirmed"
-              checked={features.interaction.threePhasePromptShowConfirmed}
-              visibility={visibility.interaction.threePhasePromptShowConfirmed}
-              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowConfirmed"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptShowConfirmed"], mode)}
-            />
-            <ToggleRow
-              label="interaction.threePhasePromptShowConfirming"
-              checked={features.interaction.threePhasePromptShowConfirming}
-              visibility={visibility.interaction.threePhasePromptShowConfirming}
-              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowConfirming"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptShowConfirming"], mode)}
-            />
-            <ToggleRow
-              label="interaction.threePhasePromptShowNext"
-              checked={features.interaction.threePhasePromptShowNext}
-              visibility={visibility.interaction.threePhasePromptShowNext}
-              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowNext"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptShowNext"], mode)}
-            />
-            <ToggleRow
-              label="interaction.threePhasePromptHideLabels"
-              checked={features.interaction.threePhasePromptHideLabels}
-              visibility={visibility.interaction.threePhasePromptHideLabels}
-              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptHideLabels"], next)}
-              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptHideLabels"], mode)}
-            />
-            <Row
-              label={features.interaction.threePhasePromptLabels.confirmed || "interaction.threePhasePromptLabels.confirmed"}
-              editableLabel
-              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "confirmed"], value)}
-            />
-            <Row
-              label={features.interaction.threePhasePromptLabels.confirming || "interaction.threePhasePromptLabels.confirming"}
-              editableLabel
-              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "confirming"], value)}
-            />
-            <Row
-              label={features.interaction.threePhasePromptLabels.next || "interaction.threePhasePromptLabels.next"}
-              editableLabel
-              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "next"], value)}
-            />
-          </ToggleRowGroup>
-        </RowGroup>
-          </ToggleRowGroup>
           <ToggleRow
             label="widget.tabBar.list"
             checked={tabBarListEnabled}
@@ -1140,30 +955,31 @@ export function ChatSettingsPanel({
                   onVisibilityChange={(mode) => updateVisibility(["setup", "modelSelector"], mode)}
                 />
                 <ToggleRowGroup
-                  label="setup.modeExisting"
+                  label={setupUi.existingLabels.modeExisting || "setup.modeExisting"}
                   checked={features.setup.modeExisting}
                   visibility={visibility.setup.modeExisting}
                   onToggle={(next) => updateFeatures(["setup", "modeExisting"], next)}
                   onVisibilityChange={(mode) => updateVisibility(["setup", "modeExisting"], mode)}
+                  editableLabel
+                  onLabelChange={(value) => updateSetupUi(["existingLabels", "modeExisting"], value)}
                 >
                   <ToggleRow
-                    label="setup.agentSelector"
+                    label={setupUi.existingLabels.agentSelector || "setup.agentSelector"}
                     checked={features.setup.agentSelector}
                     visibility={visibility.setup.agentSelector}
                     onToggle={(next) => updateFeatures(["setup", "agentSelector"], next)}
                     onVisibilityChange={(mode) => updateVisibility(["setup", "agentSelector"], mode)}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["existingLabels", "agentSelector"], value)}
                   />
                   <ToggleRow
-                    label="setup.sessionIdSearch"
+                    label={setupUi.existingLabels.sessionIdSearch || "setup.sessionIdSearch"}
                     checked={features.setup.sessionIdSearch}
                     visibility={visibility.setup.sessionIdSearch}
                     onToggle={(next) => updateFeatures(["setup", "sessionIdSearch"], next)}
                     onVisibilityChange={(mode) => updateVisibility(["setup", "sessionIdSearch"], mode)}
-                  />
-                  <Row
-                    label={setupUi.existingLabels.agentSelector || "setup.existingLabels.agentSelector"}
                     editableLabel
-                    onLabelChange={(value) => updateSetupUi(["existingLabels", "agentSelector"], value)}
+                    onLabelChange={(value) => updateSetupUi(["existingLabels", "sessionIdSearch"], value)}
                   />
                   <Row
                     label={setupUi.existingLabels.versionSelector || "setup.existingLabels.versionSelector"}
@@ -1176,19 +992,9 @@ export function ChatSettingsPanel({
                     onLabelChange={(value) => updateSetupUi(["existingLabels", "sessionSelector"], value)}
                   />
                   <Row
-                    label={setupUi.existingLabels.sessionIdSearch || "setup.existingLabels.sessionIdSearch"}
-                    editableLabel
-                    onLabelChange={(value) => updateSetupUi(["existingLabels", "sessionIdSearch"], value)}
-                  />
-                  <Row
                     label={setupUi.existingLabels.conversationMode || "setup.existingLabels.conversationMode"}
                     editableLabel
                     onLabelChange={(value) => updateSetupUi(["existingLabels", "conversationMode"], value)}
-                  />
-                  <Row
-                    label={setupUi.existingLabels.modeExisting || "setup.existingLabels.modeExisting"}
-                    editableLabel
-                    onLabelChange={(value) => updateSetupUi(["existingLabels", "modeExisting"], value)}
                   />
                 </ToggleRowGroup>
 
@@ -1200,68 +1006,52 @@ export function ChatSettingsPanel({
                   onVisibilityChange={(mode) => updateVisibility(["setup", "modeNew"], mode)}
                 >
                   <ToggleRow
-                    label="setup.inlineUserKbInput"
+                    label={setupUi.labels.inlineUserKbInput || "setup.inlineUserKbInput"}
                     checked={features.setup.inlineUserKbInput}
                     visibility={visibility.setup.inlineUserKbInput}
                     onToggle={(next) => updateFeatures(["setup", "inlineUserKbInput"], next)}
                     onVisibilityChange={(mode) => updateVisibility(["setup", "inlineUserKbInput"], mode)}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["labels", "inlineUserKbInput"], value)}
                   />
                   <ToggleRow
-                    label="setup.llmSelector"
+                    label={setupUi.labels.llmSelector || "setup.llmSelector"}
                     checked={features.setup.llmSelector}
                     visibility={visibility.setup.llmSelector}
                     onToggle={(next) => updateFeatures(["setup", "llmSelector"], next)}
                     onVisibilityChange={(mode) => updateVisibility(["setup", "llmSelector"], mode)}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["labels", "llmSelector"], value)}
                   />
                   <ToggleRow
-                    label="setup.kbSelector"
+                    label={setupUi.labels.kbSelector || "setup.kbSelector"}
                     checked={features.setup.kbSelector}
                     visibility={visibility.setup.kbSelector}
                     onToggle={(next) => updateFeatures(["setup", "kbSelector"], next)}
                     onVisibilityChange={(mode) => updateVisibility(["setup", "kbSelector"], mode)}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["labels", "kbSelector"], value)}
                   />
                   <ToggleRow
-                    label="setup.adminKbSelector"
+                    label={setupUi.labels.adminKbSelector || "setup.adminKbSelector"}
                     checked={features.setup.adminKbSelector}
                     visibility={visibility.setup.adminKbSelector}
                     onToggle={(next) => updateFeatures(["setup", "adminKbSelector"], next)}
                     onVisibilityChange={(mode) => updateVisibility(["setup", "adminKbSelector"], mode)}
+                    editableLabel
+                    onLabelChange={(value) => updateSetupUi(["labels", "adminKbSelector"], value)}
                   />
                 </ToggleRowGroup>
 
-                <ToggleRowGroup
-                  label="setup.routeSelector"
+                <ToggleRow
+                  label={setupUi.labels.routeSelector || "setup.routeSelector"}
                   checked={features.setup.routeSelector}
                   visibility={visibility.setup.routeSelector}
                   onToggle={(next) => updateFeatures(["setup", "routeSelector"], next)}
                   onVisibilityChange={(mode) => updateVisibility(["setup", "routeSelector"], mode)}
-                >
-                  <Row
-                    label={setupUi.labels.inlineUserKbInput || "setup.labels.inlineUserKbInput"}
-                    editableLabel
-                    onLabelChange={(value) => updateSetupUi(["labels", "inlineUserKbInput"], value)}
-                  />
-                  <Row
-                    label={setupUi.labels.llmSelector || "setup.labels.llmSelector"}
-                    editableLabel
-                    onLabelChange={(value) => updateSetupUi(["labels", "llmSelector"], value)}
-                  />
-                  <Row
-                    label={setupUi.labels.kbSelector || "setup.labels.kbSelector"}
-                    editableLabel
-                    onLabelChange={(value) => updateSetupUi(["labels", "kbSelector"], value)}
-                  />
-                  <Row
-                    label={setupUi.labels.adminKbSelector || "setup.labels.adminKbSelector"}
-                    editableLabel
-                    onLabelChange={(value) => updateSetupUi(["labels", "adminKbSelector"], value)}
-                  />
-                  <Row
-                    label={setupUi.labels.routeSelector || "setup.labels.routeSelector"}
-                    editableLabel
-                    onLabelChange={(value) => updateSetupUi(["labels", "routeSelector"], value)}
-                  />
-                </ToggleRowGroup>
+                  editableLabel
+                  onLabelChange={(value) => updateSetupUi(["labels", "routeSelector"], value)}
+                />
 
                 <Row
                   label="setup.defaultSetupMode"
@@ -1341,6 +1131,102 @@ export function ChatSettingsPanel({
                 />
               </RowGroup>
             ) : null}
+          </ToggleRowGroup>
+        <RowGroup label="Admin Panel">
+          <ToggleRow
+            label="adminPanel.enabled"
+            checked={features.adminPanel.enabled}
+            visibility={visibility.adminPanel.enabled}
+            onToggle={(next) => updateFeatures(["adminPanel", "enabled"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "enabled"], mode)}
+          />
+          <ToggleRow
+            label="adminPanel.logsToggle"
+            checked={features.adminPanel.logsToggle}
+            visibility={visibility.adminPanel.logsToggle}
+            onToggle={(next) => updateFeatures(["adminPanel", "logsToggle"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "logsToggle"], mode)}
+          />
+          <ToggleRow
+            label="adminPanel.copyConversation"
+            checked={features.adminPanel.copyConversation}
+            visibility={visibility.adminPanel.copyConversation}
+            onToggle={(next) => updateFeatures(["adminPanel", "copyConversation"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["adminPanel", "copyConversation"], mode)}
+          />
+        </RowGroup>
+
+        <RowGroup label="Interaction">
+          <ToggleRow
+            label="interaction.quickReplies"
+            checked={features.interaction.quickReplies}
+            visibility={visibility.interaction.quickReplies}
+            onToggle={(next) => updateFeatures(["interaction", "quickReplies"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["interaction", "quickReplies"], mode)}
+          />
+          <ToggleRow
+            label="interaction.productCards"
+            checked={features.interaction.productCards}
+            visibility={visibility.interaction.productCards}
+            onToggle={(next) => updateFeatures(["interaction", "productCards"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["interaction", "productCards"], mode)}
+          />
+          <ToggleRow
+            label="interaction.inputSubmit"
+            checked={features.interaction.inputSubmit}
+            visibility={visibility.interaction.inputSubmit}
+            onToggle={(next) => updateFeatures(["interaction", "inputSubmit"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["interaction", "inputSubmit"], mode)}
+          />
+          <ToggleRowGroup
+            label="interaction.threePhasePrompt"
+            checked={features.interaction.threePhasePrompt}
+            visibility={visibility.interaction.threePhasePrompt}
+            onToggle={(next) => updateFeatures(["interaction", "threePhasePrompt"], next)}
+            onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePrompt"], mode)}
+          >
+            <ToggleRow
+              label={
+                features.interaction.threePhasePromptLabels.confirmed ||
+                "interaction.threePhasePromptShowConfirmed"
+              }
+              checked={features.interaction.threePhasePromptShowConfirmed}
+              visibility={visibility.interaction.threePhasePromptShowConfirmed}
+              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowConfirmed"], next)}
+              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptShowConfirmed"], mode)}
+              editableLabel
+              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "confirmed"], value)}
+            />
+            <ToggleRow
+              label={
+                features.interaction.threePhasePromptLabels.confirming ||
+                "interaction.threePhasePromptShowConfirming"
+              }
+              checked={features.interaction.threePhasePromptShowConfirming}
+              visibility={visibility.interaction.threePhasePromptShowConfirming}
+              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowConfirming"], next)}
+              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptShowConfirming"], mode)}
+              editableLabel
+              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "confirming"], value)}
+            />
+            <ToggleRow
+              label={features.interaction.threePhasePromptLabels.next || "interaction.threePhasePromptShowNext"}
+              checked={features.interaction.threePhasePromptShowNext}
+              visibility={visibility.interaction.threePhasePromptShowNext}
+              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptShowNext"], next)}
+              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptShowNext"], mode)}
+              editableLabel
+              onLabelChange={(value) => updateFeatures(["interaction", "threePhasePromptLabels", "next"], value)}
+            />
+            <ToggleRow
+              label="interaction.threePhasePromptHideLabels"
+              checked={features.interaction.threePhasePromptHideLabels}
+              visibility={visibility.interaction.threePhasePromptHideLabels}
+              onToggle={(next) => updateFeatures(["interaction", "threePhasePromptHideLabels"], next)}
+              onVisibilityChange={(mode) => updateVisibility(["interaction", "threePhasePromptHideLabels"], mode)}
+            />
+          </ToggleRowGroup>
+        </RowGroup>
 
         <RowGroup label="Allow/Deny">
           {renderAllowDenyBlock(
@@ -1406,16 +1292,17 @@ export function ChatSettingsPanel({
             onVisibilityChange={(mode) =>
               void handleGovernanceChange({
                 enabled: governanceConfig?.enabled ?? true,
-                visibility_mode: mode,
+                visibility_mode: mode === "public" ? "user" : mode,
               })
             }
           />
           {governanceSaving ? <div className="text-[11px] text-slate-500">저장 중...</div> : null}
         </RowGroup>
-          </ToggleRowGroup>
+
         </ToggleRowGroup>
 
-    </div>
+      </div>
+    </PanelVariantContext.Provider>
   );
 }
 
@@ -1459,6 +1346,23 @@ function parseLines(value: string) {
     .filter(Boolean);
 }
 
+function fillWithNulls<T extends Record<string, any>>(template: T, target: Record<string, unknown>) {
+  const result: Record<string, unknown> = {};
+  Object.keys(template).forEach((key) => {
+    const templateValue = template[key];
+    const hasKey = Object.prototype.hasOwnProperty.call(target, key);
+    const targetValue = hasKey ? target[key] : undefined;
+    if (isObject(templateValue)) {
+      result[key] = fillWithNulls(templateValue, isObject(targetValue) ? (targetValue as Record<string, unknown>) : {});
+    } else if (hasKey) {
+      result[key] = targetValue as unknown;
+    } else {
+      result[key] = null;
+    }
+  });
+  return result as T;
+}
+
 function parseCsv(value: string) {
   return value
     .split(",")
@@ -1481,7 +1385,10 @@ function formatCsv(values: string[] | undefined) {
   return (values || []).join(", ");
 }
 
-function rowToneClass(tone: FieldTone) {
+function rowToneClass(tone: FieldTone, isBaseVariant: boolean) {
+  if (isBaseVariant) {
+    return "border-slate-200 bg-white text-slate-700";
+  }
   if (tone === "enabled") {
     return "border-emerald-500 bg-emerald-100 text-emerald-900 ring-1 ring-emerald-200";
   }
@@ -1500,12 +1407,16 @@ function Row({
   ariaExpanded,
   right,
   alignTop = false,
+  variant,
 }: RowProps) {
+  const contextVariant = useContext(PanelVariantContext);
+  const resolvedVariant = variant ?? contextVariant;
+  const isBaseVariant = resolvedVariant === "base";
   return (
     <div
       className={`flex ${alignTop ? "items-start" : "items-center"} justify-between gap-3 rounded-lg border px-3 ${
         alignTop ? "py-2" : "h-12"
-      } text-xs ${rowToneClass(tone)}`}
+      } text-xs ${rowToneClass(tone, isBaseVariant)}`}
     >
       <button
         type="button"
@@ -1563,21 +1474,29 @@ function ToggleRow({
   onLabelChange,
   onLabelClick,
   expanded,
+  variant,
 }: {
   label: string;
-  checked: boolean;
+  checked: boolean | null | undefined;
   onToggle: (next: boolean) => void;
-  visibility?: FeatureVisibilityMode;
+  visibility?: FeatureVisibilityMode | null;
   onVisibilityChange?: (next: FeatureVisibilityMode) => void;
   editableLabel?: boolean;
   onLabelChange?: (value: string) => void;
   onLabelClick?: () => void;
   expanded?: boolean;
+  variant?: "policy" | "base";
 }) {
+  const isNull = checked === null || checked === undefined;
+  const resolvedChecked = checked === true;
+  const tone: FieldTone = isNull ? "neutral" : resolvedChecked ? "enabled" : "disabled";
+  const nextVisibility =
+    visibility === "admin" ? "public" : visibility === "public" ? "user" : "admin";
   return (
     <Row
       label={label}
-      tone={checked ? "enabled" : "disabled"}
+      tone={tone}
+      variant={variant}
       editableLabel={editableLabel}
       onLabelChange={onLabelChange}
       onLabelClick={onLabelClick}
@@ -1586,26 +1505,32 @@ function ToggleRow({
         <span className="state-controls flex items-center gap-1">
           <button
             type="button"
-            onClick={() => onToggle(!checked)}
+            onClick={() => onToggle(isNull ? true : !resolvedChecked)}
             className={
-              checked
+              isNull
+                ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-400 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+                : resolvedChecked
                 ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
                 : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
             }
           >
-            {checked ? "ON" : "OFF"}
+            {isNull ? "NULL" : resolvedChecked ? "ON" : "OFF"}
           </button>
-          {visibility ? (
+          {visibility !== undefined ? (
             <button
               type="button"
-              onClick={() => onVisibilityChange?.(visibility === "user" ? "admin" : "user")}
+              onClick={() => onVisibilityChange?.(nextVisibility)}
               className={
                 visibility === "admin"
                   ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-amber-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
-                  : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+                  : visibility === "public"
+                    ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-sky-600 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+                    : visibility === "user"
+                      ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
+                      : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-400 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
               }
             >
-              {visibility === "admin" ? "ADMIN" : "USER"}
+              {visibility === "admin" ? "ADMIN" : visibility === "public" ? "PUBLIC" : visibility === "user" ? "USER" : "NULL"}
             </button>
           ) : null}
         </span>
@@ -1645,19 +1570,25 @@ function ToggleRowGroup({
   editableLabel,
   onLabelChange,
   defaultOpen = false,
+  variant,
   children,
 }: {
   label: string;
-  checked: boolean;
+  checked: boolean | null | undefined;
   onToggle: (next: boolean) => void;
-  visibility?: FeatureVisibilityMode;
+  visibility?: FeatureVisibilityMode | null;
   onVisibilityChange?: (next: FeatureVisibilityMode) => void;
   editableLabel?: boolean;
   onLabelChange?: (value: string) => void;
   defaultOpen?: boolean;
+  variant?: "policy" | "base";
   children: ReactNode;
 }) {
+  const contextVariant = useContext(PanelVariantContext);
+  const resolvedVariant = variant ?? contextVariant;
+  const isBaseVariant = resolvedVariant === "base";
   const [open, setOpen] = useState(defaultOpen);
+  const isOpen = isBaseVariant ? true : open;
 
   return (
     <div className="space-y-2">
@@ -1667,12 +1598,13 @@ function ToggleRowGroup({
         onToggle={onToggle}
         visibility={visibility}
         onVisibilityChange={onVisibilityChange}
+        variant={resolvedVariant}
         editableLabel={editableLabel}
         onLabelChange={onLabelChange}
-        onLabelClick={() => setOpen((prev) => !prev)}
-        expanded={open}
+        onLabelClick={isBaseVariant ? undefined : () => setOpen((prev) => !prev)}
+        expanded={isOpen}
       />
-      {open ? <DetailBlock>{children}</DetailBlock> : null}
+      {isOpen ? <DetailBlock variant={resolvedVariant}>{children}</DetailBlock> : null}
     </div>
   );
 }
@@ -1680,51 +1612,52 @@ function ToggleRowGroup({
 function RowGroup({
   label,
   defaultOpen = false,
+  variant,
   children,
 }: {
   label: string;
   defaultOpen?: boolean;
+  variant?: "policy" | "base";
   children: ReactNode;
 }) {
+  const contextVariant = useContext(PanelVariantContext);
+  const resolvedVariant = variant ?? contextVariant;
+  const isBaseVariant = resolvedVariant === "base";
   const [open, setOpen] = useState(defaultOpen);
+  const isOpen = isBaseVariant ? true : open;
 
   return (
     <div className="space-y-2">
-      <Row label={label} tone="neutral" onLabelClick={() => setOpen((prev) => !prev)} ariaExpanded={open} />
-      {open ? <DetailBlock>{children}</DetailBlock> : null}
+      <Row
+        label={label}
+        tone="neutral"
+        variant={resolvedVariant}
+        onLabelClick={isBaseVariant ? undefined : () => setOpen((prev) => !prev)}
+        ariaExpanded={isOpen}
+      />
+      {isOpen ? <DetailBlock variant={resolvedVariant}>{children}</DetailBlock> : null}
     </div>
   );
 }
 
 function DetailBlock({
+  variant,
   children,
 }: {
+  variant?: "policy" | "base";
   children: ReactNode;
 }) {
-  return <div className="detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3">{children}</div>;
-}
-
-function renderDebugTree(
-  tree: DebugFieldTree[],
-  map: BooleanMap | undefined,
-  onToggle: (key: string, next: boolean) => void
-) {
-  return tree.map((node) => {
-    const checked = readBooleanMap(map, node.key);
-    if (node.children && node.children.length > 0) {
-      return (
-        <ToggleRowGroup
-          key={node.key}
-          label={node.key}
-          checked={checked}
-          onToggle={(next) => onToggle(node.key, next)}
-        >
-          {renderDebugTree(node.children, map, (key, next) => onToggle(key, next))}
-        </ToggleRowGroup>
-      );
-    }
-    return (
-      <ToggleRow key={node.key} label={node.key} checked={checked} onToggle={(next) => onToggle(node.key, next)} />
-    );
-  });
+  const contextVariant = useContext(PanelVariantContext);
+  const resolvedVariant = variant ?? contextVariant;
+  return (
+    <div
+      className={
+        resolvedVariant === "base"
+          ? "detail-block mt-2 space-y-2"
+          : "detail-block mt-2 space-y-2 border-l-2 border-slate-200 pl-3"
+      }
+    >
+      {children}
+    </div>
+  );
 }

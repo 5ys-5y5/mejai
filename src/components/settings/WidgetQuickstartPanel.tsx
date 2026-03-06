@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { SelectPopover } from "@/components/SelectPopover";
 import { apiFetch } from "@/lib/apiClient";
 import { toast } from "sonner";
 
@@ -12,19 +13,29 @@ type WidgetConfig = {
   public_key?: string | null;
   allowed_domains?: string[] | null;
   is_active?: boolean | null;
+  page_keys?: string[] | null;
 };
 
 export function WidgetQuickstartPanel() {
   const [loading, setLoading] = useState(true);
-  const [widget, setWidget] = useState<WidgetConfig | null>(null);
+  const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
+  const [selectedId, setSelectedId] = useState<string>("");
+  const selectedWidget = useMemo(
+    () => widgets.find((item) => item.id === selectedId) || widgets[0] || null,
+    [widgets, selectedId]
+  );
 
   const loadWidget = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiFetch<{ item: WidgetConfig | null }>("/api/widgets");
-      setWidget(res.item || null);
+      const res = await apiFetch<{ items: WidgetConfig[] }>("/api/widgets");
+      const list = res.items || [];
+      setWidgets(list);
+      const fallbackId = list[0]?.id || "";
+      setSelectedId((prev) => (prev && list.some((item) => item.id === prev) ? prev : fallbackId));
     } catch (error) {
-      setWidget(null);
+      setWidgets([]);
+      setSelectedId("");
     } finally {
       setLoading(false);
     }
@@ -34,7 +45,7 @@ export function WidgetQuickstartPanel() {
     void loadWidget();
   }, [loadWidget]);
 
-  const publicKey = (widget?.public_key || "").trim();
+  const publicKey = (selectedWidget?.public_key || "").trim();
   const snippet = useMemo(() => {
     if (!publicKey) return "";
     return `<script async src=\"https://mejai.help/widget.js\" data-key=\"${publicKey}\"></script>`;
@@ -43,6 +54,20 @@ export function WidgetQuickstartPanel() {
   return (
     <div className="space-y-4">
       <Card className="p-4">
+        <div className="mb-3">
+          <div className="mb-1 text-xs text-slate-600">템플릿 선택</div>
+          <SelectPopover
+            value={selectedId}
+            options={widgets.map((item) => ({
+              id: String(item.id || ""),
+              label: String(item.name || item.id || "템플릿"),
+              description: item.public_key ? `키: ${item.public_key}` : undefined,
+            }))}
+            onChange={(value) => setSelectedId(value)}
+            className="w-full"
+            buttonClassName="h-9 text-xs"
+          />
+        </div>
         <div className="text-sm font-semibold text-slate-900">시작 안내</div>
         <div className="mt-2 text-xs text-slate-600">
           아래 단계는 비개발자도 따라할 수 있도록 작성되었습니다. 순서대로 진행하세요.
@@ -74,7 +99,11 @@ export function WidgetQuickstartPanel() {
           이 섹션은 `/api/widgets` 응답을 기반으로 키와 상태를 표시합니다.
         </div>
         <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
-          {loading ? "불러오는 중..." : widget ? "정상 (위젯 데이터 수신 완료)" : "실패 (위젯 데이터 없음)"}
+          {loading
+            ? "불러오는 중..."
+            : selectedWidget
+              ? "정상 (위젯 데이터 수신 완료)"
+              : "실패 (위젯 데이터 없음)"}
         </div>
         <div className="mt-2 text-[11px] text-slate-500">
           위젯 데이터가 없으면 “채팅 위젯” 탭에서 설정을 저장해야 합니다.
@@ -115,8 +144,8 @@ export function WidgetQuickstartPanel() {
         <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
           {loading ? (
             "불러오는 중..."
-          ) : widget?.allowed_domains && widget.allowed_domains.length > 0 ? (
-            widget.allowed_domains.join(", ")
+          ) : selectedWidget?.allowed_domains && selectedWidget.allowed_domains.length > 0 ? (
+            selectedWidget.allowed_domains.join(", ")
           ) : (
             "허용 도메인이 등록되지 않았습니다."
           )}
@@ -132,7 +161,7 @@ export function WidgetQuickstartPanel() {
           런처 클릭 시 위젯이 열리고, `/api/widget/init`가 호출되어 토큰이 발급됩니다.
         </div>
         <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
-          {widget?.is_active ? "미확인 (최근 신호 없음)" : "비활성 상태"}
+          {selectedWidget?.is_active ? "미확인 (최근 신호 없음)" : "비활성 상태"}
         </div>
         <div className="mt-2 text-[11px] text-slate-500">
           토큰은 자동으로 발급되며 관리자 화면에 노출되지 않습니다. 위젯이 열리고 채팅이 가능하면 정상입니다.
