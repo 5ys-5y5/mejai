@@ -1016,6 +1016,80 @@ export function applyConversationFeatureVisibility(
   };
 }
 
+function mapBooleanFieldsDeep(value: unknown, nextValue: boolean): unknown {
+  if (typeof value === "boolean") return nextValue;
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") {
+    const next: Record<string, unknown> = {};
+    Object.entries(value).forEach(([key, entry]) => {
+      next[key] = mapBooleanFieldsDeep(entry, nextValue);
+    });
+    return next;
+  }
+  return value;
+}
+
+function isVisibilityMode(value: unknown): value is FeatureVisibilityMode {
+  return value === "user" || value === "admin" || value === "public";
+}
+
+function mapVisibilityModesDeep(value: unknown, nextMode: FeatureVisibilityMode): unknown {
+  if (isVisibilityMode(value)) return nextMode;
+  if (Array.isArray(value)) return value;
+  if (value && typeof value === "object") {
+    const next: Record<string, unknown> = {};
+    Object.entries(value).forEach(([key, entry]) => {
+      next[key] = mapVisibilityModesDeep(entry, nextMode);
+    });
+    return next;
+  }
+  return value;
+}
+
+export function applyConversationFeatureBulkToggle(
+  provider: ConversationFeaturesProviderShape | null | undefined,
+  page: ConversationPageKey,
+  enabled: boolean
+): ConversationFeaturesProviderShape {
+  const normalized = normalizeConversationFeatureProvider(provider) || {};
+  const base = getDefaultConversationPageFeatures(page);
+  const current = mergeConversationPageFeatures(base, normalized.pages?.[page] ?? normalized.features);
+  const toggled = mapBooleanFieldsDeep(current, enabled) as ConversationPageFeatures;
+  const nextProvider: ConversationFeaturesProviderShape = {
+    ...normalized,
+    features: toggled,
+    pages: {
+      ...(normalized.pages || {}),
+      [page]: toggled,
+    },
+  };
+  return normalizeConversationFeatureProvider(nextProvider) || nextProvider;
+}
+
+export function applyConversationFeatureVisibilityMode(
+  provider: ConversationFeaturesProviderShape | null | undefined,
+  page: ConversationPageKey,
+  mode: FeatureVisibilityMode
+): ConversationFeaturesProviderShape {
+  const normalized = normalizeConversationFeatureProvider(provider) || {};
+  const base = getDefaultConversationPageFeatures(page);
+  const current = mergeConversationPageFeatures(base, normalized.pages?.[page] ?? normalized.features);
+  const nextVisibility = mapVisibilityModesDeep(current.visibility, mode) as ConversationPageFeatures["visibility"];
+  const nextFeatures: ConversationPageFeatures = {
+    ...current,
+    visibility: nextVisibility,
+  };
+  const nextProvider: ConversationFeaturesProviderShape = {
+    ...normalized,
+    features: nextFeatures,
+    pages: {
+      ...(normalized.pages || {}),
+      [page]: nextFeatures,
+    },
+  };
+  return normalizeConversationFeatureProvider(nextProvider) || nextProvider;
+}
+
 /**
  * 정책 편집 가이드:
  * 1) 특정 페이지에서 provider를 막고 싶으면:

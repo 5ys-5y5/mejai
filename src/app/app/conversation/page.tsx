@@ -5,7 +5,7 @@ import { Plus, RefreshCw, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
+import type { SelectOption } from "@/components/SelectPopover";
 import { ChatSettingsPanel } from "@/components/conversation/ChatSettingsPanel";
 import { apiFetch } from "@/lib/apiClient";
 import { getSupabaseClient } from "@/lib/supabaseClient";
@@ -17,8 +17,12 @@ import {
 } from "@/components/design-system/widget/WidgetUI.parts";
 import {
   WIDGET_PAGE_KEY,
+  applyConversationFeatureBulkToggle,
+  applyConversationFeatureVisibilityMode,
   normalizeConversationFeatureProvider,
+  resolveConversationPageFeatures,
   type ConversationFeaturesProviderShape,
+  type FeatureVisibilityMode,
 } from "@/lib/conversation/pageFeaturePolicy";
 import type { WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 import {
@@ -80,6 +84,42 @@ function isValidUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function isVisibilityMode(value: unknown): value is FeatureVisibilityMode {
+  return value === "public" || value === "user" || value === "admin";
+}
+
+function countBooleanFields(value: unknown, skipVisibility = false): { total: number; enabled: number } {
+  if (typeof value === "boolean") {
+    return { total: 1, enabled: value ? 1 : 0 };
+  }
+  if (Array.isArray(value) || !value || typeof value !== "object") {
+    return { total: 0, enabled: 0 };
+  }
+  let total = 0;
+  let enabled = 0;
+  Object.entries(value).forEach(([key, entry]) => {
+    if (skipVisibility && key === "visibility") return;
+    const child = countBooleanFields(entry, skipVisibility);
+    total += child.total;
+    enabled += child.enabled;
+  });
+  return { total, enabled };
+}
+
+function countVisibilityModes(value: unknown): Record<FeatureVisibilityMode, number> {
+  const counts: Record<FeatureVisibilityMode, number> = { public: 0, user: 0, admin: 0 };
+  const walk = (entry: unknown) => {
+    if (isVisibilityMode(entry)) {
+      counts[entry] += 1;
+      return;
+    }
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return;
+    Object.values(entry).forEach(walk);
+  };
+  walk(value);
+  return counts;
+}
+
 function buildPolicyFingerprint(value: ConversationFeaturesProviderShape | null | undefined) {
   const normalized = normalizeConversationFeatureProvider(value);
   const merged = withNullFeatureDefaults(normalized, WIDGET_PAGE_KEY);
@@ -126,6 +166,9 @@ export default function ConversationWidgetPage() {
   const [policySaving, setPolicySaving] = useState(false);
   const [policyRefreshNonce, setPolicyRefreshNonce] = useState(0);
   const [policyBaselineFingerprint, setPolicyBaselineFingerprint] = useState("");
+  const [bulkEnabledSelection, setBulkEnabledSelection] = useState<boolean | null>(null);
+  const [bulkVisibilitySelection, setBulkVisibilitySelection] = useState<FeatureVisibilityMode | null>(null);
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
   const [saveSyncing, setSaveSyncing] = useState(false);
   const policySyncRef = useRef(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -572,6 +615,36 @@ export default function ConversationWidgetPage() {
   }, [draft?.id, policyValue]);
 
   const policyTemplateId = draft?.id && isValidUuid(String(draft.id)) ? String(draft.id) : "";
+  const bulkDisabled = !policyTemplateId || isSaving;
+
+  const bulkSummary = useMemo(() => {
+    if (!policyValue) return null;
+    const resolved = resolveConversationPageFeatures(WIDGET_PAGE_KEY, policyValue);
+    const { total, enabled } = countBooleanFields(resolved, true);
+    const visibilityCounts = countVisibilityModes(resolved.visibility);
+    const activeModes = (Object.keys(visibilityCounts) as FeatureVisibilityMode[]).filter(
+      (key) => visibilityCounts[key] > 0
+    );
+    const currentVisibilityMode = activeModes.length === 1 ? activeModes[0] : "";
+    return {
+      total,
+      enabled,
+      disabled: Math.max(0, total - enabled),
+      visibilityCounts,
+      currentVisibilityMode,
+    };
+  }, [policyValue]);
+
+  const bulkSelectionText = useMemo(() => {
+    const parts: string[] = [];
+    if (bulkEnabledSelection !== null) {
+      parts.push(`on/off: ${bulkEnabledSelection ? "ON" : "OFF"}`);
+    }
+    if (bulkVisibilitySelection) {
+      parts.push(`visibility: ${bulkVisibilitySelection}`);
+    }
+    return parts.length ? parts.join(", ") : "선택 없음";
+  }, [bulkEnabledSelection, bulkVisibilitySelection]);
   useEffect(() => {
     if (!policyTemplateId) {
       setPolicyValue(null);
@@ -645,6 +718,24 @@ export default function ConversationWidgetPage() {
       setSaveSyncing(false);
     }
   }, [policyTemplateId, policyValue, draft, setupConfig, domainText, pathText]);
+
+  const canApplyBulk =
+    !bulkDisabled && (bulkEnabledSelection !== null || bulkVisibilitySelection !== null);
+
+  const applyBulkChanges = useCallback(() => {
+    if (!canApplyBulk) return;
+    setPolicyValue((prev) => {
+      let next = prev;
+      if (bulkEnabledSelection !== null) {
+        next = applyConversationFeatureBulkToggle(next, WIDGET_PAGE_KEY, bulkEnabledSelection);
+      }
+      if (bulkVisibilitySelection) {
+        next = applyConversationFeatureVisibilityMode(next, WIDGET_PAGE_KEY, bulkVisibilitySelection);
+      }
+      return next;
+    });
+    setBulkConfirmOpen(false);
+  }, [bulkEnabledSelection, bulkVisibilitySelection, canApplyBulk]);
 
   if (adminReady && !isAdmin) {
     return (
@@ -805,13 +896,113 @@ export default function ConversationWidgetPage() {
                 <Card className="p-3">
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <div className="text-xs font-semibold text-slate-900">대화 정책</div>
+                      <div className="text-xs font-semibold text-slate-900">대화 정책 일괄 설정</div>
                       <div className="text-[11px] text-slate-500">
-                        docs/guide/ref/conversation 기준 UI
+                        전체 항목의 on/off 및 public/user/admin 가시성을 선택 후 적용합니다.
                       </div>
                     </div>
                   </div>
-                  {draft ? null : null}
+                  <div className="mt-3 grid grid-cols-1 gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-semibold text-slate-500">일괄 on/off</span>
+                      <Button
+                        type="button"
+                        variant={bulkEnabledSelection === true ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBulkEnabledSelection(true)}
+                        disabled={bulkDisabled}
+                      >
+                        전체 ON
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={bulkEnabledSelection === false ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBulkEnabledSelection(false)}
+                        disabled={bulkDisabled}
+                      >
+                        전체 OFF
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => setBulkEnabledSelection(null)}
+                        disabled={bulkDisabled || bulkEnabledSelection === null}
+                        className="text-[11px] font-semibold text-slate-500 disabled:text-slate-300"
+                      >
+                        선택 해제
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-semibold text-slate-500">가시성</span>
+                      <Button
+                        type="button"
+                        variant={bulkVisibilitySelection === "public" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBulkVisibilitySelection("public")}
+                        disabled={bulkDisabled}
+                      >
+                        public
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={bulkVisibilitySelection === "user" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBulkVisibilitySelection("user")}
+                        disabled={bulkDisabled}
+                      >
+                        user
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={bulkVisibilitySelection === "admin" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setBulkVisibilitySelection("admin")}
+                        disabled={bulkDisabled}
+                      >
+                        admin
+                      </Button>
+                      <button
+                        type="button"
+                        onClick={() => setBulkVisibilitySelection(null)}
+                        disabled={bulkDisabled || bulkVisibilitySelection === null}
+                        className="text-[11px] font-semibold text-slate-500 disabled:text-slate-300"
+                      >
+                        선택 해제
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-600">
+                      <span>
+                        현재 on/off:{" "}
+                        <span className="font-semibold text-slate-700">
+                          {bulkSummary ? `${bulkSummary.enabled}/${bulkSummary.total}` : "-"}
+                        </span>
+                      </span>
+                      <span>
+                        현재 가시성:{" "}
+                        <span className="font-semibold text-slate-700">
+                          {bulkSummary?.currentVisibilityMode || "혼합"}
+                        </span>
+                      </span>
+                      <span>
+                        public {bulkSummary?.visibilityCounts.public ?? 0} / user{" "}
+                        {bulkSummary?.visibilityCounts.user ?? 0} / admin{" "}
+                        {bulkSummary?.visibilityCounts.admin ?? 0}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-slate-500">
+                        선택한 항목만 적용됩니다. 적용 전 확인이 필요합니다.
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => setBulkConfirmOpen(true)}
+                        disabled={!canApplyBulk}
+                      >
+                        적용
+                      </Button>
+                    </div>
+                  </div>
                 </Card>
                 {policyLoading ? (
                   <Card className="p-4 text-xs text-slate-500">정책을 불러오는 중...</Card>
@@ -1007,6 +1198,45 @@ export default function ConversationWidgetPage() {
             >
               {isSaving ? "저장중" : "저장하기"}
             </Button>
+          </div>
+        ) : null}
+        {bulkConfirmOpen ? (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4">
+            <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-semibold text-slate-900">일괄 적용 확인</div>
+                <button
+                  type="button"
+                  onClick={() => setBulkConfirmOpen(false)}
+                  className="text-xs font-semibold text-slate-500 hover:text-slate-700"
+                >
+                  닫기
+                </button>
+              </div>
+              <div className="text-xs text-slate-600">적용 내용: {bulkSelectionText}</div>
+              <div className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-[11px] text-slate-600">
+                <div>
+                  현재 on/off:{" "}
+                  <span className="font-semibold text-slate-700">
+                    {bulkSummary ? `${bulkSummary.enabled}/${bulkSummary.total}` : "-"}
+                  </span>
+                </div>
+                <div>
+                  현재 가시성:{" "}
+                  <span className="font-semibold text-slate-700">
+                    {bulkSummary?.currentVisibilityMode || "혼합"}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setBulkConfirmOpen(false)}>
+                  취소
+                </Button>
+                <Button type="button" size="sm" onClick={applyBulkChanges} disabled={!canApplyBulk}>
+                  적용
+                </Button>
+              </div>
+            </div>
           </div>
         ) : null}
       </div>
