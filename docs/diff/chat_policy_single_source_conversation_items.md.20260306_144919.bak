@@ -82,22 +82,6 @@
 - 기능 파괴 방지를 위해, 런타임/저장/표시 경로를 조사 후 **최소 변경**으로 단일화한다.
 - 단일화 기준은 "현재 가장 널리 사용되는 경로"이며, 변경 시 영향 범위를 문서화한다.
 
-실사용 경로 조사 결과(2026-03-06):
-- UI 입력: `ChatSettingsPanel`이 `widget.allowed_*`를 직접 편집.
-- 런타임/응답 구성: API/공유 인스턴스에서 `widget.access.allowed_*`를 우선 사용.
-- 정규화: `normalizeWidgetPolicyWidgetFields`가 양쪽을 상호 보완/동기화.
-
-단일화 계획(승인 필요):
-- 후보 A: `widget.access.allowed_*`를 단일 원천으로 채택.
-  - 이유: 런타임/응답 구성 경로에서 실제 사용됨.
-  - 필요 변경: UI 입력을 `widget.access.*`로 이동, 정규화에서 `widget.allowed_*` 쓰기 제거.
-- 후보 B: `widget.allowed_*`를 단일 원천으로 채택.
-  - 이유: UI 입력 경로를 유지.
-  - 필요 변경: 런타임/응답 구성 경로를 `widget.allowed_*`로 변경.
-
-결론:
-- 현재는 **중복 확실**이며, 단일화 방향은 승인 후 결정한다.
-
 ### 6) 관리자 패널 토글 (정책 원천: features/adminPanel)
 - `chat_policy.features.adminPanel.enabled`
 - `chat_policy.features.adminPanel.logsToggle`
@@ -169,10 +153,10 @@
 
 정리 방향:
 - 정책 원천 유지.
-- 정식 원천은 `settings_ui.setup_fields[pageKey]`로 고정한다.
-- `setup_ui`는 읽기 fallback만 허용한다.
-  - 읽기: `settings_ui.setup_fields[pageKey]` 우선, 없으면 `setup_ui`
-  - 쓰기: `settings_ui.setup_fields[pageKey]`만 기록, `setup_ui`는 더 이상 쓰지 않는다.
+- `setup_ui`와 `settings_ui.setup_fields[pageKey]`가 이중으로 기록되는 구조는 계약 레벨이라 유지하되,
+  "읽기 우선순위"를 문서화한다.
+  - 읽기: `settings_ui.setup_fields[pageKey]` 우선, 없으면 `setup_ui` 사용
+  - 쓰기: 두 경로 모두 업데이트(기존 호환 유지)
 
 ### 12) Visibility (정책 원천: features.visibility)
 - `chat_policy.features.visibility.*` 전 항목

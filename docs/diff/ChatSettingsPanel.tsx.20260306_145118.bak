@@ -743,8 +743,8 @@ export function ChatSettingsPanel({
               }
             />
             <Row
-              label="theme.primary_color"
-              displayLabel="primary_color"
+              label="theme.primary_color / theme.launcher_bg"
+              displayLabel="primary_color | launcher_bg"
               variant={variant}
               right={
                 <div className="flex items-center gap-2">
@@ -760,20 +760,13 @@ export function ChatSettingsPanel({
                     className="h-7 w-[120px] text-[11px]"
                     placeholder="#4f46e5"
                   />
+                  <Input
+                    value={typeof widget.theme?.launcher_bg === "string" ? widget.theme.launcher_bg : ""}
+                    onChange={(event) => updateWidget(["theme", "launcher_bg"], event.target.value)}
+                    className="h-7 w-[120px] text-[11px]"
+                    placeholder="#0f172a"
+                  />
                 </div>
-              }
-            />
-            <Row
-              label="theme.launcher_bg"
-              displayLabel="launcher_bg"
-              variant={variant}
-              right={
-                <Input
-                  value={typeof widget.theme?.launcher_bg === "string" ? widget.theme.launcher_bg : ""}
-                  onChange={(event) => updateWidget(["theme", "launcher_bg"], event.target.value)}
-                  className="h-7 w-[120px] text-[11px]"
-                  placeholder="#0f172a"
-                />
               }
             />
             <Row
@@ -947,31 +940,27 @@ export function ChatSettingsPanel({
           </RowGroup>
 
           <RowGroup label="widget.access" displayLabel="노출/권한">
-            {isHidden("widget.access.allowed_domains") ? null : (
+            {isHidden("widget.allowed_domains") ? null : (
               <Row
-                label="widget.access.allowed_domains"
+                label="widget.allowed_domains"
                 alignTop
                 right={
                   <textarea
-                    value={formatLines(Array.isArray(widget.access?.allowed_domains) ? widget.access?.allowed_domains : undefined)}
-                    onChange={(event) =>
-                      updateWidget(["access", "allowed_domains"], parseLinesAndComma(event.target.value))
-                    }
+                    value={formatLines(widget.allowed_domains)}
+                    onChange={(event) => updateWidget(["allowed_domains"], parseLinesAndComma(event.target.value))}
                     className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
                   />
                 }
               />
             )}
-            {isHidden("widget.access.allowed_paths") ? null : (
+            {isHidden("widget.allowed_paths") ? null : (
               <Row
-                label="widget.access.allowed_paths"
+                label="widget.allowed_paths"
                 alignTop
                 right={
                   <textarea
-                    value={formatLines(Array.isArray(widget.access?.allowed_paths) ? widget.access?.allowed_paths : undefined)}
-                    onChange={(event) =>
-                      updateWidget(["access", "allowed_paths"], parseLinesAndComma(event.target.value))
-                    }
+                    value={formatLines(widget.allowed_paths)}
+                    onChange={(event) => updateWidget(["allowed_paths"], parseLinesAndComma(event.target.value))}
                     className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
                   />
                 }

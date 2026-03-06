@@ -1,0 +1,201 @@
+# 위젯 로그인 탭 및 대화 기반 로그인 런타임 설계 (업데이트)
+
+작성일: 2026-03-06
+작성자: Codex
+범위: 설계 문서 + 로그인 데모페이지 구현
+
+## 목표
+- 위젯 탭바(대화/리스트/정책) 우측에 "로그인" 탭을 추가한다.
+- http://localhost:3000/app/conversation 페이지의 `widget.tabBar.enabled` 하단에서 탭 노출/권한을 설정할 수 있도록 한다.
+  - on/off
+  - public/user/admin 중 하나를 선택
+- 해당 탭의 권한이 `user`인 경우, 비로그인 상태에서도 대화 탭을 통해 "관리자 로그인" 맥락으로 로그인할 수 있는 런타임을 제공한다.
+- 대화에서 "관리자 로그인" 맥락이 전달되면 Solapi MCP 기반 휴대폰 인증을 통해 유저를 특정하고, 해당 번호로 가입된 유저를 로그인 완료로 간주하여 로그인 상태로 전환한다.
+- 로그인 완료 후 user 전용 정보 접근 가능.
+- 로그인 상태라면 "로그인" 탭은 노출되지 않는다.
+- 로그인 탭은 서비스 기능을 가장 직관적으로 보여주는 공유 가능한 페이지가 되어야 한다.
+- 로그인 데모페이지(`/app/logindemo`)는 320x420px 크기로 구현하여 UI 확인 가능해야 한다.
+- 데모 UI는 추후 `src/app/embed/[key]/page.tsx`에 직접 코드로 기록되어야 하며, 데모페이지 UI를 단순 import/재사용하는 방식이 아니라 동일한 UI 코드가 해당 파일에 존재해야 한다.
+
+## 범위 외
+- 실제 UI/서버 코드 변경(로그인 탭 기능 실구현)
+- 인증 벤더 선정 및 비용 정책 변경
+- 신규 사용자 가입/회원가입 플로우
+
+---
+
+## 실행 정책 (필수 준수)
+아래 정책은 본 설계 또는 후속 수정에서 100% 준수한다. 간결하게 요약하지 않고, 실제 실행 단계에서 누락이 없도록 상세하게 기록한다.
+
+1. 수정 전 이해확정 절차
+- 수정 적용 전, 현재 요청에 대한 이해 내용을 목록으로 정리한다.
+- 정리된 이해 내용에 대해 서로 실행하고자 하는 바가 일치하는지 사용자가 명시적으로 확정한 뒤에만 수정한다.
+- 확정 없이 임의로 수정에 착수하지 않는다.
+
+2. 변경 기록 및 롤백 보장
+- 코드 수정이 있는 경우, 수정 직전의 코드를 반드시 `C:\dev\1227\mejai3\mejai\docs\diff` 폴더에 기록한다.
+- 기록이 없으면 치명적 에러를 막을 수 없으므로, 기록 누락은 허용하지 않는다.
+- 기록 대상은 변경된 파일 전체 또는 수정 구간을 포함하는 형태여야 하며, 언제든 수정 직전 상태로 롤백 가능해야 한다.
+
+3. 확정 범위 외 수정 금지
+- 사용자가 확정한 범위를 넘어서는 변경을 임의로 수행하지 않는다.
+- 서비스 파괴(인코인, UI)의 주된 원인이므로 절대 금지한다.
+
+---
+
+## 확정된 현재 상태 (서비스 코드 확인 완료)
+다음은 실제 코드에서 확인된 사실이며, 가정이 아닌 확정 사항이다.
+
+1. 탭바 설정 위치와 스키마
+- `widget.tabBar.enabled` 및 개별 탭(`chat/list/policy`)은 `src/components/conversation/ChatSettingsPanel.tsx`에서 설정 UI가 제공된다.
+- `ConversationPageFeatures.widget.tabBar`는 `enabled/chat/list/policy` boolean을 가지며, 기본 스키마는 `src/lib/conversation/pageFeaturePolicy.ts`에 정의되어 있다.
+
+2. 탭바 가시성 적용 방식
+- 가시성 모드는 `FeatureVisibilityMode = "user" | "admin" | "public"`이며 타입은 `src/lib/conversation/pageFeaturePolicy.ts`에 정의되어 있다.
+- 현재 `applyConversationFeatureVisibility()`는 `admin`만 차단하고 `user` 모드는 별도 판정이 없어 사실상 `public`과 동일하게 동작한다.
+  - 이는 로그인 기반 `user` 가시성을 구현하기 위해 계약/로직 확장이 필요함을 의미한다.
+
+3. 위젯 탭 목록 결정
+- 위젯 탭 노출/활성은 `src/app/embed/[key]/page.tsx`의 `allowedTabs` 로직에서 `widget.tabBar.*` 및 `widget.*Panel` 플래그로 결정된다.
+- 현재 탭 목록은 `chat/list/policy`에 한정되어 있다.
+
+4. Solapi OTP MCP 구현
+- OTP 발송/검증은 `src/lib/mcpAdapters.ts`의 `send_otp` / `verify_otp`에 구현되어 있다.
+- `send_otp`는 `H_auth_otp_verifications` 테이블에 아래 필드를 기록한다:
+  - `id`, `org_id`, `user_id`, `destination`, `otp_ref`, `code_hash`, `expires_at`
+- `verify_otp`는 다음 규칙으로 검증한다:
+  - `otp_ref` 필수
+  - `verified_at` 존재 시 재사용 불가
+  - `expires_at` 만료 시 실패
+  - 해시 불일치 시 실패
+  - 성공 시 `verification_token`을 갱신하고 `customer_verification_token`을 반환
+- OTP 기본 만료는 5분이다 (`expires_at = now + 5min`).
+
+5. OTP 런타임 상태 필드
+- OTP 대화 흐름 상태는 `src/app/api/runtime/chat/runtime/otpRuntime.ts`에서 `bot_context`에 다음 필드를 기록한다:
+  - `otp_pending`, `otp_stage`, `otp_destination`, `otp_ref`, `expected_input`, `customer_verification_token`
+
+6. 위젯 토큰 TTL
+- 위젯 토큰은 `src/lib/widgetToken.ts`에서 기본 TTL 3600초(1시간)로 발급된다.
+
+---
+
+## 요구사항 반영 설계
+
+### 1. 로그인 탭 추가 및 표시 규칙
+- 탭바에 `login` 탭 추가.
+- 위치: `대화/리스트/정책` 오른쪽.
+- 권한: `public/user/admin` 지원.
+- 로그인 상태라면 `login` 탭은 숨김.
+
+### 2. 설정 스키마 확장
+- `widget.tabBar.enabled` 하단에 `widget.tabBar.login` 설정을 추가한다.
+- `visibility.widget.tabBar.login`도 동일하게 제공해야 한다.
+
+예시:
+- `widget.tabBar.login = true|false`
+- `visibility.widget.tabBar.login = "public" | "user" | "admin"`
+
+### 3. 로그인 상태 판정
+- 현재 `FeatureVisibilityMode`는 `user`를 포함하지만 판정 로직이 없다.
+- 계약/로직 확장 필요:
+  - `applyConversationFeatureVisibility()`에 `isUserLoggedIn` 인자를 추가하여 `user` 가시성을 판정.
+  - widget 페이지에서 로그인 상태를 계산하여 전달.
+
+로그인 상태 기준(신규 계약):
+- OTP 인증 성공 후 `customer_verification_token`이 유효하고,
+- 해당 인증 토큰으로 조회된 사용자(휴대폰 번호 기반)가 존재할 때 `loggedIn = true`.
+- 로그인 상태는 세션 스코프에 저장한다(예: D_conv_sessions.metadata 또는 별도 세션 테이블).
+
+### 4. 대화 기반 로그인 런타임
+- “관리자 로그인” 맥락이 감지되면 OTP 런타임에 진입한다.
+- **반드시 기존 Solapi MCP( `send_otp` / `verify_otp` )를 사용**한다.
+- OTP 완료 후 휴대폰 번호로 가입된 사용자 조회.
+  - 존재: 로그인 완료
+  - 미존재: 실패 처리
+
+### 5. 실패 케이스 (일반적 방식)
+기존 OTP 런타임의 실패 규칙을 그대로 활용한다.
+- `OTP_NOT_FOUND`, `OTP_ALREADY_USED`, `OTP_EXPIRED`, `OTP_INVALID`
+- `send_otp` 실패 시 “인증번호 전송에 실패했어요. 잠시 후 다시 시도해주세요.”
+- `verify_otp` 실패 시 “인증번호가 올바르지 않아요. 다시 입력해주세요.”
+- 툴 비허용 시 “본인 인증을 진행할 수 없어요. 잠시 후 다시 시도해주세요.”
+
+### 6. 세션 만료 기준
+- 위젯 토큰 기본 TTL은 1시간(`issueWidgetToken` 기본값)이며, 이를 로그인 세션의 기본 만료 기준으로 삼는다.
+- OTP 자체 만료는 5분(`send_otp` 기준).
+- 로그인 세션 만료 시 로그인 탭을 다시 노출하고 대화 기반 로그인 루프를 허용한다.
+
+---
+
+## 데이터/상태 모델 변경 (Solapi OTP 기준 정합)
+이 섹션은 기존 Solapi OTP 코드에 맞춰 작성되며 임의 정의를 금지한다.
+
+1. OTP 요청 상태 (`bot_context`)
+- `otp_pending: boolean`
+- `otp_stage: "awaiting_phone" | "awaiting_code" | null`
+- `otp_destination: string | null`
+- `otp_ref: string | null`
+- `expected_input: "phone" | "otp_code" | null`
+- `customer_verification_token: string | null`
+
+2. OTP 저장 테이블 (`H_auth_otp_verifications`)
+- `id`, `org_id`, `user_id`, `destination`, `otp_ref`, `code_hash`, `expires_at`, `verified_at`, `verification_token`
+
+3. OTP 응답 (Solapi MCP)
+- `send_otp` 성공 응답: `otp_ref`, `expires_at`, `delivery`, `destination(masked)`, `test_mode`, `test_code?`
+- `verify_otp` 성공 응답: `customer_verification_token`
+
+4. 로그인 완료 상태
+- 로그인 완료 시 세션 메타 또는 별도 인증 테이블에 다음을 기록:
+  - `authenticated_user_id`
+  - `authenticated_phone`
+  - `auth_verified_at`
+  - `customer_verification_token`
+
+---
+
+## 로그인 탭 UX 요구사항
+- 로그인 탭은 서비스 기능을 직관적으로 보여주는 공유 가능한 페이지여야 한다.
+- 상단에 “정책” 인풋 박스가 노출되고, 바로 아래에 “대화” 창이 노출된다.
+- 무한 루프 형태로 다음을 반복:
+  1. 정책 텍스트 입력
+  2. 사용자가 대화
+  3. 정책에 맞게 답변
+- 실제 UI가 계속 바뀌는 동영상 같은 느낌을 제공한다.
+
+---
+
+## 로그인 데모페이지
+- 경로: `/app/logindemo`
+- 크기: 320x420px
+- UI 루프 애니메이션 구현
+- 파일: `src/app/app/logindemo/page.tsx`
+
+주의:
+- 이 페이지는 임시 데모이다.
+- 추후 로그인 탭 실제 구현 시 UI 코드는 `src/app/embed/[key]/page.tsx`에 **직접 작성**해야 한다.
+- 데모 페이지 UI를 import하거나 끌어다 쓰지 않는다.
+
+---
+
+## 구현 단계 체크리스트 (후속 작업용)
+- 수정 전 이해확정 절차 수행
+- 변경 파일 백업 to `docs\diff`
+- `ConversationPageFeatures.widget.tabBar`에 `login` 탭 추가
+- `visibility.widget.tabBar.login` 추가
+- `applyConversationFeatureVisibility()`에 `user` 가시성 판정 추가
+- 로그인 상태 판정 로직 추가
+- 로그인 상태 시 `login` 탭 숨김
+- “관리자 로그인” 맥락 감지 시 OTP 런타임 진입
+- `send_otp` / `verify_otp` Solapi MCP 사용
+- 로그인 완료 상태 저장
+- 빌드 및 테스트
+
+---
+
+## 오픈 이슈
+- 로그인 완료 사용자 식별 테이블/쿼리 확정
+- 로그인 상태 저장 위치(D_conv_sessions.metadata vs 별도 테이블)
+- 로그인 상태 판정 기준 확정(토큰 유효성, 만료 정책)
+

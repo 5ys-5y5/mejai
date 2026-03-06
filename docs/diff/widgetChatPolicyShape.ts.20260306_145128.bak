@@ -54,6 +54,12 @@ function normalizeWidgetPolicyWidgetFields(
   if (!Array.isArray(widget.allowed_paths) && Array.isArray(base.allowed_paths)) {
     widget.allowed_paths = base.allowed_paths as unknown[];
   }
+  if (!Array.isArray(widget.allowed_domains) && Array.isArray(access.allowed_domains)) {
+    widget.allowed_domains = access.allowed_domains;
+  }
+  if (!Array.isArray(widget.allowed_paths) && Array.isArray(access.allowed_paths)) {
+    widget.allowed_paths = access.allowed_paths;
+  }
   if (!Array.isArray(access.allowed_domains) && Array.isArray(widget.allowed_domains)) {
     access.allowed_domains = widget.allowed_domains;
   }

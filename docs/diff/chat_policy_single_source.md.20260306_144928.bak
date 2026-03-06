@@ -137,13 +137,13 @@
 - 비고: `setup_ui`는 읽기 fallback만 허용, 저장/정규화 결과에는 `settings_ui.setup_fields[pageKey]`만 유지.
 
 4. `allowed_domains` / `allowed_paths` 중복 경로 조사 및 최소 변경 단일화 계획 확정
-- 실행 여부: 완료
-- 비고: 단일 원천은 `widget.access.allowed_*`로 확정. UI 입력은 `widget.access.*`로 이동, 정규화에서 `widget.allowed_*` → `widget.access.*` 단방향 보완만 유지. 런타임/API 변경 없음.
+- 실행 여부: 미시작
+- 비고:
 
 5. 정책 탭 및 관련 UI 라벨을 **원천 정의명**으로 통일
-- 실행 여부: 완료
-- 비고: 대화 정책 UI 항목을 정의명(회색)/표시명(검은색) 구조로 전환. `widget.tabBar.chat` 하위로 Admin Panel/Interaction/Allow-Deny/MCP/Runtime 이동. chevron(토글) 기준 핸들 슬롯 조건 적용. `widget.access.allowed_*` 라벨/숨김키 통일, `theme.primary_color`/`theme.launcher_bg` 분리 완료.
+- 실행 여부: 진행 중
+- 비고: 대화 정책 UI 항목을 정의명(회색)/표시명(검은색) 구조로 전환. `widget.tabBar.chat` 하위로 Admin Panel/Interaction/Allow-Deny/MCP/Runtime 이동. 핸들/토글 자리 고정 렌더링 적용. 추가 점검 필요.
 
 6. `docs/chat_policy_single_source_conversation_items.md`와 실제 코드 변경의 불일치 점검
-- 실행 여부: 완료
-- 비고: Setup UI 단일 원천 규칙을 `settings_ui.setup_fields[pageKey]` 기준으로 정정, allowed_* 실제 사용 경로 조사 반영.
+- 실행 여부: 미시작
+- 비고:
