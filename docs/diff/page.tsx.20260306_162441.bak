@@ -25,6 +25,9 @@ import {
   getPolicyWidgetAccess,
   getPolicyWidgetSetupConfig,
   getPolicyWidgetTheme,
+  setPolicyWidgetAccess,
+  setPolicyWidgetSetupConfig,
+  setPolicyWidgetTheme,
   withNullFeatureDefaults,
 } from "@/lib/widgetPolicyUtils";
 
@@ -323,6 +326,33 @@ export default function ConversationWidgetPage() {
   }, [draft, previewMeta.origin, previewMeta.page_url, previewMeta.referrer]);
 
   useEffect(() => {
+    if (!draft) return;
+    if (policySyncRef.current) return;
+    const access = {
+      allowed_domains: normalizeListInput(domainText),
+      allowed_paths: normalizeListInput(pathText),
+    };
+    const normalizedSetup: WidgetSetupConfig = {
+      ...setupConfig,
+      ...(draft.agent_id ? { agent_id: draft.agent_id } : {}),
+    };
+    setPolicyValue((prev) => {
+      const base = prev || {};
+      let next = setPolicyWidgetTheme(base, draft.theme || {});
+      next = setPolicyWidgetSetupConfig(next, normalizedSetup);
+      next = setPolicyWidgetAccess(next, access);
+      next = {
+        ...next,
+        widget: {
+          ...(next.widget || {}),
+          agent_id: draft.agent_id || undefined,
+        },
+      };
+      return normalizeConversationFeatureProvider(next) || next;
+    });
+  }, [draft, setupConfig, domainText, pathText]);
+
+  useEffect(() => {
     if (!installOverridesText.trim()) {
       setInstallOverrides({});
       return;
@@ -446,7 +476,27 @@ export default function ConversationWidgetPage() {
   };
 
   const handleSave = async () => {
-    await handlePolicySave();
+    if (!draft) return;
+    setLoading(true);
+    try {
+      const res = await apiFetch<{ item: TemplateItem }>(`/api/widget-templates/${draft.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: draft.name,
+          agent_id: draft.agent_id || null,
+          allowed_domains: normalizeListInput(domainText),
+          allowed_paths: normalizeListInput(pathText),
+          theme: draft.theme || {},
+          setup_config: setupConfig,
+          is_active: draft.is_active !== false,
+        }),
+      });
+      setTemplates((prev) => prev.map((item) => (item.id === res.item.id ? res.item : item)));
+      setDraft(res.item);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async () => {
@@ -583,6 +633,18 @@ export default function ConversationWidgetPage() {
         setDraft(res.item);
       }
       let mergedPolicy = policyValue || null;
+      if (draft) {
+        const normalizedSetup: WidgetSetupConfig = {
+          ...setupConfig,
+          ...(draft.agent_id ? { agent_id: draft.agent_id } : {}),
+        };
+        mergedPolicy = setPolicyWidgetTheme(mergedPolicy, draft.theme || {});
+        mergedPolicy = setPolicyWidgetSetupConfig(mergedPolicy, normalizedSetup);
+        mergedPolicy = setPolicyWidgetAccess(mergedPolicy, {
+          allowed_domains: normalizeListInput(domainText),
+          allowed_paths: normalizeListInput(pathText),
+        });
+      }
       mergedPolicy = withNullFeatureDefaults(mergedPolicy, WIDGET_PAGE_KEY);
       await apiFetch(`/api/widget-templates/${policyTemplateId}/chat-policy`, {
         method: "POST",

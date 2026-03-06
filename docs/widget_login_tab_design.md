@@ -4,6 +4,8 @@
 작성자: Codex
 범위: 설계 문서 + 로그인 데모페이지 구현
 
+실행 전 문제 없는 커밋 버전: e28f6c845503ea1ccb2317b3582e14190ff73f3f
+
 ## 목표
 - 위젯 탭바(대화/리스트/정책) 우측에 "로그인" 탭을 추가한다.
 - http://localhost:3000/app/conversation 페이지의 `widget.tabBar.enabled` 하단에서 탭 노출/권한을 설정할 수 있도록 한다.
@@ -199,3 +201,23 @@
 - 로그인 상태 저장 위치(D_conv_sessions.metadata vs 별도 테이블)
 - 로그인 상태 판정 기준 확정(토큰 유효성, 만료 정책)
 
+---
+
+## 진행 전 체크리스트
+
+작성일: 2026-03-06
+범위: 로그인 탭/대화 기반 로그인 런타임/데모 페이지
+
+- [x] 설계 문서 업데이트 (`docs/widget_login_tab_design.md`)
+- [x] 로그인 데모페이지 구현 (`src/app/app/logindemo/page.tsx`)
+- [ ] 수정 전 이해확정 절차 수행 (사용자 확정 필요)
+- [ ] 변경 전 백업 기록 (`C:\dev\1227\mejai3\mejai\docs\diff`)
+- [ ] `ConversationPageFeatures.widget.tabBar`에 `login` 탭 추가
+- [ ] `visibility.widget.tabBar.login` 추가
+- [ ] `applyConversationFeatureVisibility()`에 `user` 가시성 판정 추가
+- [ ] 로그인 상태 판정 로직 추가 (OTP + 사용자 매핑 기준)
+- [ ] 로그인 상태 시 `login` 탭 숨김 처리
+- [ ] “관리자 로그인” 맥락 감지 → Solapi OTP 런타임 진입
+- [ ] OTP 성공 후 사용자 조회 및 로그인 상태 저장
+- [ ] 위젯 로그인 탭 UI 구현 (`src/app/embed/[key]/page.tsx`에 직접 코드 작성)
+- [ ] 빌드/테스트 (`npm run build`)

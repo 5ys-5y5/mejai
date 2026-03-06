@@ -446,7 +446,27 @@ export default function ConversationWidgetPage() {
   };
 
   const handleSave = async () => {
-    await handlePolicySave();
+    if (!draft) return;
+    setLoading(true);
+    try {
+      const res = await apiFetch<{ item: TemplateItem }>(`/api/widget-templates/${draft.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: draft.name,
+          agent_id: draft.agent_id || null,
+          allowed_domains: normalizeListInput(domainText),
+          allowed_paths: normalizeListInput(pathText),
+          theme: draft.theme || {},
+          setup_config: setupConfig,
+          is_active: draft.is_active !== false,
+        }),
+      });
+      setTemplates((prev) => prev.map((item) => (item.id === res.item.id ? res.item : item)));
+      setDraft(res.item);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async () => {
