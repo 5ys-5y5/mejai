@@ -151,10 +151,6 @@ export type ConversationPageFeatures = {
     routeSelector: boolean;
     /** runtime(route) 선택 UI 하위 항목 허용/차단 (route id) */
     routes: IdGate;
-    /** MCP provider 선택 UI 노출 */
-    mcpProviderSelector: boolean;
-    /** MCP action 선택 UI 노출 */
-    mcpActionSelector: boolean;
     /** 인라인 사용자 KB 입력 textarea 노출 */
     inlineUserKbInput: boolean;
     /** 기본 모드 */
@@ -197,11 +193,7 @@ export type ConversationDataLoadPlan = {
 
 export function deriveConversationDataLoadPlan(features: ConversationPageFeatures): ConversationDataLoadPlan {
   return {
-    loadMcp:
-      features.mcp.providerSelector ||
-      features.mcp.actionSelector ||
-      features.setup.mcpProviderSelector ||
-      features.setup.mcpActionSelector,
+    loadMcp: features.mcp.providerSelector || features.mcp.actionSelector,
     loadInlineKbSamples: features.setup.inlineUserKbInput,
     loadKb:
       features.setup.kbSelector ||
@@ -607,8 +599,6 @@ export function mergeConversationPageFeatures(
       modeNew: override.setup?.modeNew ?? base.setup.modeNew,
       routeSelector: override.setup?.routeSelector ?? base.setup.routeSelector,
       routes: mergeIdGate(base.setup.routes, override.setup?.routes),
-      mcpProviderSelector: override.setup?.mcpProviderSelector ?? base.setup.mcpProviderSelector,
-      mcpActionSelector: override.setup?.mcpActionSelector ?? base.setup.mcpActionSelector,
       inlineUserKbInput: override.setup?.inlineUserKbInput ?? base.setup.inlineUserKbInput,
       defaultSetupMode: override.setup?.defaultSetupMode ?? base.setup.defaultSetupMode,
       defaultLlm: override.setup?.defaultLlm ?? base.setup.defaultLlm,
@@ -677,10 +667,6 @@ export function mergeConversationPageFeatures(
         sessionIdSearch: override.visibility?.setup?.sessionIdSearch ?? base.visibility.setup.sessionIdSearch,
         modeNew: override.visibility?.setup?.modeNew ?? base.visibility.setup.modeNew,
         routeSelector: override.visibility?.setup?.routeSelector ?? base.visibility.setup.routeSelector,
-        mcpProviderSelector:
-          override.visibility?.setup?.mcpProviderSelector ?? base.visibility.setup.mcpProviderSelector,
-        mcpActionSelector:
-          override.visibility?.setup?.mcpActionSelector ?? base.visibility.setup.mcpActionSelector,
         inlineUserKbInput:
           override.visibility?.setup?.inlineUserKbInput ?? base.visibility.setup.inlineUserKbInput,
       },
@@ -718,22 +704,6 @@ export function resolveConversationPageFeatures(
   const base = getDefaultConversationPageFeatures(resolvedPage);
   const override = providerValue?.pages?.[resolvedPage];
   let merged = mergeConversationPageFeatures(base, override);
-  const setupMcpProviderDefined = override?.setup?.mcpProviderSelector !== undefined;
-  const setupMcpActionDefined = override?.setup?.mcpActionSelector !== undefined;
-  const normalizedSetup = {
-    ...merged.setup,
-    mcpProviderSelector: setupMcpProviderDefined ? merged.setup.mcpProviderSelector : merged.mcp.providerSelector,
-    mcpActionSelector: setupMcpActionDefined ? merged.setup.mcpActionSelector : merged.mcp.actionSelector,
-  };
-  merged = {
-    ...merged,
-    setup: normalizedSetup,
-    mcp: {
-      ...merged.mcp,
-      providerSelector: normalizedSetup.mcpProviderSelector,
-      actionSelector: normalizedSetup.mcpActionSelector,
-    },
-  };
   if (merged.interaction.prefill && resolvedPage !== "/") {
     const rootBase = getDefaultConversationPageFeatures("/");
     const rootOverride = providerValue?.pages?.["/"];
@@ -779,24 +749,22 @@ export function applyConversationFeatureVisibility(
   isAdminUser: boolean,
   isUserLoggedIn = false
 ): ConversationPageFeatures {
-  const setupMcpProvider = withVisibilityFlag(
-    features.setup.mcpProviderSelector,
-    features.visibility.setup.mcpProviderSelector,
-    isAdminUser,
-    isUserLoggedIn
-  );
-  const setupMcpAction = withVisibilityFlag(
-    features.setup.mcpActionSelector,
-    features.visibility.setup.mcpActionSelector,
-    isAdminUser,
-    isUserLoggedIn
-  );
   return {
     ...features,
     mcp: {
       ...features.mcp,
-      providerSelector: setupMcpProvider,
-      actionSelector: setupMcpAction,
+      providerSelector: withVisibilityFlag(
+        features.mcp.providerSelector,
+        features.visibility.mcp.providerSelector,
+        isAdminUser,
+        isUserLoggedIn
+      ),
+      actionSelector: withVisibilityFlag(
+        features.mcp.actionSelector,
+        features.visibility.mcp.actionSelector,
+        isAdminUser,
+        isUserLoggedIn
+      ),
     },
     adminPanel: {
       enabled: withVisibilityFlag(
@@ -896,8 +864,8 @@ export function applyConversationFeatureVisibility(
         isUserLoggedIn
       ),
     },
-      setup: {
-        ...features.setup,
+    setup: {
+      ...features.setup,
       modelSelector: withVisibilityFlag(
         features.setup.modelSelector,
         features.visibility.setup.modelSelector,
@@ -964,18 +932,16 @@ export function applyConversationFeatureVisibility(
         isAdminUser,
         isUserLoggedIn
       ),
-        routeSelector: withVisibilityFlag(
-          features.setup.routeSelector,
-          features.visibility.setup.routeSelector,
-          isAdminUser,
-          isUserLoggedIn
-        ),
-        mcpProviderSelector: setupMcpProvider,
-        mcpActionSelector: setupMcpAction,
-        inlineUserKbInput: withVisibilityFlag(
-          features.setup.inlineUserKbInput,
-          features.visibility.setup.inlineUserKbInput,
-          isAdminUser,
+      routeSelector: withVisibilityFlag(
+        features.setup.routeSelector,
+        features.visibility.setup.routeSelector,
+        isAdminUser,
+        isUserLoggedIn
+      ),
+      inlineUserKbInput: withVisibilityFlag(
+        features.setup.inlineUserKbInput,
+        features.visibility.setup.inlineUserKbInput,
+        isAdminUser,
         isUserLoggedIn
       ),
     },
@@ -1189,8 +1155,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       modeNew: true,
       routeSelector: false,
       routes: {},
-      mcpProviderSelector: true,
-      mcpActionSelector: true,
       inlineUserKbInput: true,
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
@@ -1254,8 +1218,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         sessionIdSearch: "user",
         modeNew: "user",
         routeSelector: "user",
-        mcpProviderSelector: "user",
-        mcpActionSelector: "user",
         inlineUserKbInput: "user",
       },
       widget: {
@@ -1325,14 +1287,12 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       adminKbIds: {},
       modeExisting: true,
       sessionIdSearch: true,
-        modeNew: true,
-        routeSelector: true,
-        routes: {},
-        mcpProviderSelector: true,
-        mcpActionSelector: true,
-        inlineUserKbInput: false,
-        defaultSetupMode: "existing",
-        defaultLlm: "chatgpt",
+      modeNew: true,
+      routeSelector: true,
+      routes: {},
+      inlineUserKbInput: false,
+      defaultSetupMode: "existing",
+      defaultLlm: "chatgpt",
     },
     widget: {
       launcher: true,
@@ -1391,12 +1351,10 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         adminKbSelector: "admin",
         modeExisting: "user",
         sessionIdSearch: "user",
-          modeNew: "user",
-          routeSelector: "user",
-          mcpProviderSelector: "user",
-          mcpActionSelector: "user",
-          inlineUserKbInput: "user",
-        },
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
+      },
       widget: {
         launcher: "user",
         header: {
@@ -1468,8 +1426,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       modeNew: true,
       routeSelector: false,
       routes: {},
-      mcpProviderSelector: true,
-      mcpActionSelector: true,
       inlineUserKbInput: true,
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
@@ -1533,8 +1489,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         sessionIdSearch: "user",
         modeNew: "user",
         routeSelector: "user",
-        mcpProviderSelector: "user",
-        mcpActionSelector: "user",
         inlineUserKbInput: "user",
       },
       widget: {
@@ -1608,8 +1562,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       modeNew: true,
       routeSelector: false,
       routes: {},
-      mcpProviderSelector: true,
-      mcpActionSelector: true,
       inlineUserKbInput: true,
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
@@ -1673,8 +1625,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         sessionIdSearch: "user",
         modeNew: "user",
         routeSelector: "user",
-        mcpProviderSelector: "user",
-        mcpActionSelector: "user",
         inlineUserKbInput: "user",
       },
       widget: {

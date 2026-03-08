@@ -27,6 +27,7 @@ import {
 import type { WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 import {
   getPolicyWidgetAccess,
+  getPolicyWidgetSetupConfig,
   getPolicyWidgetTheme,
   withNullFeatureDefaults,
 } from "@/lib/widgetPolicyUtils";
@@ -49,10 +50,6 @@ type KbItem = {
   title: string;
   is_active?: boolean | null;
   is_admin?: boolean | string | null;
-  is_public?: boolean | null;
-  usable_id?: string[] | string | null;
-  editable_id?: string[] | string | null;
-  applies_to_user?: boolean | null;
 };
 
 type AgentItem = {
@@ -63,17 +60,12 @@ type AgentItem = {
   kb_id?: string | null;
   llm?: string | null;
   editable_id?: string[] | string | null;
-  usable_id?: string[] | string | null;
-  is_public?: boolean | null;
 };
 
 type McpTool = {
   id: string;
   provider_key?: string | null;
   name: string;
-  is_public?: boolean | null;
-  usable_id?: string[] | string | null;
-  editable_id?: string[] | string | null;
 };
 
 function normalizeListInput(value: string) {
@@ -81,28 +73,6 @@ function normalizeListInput(value: string) {
     .split(/[\n,]+/)
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-function normalizeIdList(value: unknown) {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item || "").trim()).filter(Boolean);
-  }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed ? [trimmed] : [];
-  }
-  return [];
-}
-
-function hasUserAccess(
-  item: { is_public?: boolean | null; editable_id?: unknown; usable_id?: unknown },
-  userId: string
-) {
-  if (!userId) return false;
-  if (item.is_public) return true;
-  const editable = normalizeIdList(item.editable_id);
-  const usable = normalizeIdList(item.usable_id);
-  return editable.includes(userId) || usable.includes(userId);
 }
 
 function readThemeString(theme: Record<string, unknown> | null, key: string) {
@@ -172,6 +142,11 @@ export default function ConversationWidgetPage() {
   const [draft, setDraft] = useState<TemplateItem | null>(null);
   const [domainText, setDomainText] = useState("");
   const [pathText, setPathText] = useState("");
+  const [setupConfig, setSetupConfig] = useState<WidgetSetupConfig>({
+    kb: { mode: "inline", kb_id: "", admin_kb_ids: [] },
+    mcp: { provider_keys: [], tool_ids: [] },
+    llm: { default: "chatgpt" },
+  });
   const [kbItems, setKbItems] = useState<KbItem[]>([]);
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [mcpTools, setMcpTools] = useState<McpTool[]>([]);
@@ -227,18 +202,20 @@ export default function ConversationWidgetPage() {
       allowed_domains?: string[] | null;
       allowed_paths?: string[] | null;
       theme?: Record<string, unknown> | null;
-        is_active?: boolean | null;
-      }) =>
-        JSON.stringify({
-          name: String(input.name || "").trim(),
-          agent_id: input.agent_id ? String(input.agent_id) : null,
-          allowed_domains: (input.allowed_domains || []).map((item) => String(item || "").trim()),
-          allowed_paths: (input.allowed_paths || []).map((item) => String(item || "").trim()),
-          theme: normalizeThemeValue(input.theme || null),
-          is_active: input.is_active !== false,
-        }),
-      [normalizeThemeValue]
-    );
+      setup_config?: WidgetSetupConfig | null;
+      is_active?: boolean | null;
+    }) =>
+      JSON.stringify({
+        name: String(input.name || "").trim(),
+        agent_id: input.agent_id ? String(input.agent_id) : null,
+        allowed_domains: (input.allowed_domains || []).map((item) => String(item || "").trim()),
+        allowed_paths: (input.allowed_paths || []).map((item) => String(item || "").trim()),
+        theme: normalizeThemeValue(input.theme || null),
+        setup_config: input.setup_config || null,
+        is_active: input.is_active !== false,
+      }),
+    [normalizeThemeValue]
+  );
 
   const buildDraftFingerprint = useCallback(
     (current: TemplateItem | null) =>
@@ -248,10 +225,11 @@ export default function ConversationWidgetPage() {
         allowed_domains: normalizeListInput(domainText),
         allowed_paths: normalizeListInput(pathText),
         theme: normalizeThemeValue(current?.theme || null),
-          is_active: current?.is_active !== false,
-        }),
-      [domainText, normalizeThemeValue, pathText]
-    );
+        setup_config: setupConfig,
+        is_active: current?.is_active !== false,
+      }),
+    [domainText, normalizeThemeValue, pathText, setupConfig]
+  );
 
   const isDirty = useMemo(() => {
     if (!selectedTemplate || !draft) return false;
@@ -355,12 +333,19 @@ export default function ConversationWidgetPage() {
     if (!selectedId) return;
     const current = templates.find((item) => item.id === selectedId) || null;
     setDraft(current);
-      if (current) {
-        setDomainText((current.allowed_domains || []).join("\n"));
-        setPathText((current.allowed_paths || []).join("\n"));
-        setInstallOverridesText("");
-        setInstallOverrides({});
-        const hasPolicyField = Object.prototype.hasOwnProperty.call(current, "chat_policy");
+    if (current) {
+      setDomainText((current.allowed_domains || []).join("\n"));
+      setPathText((current.allowed_paths || []).join("\n"));
+      setSetupConfig(
+        current.setup_config || {
+          kb: { mode: "inline", kb_id: "", admin_kb_ids: [] },
+          mcp: { provider_keys: [], tool_ids: [] },
+          llm: { default: "chatgpt" },
+        }
+      );
+      setInstallOverridesText("");
+      setInstallOverrides({});
+      const hasPolicyField = Object.prototype.hasOwnProperty.call(current, "chat_policy");
       if (hasPolicyField) {
         setPolicyValue(current.chat_policy || null);
         setPolicyBaselineFingerprint(buildPolicyFingerprint(current.chat_policy || null));
@@ -372,9 +357,16 @@ export default function ConversationWidgetPage() {
     if (!policyValue) return;
     policySyncRef.current = true;
     const theme = getPolicyWidgetTheme(policyValue);
+    const setup = getPolicyWidgetSetupConfig(policyValue);
     const access = getPolicyWidgetAccess(policyValue);
     const agentId = typeof policyValue.widget?.agent_id === "string" ? policyValue.widget.agent_id : null;
     const nextTheme = theme || {};
+    const nextSetup =
+      setup || {
+        kb: { mode: "inline", kb_id: "", admin_kb_ids: [] },
+        mcp: { provider_keys: [], tool_ids: [] },
+        llm: { default: "chatgpt" },
+      };
     const nextDomainText = (access.allowed_domains || []).join("\n");
     const nextPathText = (access.allowed_paths || []).join("\n");
     setDraft((prev) => {
@@ -388,6 +380,7 @@ export default function ConversationWidgetPage() {
         agent_id: agentId,
       };
     });
+    setSetupConfig((prev) => (JSON.stringify(prev) === JSON.stringify(nextSetup) ? prev : nextSetup));
     setDomainText((prev) => (prev === nextDomainText ? prev : nextDomainText));
     setPathText((prev) => (prev === nextPathText ? prev : nextPathText));
     setTimeout(() => {
@@ -435,7 +428,17 @@ export default function ConversationWidgetPage() {
   const agentOptions = useMemo<SelectOption[]>(
     () =>
       agents
-        .filter((agent) => hasUserAccess(agent, userId))
+        .filter((agent) => {
+          if (!userId) return false;
+          const editable = agent.editable_id;
+          if (Array.isArray(editable)) {
+            return editable.map((item) => String(item || "")).includes(userId);
+          }
+          if (typeof editable === "string") {
+            return editable === userId;
+          }
+          return false;
+        })
         .map((agent) => ({
           id: agent.id,
           label: `${agent.name || agent.id} ${agent.version ? `v${agent.version}` : "v-"} ${
@@ -447,65 +450,66 @@ export default function ConversationWidgetPage() {
   );
 
   const editableAgents = useMemo(
-    () => agents.filter((agent) => hasUserAccess(agent, userId)),
+    () =>
+      agents.filter((agent) => {
+        if (!userId) return false;
+        const editable = agent.editable_id;
+        if (Array.isArray(editable)) {
+          return editable.map((item) => String(item || "")).includes(userId);
+        }
+        if (typeof editable === "string") {
+          return editable === userId;
+        }
+        return false;
+      }),
     [agents, userId]
   );
 
   const userKbOptions = useMemo<SelectOption[]>(
     () =>
       kbItems
-        .filter((kb) => !kb.is_admin && hasUserAccess(kb, userId) && kb.applies_to_user !== false)
+        .filter((kb) => !kb.is_admin)
         .map((kb) => ({
           id: kb.id,
           label: kb.title,
         })),
-    [kbItems, userId]
+    [kbItems]
   );
 
   const adminKbOptions = useMemo<SelectOption[]>(
     () =>
       kbItems
-        .filter((kb) => kb.is_admin && hasUserAccess(kb, userId) && kb.applies_to_user !== false)
+        .filter((kb) => kb.is_admin)
         .map((kb) => ({
           id: kb.id,
           label: kb.title,
         })),
-    [kbItems, userId]
-  );
-
-  const accessibleMcpTools = useMemo(
-    () => mcpTools.filter((tool) => hasUserAccess(tool, userId)),
-    [mcpTools, userId]
+    [kbItems]
   );
 
   const providerKeys = useMemo(() => {
     const map = new Map<string, number>();
-    accessibleMcpTools.forEach((tool) => {
+    mcpTools.forEach((tool) => {
       const key = String(tool.provider_key || "").trim();
       if (!key) return;
       map.set(key, (map.get(key) || 0) + 1);
     });
     return Array.from(map.keys()).sort((a, b) => a.localeCompare(b));
-  }, [accessibleMcpTools]);
+  }, [mcpTools]);
 
   const providerOptions = useMemo<SelectOption[]>(
     () => providerKeys.map((key) => ({ id: key, label: key })),
     [providerKeys]
   );
 
-  const routeOptions = useMemo<SelectOption[]>(
-    () => [{ id: "shipping", label: "Core Runtime", description: "/api/runtime/chat" }],
-    []
-  );
-
   const mcpToolOptions = useMemo<SelectOption[]>(
     () =>
-      accessibleMcpTools.map((tool) => ({
+      mcpTools.map((tool) => ({
         id: tool.id,
         label: tool.name,
         group: String(tool.provider_key || "").trim() || undefined,
       })),
-    [accessibleMcpTools]
+    [mcpTools]
   );
 
   const handleCreate = async () => {
@@ -713,7 +717,7 @@ export default function ConversationWidgetPage() {
       setPolicySaving(false);
       setSaveSyncing(false);
     }
-  }, [policyTemplateId, policyValue, draft, domainText, pathText]);
+  }, [policyTemplateId, policyValue, draft, setupConfig, domainText, pathText]);
 
   const canApplyBulk =
     !bulkDisabled && (bulkEnabledSelection !== null || bulkVisibilitySelection !== null);
@@ -1002,34 +1006,19 @@ export default function ConversationWidgetPage() {
                 </Card>
                 {policyLoading ? (
                   <Card className="p-4 text-xs text-slate-500">정책을 불러오는 중...</Card>
-                  ) : (
-                    <ChatSettingsPanel
-                      value={policyValue}
-                      onChange={setPolicyValue}
-                      pageScope={[WIDGET_PAGE_KEY]}
-                      agents={editableAgents}
-                      hiddenLabels={[
-                        "widget.name",
-                        "widget.agent_id",
-                        "widget.setup_config",
-                        "setup_config.kb.mode",
-                        "setup_config.kb.kb_id",
-                        "setup_config.kb.admin_kb_ids",
-                        "setup_config.mcp.provider_keys",
-                        "setup_config.mcp.tool_ids",
-                        "setup_config.llm.default",
-                      ]}
-                      widgetNameValue={draft?.name ?? ""}
-                      onWidgetNameChange={(next) =>
-                        setDraft((prev) => (prev ? { ...prev, name: next } : prev))
-                      }
-                      widgetNameLabel="B_chat_widgets.name"
-                      kbOptions={userKbOptions}
-                      adminKbOptions={adminKbOptions}
-                      routeOptions={routeOptions}
-                      mcpProviderOptions={providerOptions}
-                      mcpToolOptions={mcpToolOptions}
-                      widgetActiveValue={draft?.is_active ?? null}
+                ) : (
+                  <ChatSettingsPanel
+                    value={policyValue}
+                    onChange={setPolicyValue}
+                    pageScope={[WIDGET_PAGE_KEY]}
+                    agents={editableAgents}
+                    hiddenLabels={["widget.name"]}
+                    widgetNameValue={draft?.name ?? ""}
+                    onWidgetNameChange={(next) =>
+                      setDraft((prev) => (prev ? { ...prev, name: next } : prev))
+                    }
+                    widgetNameLabel="B_chat_widgets.name"
+                    widgetActiveValue={draft?.is_active ?? null}
                     onWidgetActiveChange={(next) =>
                       setDraft((prev) => (prev ? { ...prev, is_active: next } : prev))
                     }

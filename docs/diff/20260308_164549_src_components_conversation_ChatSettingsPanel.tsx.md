@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode, type DragEvent } from "react";
 import { ChevronDown, GripVertical } from "lucide-react";
-import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
+import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
 import { CollapsibleSection } from "@/components/conversation/CollapsibleSection";
 import { Input } from "@/components/ui/Input";
 import type { DebugTranscriptOptions } from "@/lib/debugTranscript";
@@ -58,12 +58,6 @@ type ChatSettingsPanelProps = {
   widgetNameValue?: string | null;
   onWidgetNameChange?: (next: string) => void;
   widgetNameLabel?: string;
-  llmOptions?: SelectOption[];
-  kbOptions?: SelectOption[];
-  adminKbOptions?: SelectOption[];
-  routeOptions?: SelectOption[];
-  mcpProviderOptions?: SelectOption[];
-  mcpToolOptions?: SelectOption[];
 };
 
 const PanelVariantContext = createContext<"policy" | "base">("policy");
@@ -132,10 +126,6 @@ const DEFAULT_LLM_OPTIONS: SelectOption[] = [
   { id: "gemini", label: "gemini" },
 ];
 
-const DEFAULT_ROUTE_OPTIONS: SelectOption[] = [
-  { id: "shipping", label: "Core Runtime", description: "/api/runtime/chat" },
-];
-
 const DEFAULT_WIDGET_TAB_OPTIONS: SelectOption[] = [
   { id: "chat", label: "chat" },
   { id: "list", label: "list" },
@@ -163,12 +153,6 @@ export function ChatSettingsPanel({
   widgetNameValue,
   onWidgetNameChange,
   widgetNameLabel,
-  llmOptions,
-  kbOptions,
-  adminKbOptions,
-  routeOptions,
-  mcpProviderOptions,
-  mcpToolOptions,
 }: ChatSettingsPanelProps) {
   const isBaseVariant = variant === "base";
   const pageKey = pageScope?.[0] || WIDGET_PAGE_KEY;
@@ -211,19 +195,9 @@ export function ChatSettingsPanel({
   const commitDraft = useCallback(
     (nextDraft: DraftState) => {
       const base = providerRef.current || {};
-      const nextWidget =
-        pageKey === WIDGET_PAGE_KEY
-          ? {
-              ...nextDraft.widget,
-              setup_config: null,
-            }
-          : nextDraft.widget;
-      if (pageKey === WIDGET_PAGE_KEY && nextWidget && "agent_id" in nextWidget) {
-        delete (nextWidget as WidgetChatPolicyConfig).agent_id;
-      }
       const nextProvider: ConversationFeaturesProviderShape = {
         ...base,
-        widget: nextWidget,
+        widget: nextDraft.widget,
         features: nextDraft.features,
         pages: {
           ...(base.pages || {}),
@@ -340,7 +314,6 @@ export function ChatSettingsPanel({
     !isHidden("widget.agent_id") ||
     !isHidden("widget.entry_mode") ||
     !isHidden("widget.embed_view");
-  const showSetupConfig = !isHidden("widget.setup_config");
   const showThemeBasics = !isHidden("theme.greeting") || !isHidden("theme.input_placeholder");
   const widgetActiveChecked = widgetActiveValue ?? true;
   const handleWidgetActiveToggle = onWidgetActiveChange || (() => {});
@@ -358,17 +331,6 @@ export function ChatSettingsPanel({
     });
     return base;
   }, [agents, widget.agent_id]);
-
-  const llmAllowlistOptions = useMemo(
-    () => (llmOptions && llmOptions.length > 0 ? llmOptions : DEFAULT_LLM_OPTIONS),
-    [llmOptions]
-  );
-  const kbAllowlistOptions = useMemo(() => kbOptions || [], [kbOptions]);
-  const adminKbAllowlistOptions = useMemo(() => adminKbOptions || [], [adminKbOptions]);
-  const routeAllowlistOptions = useMemo(
-    () => (routeOptions && routeOptions.length > 0 ? routeOptions : DEFAULT_ROUTE_OPTIONS),
-    [routeOptions]
-  );
 
   const updateWidget = (path: string[], value: unknown) =>
     updateDraft((current) => ({ ...current, widget: setIn(current.widget as any, path, value) }));
@@ -633,105 +595,103 @@ export function ChatSettingsPanel({
             </RowGroup>
           ) : null}
 
-          {showSetupConfig ? (
-            <RowGroup label="widget.setup_config" displayLabel="구성">
-              {isHidden("setup_config.kb.mode") ? null : (
-                <Row
-                  label="setup_config.kb.mode"
-                  variant={variant}
-                  right={
-                    <SelectPopover
-                      value={typeof kbConfig.mode === "string" ? kbConfig.mode : "inline"}
-                      options={KB_MODE_OPTIONS}
-                      onChange={(value) => updateWidget(["setup_config", "kb", "mode"], value)}
-                      buttonClassName="h-7 text-[11px]"
-                      className="w-[140px]"
-                    />
-                  }
-                />
-              )}
-              {isHidden("setup_config.kb.kb_id") ? null : (
-                <Row
-                  label="setup_config.kb.kb_id"
-                  variant={variant}
-                  right={
-                    <Input
-                      value={typeof kbConfig.kb_id === "string" ? kbConfig.kb_id : ""}
-                      onChange={(event) => updateWidget(["setup_config", "kb", "kb_id"], event.target.value)}
-                      className="h-7 w-[220px] text-[11px]"
-                    />
-                  }
-                />
-              )}
-              {isHidden("setup_config.kb.admin_kb_ids") ? null : (
-                <Row
-                  label="setup_config.kb.admin_kb_ids"
-                  alignTop
-                  variant={variant}
-                  right={
-                    <textarea
-                      value={formatLines(Array.isArray(kbConfig.admin_kb_ids) ? kbConfig.admin_kb_ids : undefined)}
-                      onChange={(event) =>
-                        updateWidget(
-                          ["setup_config", "kb", "admin_kb_ids"],
-                          parseLinesAndComma(event.target.value)
-                        )
-                      }
-                      className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-                    />
-                  }
-                />
-              )}
-              {isHidden("setup_config.mcp.provider_keys") ? null : (
-                <Row
-                  label="setup_config.mcp.provider_keys"
-                  alignTop
-                  variant={variant}
-                  right={
-                    <textarea
-                      value={formatLines(Array.isArray(mcpConfig.provider_keys) ? mcpConfig.provider_keys : undefined)}
-                      onChange={(event) =>
-                        updateWidget(
-                          ["setup_config", "mcp", "provider_keys"],
-                          parseLinesAndComma(event.target.value)
-                        )
-                      }
-                      className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-                    />
-                  }
-                />
-              )}
-              {isHidden("setup_config.mcp.tool_ids") ? null : (
-                <Row
-                  label="setup_config.mcp.tool_ids"
-                  alignTop
-                  variant={variant}
-                  right={
-                    <textarea
-                      value={formatLines(Array.isArray(mcpConfig.tool_ids) ? mcpConfig.tool_ids : undefined)}
-                      onChange={(event) =>
-                        updateWidget(["setup_config", "mcp", "tool_ids"], parseLinesAndComma(event.target.value))
-                      }
-                      className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-                    />
-                  }
-                />
-              )}
-              {isHidden("setup_config.llm.default") ? null : (
-                <Row
-                  label="setup_config.llm.default"
-                  variant={variant}
-                  right={
-                    <Input
-                      value={typeof llmConfig.default === "string" ? llmConfig.default : ""}
-                      onChange={(event) => updateWidget(["setup_config", "llm", "default"], event.target.value)}
-                      className="h-7 w-[200px] text-[11px]"
-                    />
-                  }
-                />
-              )}
-            </RowGroup>
-          ) : null}
+          <RowGroup label="widget.setup_config" displayLabel="구성">
+            {isHidden("setup_config.kb.mode") ? null : (
+              <Row
+                label="setup_config.kb.mode"
+                variant={variant}
+                right={
+                  <SelectPopover
+                    value={typeof kbConfig.mode === "string" ? kbConfig.mode : "inline"}
+                    options={KB_MODE_OPTIONS}
+                    onChange={(value) => updateWidget(["setup_config", "kb", "mode"], value)}
+                    buttonClassName="h-7 text-[11px]"
+                    className="w-[140px]"
+                  />
+                }
+              />
+            )}
+            {isHidden("setup_config.kb.kb_id") ? null : (
+              <Row
+                label="setup_config.kb.kb_id"
+                variant={variant}
+                right={
+                  <Input
+                    value={typeof kbConfig.kb_id === "string" ? kbConfig.kb_id : ""}
+                    onChange={(event) => updateWidget(["setup_config", "kb", "kb_id"], event.target.value)}
+                    className="h-7 w-[220px] text-[11px]"
+                  />
+                }
+              />
+            )}
+            {isHidden("setup_config.kb.admin_kb_ids") ? null : (
+              <Row
+                label="setup_config.kb.admin_kb_ids"
+                alignTop
+                variant={variant}
+                right={
+                  <textarea
+                    value={formatLines(Array.isArray(kbConfig.admin_kb_ids) ? kbConfig.admin_kb_ids : undefined)}
+                    onChange={(event) =>
+                      updateWidget(
+                        ["setup_config", "kb", "admin_kb_ids"],
+                        parseLinesAndComma(event.target.value)
+                      )
+                    }
+                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  />
+                }
+              />
+            )}
+            {isHidden("setup_config.mcp.provider_keys") ? null : (
+              <Row
+                label="setup_config.mcp.provider_keys"
+                alignTop
+                variant={variant}
+                right={
+                  <textarea
+                    value={formatLines(Array.isArray(mcpConfig.provider_keys) ? mcpConfig.provider_keys : undefined)}
+                    onChange={(event) =>
+                      updateWidget(
+                        ["setup_config", "mcp", "provider_keys"],
+                        parseLinesAndComma(event.target.value)
+                      )
+                    }
+                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  />
+                }
+              />
+            )}
+            {isHidden("setup_config.mcp.tool_ids") ? null : (
+              <Row
+                label="setup_config.mcp.tool_ids"
+                alignTop
+                variant={variant}
+                right={
+                  <textarea
+                    value={formatLines(Array.isArray(mcpConfig.tool_ids) ? mcpConfig.tool_ids : undefined)}
+                    onChange={(event) =>
+                      updateWidget(["setup_config", "mcp", "tool_ids"], parseLinesAndComma(event.target.value))
+                    }
+                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  />
+                }
+              />
+            )}
+            {isHidden("setup_config.llm.default") ? null : (
+              <Row
+                label="setup_config.llm.default"
+                variant={variant}
+                right={
+                  <Input
+                    value={typeof llmConfig.default === "string" ? llmConfig.default : ""}
+                    onChange={(event) => updateWidget(["setup_config", "llm", "default"], event.target.value)}
+                    className="h-7 w-[200px] text-[11px]"
+                  />
+                }
+              />
+            )}
+          </RowGroup>
 
           {showThemeBasics ? (
             <RowGroup label="widget.theme" displayLabel="대화 기본값">
@@ -1123,9 +1083,9 @@ export function ChatSettingsPanel({
               checked={tabBarChatEnabled}
               visibility={visibility.widget.tabBar.chat}
               onToggle={(next) => setTabBarPanelEnabled("chat", next)}
-              onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
-              defaultOpen
-            >
+            onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
+            defaultOpen
+          >
             <RowGroup label="adminPanel" displayLabel="Admin Panel">
               <ToggleRow
                 label="adminPanel.enabled"
@@ -1255,8 +1215,69 @@ export function ChatSettingsPanel({
                 features.mcp.tools,
                 (next) => updateFeatures(["mcp", "tools"], next)
               )}
+              {renderAllowDenyBlock(
+                "setup.llms",
+                "LLM IDs",
+                features.setup.llms,
+                (next) => updateFeatures(["setup", "llms"], next)
+              )}
+              {renderAllowDenyBlock(
+                "setup.kbIds",
+                "KB IDs",
+                features.setup.kbIds,
+                (next) => updateFeatures(["setup", "kbIds"], next)
+              )}
+              {renderAllowDenyBlock(
+                "setup.adminKbIds",
+                "Admin KB IDs",
+                features.setup.adminKbIds,
+                (next) => updateFeatures(["setup", "adminKbIds"], next)
+              )}
+              {renderAllowDenyBlock(
+                "setup.routes",
+                "Runtime Routes",
+                features.setup.routes,
+                (next) => updateFeatures(["setup", "routes"], next)
+              )}
             </RowGroup>
 
+            <RowGroup label="mcp" displayLabel="MCP">
+              <ToggleRow
+                label="mcp.providerSelector"
+                checked={features.mcp.providerSelector}
+                visibility={visibility.mcp.providerSelector}
+                onToggle={(next) => updateFeatures(["mcp", "providerSelector"], next)}
+                onVisibilityChange={(mode) => updateVisibility(["mcp", "providerSelector"], mode)}
+              />
+              <ToggleRow
+                label="mcp.actionSelector"
+                checked={features.mcp.actionSelector}
+                visibility={visibility.mcp.actionSelector}
+                onToggle={(next) => updateFeatures(["mcp", "actionSelector"], next)}
+                onVisibilityChange={(mode) => updateVisibility(["mcp", "actionSelector"], mode)}
+              />
+            </RowGroup>
+
+            <RowGroup label="runtime" displayLabel="Runtime">
+              <ToggleRow
+                label="runtime.selfUpdate.enabled"
+                checked={Boolean(governanceConfig?.enabled)}
+                visibility={governanceConfig?.visibility_mode || "admin"}
+                onToggle={(next) =>
+                  void handleGovernanceChange({
+                    enabled: next,
+                    visibility_mode: governanceConfig?.visibility_mode || "admin",
+                  })
+                }
+                onVisibilityChange={(mode) =>
+                  void handleGovernanceChange({
+                    enabled: governanceConfig?.enabled ?? true,
+                    visibility_mode: mode === "public" ? "user" : mode,
+                  })
+                }
+              />
+              {governanceSaving ? <div className="text-[11px] text-slate-500">저장 중...</div> : null}
+            </RowGroup>
           </ToggleRowGroup>
           <ToggleRow
             label="widget.tabBar.list"
@@ -1280,8 +1301,7 @@ export function ChatSettingsPanel({
             onVisibilityChange={(mode) => setTabBarPanelVisibility("policy", mode)}
           >
             {tabBarPolicyEnabled ? (
-              <>
-                <RowGroup label="setup.mode" displayLabel="Setup Mode">
+              <RowGroup label="setup" displayLabel="Setup">
                 <ToggleRow
                   label="setup.modelSelector"
                   codeLabel="setup.modelSelector"
@@ -1517,82 +1537,80 @@ export function ChatSettingsPanel({
                         />
                       );
                     }
-                      if (key === "routeSelector") {
-                        return (
-                          <ToggleRow
-                            key={key}
-                            label="setup.routeSelector"
-                            codeLabel="setup.routeSelector"
-                            displayLabel={setupUi.labels.routeSelector || "Runtime 선택"}
-                            checked={features.setup.routeSelector}
-                            visibility={visibility.setup.routeSelector}
-                            onToggle={(next) => updateFeatures(["setup", "routeSelector"], next)}
-                            onVisibilityChange={(mode) => updateVisibility(["setup", "routeSelector"], mode)}
-                            editableLabel
-                            onLabelChange={(value) => updateSetupUi(["labels", "routeSelector"], value)}
-                            showDragHandle
-                            draggable
-                            onDragStart={handleSetupDragStart(key)}
-                            onDragOver={handleSetupDragOver}
-                            onDrop={handleSetupDrop(key)}
-                            onDragEnd={handleSetupDragEnd}
-                          />
-                        );
-                      }
-                      if (key === "mcpProviderSelector") {
-                        return (
-                          <ToggleRow
-                            key={key}
-                            label="setup.mcpProviderSelector"
-                            codeLabel="setup.mcpProviderSelector"
-                            displayLabel={setupUi.labels.mcpProviderSelector || "MCP 프로바이더 선택"}
-                            checked={features.setup.mcpProviderSelector}
-                            visibility={visibility.setup.mcpProviderSelector}
-                            onToggle={(next) => updateFeatures(["setup", "mcpProviderSelector"], next)}
-                            onVisibilityChange={(mode) => updateVisibility(["setup", "mcpProviderSelector"], mode)}
-                            editableLabel
-                            onLabelChange={(value) => updateSetupUi(["labels", "mcpProviderSelector"], value)}
-                            showDragHandle
-                            draggable
-                            onDragStart={handleSetupDragStart(key)}
-                            onDragOver={handleSetupDragOver}
-                            onDrop={handleSetupDrop(key)}
-                            onDragEnd={handleSetupDragEnd}
-                          />
-                        );
-                      }
-                      if (key === "mcpActionSelector") {
-                        return (
-                          <ToggleRow
-                            key={key}
-                            label="setup.mcpActionSelector"
-                            codeLabel="setup.mcpActionSelector"
-                            displayLabel={setupUi.labels.mcpActionSelector || "MCP 액션 선택"}
-                            checked={features.setup.mcpActionSelector}
-                            visibility={visibility.setup.mcpActionSelector}
-                            onToggle={(next) => updateFeatures(["setup", "mcpActionSelector"], next)}
-                            onVisibilityChange={(mode) => updateVisibility(["setup", "mcpActionSelector"], mode)}
-                            editableLabel
-                            onLabelChange={(value) => updateSetupUi(["labels", "mcpActionSelector"], value)}
-                            showDragHandle
-                            draggable
-                            onDragStart={handleSetupDragStart(key)}
-                            onDragOver={handleSetupDragOver}
-                            onDrop={handleSetupDrop(key)}
-                            onDragEnd={handleSetupDragEnd}
-                          />
-                        );
-                      }
+                    if (key === "routeSelector") {
+                      return (
+                        <ToggleRow
+                          key={key}
+                          label="setup.routeSelector"
+                          codeLabel="setup.routeSelector"
+                          displayLabel={setupUi.labels.routeSelector || "Runtime 선택"}
+                          checked={features.setup.routeSelector}
+                          visibility={visibility.setup.routeSelector}
+                          onToggle={(next) => updateFeatures(["setup", "routeSelector"], next)}
+                          onVisibilityChange={(mode) => updateVisibility(["setup", "routeSelector"], mode)}
+                          editableLabel
+                          onLabelChange={(value) => updateSetupUi(["labels", "routeSelector"], value)}
+                          showDragHandle
+                          draggable
+                          onDragStart={handleSetupDragStart(key)}
+                          onDragOver={handleSetupDragOver}
+                          onDrop={handleSetupDrop(key)}
+                          onDragEnd={handleSetupDragEnd}
+                        />
+                      );
+                    }
+                    if (key === "mcpProviderSelector") {
+                      return (
+                        <ToggleRow
+                          key={key}
+                          label="setup.mcpProviderSelector"
+                          codeLabel="setup.mcpProviderSelector"
+                          displayLabel={setupUi.labels.mcpProviderSelector || "MCP 프로바이더 선택"}
+                          checked={features.mcp.providerSelector}
+                          visibility={visibility.mcp.providerSelector}
+                          onToggle={(next) => updateFeatures(["mcp", "providerSelector"], next)}
+                          onVisibilityChange={(mode) => updateVisibility(["mcp", "providerSelector"], mode)}
+                          editableLabel
+                          onLabelChange={(value) => updateSetupUi(["labels", "mcpProviderSelector"], value)}
+                          showDragHandle
+                          draggable
+                          onDragStart={handleSetupDragStart(key)}
+                          onDragOver={handleSetupDragOver}
+                          onDrop={handleSetupDrop(key)}
+                          onDragEnd={handleSetupDragEnd}
+                        />
+                      );
+                    }
+                    if (key === "mcpActionSelector") {
+                      return (
+                        <ToggleRow
+                          key={key}
+                          label="setup.mcpActionSelector"
+                          codeLabel="setup.mcpActionSelector"
+                          displayLabel={setupUi.labels.mcpActionSelector || "MCP 액션 선택"}
+                          checked={features.mcp.actionSelector}
+                          visibility={visibility.mcp.actionSelector}
+                          onToggle={(next) => updateFeatures(["mcp", "actionSelector"], next)}
+                          onVisibilityChange={(mode) => updateVisibility(["mcp", "actionSelector"], mode)}
+                          editableLabel
+                          onLabelChange={(value) => updateSetupUi(["labels", "mcpActionSelector"], value)}
+                          showDragHandle
+                          draggable
+                          onDragStart={handleSetupDragStart(key)}
+                          onDragOver={handleSetupDragOver}
+                          onDrop={handleSetupDrop(key)}
+                          onDragEnd={handleSetupDragEnd}
+                        />
+                      );
+                    }
                     return null;
                   })}
                 </ToggleRowGroup>
 
-                </RowGroup>
-                <RowGroup label="setup" displayLabel="Setup">
-                  <Row
-                    label="setup.defaultSetupMode"
-                    right={
-                      <SelectPopover
+                <Row
+                  label="setup.defaultSetupMode"
+                  right={
+                    <SelectPopover
                       value={features.setup.defaultSetupMode || "existing"}
                       options={DEFAULT_SETUP_MODE_OPTIONS}
                       onChange={(value) => updateFeatures(["setup", "defaultSetupMode"], value)}
@@ -1613,96 +1631,59 @@ export function ChatSettingsPanel({
                     />
                   }
                 />
-                  <Row
-                    label="setup.llms"
-                    right={
-                      <MultiSelectPopover
-                        values={Array.isArray(features.setup.llms.allowlist) ? features.setup.llms.allowlist : []}
-                        onChange={(values) =>
-                          updateFeatures(["setup", "llms", "allowlist"], values.length ? values : undefined)
-                        }
-                        options={llmAllowlistOptions}
-                        displayMode="count"
-                        showBulkActions
-                        className="w-[260px]"
-                        buttonClassName="h-7 text-[11px]"
-                      />
-                    }
-                  />
-                  <Row
-                    label="setup.kbIds"
-                    right={
-                      <MultiSelectPopover
-                        values={Array.isArray(features.setup.kbIds.allowlist) ? features.setup.kbIds.allowlist : []}
-                        onChange={(values) =>
-                          updateFeatures(["setup", "kbIds", "allowlist"], values.length ? values : undefined)
-                        }
-                        options={kbAllowlistOptions}
-                        displayMode="count"
-                        showBulkActions
-                        className="w-[260px]"
-                        buttonClassName="h-7 text-[11px]"
-                      />
-                    }
-                  />
-                  <Row
-                    label="setup.adminKbIds"
-                    right={
-                      <MultiSelectPopover
-                        values={
-                          Array.isArray(features.setup.adminKbIds.allowlist)
-                            ? features.setup.adminKbIds.allowlist
-                            : []
-                        }
-                        onChange={(values) =>
-                          updateFeatures(["setup", "adminKbIds", "allowlist"], values.length ? values : undefined)
-                        }
-                        options={adminKbAllowlistOptions}
-                        displayMode="count"
-                        showBulkActions
-                        className="w-[260px]"
-                        buttonClassName="h-7 text-[11px]"
-                      />
-                    }
-                  />
-                  <Row
-                    label="setup.routes"
-                    right={
-                      <MultiSelectPopover
-                        values={Array.isArray(features.setup.routes.allowlist) ? features.setup.routes.allowlist : []}
-                        onChange={(values) =>
-                          updateFeatures(["setup", "routes", "allowlist"], values.length ? values : undefined)
-                        }
-                        options={routeAllowlistOptions}
-                        displayMode="count"
-                        showBulkActions
-                        className="w-[260px]"
-                        buttonClassName="h-7 text-[11px]"
-                      />
-                    }
+                <Row
+                  label="setup.llms"
+                  right={
+                    <Input
+                      value={formatCsv(features.setup.llms.allowlist)}
+                      onChange={(event) =>
+                        updateFeatures(["setup", "llms", "allowlist"], parseCsv(event.target.value))
+                      }
+                      className="h-7 w-[260px] text-[11px]"
+                      placeholder="gpt-4o, gpt-4o-mini"
                     />
-                </RowGroup>
-                <RowGroup label="runtime" displayLabel="Runtime">
-                  <ToggleRow
-                    label="runtime.selfUpdate.enabled"
-                    checked={Boolean(governanceConfig?.enabled)}
-                    visibility={governanceConfig?.visibility_mode || "admin"}
-                    onToggle={(next) =>
-                      void handleGovernanceChange({
-                        enabled: next,
-                        visibility_mode: governanceConfig?.visibility_mode || "admin",
-                      })
-                    }
-                    onVisibilityChange={(mode) =>
-                      void handleGovernanceChange({
-                        enabled: governanceConfig?.enabled ?? true,
-                        visibility_mode: mode === "public" ? "user" : mode,
-                      })
-                    }
-                  />
-                  {governanceSaving ? <div className="text-[11px] text-slate-500">저장 중...</div> : null}
-                </RowGroup>
-              </>
+                  }
+                />
+                <Row
+                  label="setup.kbIds"
+                  right={
+                    <Input
+                      value={formatCsv(features.setup.kbIds.allowlist)}
+                      onChange={(event) =>
+                        updateFeatures(["setup", "kbIds", "allowlist"], parseCsv(event.target.value))
+                      }
+                      className="h-7 w-[260px] text-[11px]"
+                      placeholder="kb_1, kb_2"
+                    />
+                  }
+                />
+                <Row
+                  label="setup.adminKbIds"
+                  right={
+                    <Input
+                      value={formatCsv(features.setup.adminKbIds.allowlist)}
+                      onChange={(event) =>
+                        updateFeatures(["setup", "adminKbIds", "allowlist"], parseCsv(event.target.value))
+                      }
+                      className="h-7 w-[260px] text-[11px]"
+                      placeholder="kb_admin_1"
+                    />
+                  }
+                />
+                <Row
+                  label="setup.routes"
+                  right={
+                    <Input
+                      value={formatCsv(features.setup.routes.allowlist)}
+                      onChange={(event) =>
+                        updateFeatures(["setup", "routes", "allowlist"], parseCsv(event.target.value))
+                      }
+                      className="h-7 w-[260px] text-[11px]"
+                      placeholder="route_a, route_b"
+                    />
+                  }
+                />
+              </RowGroup>
             ) : null}
           </ToggleRowGroup>
         </ToggleRowGroup>

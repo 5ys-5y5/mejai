@@ -975,19 +975,15 @@ export default function WidgetEmbedPage() {
           WIDGET_PAGE_KEY,
           data.widget_config?.chat_policy ? (data.widget_config.chat_policy as ConversationFeaturesProviderShape) : null
         );
-        const greetingValue =
-          data.widget_config?.theme && (data.widget_config.theme as Record<string, any>).greeting
-            ? String((data.widget_config.theme as Record<string, any>).greeting)
-            : "";
-        const greeting = greetingValue.trim();
+        const greeting =
+          (data.widget_config?.theme && (data.widget_config.theme as Record<string, any>).greeting) ||
+          "안녕하세요. 무엇을 도와드릴까요?";
         const nextMessages =
           history.length > 0
             ? history
             : resolvedFeatures.interaction.prefill
               ? []
-              : greeting
-                ? [{ id: buildId(), role: "bot" as const, content: greeting }]
-                : [];
+              : [{ id: buildId(), role: "bot" as const, content: String(greeting) }];
         setMessages(nextMessages);
         setStatus("연결됨");
       } catch (error) {

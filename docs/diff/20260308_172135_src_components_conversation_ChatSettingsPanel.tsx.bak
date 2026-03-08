@@ -215,12 +215,10 @@ export function ChatSettingsPanel({
         pageKey === WIDGET_PAGE_KEY
           ? {
               ...nextDraft.widget,
+              agent_id: null,
               setup_config: null,
             }
           : nextDraft.widget;
-      if (pageKey === WIDGET_PAGE_KEY && nextWidget && "agent_id" in nextWidget) {
-        delete (nextWidget as WidgetChatPolicyConfig).agent_id;
-      }
       const nextProvider: ConversationFeaturesProviderShape = {
         ...base,
         widget: nextWidget,
@@ -1123,9 +1121,9 @@ export function ChatSettingsPanel({
               checked={tabBarChatEnabled}
               visibility={visibility.widget.tabBar.chat}
               onToggle={(next) => setTabBarPanelEnabled("chat", next)}
-              onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
-              defaultOpen
-            >
+            onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
+            defaultOpen
+          >
             <RowGroup label="adminPanel" displayLabel="Admin Panel">
               <ToggleRow
                 label="adminPanel.enabled"
@@ -1255,7 +1253,8 @@ export function ChatSettingsPanel({
                 features.mcp.tools,
                 (next) => updateFeatures(["mcp", "tools"], next)
               )}
-            </RowGroup>
+                {renderAllowDenyBlock(
+              </RowGroup>
 
           </ToggleRowGroup>
           <ToggleRow
@@ -1280,7 +1279,6 @@ export function ChatSettingsPanel({
             onVisibilityChange={(mode) => setTabBarPanelVisibility("policy", mode)}
           >
             {tabBarPolicyEnabled ? (
-              <>
                 <RowGroup label="setup.mode" displayLabel="Setup Mode">
                 <ToggleRow
                   label="setup.modelSelector"
@@ -1702,8 +1700,7 @@ export function ChatSettingsPanel({
                   />
                   {governanceSaving ? <div className="text-[11px] text-slate-500">저장 중...</div> : null}
                 </RowGroup>
-              </>
-            ) : null}
+              ) : null}
           </ToggleRowGroup>
         </ToggleRowGroup>
 

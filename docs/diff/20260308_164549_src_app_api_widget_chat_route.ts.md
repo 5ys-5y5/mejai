@@ -6,14 +6,13 @@ import { verifyWidgetToken } from "@/lib/widgetToken";
 import { resolveRuntimeFlags } from "@/lib/runtimeFlags";
 import {
   applyConversationFeatureVisibility,
-  isEnabledByGate,
   isProviderEnabled,
   isToolEnabled,
   resolveConversationPageFeatures,
   WIDGET_PAGE_KEY,
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
-import { normalizeWidgetOverrides } from "@/lib/widgetTemplateMeta";
+import { normalizeWidgetOverrides, normalizeStringArray } from "@/lib/widgetTemplateMeta";
 import { filterWidgetOverridesByPolicy, resolveWidgetBasePolicy, resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
 
 const WIDGET_CHAT_ERROR_EVENT = "WIDGET_CHAT_ERROR";
@@ -256,37 +255,58 @@ export async function POST(req: NextRequest) {
         .map((value: unknown) => String(value || "").trim())
         .filter((id: string) => id.length > 0 && isToolEnabled(id, featureFlags))
     : [];
-  const mergedMcpSelectors = Array.from(
-    new Set(
-      [...filteredToolIds, ...filteredProviderKeys].map((value) => String(value).trim()).filter(Boolean)
-    )
-  );
+  const setupConfig = resolved.setup_config || {};
+  const resolvedAgentId = setupConfig.agent_id ? String(setupConfig.agent_id) : null;
+  const kbConfig = setupConfig.kb || {};
+  const mcpConfig = setupConfig.mcp || {};
+  const enforcedProviderKeys = normalizeStringArray(mcpConfig.provider_keys);
+  const enforcedToolIds = normalizeStringArray(mcpConfig.tool_ids);
+  const enforcedKbId = kbConfig.mode === "select" ? String(kbConfig.kb_id || "").trim() : "";
+  const enforcedAdminKbIds = normalizeStringArray(kbConfig.admin_kb_ids);
+  const enforcedLlm = String(setupConfig.llm?.default || "").trim();
+
+  const filteredEnforcedProviders = enforcedProviderKeys.filter((key) => isProviderEnabled(key, featureFlags));
+  const filteredEnforcedTools = enforcedToolIds.filter((id) => isToolEnabled(id, featureFlags));
+
+  const mergedMcpSelectors = resolvedAgentId
+    ? []
+    : Array.from(
+        new Set(
+          [
+            ...filteredEnforcedTools,
+            ...filteredEnforcedProviders,
+            ...filteredToolIds,
+            ...filteredProviderKeys,
+          ]
+            .map((value) => String(value).trim())
+            .filter(Boolean)
+        )
+      );
 
   const normalizedLlm = String(safeLlm || "").trim();
-  const defaultLlm = featureFlags.setup.defaultLlm;
-  const requestedLlm =
-    featureFlags.setup.llmSelector && normalizedLlm && isEnabledByGate(normalizedLlm, featureFlags.setup.llms)
-      ? normalizedLlm
-      : "";
-  const effectiveLlm = featureFlags.setup.llmSelector ? requestedLlm || defaultLlm : defaultLlm;
+  const effectiveLlmCandidate = enforcedLlm || normalizedLlm;
+  const effectiveLlm = featureFlags.setup.llmSelector
+    ? effectiveLlmCandidate || featureFlags.setup.defaultLlm
+    : featureFlags.setup.defaultLlm;
 
-  const normalizedKbId = String(safeKbId || "").trim();
   const effectiveKbId =
-    featureFlags.setup.kbSelector && normalizedKbId && isEnabledByGate(normalizedKbId, featureFlags.setup.kbIds)
-      ? normalizedKbId
+    !resolvedAgentId && featureFlags.setup.kbSelector
+      ? enforcedKbId || String(safeKbId || "").trim() || undefined
       : undefined;
-  const inlineAllowed = featureFlags.setup.inlineUserKbInput;
-  const effectiveInlineKb = inlineAllowed ? String(safeInlineKb || "").trim() || undefined : undefined;
-  const effectiveAdminKbIds = featureFlags.setup.adminKbSelector
-    ? Array.from(
-        new Set(
-          (Array.isArray(safeAdminKbIds) ? safeAdminKbIds : [])
-            .map((value: unknown) => String(value || "").trim())
-            .filter((value: string) => value.length > 0)
-            .filter((value: string) => isEnabledByGate(value, featureFlags.setup.adminKbIds))
+  const effectiveInlineKb =
+    !resolvedAgentId && featureFlags.setup.inlineUserKbInput
+      ? String(safeInlineKb || "").trim() || undefined
+      : undefined;
+  const effectiveAdminKbIds =
+    !resolvedAgentId && featureFlags.setup.adminKbSelector
+      ? Array.from(
+          new Set(
+            [...enforcedAdminKbIds, ...(Array.isArray(safeAdminKbIds) ? safeAdminKbIds : [])]
+              .map((value: unknown) => String(value || "").trim())
+              .filter((value: string) => value.length > 0)
+          )
         )
-      )
-    : [];
+      : [];
 
   const logAndReturn = async (errorCode: string, status: number) => {
     await logWidgetProxyEvent({
@@ -294,7 +314,7 @@ export async function POST(req: NextRequest) {
       sessionId,
       widgetId: instance.id,
       orgId,
-      agentId: null,
+      agentId: resolvedAgentId,
       eventType: WIDGET_CHAT_ERROR_EVENT,
       payload: {
         error: errorCode,
@@ -304,6 +324,17 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json({ error: errorCode }, { status });
   };
+
+  if (resolvedAgentId) {
+    const { data: agent } = await supabaseAdmin
+      .from("B_bot_agents")
+      .select("id, is_public, usable_id")
+      .eq("id", resolvedAgentId)
+      .maybeSingle();
+    if (!agent || (!previewAllowed && !isUsableByVisitor(agent, visitorUserId))) {
+      return await logAndReturn("AGENT_NOT_ALLOWED", 403);
+    }
+  }
 
   if (effectiveKbId) {
     const { data: kb } = await supabaseAdmin
@@ -344,12 +375,12 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  if (!previewAllowed && allowedMcpTools.length === 0 && !inlineAllowed) {
+  if (!previewAllowed && !resolvedAgentId && allowedMcpTools.length === 0) {
     return await logAndReturn("MCP_REQUIRED", 400);
   }
 
-  if (!previewAllowed && !inlineAllowed && !effectiveKbId) {
-    return await logAndReturn("KB_REQUIRED", 400);
+  if (!previewAllowed && !resolvedAgentId && kbConfig.mode !== "inline" && !effectiveKbId) {
+    return NextResponse.json({ error: "KB_REQUIRED" }, { status: 400 });
   }
 
   const secret = getWidgetRuntimeSecret();
@@ -369,7 +400,7 @@ export async function POST(req: NextRequest) {
     req_forwarded_host: req.headers.get("x-forwarded-host") || "",
     req_forwarded_proto: req.headers.get("x-forwarded-proto") || "",
   };
-  const effectiveAgentId = null;
+  const effectiveAgentId = resolvedAgentId || null;
   await logWidgetProxyEvent({
     supabase: supabaseAdmin,
     sessionId,
@@ -394,14 +425,14 @@ export async function POST(req: NextRequest) {
         "x-widget-id": String(instance.id || ""),
         "x-widget-name": encodeHeaderValue(String(resolved.name || template.name || instance.name || "")),
         "x-widget-public-key": String(instance.public_key || ""),
-        "x-widget-agent-id": "",
+        "x-widget-agent-id": String(resolvedAgentId || ""),
         "x-widget-allowed-domains": encodeHeaderJson(resolved.allowed_domains || []),
         "x-widget-allowed-paths": encodeHeaderJson(resolved.allowed_paths || []),
       },
       body: JSON.stringify({
         message,
         session_id: sessionId,
-        agent_id: undefined,
+        agent_id: resolvedAgentId || undefined,
         mode: body.mode,
         llm: effectiveLlm,
         kb_id: effectiveKbId,

@@ -89,7 +89,7 @@ export function filterWidgetOverridesByPolicy(
   const allowKbOverride = Boolean(
     features.setup.kbSelector || features.setup.inlineUserKbInput || features.setup.adminKbSelector
   );
-  const allowMcpOverride = Boolean(features.setup.mcpProviderSelector || features.setup.mcpActionSelector);
+  const allowMcpOverride = Boolean(features.mcp.providerSelector || features.mcp.actionSelector);
 
   let nextSetup: WidgetSetupConfig | null = overrides.setup_config || null;
   if (nextSetup && typeof nextSetup === "object") {

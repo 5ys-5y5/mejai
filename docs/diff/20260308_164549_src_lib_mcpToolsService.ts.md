@@ -57,9 +57,6 @@ export type McpToolItem = {
   description: string | null;
   schema: Record<string, unknown> | null;
   version: string | null;
-  is_public?: boolean | null;
-  usable_id?: string[] | null;
-  editable_id?: string[] | null;
   policy: McpToolPolicy | null;
   provider: McpProviderKey;
   meta: {
@@ -83,9 +80,6 @@ type ToolRow = {
   visibility: string | null;
   access: string | null;
   is_destructive: boolean | null;
-  is_public?: boolean | null;
-  usable_id?: string[] | null;
-  editable_id?: string[] | null;
   rate_limit_per_min?: number | null;
   masking_rules?: unknown;
   conditions?: unknown;
@@ -134,7 +128,7 @@ export async function loadMcpToolsForOrg(supabase: SupabaseClient, orgId: string
   const dbResult = await supabase
     .from("C_mcp_tools")
     .select(
-      "id, name, scope_key, endpoint_path, http_method, usage_count, description, schema_json, version, provider_key, visibility, access, is_destructive, rate_limit_per_min, masking_rules, conditions, is_active, is_public, usable_id, editable_id"
+      "id, name, scope_key, endpoint_path, http_method, usage_count, description, schema_json, version, provider_key, visibility, access, is_destructive, rate_limit_per_min, masking_rules, conditions, is_active"
     )
     .eq("is_active", true);
 
@@ -170,9 +164,6 @@ export async function loadMcpToolsForOrg(supabase: SupabaseClient, orgId: string
       description: tool.description || null,
       schema: tool.schema_json || null,
       version: tool.version || null,
-      is_public: tool.is_public ?? null,
-      usable_id: Array.isArray(tool.usable_id) ? tool.usable_id.map((value) => String(value || "").trim()) : null,
-      editable_id: Array.isArray(tool.editable_id) ? tool.editable_id.map((value) => String(value || "").trim()) : null,
       policy,
       provider,
       meta: {
