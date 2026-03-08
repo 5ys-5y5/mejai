@@ -49,26 +49,27 @@ export default function LoginClient() {
   return (
     <AuthShell
       title="다시 오신 것을 환영합니다"
-      footer={null}
+      footer={
+        <div className="space-y-2">
+          <span className="block">
+            <Link className="text-emerald-700 hover:underline" href="/forgot">
+              비밀번호를 잊으셨나요?
+            </Link>
+          </span>
+          <span className="block">
+            계정이 없나요?{" "}
+            <Link className="text-emerald-700 hover:underline" href="/signup?from=login">
+              회원가입
+            </Link>
+          </span>
+        </div>
+      }
     >
       <LoginForm
         email={email}
         password={pw}
         loading={loading}
         error={error}
-        emailRightSlot={
-          <>
-            계정이 없나요?{" "}
-            <Link className="text-emerald-700 hover:underline" href="/signup?from=login">
-              회원가입
-            </Link>
-          </>
-        }
-        passwordRightSlot={
-          <Link className="text-emerald-700 hover:underline" href="/forgot">
-            비밀번호를 잊으셨나요?
-          </Link>
-        }
         onEmailChange={setEmail}
         onPasswordChange={setPw}
         onSubmit={handleLogin}

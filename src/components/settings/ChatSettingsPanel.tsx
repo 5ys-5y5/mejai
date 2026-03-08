@@ -25,7 +25,7 @@ import {
   resolvePageConversationDebugOptions,
 } from "@/lib/transcriptCopyPolicy";
 
-const BASE_PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory", "/embed", "/demo", "/call"];
+const BASE_PAGE_KEYS: ConversationPageKey[] = ["/", "/app/laboratory", "/embed", "/call"];
 const SETTINGS_CARD_WIDTH = 300;
 function normalizePages(
   pages: ConversationPageKey[],

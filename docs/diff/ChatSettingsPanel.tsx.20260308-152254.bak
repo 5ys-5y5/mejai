@@ -243,6 +243,7 @@ export function ChatSettingsPanel({
 
   const [governanceConfig, setGovernanceConfig] = useState<GovernanceConfig | null>(null);
   const [governanceSaving, setGovernanceSaving] = useState(false);
+  const [loginDemoLoopText, setLoginDemoLoopText] = useState("");
   useEffect(() => {
     let active = true;
     const load = async () => {
@@ -317,6 +318,18 @@ export function ChatSettingsPanel({
   const showThemeBasics = !isHidden("theme.greeting") || !isHidden("theme.input_placeholder");
   const widgetActiveChecked = widgetActiveValue ?? true;
   const handleWidgetActiveToggle = onWidgetActiveChange || (() => {});
+  const loginDemoLoopValue = useMemo(() => {
+    if (!isObject(widget.theme?.login_demo_loop)) return "";
+    try {
+      return JSON.stringify(widget.theme?.login_demo_loop, null, 2);
+    } catch {
+      return "";
+    }
+  }, [widget.theme?.login_demo_loop]);
+
+  useEffect(() => {
+    setLoginDemoLoopText(loginDemoLoopValue);
+  }, [loginDemoLoopValue]);
 
   const agentOptions = useMemo<SelectOption[]>(() => {
     const base = (agents || []).map((agent) => {
@@ -717,6 +730,36 @@ export function ChatSettingsPanel({
                       value={typeof widget.theme?.input_placeholder === "string" ? widget.theme.input_placeholder : ""}
                       onChange={(event) => updateWidget(["theme", "input_placeholder"], event.target.value)}
                       className="h-7 w-[260px] text-[11px]"
+                    />
+                  }
+                />
+              )}
+              {isHidden("theme.login_demo_loop") ? null : (
+                <Row
+                  label="theme.login_demo_loop"
+                  alignTop
+                  variant={variant}
+                  right={
+                    <textarea
+                      value={loginDemoLoopText}
+                      onChange={(event) => {
+                        const nextValue = event.target.value;
+                        setLoginDemoLoopText(nextValue);
+                        if (!nextValue.trim()) {
+                          updateWidget(["theme", "login_demo_loop"], null);
+                          return;
+                        }
+                        try {
+                          const parsed = JSON.parse(nextValue);
+                          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                            updateWidget(["theme", "login_demo_loop"], parsed);
+                          }
+                        } catch {
+                          // keep text as-is until valid JSON
+                        }
+                      }}
+                      className="min-h-[140px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                      placeholder="{ \"enabled\": true, \"interval_ms\": 1400, \"items\": [...] }"
                     />
                   }
                 />

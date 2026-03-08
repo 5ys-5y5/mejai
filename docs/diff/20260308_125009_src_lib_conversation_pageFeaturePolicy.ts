@@ -4,7 +4,6 @@ import type { WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 export type ConversationPageKey = string;
 
 export const WIDGET_PAGE_KEY: ConversationPageKey = "/embed";
-export type WidgetDefaultTab = "chat" | "list" | "policy" | "login";
 export type SetupFieldKey =
   | "inlineUserKbInput"
   | "llmSelector"
@@ -160,7 +159,6 @@ export type ConversationPageFeatures = {
   };
   widget: {
     launcher: boolean;
-    defaultTab: WidgetDefaultTab;
     header: {
       enabled: boolean;
       logo: boolean;
@@ -605,7 +603,6 @@ export function mergeConversationPageFeatures(
     },
     widget: {
       launcher: override.widget?.launcher ?? base.widget.launcher,
-      defaultTab: override.widget?.defaultTab ?? base.widget.defaultTab,
       header: {
         enabled: override.widget?.header?.enabled ?? base.widget.header.enabled,
         logo: override.widget?.header?.logo ?? base.widget.header.logo,
@@ -947,7 +944,6 @@ export function applyConversationFeatureVisibility(
     },
     widget: {
       launcher: withVisibilityFlag(features.widget.launcher, features.visibility.widget.launcher, isAdminUser, isUserLoggedIn),
-      defaultTab: features.widget.defaultTab,
       header: {
         enabled: withVisibilityFlag(
           features.widget.header.enabled,
@@ -1161,7 +1157,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
     widget: {
       launcher: true,
-      defaultTab: "chat",
       header: {
         enabled: true,
         logo: true,
@@ -1296,7 +1291,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
     widget: {
       launcher: true,
-      defaultTab: "chat",
       header: {
         enabled: true,
         logo: true,
@@ -1432,7 +1426,141 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
     widget: {
       launcher: true,
-      defaultTab: "chat",
+      header: {
+        enabled: true,
+        logo: true,
+        status: true,
+        agentAction: true,
+        newConversation: true,
+        close: true,
+      },
+      tabBar: {
+        enabled: true,
+        chat: true,
+        list: true,
+        policy: true,
+        login: false,
+      },
+      chatPanel: true,
+      historyPanel: true,
+      setupPanel: true,
+    },
+    visibility: {
+      mcp: {
+        providerSelector: "user",
+        actionSelector: "user",
+      },
+      adminPanel: {
+        enabled: "user",
+        logsToggle: "user",
+        copyConversation: "user",
+      },
+      interaction: {
+        quickReplies: "user",
+        productCards: "user",
+        threePhasePrompt: "user",
+        threePhasePromptShowConfirmed: "user",
+        threePhasePromptShowConfirming: "user",
+        threePhasePromptShowNext: "user",
+        threePhasePromptHideLabels: "user",
+        prefill: "user",
+        inputSubmit: "user",
+        widgetHeaderAgentAction: "user",
+        widgetHeaderNewConversation: "user",
+        widgetHeaderClose: "user",
+      },
+      setup: {
+        modelSelector: "user",
+        agentSelector: "user",
+        versionSelector: "user",
+        sessionSelector: "user",
+        conversationMode: "user",
+        llmSelector: "user",
+        kbSelector: "user",
+        adminKbSelector: "admin",
+        modeExisting: "user",
+        sessionIdSearch: "user",
+        modeNew: "user",
+        routeSelector: "user",
+        inlineUserKbInput: "user",
+      },
+      widget: {
+        launcher: "user",
+        header: {
+          enabled: "user",
+          logo: "user",
+          status: "user",
+          agentAction: "user",
+          newConversation: "user",
+          close: "user",
+        },
+        tabBar: {
+          enabled: "user",
+          chat: "user",
+          list: "user",
+          policy: "user",
+          login: "user",
+        },
+        chatPanel: "user",
+        historyPanel: "user",
+        setupPanel: "user",
+      },
+    },
+  },
+  "/demo": {
+    mcp: {
+      providerSelector: true,
+      actionSelector: true,
+      providers: {
+        denylist: ["cafe24"],
+      },
+      tools: {},
+    },
+    adminPanel: {
+      enabled: true,
+      logsToggle: true,
+      copyConversation: true,
+    },
+    interaction: {
+      quickReplies: true,
+      productCards: true,
+      threePhasePrompt: true,
+      threePhasePromptLabels: DEFAULT_THREE_PHASE_LABELS,
+      threePhasePromptShowConfirmed: true,
+      threePhasePromptShowConfirming: true,
+      threePhasePromptShowNext: true,
+      threePhasePromptHideLabels: false,
+      inputPlaceholder: "",
+      prefill: true,
+      prefillMessages: DEFAULT_PREFILL_MESSAGES,
+      inputSubmit: true,
+      widgetHeaderAgentAction: false,
+      widgetHeaderNewConversation: true,
+      widgetHeaderClose: true,
+    },
+    setup: {
+      modelSelector: false,
+      agentSelector: false,
+      versionSelector: true,
+      sessionSelector: true,
+      conversationMode: true,
+      llmSelector: true,
+      llms: {},
+      kbSelector: false,
+      kbIds: {},
+      adminKbSelector: false,
+      adminKbIds: {},
+      modeExisting: false,
+      sessionIdSearch: false,
+      modeNew: true,
+      routeSelector: false,
+      routes: {},
+      inlineUserKbInput: true,
+      defaultSetupMode: "new",
+      defaultLlm: "chatgpt",
+    },
+    widget: {
+      launcher: true,
       header: {
         enabled: true,
         logo: true,
@@ -1568,7 +1696,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
     },
     widget: {
       launcher: true,
-      defaultTab: "chat",
       header: {
         enabled: true,
         logo: true,
@@ -1652,10 +1779,11 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
   },
 };
 
-export function getConversationPageBaseKey(page: ConversationPageKey): "/" | "/app/laboratory" | typeof WIDGET_PAGE_KEY | "/call" {
+export function getConversationPageBaseKey(page: ConversationPageKey): "/" | "/app/laboratory" | typeof WIDGET_PAGE_KEY | "/demo" | "/call" {
   const normalized = String(page || "").trim();
   if (normalized === "/") return "/";
   if (normalized === "/app/laboratory") return "/app/laboratory";
+  if (normalized === "/demo") return "/demo";
   if (normalized === "/call" || normalized.startsWith("/call/")) return "/call";
   if (normalized === WIDGET_PAGE_KEY || normalized.startsWith(`${WIDGET_PAGE_KEY}/`)) return WIDGET_PAGE_KEY;
   return "/";

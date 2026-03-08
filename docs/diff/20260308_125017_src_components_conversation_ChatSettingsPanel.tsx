@@ -126,13 +126,6 @@ const DEFAULT_LLM_OPTIONS: SelectOption[] = [
   { id: "gemini", label: "gemini" },
 ];
 
-const DEFAULT_WIDGET_TAB_OPTIONS: SelectOption[] = [
-  { id: "chat", label: "chat" },
-  { id: "list", label: "list" },
-  { id: "policy", label: "policy" },
-  { id: "login", label: "login" },
-];
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -297,9 +290,7 @@ export function ChatSettingsPanel({
           key === "llmSelector" ||
           key === "kbSelector" ||
           key === "adminKbSelector" ||
-          key === "routeSelector" ||
-          key === "mcpProviderSelector" ||
-          key === "mcpActionSelector"
+          key === "routeSelector"
       ),
     [setupUi.order]
   );
@@ -1059,30 +1050,18 @@ export function ChatSettingsPanel({
           />
         </ToggleRowGroup>
 
+        <ToggleRowGroup
+          label="widget.tabBar.enabled"
+          checked={features.widget.tabBar.enabled}
+          visibility={visibility.widget.tabBar.enabled}
+          onToggle={(next) => updateFeatures(["widget", "tabBar", "enabled"], next)}
+          onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "enabled"], mode)}
+        >
           <ToggleRowGroup
-            label="widget.tabBar.enabled"
-            checked={features.widget.tabBar.enabled}
-            visibility={visibility.widget.tabBar.enabled}
-            onToggle={(next) => updateFeatures(["widget", "tabBar", "enabled"], next)}
-            onVisibilityChange={(mode) => updateVisibility(["widget", "tabBar", "enabled"], mode)}
-          >
-            <Row
-              label="widget.defaultTab"
-              right={
-                <SelectPopover
-                  value={features.widget.defaultTab || "chat"}
-                  options={DEFAULT_WIDGET_TAB_OPTIONS}
-                  onChange={(value) => updateFeatures(["widget", "defaultTab"], value)}
-                  buttonClassName="h-7 text-[11px]"
-                  className="w-[140px]"
-                />
-              }
-            />
-            <ToggleRowGroup
-              label="widget.tabBar.chat"
-              checked={tabBarChatEnabled}
-              visibility={visibility.widget.tabBar.chat}
-              onToggle={(next) => setTabBarPanelEnabled("chat", next)}
+            label="widget.tabBar.chat"
+            checked={tabBarChatEnabled}
+            visibility={visibility.widget.tabBar.chat}
+            onToggle={(next) => setTabBarPanelEnabled("chat", next)}
             onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
             defaultOpen
           >
@@ -1550,50 +1529,6 @@ export function ChatSettingsPanel({
                           onVisibilityChange={(mode) => updateVisibility(["setup", "routeSelector"], mode)}
                           editableLabel
                           onLabelChange={(value) => updateSetupUi(["labels", "routeSelector"], value)}
-                          showDragHandle
-                          draggable
-                          onDragStart={handleSetupDragStart(key)}
-                          onDragOver={handleSetupDragOver}
-                          onDrop={handleSetupDrop(key)}
-                          onDragEnd={handleSetupDragEnd}
-                        />
-                      );
-                    }
-                    if (key === "mcpProviderSelector") {
-                      return (
-                        <ToggleRow
-                          key={key}
-                          label="setup.mcpProviderSelector"
-                          codeLabel="setup.mcpProviderSelector"
-                          displayLabel={setupUi.labels.mcpProviderSelector || "MCP 프로바이더 선택"}
-                          checked={features.mcp.providerSelector}
-                          visibility={visibility.mcp.providerSelector}
-                          onToggle={(next) => updateFeatures(["mcp", "providerSelector"], next)}
-                          onVisibilityChange={(mode) => updateVisibility(["mcp", "providerSelector"], mode)}
-                          editableLabel
-                          onLabelChange={(value) => updateSetupUi(["labels", "mcpProviderSelector"], value)}
-                          showDragHandle
-                          draggable
-                          onDragStart={handleSetupDragStart(key)}
-                          onDragOver={handleSetupDragOver}
-                          onDrop={handleSetupDrop(key)}
-                          onDragEnd={handleSetupDragEnd}
-                        />
-                      );
-                    }
-                    if (key === "mcpActionSelector") {
-                      return (
-                        <ToggleRow
-                          key={key}
-                          label="setup.mcpActionSelector"
-                          codeLabel="setup.mcpActionSelector"
-                          displayLabel={setupUi.labels.mcpActionSelector || "MCP 액션 선택"}
-                          checked={features.mcp.actionSelector}
-                          visibility={visibility.mcp.actionSelector}
-                          onToggle={(next) => updateFeatures(["mcp", "actionSelector"], next)}
-                          onVisibilityChange={(mode) => updateVisibility(["mcp", "actionSelector"], mode)}
-                          editableLabel
-                          onLabelChange={(value) => updateSetupUi(["labels", "mcpActionSelector"], value)}
                           showDragHandle
                           draggable
                           onDragStart={handleSetupDragStart(key)}

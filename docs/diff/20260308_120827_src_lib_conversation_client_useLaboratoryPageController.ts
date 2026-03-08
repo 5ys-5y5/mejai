@@ -151,13 +151,12 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
             : existingEnabled
               ? "existing"
               : "new";
-        const nextConversationMode: ConversationMode = resolvedMode === "existing" ? "history" : "new";
         if (model.setupMode !== resolvedMode) {
           changed = true;
           return {
             ...model,
             setupMode: resolvedMode,
-            conversationMode: nextConversationMode,
+            conversationMode: resolvedMode === "existing" ? "history" : "new",
             config: { ...model.config, llm: effectiveDefaultLlm },
           };
         }
@@ -165,7 +164,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
           const nextSetupMode = resolvedMode;
           if (
             model.setupMode === nextSetupMode &&
-            model.conversationMode === nextConversationMode &&
+            model.conversationMode === (nextSetupMode === "existing" ? "history" : "new") &&
             model.config.llm === effectiveDefaultLlm
           ) {
             return model;
@@ -174,7 +173,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
           return {
             ...model,
             setupMode: nextSetupMode,
-            conversationMode: nextConversationMode,
+            conversationMode: nextSetupMode === "existing" ? "history" : "new",
             config: { ...model.config, llm: effectiveDefaultLlm },
           };
         }

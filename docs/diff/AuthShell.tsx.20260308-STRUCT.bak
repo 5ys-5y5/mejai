@@ -6,7 +6,6 @@ interface AuthShellProps {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
-  afterContent?: React.ReactNode;
   footer?: React.ReactNode;
   showBrand?: boolean;
   showTitle?: boolean;
@@ -31,7 +30,6 @@ export function AuthShell({
   title,
   subtitle,
   children,
-  afterContent,
   footer,
   showBrand = true,
   showTitle = true,
@@ -64,7 +62,6 @@ export function AuthShell({
               ) : null}
             </div>
           </div>
-          {afterContent ? <div className="mt-6">{afterContent}</div> : null}
 
           <div className="mt-10 text-center text-xs text-slate-500">© Mejai</div>
         </div>

@@ -440,8 +440,6 @@ export default function WidgetEmbedPage() {
   }, [initialOverrides, queryOverrides]);
 
   const [activeTab, setActiveTab] = useState<WidgetConversationTab>(() => forcedTab || "chat");
-  const [configLoaded, setConfigLoaded] = useState(false);
-  const [tabResolved, setTabResolved] = useState(false);
   const [widgetToken, setWidgetToken] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [config, setConfig] = useState<WidgetConfig | null>(null);
@@ -719,19 +717,6 @@ export default function WidgetEmbedPage() {
   const allowListPanel = Boolean(pageFeatures.widget?.historyPanel);
   const allowPolicyPanel = Boolean(pageFeatures.widget?.setupPanel);
   const allowLoginPanel = Boolean(pageFeatures.widget?.tabBar?.login && !isUserLoggedIn);
-  const uiReady = configLoaded && tabResolved;
-  const renderHeader = uiReady && showHeader;
-  const renderHeaderLogo = uiReady && showHeaderLogo;
-  const renderHeaderStatus = uiReady && showHeaderStatus;
-  const renderTabBar = uiReady && showTabBar;
-  const renderChatTab = uiReady && showChatTab;
-  const renderListTab = uiReady && showListTab;
-  const renderPolicyTab = uiReady && showPolicyTab;
-  const renderLoginTab = uiReady && showLoginTab;
-  const renderChatPanel = uiReady && allowChatPanel;
-  const renderListPanel = uiReady && allowListPanel;
-  const renderPolicyPanel = uiReady && allowPolicyPanel;
-  const renderLoginPanel = uiReady && allowLoginPanel;
 
   const allowedTabs = useMemo<WidgetConversationTab[]>(() => {
     const tabs: WidgetConversationTab[] = [];
@@ -743,46 +728,26 @@ export default function WidgetEmbedPage() {
   }, [allowChatPanel, allowListPanel, allowLoginPanel, allowPolicyPanel, showChatTab, showListTab, showLoginTab, showPolicyTab]);
 
   useEffect(() => {
-    if (!configLoaded) {
-      setTabResolved(false);
-      initialTabAppliedRef.current = false;
-      return;
-    }
     if (forcedTab) {
-      if (activeTab === forcedTab) {
-        setTabResolved(true);
-      } else {
-        setTabResolved(false);
-        setActiveTab(forcedTab);
-      }
+      setActiveTab(forcedTab);
       return;
     }
     if (!initialTabAppliedRef.current && allowedTabs.includes(defaultTab)) {
-      if (activeTab === defaultTab) {
-        initialTabAppliedRef.current = true;
-        setTabResolved(true);
-      } else {
-        setTabResolved(false);
-        setActiveTab(defaultTab);
-      }
+      initialTabAppliedRef.current = true;
+      setActiveTab(defaultTab);
       return;
     }
-    if (!allowedTabs.includes(activeTab)) {
-      setTabResolved(false);
-      setActiveTab(allowedTabs[0]);
-      return;
-    }
-    setTabResolved(true);
-  }, [activeTab, allowedTabs, configLoaded, defaultTab, forcedTab]);
+    if (allowedTabs.includes(activeTab)) return;
+    setActiveTab(allowedTabs[0]);
+  }, [activeTab, allowedTabs, defaultTab, forcedTab]);
 
   const handleTabChange = useCallback(
     (tab: WidgetConversationTab) => {
-      if (!configLoaded || !tabResolved) return;
       if (forcedTab) return;
       if (!allowedTabs.includes(tab)) return;
       setActiveTab(tab);
     },
-    [allowedTabs, configLoaded, forcedTab, tabResolved]
+    [allowedTabs, forcedTab]
   );
 
   useEffect(() => {
@@ -854,7 +819,6 @@ export default function WidgetEmbedPage() {
     async (user?: Record<string, any> | null, options?: { forceNew?: boolean }) => {
       if (initCalledRef.current && !options?.forceNew) return;
       initCalledRef.current = true;
-      setConfigLoaded(false);
       setStatus(options?.forceNew ? "새 대화 준비 중" : "초기화 중");
       const referrer = typeof document !== "undefined" ? document.referrer : "";
       const meta = pendingMeta || {};
@@ -937,7 +901,6 @@ export default function WidgetEmbedPage() {
               error: data?.error || "INIT_FAILED",
             },
           });
-          setConfigLoaded(true);
           return;
         }
         const nextToken = String(data.widget_token || "");
@@ -945,7 +908,6 @@ export default function WidgetEmbedPage() {
         setWidgetToken(nextToken);
         setSessionId(nextSessionId);
         setConfig(data.widget_config || null);
-        setConfigLoaded(true);
         setMessageLogs({});
         setQuickReplyDrafts({});
         setLockedReplySelections({});
@@ -994,7 +956,6 @@ export default function WidgetEmbedPage() {
             error: error instanceof Error ? error.message : "INIT_FAILED",
           },
         });
-        setConfigLoaded(true);
       }
     },
     [
@@ -1675,9 +1636,9 @@ export default function WidgetEmbedPage() {
         brandName={brandName}
         status={statusLabel}
         iconUrl={headerIcon}
-        showHeader={renderHeader}
-        showHeaderLogo={renderHeaderLogo}
-        showHeaderStatus={renderHeaderStatus}
+        showHeader={showHeader}
+        showHeaderLogo={showHeaderLogo}
+        showHeaderStatus={showHeaderStatus}
         onNewConversation={handleNewConversation}
         showNewConversation={
           pageFeatures.interaction.widgetHeaderNewConversation && pageFeatures.widget?.header?.newConversation
@@ -1693,15 +1654,15 @@ export default function WidgetEmbedPage() {
         className="h-full"
         activeTab={activeTab}
         onTabChange={handleTabChange}
-        showTabBar={renderTabBar}
-        showChatTab={renderChatTab}
-        showListTab={renderListTab}
-        showPolicyTab={renderPolicyTab}
-        showLoginTab={renderLoginTab}
-        showChatPanel={renderChatPanel}
-        showListPanel={renderListPanel}
-        showPolicyPanel={renderPolicyPanel}
-        showLoginPanel={renderLoginPanel}
+        showTabBar={showTabBar}
+        showChatTab={showChatTab}
+        showListTab={showListTab}
+        showPolicyTab={showPolicyTab}
+        showLoginTab={showLoginTab}
+        showChatPanel={allowChatPanel}
+        showListPanel={allowListPanel}
+        showPolicyPanel={allowPolicyPanel}
+        showLoginPanel={allowLoginPanel}
         loginPanel={loginPanel}
         chatLegoProps={chatLegoProps}
         setupLegoProps={setupLegoProps}
