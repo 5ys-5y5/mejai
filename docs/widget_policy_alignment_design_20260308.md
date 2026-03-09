@@ -427,11 +427,10 @@
 - 프리필 우선순위: `setup.inlineUserKbPrefill`이 있으면 항상 우선 적용한다.
 - 프리필이 없으면 `setup.defaultInlineUserKb`를 사용해 대화를 지원한다.
 
-필터 규칙:
-- `setup.inlineUserKb`가 null이면 필터를 적용하지 않는다.
-- `setup.inlineUserKb`의 "필터 해제"는 on/off 토글로 제공한다.
-- 필터 해제 = ON 상태면 정책에 의한 추가 필터는 적용하지 않고,
-  기본 제약(usable_id/is_public/user scope)에 따른 목록만 제공한다.
+필터/기능 토글 규칙:
+- `setup.inlineUserKb`는 다른 정책 항목과 동일하게 **기능 on/off 의미**로 동작한다.
+- 토글 OFF면 `setup.inlineUserKb` 자체를 적용하지 않는다(값 무시).
+- 토글 ON일 때만 `setup.inlineUserKb`의 선택값으로 범위를 제한한다.
 
 ### 4) greeting/placeholder 일원화 (확정)
 전제:
@@ -475,8 +474,8 @@
 - `setup.mcpProviderKeys`, `setup.mcpToolIds`를 정책 패널에 추가한다.
   - 의미: 대화에서 선택 가능한 MCP 범위를 제한하는 allowlist.
   - default 값은 `setup.defaultMcpProviderKeys`, `setup.defaultMcpToolIds`에 별도로 둔다.
-- `setup.mcpProviderKeys`, `setup.mcpToolIds`, `setup.inlineUserKb`는 null/부분 선택/필터 해제 상태를 지원한다.
-- "필터 해제"는 각 항목에 on/off 토글로 제공한다.
+- `setup.mcpProviderKeys`, `setup.mcpToolIds`, `setup.inlineUserKb`는 null/부분 선택을 지원한다.
+- 각 항목은 기능 on/off 토글을 제공하며, OFF면 해당 항목은 적용되지 않는다.
 
 ## 정책 마이그레이션
 - 기존 저장 정책 정리:

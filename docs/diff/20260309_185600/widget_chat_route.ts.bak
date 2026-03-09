@@ -123,14 +123,6 @@ function isUsableByVisitor(row: { is_public?: boolean | null; usable_id?: string
   return usable.includes(visitorId);
 }
 
-function filterValuesByGate(values: string[], gate?: { enabled?: boolean | null; allowlist?: string[] | null }) {
-  if (!gate || gate.enabled !== true) return values;
-  const allowlist = Array.isArray(gate.allowlist) ? gate.allowlist : [];
-  if (allowlist.length === 0) return values;
-  const allowset = new Set(allowlist);
-  return values.filter((value) => allowset.has(value));
-}
-
 async function isPreviewAdmin(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
@@ -273,7 +265,6 @@ export async function POST(req: NextRequest) {
         .map((value: unknown) => String(value || "").trim())
         .filter((key: string) => key.length > 0 && isProviderEnabled(key, featureFlags))
     : [];
-  const gatedProviderKeys = filterValuesByGate(filteredProviderKeys, featureFlags.setup.mcpProviderKeys);
   const defaultToolIds = Array.isArray(featureFlags.setup.defaultMcpToolIds)
     ? featureFlags.setup.defaultMcpToolIds
     : [];
@@ -283,10 +274,9 @@ export async function POST(req: NextRequest) {
         .map((value: unknown) => String(value || "").trim())
         .filter((id: string) => id.length > 0 && isToolEnabled(id, featureFlags))
     : [];
-  const gatedToolIds = filterValuesByGate(filteredToolIds, featureFlags.setup.mcpToolIds);
   const mergedMcpSelectors = Array.from(
     new Set(
-      [...gatedToolIds, ...gatedProviderKeys].map((value) => String(value).trim()).filter(Boolean)
+      [...filteredToolIds, ...filteredProviderKeys].map((value) => String(value).trim()).filter(Boolean)
     )
   );
 
@@ -307,14 +297,7 @@ export async function POST(req: NextRequest) {
         ? defaultKbId
         : undefined);
   const inlineAllowed = featureFlags.setup.inlineUserKbInput;
-  const inlinePrefill = String(featureFlags.setup.inlineUserKbPrefill || "").trim();
-  const inlineGate = featureFlags.setup.inlineUserKb;
-  const defaultInlineKbId = String(featureFlags.setup.defaultInlineUserKb || "").trim();
-  let effectiveInlineKb = inlineAllowed ? String(safeInlineKb || "").trim() || "" : "";
-  if (inlineAllowed && !effectiveInlineKb && inlinePrefill) {
-    effectiveInlineKb = inlinePrefill;
-  }
-  let inlineKbResolved = effectiveInlineKb ? effectiveInlineKb : undefined;
+  const effectiveInlineKb = inlineAllowed ? String(safeInlineKb || "").trim() || undefined : undefined;
   const defaultAdminKbIds = Array.isArray(featureFlags.setup.defaultAdminKbIds)
     ? featureFlags.setup.defaultAdminKbIds
     : [];
@@ -326,24 +309,6 @@ export async function POST(req: NextRequest) {
         .filter((value: string) => isEnabledByGate(value, featureFlags.setup.adminKbIds))
     )
   );
-
-  if (inlineAllowed && !inlineKbResolved && defaultInlineKbId) {
-    const inlineAllowlist = Array.isArray(inlineGate?.allowlist) ? inlineGate.allowlist : [];
-    const inlineGateActive = inlineGate?.enabled === true && inlineAllowlist.length > 0;
-    if (!inlineGateActive || inlineAllowlist.includes(defaultInlineKbId)) {
-      const { data: inlineKbRow } = await supabaseAdmin
-        .from("B_bot_knowledge_bases")
-        .select("id, content, is_public, usable_id")
-        .eq("id", defaultInlineKbId)
-        .maybeSingle();
-      if (inlineKbRow && (previewAllowed || isUsableByVisitor(inlineKbRow, visitorUserId))) {
-        const content = String(inlineKbRow.content || "").trim();
-        if (content) {
-          inlineKbResolved = content;
-        }
-      }
-    }
-  }
 
   const normalizedRoute = String(route || "").trim();
   const defaultRoute = String(featureFlags.setup.defaultRoute || "").trim();
@@ -470,11 +435,11 @@ export async function POST(req: NextRequest) {
         mode: body.mode,
         llm: effectiveLlm,
         kb_id: effectiveKbId,
-        inline_kb: inlineKbResolved,
+        inline_kb: effectiveInlineKb,
         admin_kb_ids: allowedAdminKbIds,
         route: effectiveRoute,
         mcp_tool_ids: allowedMcpTools,
-        mcp_provider_keys: gatedProviderKeys,
+        mcp_provider_keys: filteredProviderKeys,
         page_key: WIDGET_PAGE_KEY,
         visitor,
         runtime_flags: runtimeFlags,

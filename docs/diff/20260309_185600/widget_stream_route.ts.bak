@@ -42,14 +42,6 @@ function isUsableByVisitor(row: { is_public?: boolean | null; usable_id?: string
   return usable.includes(visitorId);
 }
 
-function filterValuesByGate(values: string[], gate?: { enabled?: boolean | null; allowlist?: string[] | null }) {
-  if (!gate || gate.enabled !== true) return values;
-  const allowlist = Array.isArray(gate.allowlist) ? gate.allowlist : [];
-  if (allowlist.length === 0) return values;
-  const allowset = new Set(allowlist);
-  return values.filter((value) => allowset.has(value));
-}
-
 function encodeEvent(event: string, data: unknown) {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
@@ -164,11 +156,9 @@ async function handleStream(
         .map((value: unknown) => String(value || "").trim())
         .filter((id: string) => id.length > 0 && isToolEnabled(id, featureFlags))
     : [];
-  const gatedProviderKeys = filterValuesByGate(filteredProviderKeys, featureFlags.setup.mcpProviderKeys);
-  const gatedToolIds = filterValuesByGate(filteredToolIds, featureFlags.setup.mcpToolIds);
   const mergedMcpSelectors = Array.from(
     new Set(
-      [...gatedToolIds, ...gatedProviderKeys].map((value) => String(value).trim()).filter(Boolean)
+      [...filteredToolIds, ...filteredProviderKeys].map((value) => String(value).trim()).filter(Boolean)
     )
   );
 
@@ -185,14 +175,7 @@ async function handleStream(
       ? normalizedKbId
       : undefined;
   const inlineAllowed = featureFlags.setup.inlineUserKbInput;
-  const inlinePrefill = String(featureFlags.setup.inlineUserKbPrefill || "").trim();
-  const inlineGate = featureFlags.setup.inlineUserKb;
-  const defaultInlineKbId = String(featureFlags.setup.defaultInlineUserKb || "").trim();
-  let effectiveInlineKb = inlineAllowed ? String(safeInlineKb || "").trim() || "" : "";
-  if (inlineAllowed && !effectiveInlineKb && inlinePrefill) {
-    effectiveInlineKb = inlinePrefill;
-  }
-  let inlineKbResolved = effectiveInlineKb ? effectiveInlineKb : undefined;
+  const effectiveInlineKb = inlineAllowed ? String(safeInlineKb || "").trim() || undefined : undefined;
   const effectiveAdminKbIds = featureFlags.setup.adminKbSelector
     ? Array.from(
         new Set(
@@ -203,24 +186,6 @@ async function handleStream(
         )
       )
     : [];
-
-  if (inlineAllowed && !inlineKbResolved && defaultInlineKbId) {
-    const inlineAllowlist = Array.isArray(inlineGate?.allowlist) ? inlineGate.allowlist : [];
-    const inlineGateActive = inlineGate?.enabled === true && inlineAllowlist.length > 0;
-    if (!inlineGateActive || inlineAllowlist.includes(defaultInlineKbId)) {
-      const { data: inlineKbRow } = await supabaseAdmin
-        .from("B_bot_knowledge_bases")
-        .select("id, content, is_public, usable_id")
-        .eq("id", defaultInlineKbId)
-        .maybeSingle();
-      if (inlineKbRow && isUsableByVisitor(inlineKbRow, visitorUserId)) {
-        const content = String(inlineKbRow.content || "").trim();
-        if (content) {
-          inlineKbResolved = content;
-        }
-      }
-    }
-  }
 
   if (effectiveKbId) {
     const { data: kb } = await supabaseAdmin
@@ -310,10 +275,10 @@ async function handleStream(
             mode: extras?.mode || undefined,
             llm: effectiveLlm,
             kb_id: effectiveKbId,
-            inline_kb: inlineKbResolved,
+            inline_kb: effectiveInlineKb,
             admin_kb_ids: allowedAdminKbIds,
             mcp_tool_ids: allowedMcpTools,
-            mcp_provider_keys: gatedProviderKeys,
+            mcp_provider_keys: filteredProviderKeys,
             runtime_flags: runtimeFlags,
             ...(extras?.visitor && typeof extras.visitor === "object" ? { visitor: extras.visitor } : {}),
             ...(extras?.end_user && typeof extras.end_user === "object" ? { end_user: extras.end_user } : {}),

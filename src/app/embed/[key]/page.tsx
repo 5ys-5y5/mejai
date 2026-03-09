@@ -90,6 +90,7 @@ const EMPTY_OPTIONS: SelectOption[] = [];
 type GateConfig = {
   allowlist?: string[];
   denylist?: string[];
+  enabled?: boolean | null;
 };
 
 function buildGateOptions(gate?: GateConfig | null) {
@@ -100,6 +101,22 @@ function buildGateOptions(gate?: GateConfig | null) {
   return allowlist
     .filter((value) => value && !denylist.has(value))
     .map((value) => ({ id: value, label: value }));
+}
+
+function filterOptionsByGate(options: SelectOption[], gate?: GateConfig | null) {
+  if (!gate || gate.enabled !== true) return options;
+  const allowlist = Array.isArray(gate.allowlist) ? gate.allowlist : EMPTY_STRINGS;
+  if (allowlist.length === 0) return options;
+  const allowset = new Set(allowlist);
+  return options.filter((option) => allowset.has(option.id));
+}
+
+function filterValuesByGate(values: string[], gate?: GateConfig | null) {
+  if (!gate || gate.enabled !== true) return values;
+  const allowlist = Array.isArray(gate.allowlist) ? gate.allowlist : EMPTY_STRINGS;
+  if (allowlist.length === 0) return values;
+  const allowset = new Set(allowlist);
+  return values.filter((value) => allowset.has(value));
 }
 
 function buildId() {
@@ -718,10 +735,13 @@ export default function WidgetEmbedPage() {
     [baseFeatures.setup.adminKbIds]
   );
   const routeOptions = useMemo(() => buildGateOptions(baseFeatures.setup.routes), [baseFeatures.setup.routes]);
-  const providerOptions = useMemo(() => buildGateOptions(baseFeatures.mcp.providers), [baseFeatures.mcp.providers]);
+  const providerOptions = useMemo(
+    () => filterOptionsByGate(buildGateOptions(baseFeatures.mcp.providers), baseFeatures.setup.mcpProviderKeys),
+    [baseFeatures.mcp.providers, baseFeatures.setup.mcpProviderKeys]
+  );
   const filteredToolOptions = useMemo(
-    () => buildGateOptions(baseFeatures.mcp.tools),
-    [baseFeatures.mcp.tools]
+    () => filterOptionsByGate(buildGateOptions(baseFeatures.mcp.tools), baseFeatures.setup.mcpToolIds),
+    [baseFeatures.mcp.tools, baseFeatures.setup.mcpToolIds]
   );
 
   useEffect(() => {
@@ -759,15 +779,17 @@ export default function WidgetEmbedPage() {
       const defaultProviders = Array.isArray(baseFeatures.setup.defaultMcpProviderKeys)
         ? baseFeatures.setup.defaultMcpProviderKeys
         : [];
-      if (next.mcpProviderKeys.length === 0 && defaultProviders.length > 0) {
-        next = { ...next, mcpProviderKeys: [...defaultProviders] };
+      const filteredDefaultProviders = filterValuesByGate(defaultProviders, baseFeatures.setup.mcpProviderKeys);
+      if (next.mcpProviderKeys.length === 0 && filteredDefaultProviders.length > 0) {
+        next = { ...next, mcpProviderKeys: [...filteredDefaultProviders] };
         changed = true;
       }
       const defaultTools = Array.isArray(baseFeatures.setup.defaultMcpToolIds)
         ? baseFeatures.setup.defaultMcpToolIds
         : [];
-      if (next.mcpToolIds.length === 0 && defaultTools.length > 0) {
-        next = { ...next, mcpToolIds: [...defaultTools] };
+      const filteredDefaultTools = filterValuesByGate(defaultTools, baseFeatures.setup.mcpToolIds);
+      if (next.mcpToolIds.length === 0 && filteredDefaultTools.length > 0) {
+        next = { ...next, mcpToolIds: [...filteredDefaultTools] };
         changed = true;
       }
       return changed ? next : prev;
@@ -778,6 +800,8 @@ export default function WidgetEmbedPage() {
     baseFeatures.setup.defaultRoute,
     baseFeatures.setup.defaultMcpProviderKeys,
     baseFeatures.setup.defaultMcpToolIds,
+    baseFeatures.setup.mcpProviderKeys,
+    baseFeatures.setup.mcpToolIds,
   ]);
 
   useEffect(() => {
@@ -1346,10 +1370,12 @@ export default function WidgetEmbedPage() {
           shouldSendAdminKb && policyConfig.adminKbIds.length > 0 ? policyConfig.adminKbIds : undefined;
         const providerKeys =
           shouldSendProviders && policyConfig.mcpProviderKeys.length > 0
-            ? policyConfig.mcpProviderKeys
+            ? filterValuesByGate(policyConfig.mcpProviderKeys, baseFeatures.setup.mcpProviderKeys)
             : undefined;
         const toolIds =
-          shouldSendActions && policyConfig.mcpToolIds.length > 0 ? policyConfig.mcpToolIds : undefined;
+          shouldSendActions && policyConfig.mcpToolIds.length > 0
+            ? filterValuesByGate(policyConfig.mcpToolIds, baseFeatures.setup.mcpToolIds)
+            : undefined;
         const route = shouldSendRoute ? policyConfig.route || undefined : undefined;
         const res = await fetch("/api/widget/chat", {
           method: "POST",

@@ -337,7 +337,6 @@ export function ChatSettingsPanel({
     typeof setupConfig.agent_id === "string" && setupConfig.agent_id.trim().length > 0;
   const kbMode = features.setup.kbSelector ? "select" : "input";
   const isKbSelectMode = kbMode === "select";
-  const kbModeMismatchLabel = "setup.kbMode 모드 불일치";
   const hiddenLabelSet = useMemo(() => new Set(hiddenLabels || []), [hiddenLabels]);
   const isHidden = useCallback((label: string) => hiddenLabelSet.has(label), [hiddenLabelSet]);
   const showWidgetAgentRow = !isHidden("widget.agent_id") && variant !== "policy";
@@ -377,36 +376,6 @@ export function ChatSettingsPanel({
   );
   const mcpProviderDefaultOptions = useMemo(() => mcpProviderOptions || [], [mcpProviderOptions]);
   const mcpToolDefaultOptions = useMemo(() => mcpToolOptions || [], [mcpToolOptions]);
-
-  const inlineUserKbGate = features.setup.inlineUserKb || {};
-  const inlineUserKbEnabled = inlineUserKbGate.enabled === true;
-  const inlineUserKbAllowlist = Array.isArray(inlineUserKbGate.allowlist) ? inlineUserKbGate.allowlist : [];
-  const mcpProviderKeysGate = features.setup.mcpProviderKeys || {};
-  const mcpProviderKeysEnabled = mcpProviderKeysGate.enabled === true;
-  const mcpProviderKeysAllowlist = Array.isArray(mcpProviderKeysGate.allowlist) ? mcpProviderKeysGate.allowlist : [];
-  const mcpToolIdsGate = features.setup.mcpToolIds || {};
-  const mcpToolIdsEnabled = mcpToolIdsGate.enabled === true;
-  const mcpToolIdsAllowlist = Array.isArray(mcpToolIdsGate.allowlist) ? mcpToolIdsGate.allowlist : [];
-
-  const renderGateToggle = (checked: boolean | null | undefined, onToggle: (next: boolean) => void) => {
-    const isNull = checked === null || checked === undefined;
-    const resolvedChecked = checked === true;
-    return (
-      <button
-        type="button"
-        onClick={() => onToggle(isNull ? true : !resolvedChecked)}
-        className={
-          isNull
-            ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-slate-400 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
-            : resolvedChecked
-              ? "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-emerald-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
-              : "inline-flex h-7 w-[55px] items-center justify-center rounded-md bg-rose-700 px-2 py-1 text-[11px] font-bold text-white shadow-sm"
-        }
-      >
-        {isNull ? "NULL" : resolvedChecked ? "ON" : "OFF"}
-      </button>
-    );
-  };
 
   const updateWidget = (path: string[], value: unknown) =>
     updateDraft((current) => ({ ...current, widget: setIn(current.widget as any, path, value) }));
@@ -1680,12 +1649,6 @@ export function ChatSettingsPanel({
                         updateFeatures(["setup", "defaultKbId"], value ? value : null)
                       }
                       disabled={isSetupAgentSelected || !isKbSelectMode}
-                      placeholder={isKbSelectMode ? "선택" : kbModeMismatchLabel}
-                      renderValue={
-                        isKbSelectMode
-                          ? undefined
-                          : () => <span className="text-slate-400">{kbModeMismatchLabel}</span>
-                      }
                       buttonClassName="h-7 text-[11px]"
                       className="w-[220px]"
                     />
@@ -1702,12 +1665,6 @@ export function ChatSettingsPanel({
                       options={adminKbAllowlistOptions}
                       displayMode="count"
                       disabled={isSetupAgentSelected || !isKbSelectMode}
-                      placeholder={isKbSelectMode ? "선택" : kbModeMismatchLabel}
-                      renderValue={
-                        isKbSelectMode
-                          ? undefined
-                          : () => <span className="text-slate-400">{kbModeMismatchLabel}</span>
-                      }
                       showBulkActions
                       className="w-[260px]"
                       buttonClassName="h-7 text-[11px]"
@@ -1772,50 +1729,6 @@ export function ChatSettingsPanel({
                   }
                 />
                 <Row
-                  label="setup.mcpProviderKeys"
-                  right={
-                    <div className="flex items-center gap-2">
-                      {renderGateToggle(mcpProviderKeysGate.enabled, (next) =>
-                        updateFeatures(["setup", "mcpProviderKeys", "enabled"], next)
-                      )}
-                      <MultiSelectPopover
-                        values={mcpProviderKeysAllowlist}
-                        onChange={(values) =>
-                          updateFeatures(["setup", "mcpProviderKeys", "allowlist"], values.length ? values : undefined)
-                        }
-                        options={mcpProviderDefaultOptions}
-                        displayMode="count"
-                        disabled={!mcpProviderKeysEnabled || isSetupAgentSelected}
-                        showBulkActions
-                        className="w-[260px]"
-                        buttonClassName="h-7 text-[11px]"
-                      />
-                    </div>
-                  }
-                />
-                <Row
-                  label="setup.mcpToolIds"
-                  right={
-                    <div className="flex items-center gap-2">
-                      {renderGateToggle(mcpToolIdsGate.enabled, (next) =>
-                        updateFeatures(["setup", "mcpToolIds", "enabled"], next)
-                      )}
-                      <MultiSelectPopover
-                        values={mcpToolIdsAllowlist}
-                        onChange={(values) =>
-                          updateFeatures(["setup", "mcpToolIds", "allowlist"], values.length ? values : undefined)
-                        }
-                        options={mcpToolDefaultOptions}
-                        displayMode="count"
-                        disabled={!mcpToolIdsEnabled || isSetupAgentSelected}
-                        showBulkActions
-                        className="w-[260px]"
-                        buttonClassName="h-7 text-[11px]"
-                      />
-                    </div>
-                  }
-                />
-                <Row
                   label="setup.kbMode"
                   right={
                     <SelectPopover
@@ -1833,58 +1746,23 @@ export function ChatSettingsPanel({
                     />
                   }
                 />
-                <Row
-                  label="setup.inlineUserKbPrefill"
-                  alignTop
-                  right={
-                    <textarea
-                      value={isKbSelectMode ? "" : String(features.setup.inlineUserKbPrefill || "")}
-                      onChange={(event) =>
-                        updateFeatures(["setup", "inlineUserKbPrefill"], event.target.value)
-                      }
-                      disabled={isSetupAgentSelected || isKbSelectMode}
-                      className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                      placeholder={isKbSelectMode ? kbModeMismatchLabel : "인라인 KB 프리필"}
-                    />
-                  }
-                />
-                <Row
-                  label="setup.inlineUserKb"
-                  right={
-                    <div className="flex items-center gap-2">
-                      {renderGateToggle(inlineUserKbGate.enabled, (next) =>
-                        updateFeatures(["setup", "inlineUserKb", "enabled"], next)
-                      )}
-                      <MultiSelectPopover
-                        values={inlineUserKbAllowlist}
-                        onChange={(values) =>
-                          updateFeatures(["setup", "inlineUserKb", "allowlist"], values.length ? values : undefined)
+                {isKbSelectMode ? null : (
+                  <Row
+                    label="setup.inlineUserKbPrefill"
+                    alignTop
+                    right={
+                      <textarea
+                        value={String(features.setup.inlineUserKbPrefill || "")}
+                        onChange={(event) =>
+                          updateFeatures(["setup", "inlineUserKbPrefill"], event.target.value)
                         }
-                        options={kbAllowlistOptions}
-                        displayMode="count"
-                        disabled={!inlineUserKbEnabled || isSetupAgentSelected || isKbSelectMode}
-                        showBulkActions
-                        className="w-[260px]"
-                        buttonClassName="h-7 text-[11px]"
+                        disabled={isSetupAgentSelected}
+                        className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        placeholder="인라인 KB 프리필"
                       />
-                    </div>
-                  }
-                />
-                <Row
-                  label="setup.defaultInlineUserKb"
-                  right={
-                    <SelectPopover
-                      value={features.setup.defaultInlineUserKb || ""}
-                      options={[{ id: "", label: "선택 안 함" }, ...kbAllowlistOptions]}
-                      onChange={(value) =>
-                        updateFeatures(["setup", "defaultInlineUserKb"], value ? value : null)
-                      }
-                      disabled={isSetupAgentSelected || isKbSelectMode}
-                      buttonClassName="h-7 text-[11px]"
-                      className="w-[220px]"
-                    />
-                  }
-                />
+                    }
+                  />
+                )}
                   <Row
                     label="setup.llms"
                     right={
