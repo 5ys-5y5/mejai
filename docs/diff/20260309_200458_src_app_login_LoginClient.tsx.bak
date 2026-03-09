@@ -128,7 +128,7 @@ export default function LoginClient() {
             비밀번호를 잊으셨나요?
           </Link>
         }
-        showHelperText={false}
+        helperText={null}
         onEmailChange={setEmail}
         onPasswordChange={setPw}
         onSubmit={handleLogin}

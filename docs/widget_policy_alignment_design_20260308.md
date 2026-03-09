@@ -538,6 +538,9 @@
 - `src/app/api/widget/stream/route.ts` — 위젯 SSE 런타임 요청 정책 적용
 - `src/app/api/mcp/tools/route.ts` — MCP 도구 목록 API
 - `src/lib/mcpToolsService.ts` — MCP 도구 필드/권한 데이터 로딩
+- `src/app/login/LoginClient.tsx` — /login에 위젯 iframe(정책/일반) 적용
+- `src/app/logindemo/page.tsx` — /logindemo 페이지 삭제
+- `src/app/logindemo/LoginDemoClient.tsx` — /logindemo 페이지 삭제
 
 ## 체크리스트
 
@@ -583,6 +586,13 @@
 - chrome-devtools로 interaction.inputPlaceholder / interaction.prefillMessages 입력 UI 노출 확인 (2026-03-09)
 - chrome-devtools로 setup.kbMode “선택” 전환 후 kbIds 선택 가능 확인 (2026-03-09)
 - supabase MCP로 interaction 입력/KB 선택 저장 반영 확인 (2026-03-09)
+- /logindemo 위젯 iframe 구성을 /login에 직접 이식 (import 금지)
+- /login에서 정책 iframe + 일반 iframe 노출 확인
+- /login vs /logindemo “티셔츠 재입고” 응답 동일성 확인
+- /logindemo 페이지 제거 (route 삭제)
+- /login 위젯 iframe 스크롤 hidden 처리
+- /login 위젯 iframe 컨테이너 간격 -30px 적용
+- /login 안내 문구(이메일 인증 안내) 제거
 
 ### 예정
 - theme.greeting / theme.input_placeholder 기본값 노출 문제 해결
@@ -618,6 +628,38 @@
 - 2026-03-09: chrome-devtools MCP로 setup.llms 선택 UI 반영 확인(라벨 “chatgpt+1”).
 - 2026-03-09: supabase MCP로 setup.llms 저장 누락({} 유지) 확인.
 - 2026-03-09: chrome-devtools MCP로 setup.llms 선택/저장 재검증 (라벨 “chatgpt+1”).
+- 2026-03-09: chrome-devtools MCP로 `/login` 정책 iframe(tab=policy) + 일반 iframe 노출 확인.
+- 2026-03-09: chrome-devtools MCP로 `/login` 정책 iframe 내 inlineUserKbPrefill 프리필 노출 확인.
+- 2026-03-09: supabase MCP로 `B_chat_widgets`의 `chat_policy` 조회 성공(위젯 ID c9ab5088-1d28-4f7f-88f4-01c46fa9ddfc).
+- 2026-03-09: chrome-devtools MCP로 `/logindemo`와 `/login`에서 “티셔츠 재입고” 입력 후 응답 확인.
+- 2026-03-09: `/logindemo` 응답 요약/상세가 `/login` 응답과 동일함을 확인.
+- 2026-03-09: supabase MCP로 `F_audit_turn_specs` 최신 2건 조회 성공(동일 시간대 요청 기록 확인).
+- 2026-03-09: chrome-devtools MCP로 `/logindemo` 404 확인(페이지 삭제 반영).
+- 2026-03-09: supabase MCP `list_tables` 호출 성공(삭제 후 MCP 테스트).
+- 2026-03-09: chrome-devtools MCP로 `/login` iframe overflow hidden 클래스 적용 확인.
+- 2026-03-09: chrome-devtools MCP로 `/login` 위젯 컨테이너 `-space-y-[30px]` 적용 확인.
+- 2026-03-09: chrome-devtools MCP로 `/login` 안내 문구 제거 확인.
+- 2026-03-09: supabase MCP `list_tables` 호출 성공(/login 스타일 수정 후 MCP 테스트).
+- 2026-03-09: chrome-devtools MCP로 `/login` helper text 미노출 확인(`showHelperText=false`).
+- 2026-03-09: supabase MCP `list_tables` 호출 성공(helper text 제거 후 MCP 테스트).
+
+## /login 위젯 적용 설계 (2026-03-09 확정)
+목표:
+- /logindemo에서 사용 중인 위젯 iframe 구성(정책 탭 + 일반 탭)을 /login 페이지에 동일 적용한다.
+- /logindemo 코드를 import하지 않고, 동일 로직을 /login에 직접 이식한다.
+
+적용 대상:
+- `src/app/login/LoginClient.tsx`
+
+구현 방향:
+- WIDGET_TEMPLATE_ID, WIDGET_BASE_SRC, buildWidgetUrl 로직을 /login에 직접 포함한다.
+- AuthShell의 `afterContent`에 정책 iframe(tab=policy)과 일반 iframe을 추가한다.
+- URL 파라미터 `origin`, `page_url`, `preview`, `tab`을 유지한다.
+- /logindemo 페이지 코드를 import하지 않는다.
+
+검증:
+- chrome-devtools MCP로 /login에서 정책 iframe과 일반 iframe 노출 확인.
+- supabase MCP로 위젯 정책/설정 반영 여부 확인(기존 검증 흐름 유지).
 - 2026-03-09: supabase MCP로 setup.llms allowlist 저장 반영 확인.
 - 2026-03-09: `npm run build` 성공 (withNullFeatureDefaults 보존 로직 반영).
 - 2026-03-09: chrome-devtools MCP로 setup.defaultSetupMode=“new”, setup.defaultLlm=“gemini” 변경 후 저장.

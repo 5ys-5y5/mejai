@@ -88,13 +88,13 @@ export default function LoginClient() {
       showTitle={false}
       contentMarginTop="none"
       afterContent={
-        <div className="flex w-full flex-col -space-y-[30px] overflow-hidden rounded-2xl border border-slate-200">
+        <div className="w-full overflow-hidden rounded-2xl border border-slate-200">
           <div className="w-full overflow-hidden">
             <iframe
               title="Login widget (policy)"
               src={policyWidgetSrc}
-              className="w-full overflow-hidden"
-              style={{ height: 210 }}
+              className="w-full"
+              style={{ height: 205 }}
               allow="clipboard-read; clipboard-write"
             />
           </div>
@@ -102,7 +102,7 @@ export default function LoginClient() {
             <iframe
               title="Login widget"
               src={widgetSrc}
-              className="w-full overflow-hidden"
+              className="w-full"
               style={{ height: 300 }}
               allow="clipboard-read; clipboard-write"
             />
@@ -128,7 +128,6 @@ export default function LoginClient() {
             비밀번호를 잊으셨나요?
           </Link>
         }
-        showHelperText={false}
         onEmailChange={setEmail}
         onPasswordChange={setPw}
         onSubmit={handleLogin}
