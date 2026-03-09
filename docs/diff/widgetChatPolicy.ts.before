@@ -25,14 +25,11 @@ export async function fetchWidgetChatPolicy(
   const pages = { ...(provider.pages || {}) };
   const debugCopy = { ...(provider.debug_copy || {}) };
   const setupFields = { ...(provider.settings_ui?.setup_fields || {}) };
-  const featureLabels = { ...(provider.settings_ui?.feature_labels || {}) };
 
   return {
     ...provider,
     ...(Object.keys(pages).length > 0 ? { pages } : {}),
     ...(Object.keys(debugCopy).length > 0 ? { debug_copy: debugCopy } : {}),
-    ...(Object.keys(setupFields).length > 0 || Object.keys(featureLabels).length > 0
-      ? { settings_ui: { ...(Object.keys(setupFields).length > 0 ? { setup_fields: setupFields } : {}), ...(Object.keys(featureLabels).length > 0 ? { feature_labels: featureLabels } : {}) } }
-      : {}),
+    ...(Object.keys(setupFields).length > 0 ? { settings_ui: { setup_fields: setupFields } } : {}),
   };
 }

@@ -22,14 +22,11 @@ export type ExistingSetupFieldKey =
   | "conversationMode";
 export type ExistingSetupLabelKey = ExistingSetupFieldKey | "modeExisting" | "modeNew";
 
-export type FeatureLabelMap = Record<string, string>;
-
 export type ConversationSetupUi = {
   order: SetupFieldKey[];
   labels: Record<SetupFieldKey, string>;
   existingOrder: ExistingSetupFieldKey[];
   existingLabels: Record<ExistingSetupLabelKey, string>;
-  featureLabels?: FeatureLabelMap;
 };
 
 /**
@@ -303,7 +300,6 @@ export type ConversationFeaturesProviderShape = {
         }
       >
     >;
-    feature_labels?: Partial<Record<ConversationPageKey, FeatureLabelMap>>;
   };
   widget?: WidgetChatPolicyConfig;
   features?: ConversationPageFeaturesOverride;
@@ -340,7 +336,6 @@ const DEFAULT_SETUP_UI: ConversationSetupUi = {
     sessionIdSearch: "세션 ID 직접 조회",
     conversationMode: "모드 선택",
   },
-  featureLabels: {},
 };
 
 const DEFAULT_PREFILL_MESSAGES: string[] = [];
@@ -385,14 +380,6 @@ function normalizeExistingSetupOrder(order?: ExistingSetupFieldKey[]) {
   return normalized;
 }
 
-function normalizeFeatureLabels(labels?: FeatureLabelMap) {
-  if (!labels) return {};
-  const entries = Object.entries(labels)
-    .map(([key, value]) => [String(key || "").trim(), String(value || "").trim()])
-    .filter(([key, value]) => key && value);
-  return Object.fromEntries(entries);
-}
-
 export function resolveConversationSetupUi(
   page: ConversationPageKey,
   providerValue?: ConversationFeaturesProviderShape | null
@@ -418,10 +405,6 @@ export function resolveConversationSetupUi(
     existingLabels: {
       ...DEFAULT_SETUP_UI.existingLabels,
       ...(override?.existing_labels || {}),
-    },
-    featureLabels: {
-      ...normalizeFeatureLabels(DEFAULT_SETUP_UI.featureLabels),
-      ...normalizeFeatureLabels(providerValue?.settings_ui?.feature_labels?.[resolvedPage]),
     },
   };
 }
@@ -632,18 +615,6 @@ function pickSetupFields(
   return firstKey ? setupFields[firstKey] : undefined;
 }
 
-function pickFeatureLabels(
-  featureLabels?: Partial<Record<string, FeatureLabelMap>>,
-  pageKey?: ConversationPageKey
-) {
-  if (!featureLabels) return undefined;
-  if (pageKey && featureLabels[pageKey]) return featureLabels[pageKey];
-  if (featureLabels[WIDGET_PAGE_KEY]) return featureLabels[WIDGET_PAGE_KEY];
-  if (featureLabels["/"]) return featureLabels["/"];
-  const firstKey = Object.keys(featureLabels)[0];
-  return firstKey ? featureLabels[firstKey] : undefined;
-}
-
 export function normalizeWidgetChatPolicyConfig(
   value?: WidgetChatPolicyConfig | null
 ): WidgetChatPolicyConfig {
@@ -660,7 +631,6 @@ export function normalizeConversationFeatureProvider(
   const pickedPage = pickPageOverride(provider.pages, resolvedPage);
   const pickedDebug = pickDebugOverride(provider.debug_copy, resolvedPage);
   const pickedSetupFields = pickSetupFields(provider.settings_ui?.setup_fields, resolvedPage);
-  const pickedFeatureLabels = pickFeatureLabels(provider.settings_ui?.feature_labels, resolvedPage);
 
   const setupUiFromSettings = pickedSetupFields
     ? {
@@ -670,7 +640,6 @@ export function normalizeConversationFeatureProvider(
         existing_labels: pickedSetupFields.existing_labels,
       }
     : undefined;
-  const featureLabelsFromSettings = pickedFeatureLabels ? pickedFeatureLabels : undefined;
 
   const nextProvider: ConversationFeaturesProviderShape = {
     ...provider,
@@ -706,15 +675,6 @@ export function normalizeConversationFeatureProvider(
           existing_order: nextProvider.setup_ui.existing_order,
           existing_labels: nextProvider.setup_ui.existing_labels,
         },
-      },
-    };
-  }
-  if (featureLabelsFromSettings && !nextProvider.settings_ui?.feature_labels?.[resolvedPage]) {
-    nextProvider.settings_ui = {
-      ...(nextProvider.settings_ui || {}),
-      feature_labels: {
-        ...(nextProvider.settings_ui?.feature_labels || {}),
-        [resolvedPage]: featureLabelsFromSettings,
       },
     };
   }

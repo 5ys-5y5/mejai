@@ -174,7 +174,6 @@ export default function ConversationWidgetPage() {
   const [domainText, setDomainText] = useState("");
   const [pathText, setPathText] = useState("");
   const [kbItems, setKbItems] = useState<KbItem[]>([]);
-  const [inlineKbSampleOptions, setInlineKbSampleOptions] = useState<SelectOption[]>([]);
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [mcpTools, setMcpTools] = useState<McpTool[]>([]);
   const [installOverridesText, setInstallOverridesText] = useState("");
@@ -345,23 +344,14 @@ export default function ConversationWidgetPage() {
   }, [selectedId]);
 
   const loadDependencies = useCallback(async () => {
-    const [kbRes, agentRes, mcpRes, sampleRes] = await Promise.all([
+    const [kbRes, agentRes, mcpRes] = await Promise.all([
       apiFetch<{ items: KbItem[] }>("/api/kb?limit=200").catch(() => ({ items: [] })),
       apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200").catch(() => ({ items: [] })),
       apiFetch<{ items: McpTool[] }>("/api/mcp/tools").catch(() => ({ items: [] })),
-      apiFetch<{ items: Array<{ id: string; title: string }> }>("/api/kb/samples").catch(() => ({ items: [] })),
     ]);
     setKbItems(kbRes.items || []);
     setAgents(agentRes.items || []);
     setMcpTools(mcpRes.items || []);
-    setInlineKbSampleOptions(
-      (sampleRes.items || [])
-        .map((item) => ({
-          id: String(item.id || ""),
-          label: String(item.title || "샘플"),
-        }))
-        .filter((item) => item.id)
-    );
   }, []);
 
   useEffect(() => {
@@ -1118,7 +1108,6 @@ export default function ConversationWidgetPage() {
                       }
                       widgetNameLabel="B_chat_widgets.name"
                       kbOptions={userKbOptions}
-                      inlineKbSampleOptions={inlineKbSampleOptions}
                       adminKbOptions={adminKbOptions}
                       routeOptions={routeOptions}
                       mcpProviderOptions={providerOptions}

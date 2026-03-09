@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "@/components/AuthShell";
@@ -40,6 +40,10 @@ export default function LoginClient() {
   const [widgetSrc, setWidgetSrc] = useState(WIDGET_BASE_SRC);
   const [policyWidgetSrc, setPolicyWidgetSrc] = useState(WIDGET_BASE_SRC);
   const isEmbed = searchParams?.get("embed") === "1";
+  const isInIframe = useMemo(
+    () => (typeof window !== "undefined" ? window.self !== window.top : false),
+    []
+  );
   const [from] = useState(() => {
     if (typeof window === "undefined") return "/app";
     const params = new URLSearchParams(window.location.search);
@@ -84,41 +88,32 @@ export default function LoginClient() {
     }
   };
 
+  const outlineStyle = isInIframe ? (
+    <style>{`
+      main div div div {
+        outline: none !important;
+        border: none !important;
+        box-shadow: none !important;
+      }
+    `}</style>
+  ) : null;
+
   if (isEmbed) {
     return (
-      <div className="min-h-full w-full bg-white">
+      <div className="min-h-full w-full bg-white px-4 py-4">
         <div className="mx-auto w-full max-w-md">
-          <div className="p-5">
-            <LoginForm
-              email={email}
-              password={pw}
-              loading={loading}
-              error={error}
-              showHelperText={false}
-              onEmailChange={setEmail}
-              onPasswordChange={setPw}
-              onSubmit={handleLogin}
-            />
-          </div>
-          <div className="mt-6 flex w-full flex-col gap-4">
-            <iframe
-              title="Login widget (policy)"
-              src={policyWidgetSrc}
-              className="w-full border-0"
-              style={{ height: 210, overflow: "hidden" }}
-              scrolling="no"
-              allow="clipboard-read; clipboard-write"
-            />
-            <iframe
-              title="Login widget"
-              src={widgetSrc}
-              className="w-full border-0"
-              style={{ height: 300, overflow: "hidden" }}
-              scrolling="no"
-              allow="clipboard-read; clipboard-write"
-            />
-          </div>
+          <LoginForm
+            email={email}
+            password={pw}
+            loading={loading}
+            error={error}
+            showHelperText={false}
+            onEmailChange={setEmail}
+            onPasswordChange={setPw}
+            onSubmit={handleLogin}
+          />
         </div>
+        {outlineStyle}
       </div>
     );
   }
@@ -129,7 +124,6 @@ export default function LoginClient() {
       footer={null}
       showBrand={false}
       showTitle={false}
-      showFooter={!isEmbed}
       contentMarginTop="none"
       afterContent={
         <div className="flex w-full flex-col -space-y-[30px] overflow-hidden rounded-2xl border border-slate-200">
@@ -179,16 +173,7 @@ export default function LoginClient() {
         onPasswordChange={setPw}
         onSubmit={handleLogin}
       />
-      {isEmbed ? (
-        <style>{`
-          main div div div,
-          main div div div * {
-            outline: none !important;
-            border: none !important;
-            box-shadow: none !important;
-          }
-        `}</style>
-      ) : null}
+      {outlineStyle}
     </AuthShell>
   );
 }

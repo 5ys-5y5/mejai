@@ -60,7 +60,6 @@ type ChatSettingsPanelProps = {
   widgetNameLabel?: string;
   llmOptions?: SelectOption[];
   kbOptions?: SelectOption[];
-  inlineKbSampleOptions?: SelectOption[];
   adminKbOptions?: SelectOption[];
   routeOptions?: SelectOption[];
   mcpProviderOptions?: SelectOption[];
@@ -161,7 +160,6 @@ export function ChatSettingsPanel({
   widgetNameLabel,
   llmOptions,
   kbOptions,
-  inlineKbSampleOptions: inlineKbSampleOptionsProp,
   adminKbOptions,
   routeOptions,
   mcpProviderOptions,
@@ -246,10 +244,6 @@ export function ChatSettingsPanel({
               existing_labels: nextDraft.setupUi.existingLabels,
             },
           },
-          feature_labels: {
-            ...(base.settings_ui?.feature_labels || {}),
-            [pageKey]: nextDraft.setupUi.featureLabels || {},
-          },
         },
       };
       const normalized = normalizeConversationFeatureProvider(nextProvider) || {};
@@ -320,7 +314,6 @@ export function ChatSettingsPanel({
   const features = draft.features;
   const visibility = draft.features.visibility;
   const setupUi = draft.setupUi;
-  const featureLabels = setupUi.featureLabels || {};
   const orderedSetupKeys = useMemo<SetupFieldKey[]>(
     () =>
       setupUi.order.filter(
@@ -377,10 +370,6 @@ export function ChatSettingsPanel({
     [llmOptions]
   );
   const kbAllowlistOptions = useMemo(() => kbOptions || [], [kbOptions]);
-  const inlineKbSampleOptions = useMemo(
-    () => inlineKbSampleOptionsProp || [],
-    [inlineKbSampleOptionsProp]
-  );
   const adminKbAllowlistOptions = useMemo(() => adminKbOptions || [], [adminKbOptions]);
   const routeAllowlistOptions = useMemo(
     () => (routeOptions && routeOptions.length > 0 ? routeOptions : DEFAULT_ROUTE_OPTIONS),
@@ -430,23 +419,6 @@ export function ChatSettingsPanel({
     }));
   const updateSetupUi = (path: string[], value: unknown) =>
     updateDraft((current) => ({ ...current, setupUi: setIn(current.setupUi as any, path, value) }));
-
-  const resolveFeatureLabel = useCallback(
-    (key: string) => {
-      const raw = featureLabels[key];
-      const trimmed = typeof raw === "string" ? raw.trim() : "";
-      return trimmed || undefined;
-    },
-    [featureLabels]
-  );
-
-  const updateFeatureLabel = useCallback(
-    (key: string, value: string) => {
-      const trimmed = String(value || "").trim();
-      updateSetupUi(["featureLabels", key], trimmed || undefined);
-    },
-    [updateSetupUi]
-  );
 
   const handleKbModeChange = useCallback(
     (mode: "input" | "select") =>
@@ -644,9 +616,7 @@ export function ChatSettingsPanel({
       <div className="space-y-4">
         <ToggleRowGroup
           label="B_chat_widgets.is_active"
-          displayLabel={resolveFeatureLabel("B_chat_widgets.is_active") || widgetActiveLabel}
-          editableLabel
-          onLabelChange={(value) => updateFeatureLabel("B_chat_widgets.is_active", value)}
+          displayLabel={widgetActiveLabel}
           checked={widgetActiveChecked}
           onToggle={handleWidgetActiveToggle}
           visibility={visibility.widget.launcher}
@@ -1126,9 +1096,6 @@ export function ChatSettingsPanel({
 
         <ToggleRowGroup
           label="widget.header.enabled"
-          displayLabel={resolveFeatureLabel("widget.header.enabled")}
-          editableLabel
-          onLabelChange={(value) => updateFeatureLabel("widget.header.enabled", value)}
           checked={features.widget.header.enabled}
           visibility={visibility.widget.header.enabled}
           onToggle={(next) => updateFeatures(["widget", "header", "enabled"], next)}
@@ -1136,9 +1103,6 @@ export function ChatSettingsPanel({
         >
           <ToggleRow
             label="widget.header.logo"
-            displayLabel={resolveFeatureLabel("widget.header.logo")}
-            editableLabel
-            onLabelChange={(value) => updateFeatureLabel("widget.header.logo", value)}
             checked={features.widget.header.logo}
             visibility={visibility.widget.header.logo}
             onToggle={(next) => updateFeatures(["widget", "header", "logo"], next)}
@@ -1146,9 +1110,6 @@ export function ChatSettingsPanel({
           />
           <ToggleRow
             label="widget.header.status"
-            displayLabel={resolveFeatureLabel("widget.header.status")}
-            editableLabel
-            onLabelChange={(value) => updateFeatureLabel("widget.header.status", value)}
             checked={features.widget.header.status}
             visibility={visibility.widget.header.status}
             onToggle={(next) => updateFeatures(["widget", "header", "status"], next)}
@@ -1156,9 +1117,6 @@ export function ChatSettingsPanel({
           />
           <ToggleRow
             label="widget.header.agentAction"
-            displayLabel={resolveFeatureLabel("widget.header.agentAction")}
-            editableLabel
-            onLabelChange={(value) => updateFeatureLabel("widget.header.agentAction", value)}
             checked={features.widget.header.agentAction}
             visibility={visibility.widget.header.agentAction}
             onToggle={(next) => updateFeatures(["widget", "header", "agentAction"], next)}
@@ -1166,9 +1124,6 @@ export function ChatSettingsPanel({
           />
           <ToggleRow
             label="widget.header.newConversation"
-            displayLabel={resolveFeatureLabel("widget.header.newConversation")}
-            editableLabel
-            onLabelChange={(value) => updateFeatureLabel("widget.header.newConversation", value)}
             checked={features.widget.header.newConversation}
             visibility={visibility.widget.header.newConversation}
             onToggle={(next) => updateFeatures(["widget", "header", "newConversation"], next)}
@@ -1176,9 +1131,6 @@ export function ChatSettingsPanel({
           />
           <ToggleRow
             label="widget.header.close"
-            displayLabel={resolveFeatureLabel("widget.header.close")}
-            editableLabel
-            onLabelChange={(value) => updateFeatureLabel("widget.header.close", value)}
             checked={features.widget.header.close}
             visibility={visibility.widget.header.close}
             onToggle={(next) => updateFeatures(["widget", "header", "close"], next)}
@@ -1188,9 +1140,6 @@ export function ChatSettingsPanel({
 
           <ToggleRowGroup
             label="widget.tabBar.enabled"
-            displayLabel={resolveFeatureLabel("widget.tabBar.enabled")}
-            editableLabel
-            onLabelChange={(value) => updateFeatureLabel("widget.tabBar.enabled", value)}
             checked={features.widget.tabBar.enabled}
             visibility={visibility.widget.tabBar.enabled}
             onToggle={(next) => updateFeatures(["widget", "tabBar", "enabled"], next)}
@@ -1210,9 +1159,6 @@ export function ChatSettingsPanel({
             />
             <ToggleRowGroup
               label="widget.tabBar.chat"
-              displayLabel={resolveFeatureLabel("widget.tabBar.chat")}
-              editableLabel
-              onLabelChange={(value) => updateFeatureLabel("widget.tabBar.chat", value)}
               checked={tabBarChatEnabled}
               visibility={visibility.widget.tabBar.chat}
               onToggle={(next) => setTabBarPanelEnabled("chat", next)}
@@ -1222,9 +1168,6 @@ export function ChatSettingsPanel({
             <RowGroup label="adminPanel" displayLabel="Admin Panel">
               <ToggleRow
                 label="adminPanel.enabled"
-                displayLabel={resolveFeatureLabel("adminPanel.enabled")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("adminPanel.enabled", value)}
                 checked={features.adminPanel.enabled}
                 visibility={visibility.adminPanel.enabled}
                 onToggle={(next) => updateFeatures(["adminPanel", "enabled"], next)}
@@ -1232,9 +1175,6 @@ export function ChatSettingsPanel({
               />
               <ToggleRow
                 label="adminPanel.logsToggle"
-                displayLabel={resolveFeatureLabel("adminPanel.logsToggle")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("adminPanel.logsToggle", value)}
                 checked={features.adminPanel.logsToggle}
                 visibility={visibility.adminPanel.logsToggle}
                 onToggle={(next) => updateFeatures(["adminPanel", "logsToggle"], next)}
@@ -1242,9 +1182,6 @@ export function ChatSettingsPanel({
               />
               <ToggleRow
                 label="adminPanel.copyConversation"
-                displayLabel={resolveFeatureLabel("adminPanel.copyConversation")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("adminPanel.copyConversation", value)}
                 checked={features.adminPanel.copyConversation}
                 visibility={visibility.adminPanel.copyConversation}
                 onToggle={(next) => updateFeatures(["adminPanel", "copyConversation"], next)}
@@ -1255,9 +1192,6 @@ export function ChatSettingsPanel({
             <RowGroup label="interaction" displayLabel="Interaction">
               <ToggleRow
                 label="interaction.quickReplies"
-                displayLabel={resolveFeatureLabel("interaction.quickReplies")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("interaction.quickReplies", value)}
                 checked={features.interaction.quickReplies}
                 visibility={visibility.interaction.quickReplies}
                 onToggle={(next) => updateFeatures(["interaction", "quickReplies"], next)}
@@ -1265,9 +1199,6 @@ export function ChatSettingsPanel({
               />
               <ToggleRow
                 label="interaction.productCards"
-                displayLabel={resolveFeatureLabel("interaction.productCards")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("interaction.productCards", value)}
                 checked={features.interaction.productCards}
                 visibility={visibility.interaction.productCards}
                 onToggle={(next) => updateFeatures(["interaction", "productCards"], next)}
@@ -1275,9 +1206,6 @@ export function ChatSettingsPanel({
               />
               <ToggleRow
                 label="interaction.inputSubmit"
-                displayLabel={resolveFeatureLabel("interaction.inputSubmit")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("interaction.inputSubmit", value)}
                 checked={features.interaction.inputSubmit}
                 visibility={visibility.interaction.inputSubmit}
                 onToggle={(next) => updateFeatures(["interaction", "inputSubmit"], next)}
@@ -1285,9 +1213,6 @@ export function ChatSettingsPanel({
               />
               <ToggleRowGroup
                 label="interaction.threePhasePrompt"
-                displayLabel={resolveFeatureLabel("interaction.threePhasePrompt")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("interaction.threePhasePrompt", value)}
                 checked={features.interaction.threePhasePrompt}
                 visibility={visibility.interaction.threePhasePrompt}
                 onToggle={(next) => updateFeatures(["interaction", "threePhasePrompt"], next)}
@@ -1346,9 +1271,6 @@ export function ChatSettingsPanel({
                 />
                 <ToggleRow
                   label="interaction.threePhasePromptHideLabels"
-                  displayLabel={resolveFeatureLabel("interaction.threePhasePromptHideLabels")}
-                  editableLabel
-                  onLabelChange={(value) => updateFeatureLabel("interaction.threePhasePromptHideLabels", value)}
                   checked={features.interaction.threePhasePromptHideLabels}
                   visibility={visibility.interaction.threePhasePromptHideLabels}
                   onToggle={(next) => updateFeatures(["interaction", "threePhasePromptHideLabels"], next)}
@@ -1396,9 +1318,6 @@ export function ChatSettingsPanel({
           </ToggleRowGroup>
           <ToggleRow
             label="widget.tabBar.list"
-            displayLabel={resolveFeatureLabel("widget.tabBar.list")}
-            editableLabel
-            onLabelChange={(value) => updateFeatureLabel("widget.tabBar.list", value)}
             checked={tabBarListEnabled}
             visibility={visibility.widget.tabBar.list}
             onToggle={(next) => setTabBarPanelEnabled("list", next)}
@@ -1406,9 +1325,6 @@ export function ChatSettingsPanel({
           />
           <ToggleRow
             label="widget.tabBar.login"
-            displayLabel={resolveFeatureLabel("widget.tabBar.login")}
-            editableLabel
-            onLabelChange={(value) => updateFeatureLabel("widget.tabBar.login", value)}
             checked={tabBarLoginEnabled}
             visibility={visibility.widget.tabBar.login}
             onToggle={(next) => setTabBarPanelEnabled("login", next)}
@@ -1416,9 +1332,6 @@ export function ChatSettingsPanel({
           />
           <ToggleRowGroup
             label="widget.tabBar.policy"
-            displayLabel={resolveFeatureLabel("widget.tabBar.policy")}
-            editableLabel
-            onLabelChange={(value) => updateFeatureLabel("widget.tabBar.policy", value)}
             checked={tabBarPolicyEnabled}
             visibility={visibility.widget.tabBar.policy}
             onToggle={(next) => setTabBarPanelEnabled("policy", next)}
@@ -1428,13 +1341,11 @@ export function ChatSettingsPanel({
                 <ToggleRow
                   label="setup.modelSelector"
                   codeLabel="setup.modelSelector"
-                  displayLabel={resolveFeatureLabel("setup.modelSelector") || "모델 선택"}
+                  displayLabel="모델 선택"
                   checked={features.setup.modelSelector}
                   visibility={visibility.setup.modelSelector}
                   onToggle={(next) => updateFeatures(["setup", "modelSelector"], next)}
                   onVisibilityChange={(mode) => updateVisibility(["setup", "modelSelector"], mode)}
-                  editableLabel
-                  onLabelChange={(value) => updateFeatureLabel("setup.modelSelector", value)}
                 />
                 <ToggleRowGroup
                   label="setup.modeExisting"
@@ -1964,10 +1875,7 @@ export function ChatSettingsPanel({
                   right={
                     <SelectPopover
                       value={features.setup.defaultInlineUserKb || ""}
-                      options={[
-                        { id: "", label: "선택 안 함" },
-                        ...(inlineKbSampleOptions.length > 0 ? inlineKbSampleOptions : kbAllowlistOptions),
-                      ]}
+                      options={[{ id: "", label: "선택 안 함" }, ...kbAllowlistOptions]}
                       onChange={(value) =>
                         updateFeatures(["setup", "defaultInlineUserKb"], value ? value : null)
                       }
@@ -2053,9 +1961,6 @@ export function ChatSettingsPanel({
                 <RowGroup label="runtime" displayLabel="Runtime">
                   <ToggleRow
                     label="runtime.selfUpdate.enabled"
-                    displayLabel={resolveFeatureLabel("runtime.selfUpdate.enabled")}
-                    editableLabel
-                    onLabelChange={(value) => updateFeatureLabel("runtime.selfUpdate.enabled", value)}
                     checked={Boolean(governanceConfig?.enabled)}
                     visibility={governanceConfig?.visibility_mode || "admin"}
                     onToggle={(next) =>
@@ -2270,9 +2175,8 @@ function Row({
   const contextVariant = useContext(PanelVariantContext);
   const resolvedVariant = variant ?? contextVariant;
   const isBaseVariant = resolvedVariant === "base";
-  const resolvedCodeLabel = codeLabel || label;
+  const resolvedCodeLabel = codeLabel || (displayLabel ? label : undefined);
   const resolvedDisplayLabel = displayLabel ?? label;
-  const shouldShowCodeLabel = Boolean(editableLabel || codeLabel);
   const hasRight = right !== undefined && right !== null;
   const rightPlaceholder = <span className="inline-flex h-7 w-[114px]" aria-hidden />;
   const showChevron = Boolean(onLabelClick);
@@ -2313,7 +2217,7 @@ function Row({
               <span className="h-4 w-4" />
             </span>
           )}
-          {shouldShowCodeLabel ? (
+          {resolvedCodeLabel ? (
             <span className="min-w-0">
               <span className="block text-xs font-medium text-slate-500">{resolvedCodeLabel}</span>
               <span

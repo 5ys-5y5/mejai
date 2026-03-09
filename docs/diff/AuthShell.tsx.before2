@@ -11,7 +11,6 @@ interface AuthShellProps {
   showBrand?: boolean;
   showTitle?: boolean;
   showFooter?: boolean;
-  hideFrame?: boolean;
   contentMarginTop?: "none" | "default";
 }
 
@@ -37,14 +36,9 @@ export function AuthShell({
   showBrand = true,
   showTitle = true,
   showFooter = true,
-  hideFrame = false,
   contentMarginTop = "default",
 }: AuthShellProps) {
   const contentSpacingClass = contentMarginTop === "none" ? "mt-0" : "mt-6";
-  const containerClass = hideFrame
-    ? "w-full max-w-md"
-    : `${contentSpacingClass} rounded-2xl border border-slate-200 bg-white`;
-  const containerPaddingClass = hideFrame ? "" : "p-5";
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center px-4 py-12">
@@ -62,8 +56,8 @@ export function AuthShell({
             </div>
           ) : null}
 
-          <div className={containerClass}>
-            <div className={containerPaddingClass}>
+          <div className={`${contentSpacingClass} rounded-2xl border border-slate-200 bg-white`}>
+            <div className="p-5">
               {children}
               {footer && showFooter ? (
                 <div className="mt-4 text-center text-sm text-slate-600">{footer}</div>

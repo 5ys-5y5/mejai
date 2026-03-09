@@ -84,45 +84,6 @@ export default function LoginClient() {
     }
   };
 
-  if (isEmbed) {
-    return (
-      <div className="min-h-full w-full bg-white">
-        <div className="mx-auto w-full max-w-md">
-          <div className="p-5">
-            <LoginForm
-              email={email}
-              password={pw}
-              loading={loading}
-              error={error}
-              showHelperText={false}
-              onEmailChange={setEmail}
-              onPasswordChange={setPw}
-              onSubmit={handleLogin}
-            />
-          </div>
-          <div className="mt-6 flex w-full flex-col gap-4">
-            <iframe
-              title="Login widget (policy)"
-              src={policyWidgetSrc}
-              className="w-full border-0"
-              style={{ height: 210, overflow: "hidden" }}
-              scrolling="no"
-              allow="clipboard-read; clipboard-write"
-            />
-            <iframe
-              title="Login widget"
-              src={widgetSrc}
-              className="w-full border-0"
-              style={{ height: 300, overflow: "hidden" }}
-              scrolling="no"
-              allow="clipboard-read; clipboard-write"
-            />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <AuthShell
       title="다시 오신 것을 환영합니다"
@@ -130,6 +91,7 @@ export default function LoginClient() {
       showBrand={false}
       showTitle={false}
       showFooter={!isEmbed}
+      hideFrame={isEmbed}
       contentMarginTop="none"
       afterContent={
         <div className="flex w-full flex-col -space-y-[30px] overflow-hidden rounded-2xl border border-slate-200">

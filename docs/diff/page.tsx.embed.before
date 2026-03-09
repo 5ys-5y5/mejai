@@ -20,8 +20,6 @@ import {
   WIDGET_PAGE_KEY,
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
-import type { InlineKbSampleItem } from "@/lib/conversation/inlineKbSamples";
-import { appendInlineKbSample, hasConflictingInlineKbSamples } from "@/lib/conversation/inlineKbSamples";
 import { useConversationAdminStatus } from "@/lib/conversation/client/useConversationAdminStatus";
 import { executeTranscriptCopy } from "@/lib/conversation/client/copyExecutor";
 import {
@@ -82,6 +80,10 @@ const PARAMETER_FLAG_KEYS = ["parameter", "paremeter"];
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PUBLIC_KEY_REGEX = /^mw_pk_/i;
 const AUTH_STATE_STORAGE_KEY = "mejai_widget_auth_state";
+const LOGIN_POLICY_TEXT = "관리자 로그인: 휴대폰 번호를 인증해 주세요. 인증 후 사용자 전용 정보 제공.";
+const LOGIN_USER_TEXT = "관리자 로그인";
+const LOGIN_BOT_TEXT = "휴대폰 번호를 입력해주세요.";
+const LOGIN_PHASES = ["policy_typing", "user_message", "bot_message", "reset_pause"] as const;
 const EMPTY_STRINGS: string[] = [];
 const EMPTY_OPTIONS: SelectOption[] = [];
 
@@ -504,8 +506,6 @@ export default function WidgetEmbedPage() {
   const [showAdminLogs, setShowAdminLogs] = useState(false);
   const [quickReplyDrafts, setQuickReplyDrafts] = useState<Record<string, string[]>>({});
   const [lockedReplySelections, setLockedReplySelections] = useState<Record<string, string[]>>({});
-  const [inlineKbSamples, setInlineKbSamples] = useState<InlineKbSampleItem[]>([]);
-  const [inlineKbSampleSelectionOrder, setInlineKbSampleSelectionOrder] = useState<string[]>([]);
   const [detailsOpen, setDetailsOpen] = useState({
     llm: false,
     kb: false,
@@ -528,12 +528,47 @@ export default function WidgetEmbedPage() {
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [selectedAgentGroupId, setSelectedAgentGroupId] = useState("");
   const [authState, setAuthState] = useState<AuthState | null>(() => readStoredAuthState());
+  const [loginPhaseIndex, setLoginPhaseIndex] = useState(0);
+  const [loginPolicyChars, setLoginPolicyChars] = useState(0);
+  const loginTimerRef = useRef<number | null>(null);
   const inlineKbPrefillAppliedRef = useRef(false);
+  const loginPhase = LOGIN_PHASES[loginPhaseIndex] ?? "policy_typing";
   const initialTabAppliedRef = useRef(false);
+  const loginPolicyValue = useMemo(
+    () => LOGIN_POLICY_TEXT.slice(0, loginPolicyChars),
+    [loginPolicyChars]
+  );
   useEffect(() => {
     if (!forcedTab) return;
     setActiveTab(forcedTab);
   }, [forcedTab]);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (loginTimerRef.current) window.clearTimeout(loginTimerRef.current);
+    if (loginPhase === "policy_typing") {
+      if (loginPolicyChars < LOGIN_POLICY_TEXT.length) {
+        loginTimerRef.current = window.setTimeout(() => setLoginPolicyChars((value) => value + 1), 40);
+        return;
+      }
+      loginTimerRef.current = window.setTimeout(() => setLoginPhaseIndex(1), 600);
+      return;
+    }
+    if (loginPhase === "user_message") {
+      loginTimerRef.current = window.setTimeout(() => setLoginPhaseIndex(2), 700);
+      return;
+    }
+    if (loginPhase === "bot_message") {
+      loginTimerRef.current = window.setTimeout(() => setLoginPhaseIndex(3), 900);
+      return;
+    }
+    loginTimerRef.current = window.setTimeout(() => {
+      setLoginPolicyChars(0);
+      setLoginPhaseIndex(0);
+    }, 600);
+    return () => {
+      if (loginTimerRef.current) window.clearTimeout(loginTimerRef.current);
+    };
+  }, [loginPhase, loginPolicyChars]);
   const isUserLoggedIn = useMemo(() => isAuthStateActive(authState), [authState]);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -817,45 +852,6 @@ export default function WidgetEmbedPage() {
     () => applyConversationFeatureVisibility(baseFeatures, isAdminOrDebug || showPolicyTab, isUserLoggedIn),
     [baseFeatures, isAdminOrDebug, isUserLoggedIn, showPolicyTab]
   );
-
-  useEffect(() => {
-    if (!policyFeatures.setup.inlineUserKbInput) {
-      setInlineKbSamples([]);
-      setInlineKbSampleSelectionOrder([]);
-      return;
-    }
-    let active = true;
-    fetch("/api/kb/samples", { method: "GET" })
-      .then((res) =>
-        res
-          .json()
-          .then((data) => ({ ok: res.ok, data }))
-          .catch(() => ({ ok: res.ok, data: {} }))
-      )
-      .then(({ ok, data }) => {
-        if (!active) return;
-        if (!ok) {
-          setInlineKbSamples([]);
-          return;
-        }
-        const items = Array.isArray(data?.items) ? data.items : [];
-        const normalized = items
-          .map((item: InlineKbSampleItem) => ({
-            id: String(item.id || ""),
-            title: String(item.title || "샘플"),
-            content: String(item.content || ""),
-          }))
-          .filter((item) => item.id && item.content.trim().length > 0);
-        setInlineKbSamples(normalized);
-      })
-      .catch(() => {
-        if (!active) return;
-        setInlineKbSamples([]);
-      });
-    return () => {
-      active = false;
-    };
-  }, [policyFeatures.setup.inlineUserKbInput]);
 
   const showChatTab = Boolean(pageFeatures.widget?.tabBar?.chat || pageFeatures.widget?.chatPanel);
   const showListTab = Boolean(pageFeatures.widget?.tabBar?.list || pageFeatures.widget?.historyPanel);
@@ -1663,7 +1659,7 @@ export default function WidgetEmbedPage() {
         llm: policyConfig.llm,
         kbId: policyConfig.kbId,
         inlineKb: policyConfig.inlineKb,
-        inlineKbSampleSelectionOrder,
+        inlineKbSampleSelectionOrder: [],
         adminKbIds: policyConfig.adminKbIds,
         mcpProviderKeys: policyConfig.mcpProviderKeys,
         mcpToolIds: policyConfig.mcpToolIds,
@@ -1712,44 +1708,6 @@ export default function WidgetEmbedPage() {
       showAdminLogs,
       conversationMode,
     ]
-  );
-
-  const inlineKbSampleById = useMemo(() => {
-    const map = new Map<string, InlineKbSampleItem>();
-    inlineKbSamples.forEach((sample) => map.set(sample.id, sample));
-    return map;
-  }, [inlineKbSamples]);
-
-  const inlineKbSampleConflict = useMemo(
-    () =>
-      inlineKbSampleSelectionOrder.length >= 2 &&
-      hasConflictingInlineKbSamples(
-        inlineKbSampleSelectionOrder.map((id) => inlineKbSampleById.get(id)?.content || "")
-      ),
-    [inlineKbSampleSelectionOrder, inlineKbSampleById]
-  );
-
-  const handleApplyInlineKbSamples = useCallback(
-    (sampleIds: string[]) => {
-      const validIds = sampleIds.filter((id) => inlineKbSampleById.has(id));
-      if (validIds.length === 0) return;
-      setInlineKbSampleSelectionOrder((prev) => {
-        const nextIds = validIds.filter((id) => !prev.includes(id));
-        if (nextIds.length === 0) return prev;
-        setPolicyConfig((current) => {
-          let nextInlineKb = current.inlineKb;
-          nextIds.forEach((id) => {
-            const sample = inlineKbSampleById.get(id);
-            if (sample) {
-              nextInlineKb = appendInlineKbSample(nextInlineKb, sample.content);
-            }
-          });
-          return { ...current, inlineKb: nextInlineKb };
-        });
-        return [...prev, ...nextIds];
-      });
-    },
-    [inlineKbSampleById]
   );
 
   const headerActions = pageFeatures.interaction.widgetHeaderAgentAction ? (
@@ -1814,8 +1772,8 @@ export default function WidgetEmbedPage() {
     agentGroupOptions: [],
     versionOptions: [],
     sessionOptions: [],
-    inlineKbSamples,
-    inlineKbSampleConflict,
+    inlineKbSamples: [],
+    inlineKbSampleConflict: false,
     llmOptions,
     kbOptions,
     adminKbOptions,
@@ -1835,7 +1793,7 @@ export default function WidgetEmbedPage() {
     onSearchSessionById: () => undefined,
     onChangeConversationMode: (mode) => setConversationMode(mode),
     onInlineKbChange: (value) => setPolicyConfig((prev) => ({ ...prev, inlineKb: value })),
-    onInlineKbSampleApply: handleApplyInlineKbSamples,
+    onInlineKbSampleApply: () => undefined,
     onLlmChange: (value) => setPolicyConfig((prev) => ({ ...prev, llm: value })),
     onToggleLlmInfo: () => setDetailsOpen((prev) => ({ ...prev, llm: !prev.llm })),
     onKbChange: (value) => setPolicyConfig((prev) => ({ ...prev, kbId: value })),
@@ -1854,18 +1812,62 @@ export default function WidgetEmbedPage() {
 
   const loginPanel = useMemo(
     () => (
-      <div className="flex h-full w-full items-start justify-center bg-white">
-        <iframe
-          title="Login page"
-          src="/login?embed=1"
-          className="h-full w-full border-0"
-          style={{ border: "none" }}
-          scrolling="no"
-          allow="clipboard-read; clipboard-write"
-        />
+      <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-50 via-white to-amber-50 p-4">
+        <div className="flex w-full max-w-[320px] flex-col overflow-hidden rounded-[18px] border border-slate-200 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.16)]">
+          <div className="border-b border-slate-200 bg-slate-900 px-4 py-3 text-white">
+            <div className="text-[10px] uppercase tracking-[0.35em] text-amber-200">Widget Login</div>
+            <div className="mt-1 text-base font-semibold">정책 기반 로그인</div>
+          </div>
+
+          <div className="flex-1 p-3">
+            <div className="mb-3">
+              <div className="mb-1 text-[11px] font-semibold text-slate-500">정책</div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                <input
+                  className="w-full bg-transparent outline-none"
+                  readOnly
+                  value={loginPolicyValue}
+                  placeholder="정책을 입력합니다..."
+                />
+              </div>
+            </div>
+
+            <div className="flex h-[250px] flex-col rounded-xl border border-slate-200 bg-white">
+              <div className="border-b border-slate-100 px-3 py-2 text-[11px] font-semibold text-slate-500">
+                대화
+              </div>
+              <div className="flex-1 space-y-2 overflow-hidden px-3 py-2 text-xs">
+                <div className="rounded-lg bg-slate-100 px-2 py-1 text-slate-600">
+                  정책이 적용 중입니다.
+                </div>
+                {loginPhaseIndex >= 1 ? (
+                  <div className="flex justify-end">
+                    <div className="max-w-[70%] rounded-2xl bg-slate-900 px-3 py-2 text-white shadow-sm">
+                      {LOGIN_USER_TEXT}
+                    </div>
+                  </div>
+                ) : null}
+                {loginPhaseIndex >= 2 ? (
+                  <div className="flex justify-start">
+                    <div className="max-w-[70%] rounded-2xl bg-amber-100 px-3 py-2 text-slate-900 shadow-sm">
+                      {LOGIN_BOT_TEXT}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+              <div className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400">
+                입력은 비활성화 상태입니다.
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-200 bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+            320x420 데모 · 루프 재생 중
+          </div>
+        </div>
       </div>
     ),
-    []
+    [loginPhaseIndex, loginPolicyValue]
   );
 
   return (

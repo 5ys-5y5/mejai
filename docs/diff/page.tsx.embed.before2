@@ -1857,7 +1857,7 @@ export default function WidgetEmbedPage() {
       <div className="flex h-full w-full items-start justify-center bg-white">
         <iframe
           title="Login page"
-          src="/login?embed=1"
+          src="/login"
           className="h-full w-full border-0"
           style={{ border: "none" }}
           scrolling="no"
