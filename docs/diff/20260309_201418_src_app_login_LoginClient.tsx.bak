@@ -94,8 +94,7 @@ export default function LoginClient() {
               title="Login widget (policy)"
               src={policyWidgetSrc}
               className="w-full overflow-hidden"
-              style={{ height: 210, overflow: "hidden" }}
-              scrolling="no"
+              style={{ height: 210 }}
               allow="clipboard-read; clipboard-write"
             />
           </div>
@@ -104,8 +103,7 @@ export default function LoginClient() {
               title="Login widget"
               src={widgetSrc}
               className="w-full overflow-hidden"
-              style={{ height: 300, overflow: "hidden" }}
-              scrolling="no"
+              style={{ height: 300 }}
               allow="clipboard-read; clipboard-write"
             />
           </div>
