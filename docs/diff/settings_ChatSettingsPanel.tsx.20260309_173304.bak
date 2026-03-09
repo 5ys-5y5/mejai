@@ -356,6 +356,7 @@ const REVIEWABLE_FIELDS: Array<{ key: string; paths: string[][] }> = [
   { key: "setup.modelSelector", paths: [["setup", "modelSelector"], ["visibility", "setup", "modelSelector"]] },
   { key: "setup.llmSelector", paths: [["setup", "llmSelector"], ["visibility", "setup", "llmSelector"]] },
   { key: "setup.defaultLlm", paths: [["setup", "defaultLlm"]] },
+  { key: "setup.defaultSetupMode", paths: [["setup", "defaultSetupMode"]] },
   { key: "setup.kbSelector", paths: [["setup", "kbSelector"], ["visibility", "setup", "kbSelector"]] },
   { key: "setup.adminKbSelector", paths: [["setup", "adminKbSelector"], ["visibility", "setup", "adminKbSelector"]] },
   { key: "setup.routeSelector", paths: [["setup", "routeSelector"], ["visibility", "setup", "routeSelector"]] },
@@ -389,6 +390,7 @@ const REVIEW_LABELS: Record<string, string> = {
   "setup.modelSelector": "모델 선택 UI",
   "setup.llmSelector": "LLM 선택",
   "setup.defaultLlm": "기본 LLM",
+  "setup.defaultSetupMode": "기본 모드",
   "setup.kbSelector": "KB 선택",
   "setup.adminKbSelector": "관리자 KB 선택",
   "setup.routeSelector": "Runtime 선택",
@@ -2133,6 +2135,34 @@ export function ChatSettingsPanel({
                         if (!isHeader) clearReviewFlag(page, "setup.modelSelector");
                       }}
                     />
+                    <div
+                      className={`rounded-lg border border-slate-200 bg-white p-2${
+                        isReviewing("setup.defaultSetupMode") ? " border-amber-400 ring-1 ring-amber-200" : ""
+                      }${isActiveReview("setup.defaultSetupMode") ? " ring-4 ring-amber-500" : ""}`}
+                      data-review-key={!isHeader ? "setup.defaultSetupMode" : undefined}
+                      data-review-page={!isHeader ? page : undefined}
+                    >
+                      <div className="mb-1 text-[11px] font-semibold text-slate-600">
+                        {isHeader ? "setup.defaultSetupMode" : "기본 모드"}
+                      </div>
+                      <SelectPopover
+                        value={draft.setup.defaultSetupMode}
+                        disabled={isHeader}
+                        options={[
+                          { id: "new", label: "신규 모델" },
+                          { id: "existing", label: "기존 모델" },
+                        ]}
+                        onChange={(value) => {
+                          updatePage(page, (prev) => ({
+                            ...prev,
+                            setup: { ...prev.setup, defaultSetupMode: value as "existing" | "new" },
+                          }));
+                          if (!isHeader) clearReviewFlag(page, "setup.defaultSetupMode");
+                        }}
+                        className="w-full"
+                        buttonClassName="h-9 text-xs"
+                      />
+                    </div>
                     <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-2">
                       <div className="flex items-center text-xs font-semibold text-slate-900">
                         <span>{isHeader ? "runtime.selfUpdate" : "Runtime Self Update"}</span>

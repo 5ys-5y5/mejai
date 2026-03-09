@@ -10,9 +10,7 @@
 아래 파일만 수정 가능하다. 목록 외 파일 수정이 필요할 경우 즉시 중단하고 사용자 승인을 받은 뒤에만 추가한다.
 각 항목은 목적 외 변경을 금지하며, 사유 범위 내에서만 수정한다.
 
-- `src/lib/conversation/pageFeaturePolicy.ts` — 탭/가시성 계약 확장 및 user 가시성 판정 로직 추가
-- `src/components/conversation/ChatSettingsPanel.tsx` — widget.tabBar.login 토글/가시성 설정 UI 추가
-- `src/components/design-system/widget/WidgetUI.parts.tsx` — WidgetTabBarLego에 login 탭 추가 및 탭 타입 확장
+
 
 1. 수정 전 이해확정 절차
 - 수정 적용 전, 현재 요청에 대한 이해 내용을 목록으로 정리한다.

@@ -122,6 +122,11 @@ const KB_MODE_OPTIONS: SelectOption[] = [
   { id: "select", label: "select" },
 ];
 
+const DEFAULT_SETUP_MODE_OPTIONS: SelectOption[] = [
+  { id: "existing", label: "existing" },
+  { id: "new", label: "new" },
+];
+
 const DEFAULT_LLM_OPTIONS: SelectOption[] = [
   { id: "chatgpt", label: "chatgpt" },
   { id: "gemini", label: "gemini" },
@@ -374,8 +379,6 @@ export function ChatSettingsPanel({
     () => (routeOptions && routeOptions.length > 0 ? routeOptions : DEFAULT_ROUTE_OPTIONS),
     [routeOptions]
   );
-  const mcpProviderDefaultOptions = useMemo(() => mcpProviderOptions || [], [mcpProviderOptions]);
-  const mcpToolDefaultOptions = useMemo(() => mcpToolOptions || [], [mcpToolOptions]);
 
   const updateWidget = (path: string[], value: unknown) =>
     updateDraft((current) => ({ ...current, widget: setIn(current.widget as any, path, value) }));
@@ -410,6 +413,7 @@ export function ChatSettingsPanel({
         const nextWidget = setIn(current.widget as any, ["setup_config", "agent_id"], nextAgentId);
         let nextFeatures = current.features as any;
         if (nextAgentId) {
+          nextFeatures = setIn(nextFeatures as any, ["setup", "defaultSetupMode"], null);
           nextFeatures = setIn(nextFeatures as any, ["setup", "defaultLlm"], null);
           nextFeatures = setIn(nextFeatures as any, ["setup", "llms", "allowlist"], undefined);
           nextFeatures = setIn(nextFeatures as any, ["setup", "kbIds", "allowlist"], undefined);
@@ -1284,6 +1288,21 @@ export function ChatSettingsPanel({
               )}
             </RowGroup>
 
+            <RowGroup label="allowDeny" displayLabel="Allow/Deny">
+              {renderAllowDenyBlock(
+                "mcp.providers",
+                "MCP Providers",
+                features.mcp.providers,
+                (next) => updateFeatures(["mcp", "providers"], next)
+              )}
+              {renderAllowDenyBlock(
+                "mcp.tools",
+                "MCP Tools",
+                features.mcp.tools,
+                (next) => updateFeatures(["mcp", "tools"], next)
+              )}
+            </RowGroup>
+
           </ToggleRowGroup>
           <ToggleRow
             label="widget.tabBar.list"
@@ -1627,6 +1646,19 @@ export function ChatSettingsPanel({
                     }
                   />
                 <Row
+                  label="setup.defaultSetupMode"
+                  right={
+                    <SelectPopover
+                      value={features.setup.defaultSetupMode || "existing"}
+                      options={DEFAULT_SETUP_MODE_OPTIONS}
+                      onChange={(value) => updateFeatures(["setup", "defaultSetupMode"], value)}
+                      disabled={isSetupAgentSelected}
+                      buttonClassName="h-7 text-[11px]"
+                      className="w-[140px]"
+                    />
+                  }
+                />
+                <Row
                   label="setup.defaultLlm"
                   right={
                     <SelectPopover
@@ -1636,95 +1668,6 @@ export function ChatSettingsPanel({
                       disabled={isSetupAgentSelected}
                       buttonClassName="h-7 text-[11px]"
                       className="w-[140px]"
-                    />
-                  }
-                />
-                <Row
-                  label="setup.defaultKbId"
-                  right={
-                    <SelectPopover
-                      value={features.setup.defaultKbId || ""}
-                      options={[{ id: "", label: "선택 안 함" }, ...kbAllowlistOptions]}
-                      onChange={(value) =>
-                        updateFeatures(["setup", "defaultKbId"], value ? value : null)
-                      }
-                      disabled={isSetupAgentSelected || !isKbSelectMode}
-                      buttonClassName="h-7 text-[11px]"
-                      className="w-[220px]"
-                    />
-                  }
-                />
-                <Row
-                  label="setup.defaultAdminKbIds"
-                  right={
-                    <MultiSelectPopover
-                      values={Array.isArray(features.setup.defaultAdminKbIds) ? features.setup.defaultAdminKbIds : []}
-                      onChange={(values) =>
-                        updateFeatures(["setup", "defaultAdminKbIds"], values.length ? values : null)
-                      }
-                      options={adminKbAllowlistOptions}
-                      displayMode="count"
-                      disabled={isSetupAgentSelected || !isKbSelectMode}
-                      showBulkActions
-                      className="w-[260px]"
-                      buttonClassName="h-7 text-[11px]"
-                    />
-                  }
-                />
-                <Row
-                  label="setup.defaultRoute"
-                  right={
-                    <SelectPopover
-                      value={features.setup.defaultRoute || ""}
-                      options={[{ id: "", label: "선택 안 함" }, ...routeAllowlistOptions]}
-                      onChange={(value) =>
-                        updateFeatures(["setup", "defaultRoute"], value ? value : null)
-                      }
-                      disabled={isSetupAgentSelected}
-                      buttonClassName="h-7 text-[11px]"
-                      className="w-[220px]"
-                    />
-                  }
-                />
-                <Row
-                  label="setup.defaultMcpProviderKeys"
-                  right={
-                    <MultiSelectPopover
-                      values={
-                        Array.isArray(features.setup.defaultMcpProviderKeys)
-                          ? features.setup.defaultMcpProviderKeys
-                          : []
-                      }
-                      onChange={(values) =>
-                        updateFeatures(["setup", "defaultMcpProviderKeys"], values.length ? values : null)
-                      }
-                      options={mcpProviderDefaultOptions}
-                      displayMode="count"
-                      disabled={isSetupAgentSelected}
-                      showBulkActions
-                      className="w-[260px]"
-                      buttonClassName="h-7 text-[11px]"
-                    />
-                  }
-                />
-                <Row
-                  label="setup.defaultMcpToolIds"
-                  right={
-                    <MultiSelectPopover
-                      values={
-                        Array.isArray(features.setup.defaultMcpToolIds)
-                          ? features.setup.defaultMcpToolIds
-                          : []
-                      }
-                      onChange={(values) =>
-                        updateFeatures(["setup", "defaultMcpToolIds"], values.length ? values : null)
-                      }
-                      options={mcpToolDefaultOptions}
-                      displayMode="count"
-                      disabled={isSetupAgentSelected}
-                      showBulkActions
-                      className="w-[260px]"
-                      buttonClassName="h-7 text-[11px]"
                     />
                   }
                 />

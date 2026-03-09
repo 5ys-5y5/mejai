@@ -155,20 +155,12 @@ export type ConversationPageFeatures = {
     mcpProviderSelector: boolean;
     /** MCP action 선택 UI 노출 */
     mcpActionSelector: boolean;
-    /** 기본 MCP provider keys */
-    defaultMcpProviderKeys: string[] | null;
-    /** 기본 MCP tool ids */
-    defaultMcpToolIds: string[] | null;
-    /** 기본 KB id */
-    defaultKbId: string | null;
-    /** 기본 관리자 KB ids */
-    defaultAdminKbIds: string[] | null;
-    /** 기본 route id */
-    defaultRoute: string | null;
     /** 인라인 사용자 KB 입력 textarea 노출 */
     inlineUserKbInput: boolean;
     /** 인라인 사용자 KB 입력 프리필 */
     inlineUserKbPrefill: string;
+    /** 기본 모드 */
+    defaultSetupMode: "existing" | "new";
     /** 기본 LLM */
     defaultLlm: "chatgpt" | "gemini";
   };
@@ -738,22 +730,9 @@ export function mergeConversationPageFeatures(
       routes: mergeIdGate(base.setup.routes, override.setup?.routes),
       mcpProviderSelector: override.setup?.mcpProviderSelector ?? base.setup.mcpProviderSelector,
       mcpActionSelector: override.setup?.mcpActionSelector ?? base.setup.mcpActionSelector,
-      defaultMcpProviderKeys:
-        override.setup?.defaultMcpProviderKeys ??
-        base.setup.defaultMcpProviderKeys ??
-        null,
-      defaultMcpToolIds:
-        override.setup?.defaultMcpToolIds ??
-        base.setup.defaultMcpToolIds ??
-        null,
-      defaultKbId: override.setup?.defaultKbId ?? base.setup.defaultKbId ?? null,
-      defaultAdminKbIds:
-        override.setup?.defaultAdminKbIds ??
-        base.setup.defaultAdminKbIds ??
-        null,
-      defaultRoute: override.setup?.defaultRoute ?? base.setup.defaultRoute ?? null,
       inlineUserKbInput: override.setup?.inlineUserKbInput ?? base.setup.inlineUserKbInput,
       inlineUserKbPrefill: String(override.setup?.inlineUserKbPrefill ?? base.setup.inlineUserKbPrefill ?? ""),
+      defaultSetupMode: override.setup?.defaultSetupMode ?? base.setup.defaultSetupMode,
       defaultLlm: override.setup?.defaultLlm ?? base.setup.defaultLlm,
     },
     widget: {
@@ -1340,13 +1319,9 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       routes: {},
       mcpProviderSelector: true,
       mcpActionSelector: true,
-      defaultMcpProviderKeys: null,
-      defaultMcpToolIds: null,
-      defaultKbId: null,
-      defaultAdminKbIds: null,
-      defaultRoute: null,
       inlineUserKbInput: true,
       inlineUserKbPrefill: "",
+      defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
     widget: {
@@ -1479,19 +1454,15 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       adminKbIds: {},
       modeExisting: true,
       sessionIdSearch: true,
-      modeNew: true,
-      routeSelector: true,
-      routes: {},
-      mcpProviderSelector: true,
-      mcpActionSelector: true,
-      defaultMcpProviderKeys: null,
-      defaultMcpToolIds: null,
-      defaultKbId: null,
-      defaultAdminKbIds: null,
-      defaultRoute: null,
-      inlineUserKbInput: false,
-      inlineUserKbPrefill: "",
-      defaultLlm: "chatgpt",
+        modeNew: true,
+        routeSelector: true,
+        routes: {},
+        mcpProviderSelector: true,
+        mcpActionSelector: true,
+        inlineUserKbInput: false,
+        inlineUserKbPrefill: "",
+        defaultSetupMode: "existing",
+        defaultLlm: "chatgpt",
     },
     widget: {
       launcher: true,
@@ -1629,13 +1600,9 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       routes: {},
       mcpProviderSelector: true,
       mcpActionSelector: true,
-      defaultMcpProviderKeys: null,
-      defaultMcpToolIds: null,
-      defaultKbId: null,
-      defaultAdminKbIds: null,
-      defaultRoute: null,
       inlineUserKbInput: true,
       inlineUserKbPrefill: "",
+      defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
     widget: {
@@ -1774,13 +1741,9 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       routes: {},
       mcpProviderSelector: true,
       mcpActionSelector: true,
-      defaultMcpProviderKeys: null,
-      defaultMcpToolIds: null,
-      defaultKbId: null,
-      defaultAdminKbIds: null,
-      defaultRoute: null,
       inlineUserKbInput: true,
       inlineUserKbPrefill: "",
+      defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
     widget: {

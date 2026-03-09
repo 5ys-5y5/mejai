@@ -515,6 +515,7 @@ export default function WidgetEmbedPage() {
   const [loginPolicyChars, setLoginPolicyChars] = useState(0);
   const loginTimerRef = useRef<number | null>(null);
   const inlineKbPrefillAppliedRef = useRef(false);
+  const setupModeInitializedRef = useRef(false);
   const loginPhase = LOGIN_PHASES[loginPhaseIndex] ?? "policy_typing";
   const initialTabAppliedRef = useRef(false);
   const loginPolicyValue = useMemo(
@@ -692,17 +693,12 @@ export default function WidgetEmbedPage() {
     [providerPolicy]
   );
   useEffect(() => {
-    const existingEnabled = baseFeatures.setup.modeExisting;
-    const newEnabled = baseFeatures.setup.modeNew;
-    setSetupMode((prev) => {
-      if (prev !== "existing" && prev !== "new") {
-        return existingEnabled || (!existingEnabled && !newEnabled) ? "existing" : "new";
-      }
-      if (!existingEnabled && prev === "existing") return newEnabled ? "new" : "existing";
-      if (!newEnabled && prev === "new") return existingEnabled ? "existing" : "existing";
-      return prev;
-    });
-  }, [baseFeatures.setup.modeExisting, baseFeatures.setup.modeNew]);
+    if (setupModeInitializedRef.current) return;
+    const nextMode = baseFeatures.setup.defaultSetupMode === "existing" ? "existing" : "new";
+    setSetupMode(nextMode);
+    setConversationMode("new");
+    setupModeInitializedRef.current = true;
+  }, [baseFeatures.setup.defaultSetupMode]);
 
   const llmOptions = useMemo<SelectOption[]>(
     () =>
@@ -734,51 +730,6 @@ export default function WidgetEmbedPage() {
       return { ...prev, llm: String(fallback.id) };
     });
   }, [llmOptions, baseFeatures.setup.defaultLlm]);
-
-  useEffect(() => {
-    setPolicyConfig((prev) => {
-      let changed = false;
-      let next = prev;
-      const defaultKbId = String(baseFeatures.setup.defaultKbId || "").trim();
-      if (!next.kbId && defaultKbId) {
-        next = { ...next, kbId: defaultKbId };
-        changed = true;
-      }
-      const defaultAdminKbIds = Array.isArray(baseFeatures.setup.defaultAdminKbIds)
-        ? baseFeatures.setup.defaultAdminKbIds
-        : [];
-      if (next.adminKbIds.length === 0 && defaultAdminKbIds.length > 0) {
-        next = { ...next, adminKbIds: [...defaultAdminKbIds] };
-        changed = true;
-      }
-      const defaultRoute = String(baseFeatures.setup.defaultRoute || "").trim();
-      if (!next.route && defaultRoute) {
-        next = { ...next, route: defaultRoute };
-        changed = true;
-      }
-      const defaultProviders = Array.isArray(baseFeatures.setup.defaultMcpProviderKeys)
-        ? baseFeatures.setup.defaultMcpProviderKeys
-        : [];
-      if (next.mcpProviderKeys.length === 0 && defaultProviders.length > 0) {
-        next = { ...next, mcpProviderKeys: [...defaultProviders] };
-        changed = true;
-      }
-      const defaultTools = Array.isArray(baseFeatures.setup.defaultMcpToolIds)
-        ? baseFeatures.setup.defaultMcpToolIds
-        : [];
-      if (next.mcpToolIds.length === 0 && defaultTools.length > 0) {
-        next = { ...next, mcpToolIds: [...defaultTools] };
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
-  }, [
-    baseFeatures.setup.defaultKbId,
-    baseFeatures.setup.defaultAdminKbIds,
-    baseFeatures.setup.defaultRoute,
-    baseFeatures.setup.defaultMcpProviderKeys,
-    baseFeatures.setup.defaultMcpToolIds,
-  ]);
 
   useEffect(() => {
     if (!configLoaded) return;
@@ -822,8 +773,9 @@ export default function WidgetEmbedPage() {
 
   const allowedDomains = Array.isArray(config?.allowed_domains) ? config.allowed_domains : [];
   const domainAllowed = allowedDomains.length === 0 ? true : matchAllowedDomain(originHost, allowedDomains);
+  const policyAccessAllowed = debugBypass || (domainAllowed && accountAllowed);
   const policyFeatureAllowed = pageFeatures.widget?.tabBar?.policy || pageFeatures.widget?.setupPanel;
-  const showPolicyTab = forcedTab === "policy" ? true : Boolean(policyFeatureAllowed);
+  const showPolicyTab = forcedTab === "policy" ? true : Boolean(policyAccessAllowed && policyFeatureAllowed);
   const policyFeatures = useMemo(
     () => applyConversationFeatureVisibility(baseFeatures, isAdminOrDebug || showPolicyTab, isUserLoggedIn),
     [baseFeatures, isAdminOrDebug, isUserLoggedIn, showPolicyTab]
@@ -1319,27 +1271,10 @@ export default function WidgetEmbedPage() {
           allowExistingOverrides && (policyFeatures.setup.agentSelector || policyFeatures.setup.modelSelector);
         const shouldSendLlm = allowNewOverrides && policyFeatures.setup.llmSelector;
         const shouldSendInlineKb = allowNewOverrides && policyFeatures.setup.inlineUserKbInput;
-        const shouldSendKb =
-          allowNewOverrides &&
-          (policyFeatures.setup.kbSelector || Boolean(baseFeatures.setup.defaultKbId));
-        const shouldSendAdminKb =
-          allowNewOverrides &&
-          (policyFeatures.setup.adminKbSelector ||
-            (Array.isArray(baseFeatures.setup.defaultAdminKbIds) &&
-              baseFeatures.setup.defaultAdminKbIds.length > 0));
-        const shouldSendProviders =
-          allowNewOverrides &&
-          (policyFeatures.setup.mcpProviderSelector ||
-            (Array.isArray(baseFeatures.setup.defaultMcpProviderKeys) &&
-              baseFeatures.setup.defaultMcpProviderKeys.length > 0));
-        const shouldSendActions =
-          allowNewOverrides &&
-          (policyFeatures.setup.mcpActionSelector ||
-            (Array.isArray(baseFeatures.setup.defaultMcpToolIds) &&
-              baseFeatures.setup.defaultMcpToolIds.length > 0));
-        const shouldSendRoute =
-          allowNewOverrides &&
-          (policyFeatures.setup.routeSelector || Boolean(baseFeatures.setup.defaultRoute));
+        const shouldSendKb = allowNewOverrides && policyFeatures.setup.kbSelector;
+        const shouldSendAdminKb = allowNewOverrides && policyFeatures.setup.adminKbSelector;
+        const shouldSendProviders = allowNewOverrides && policyFeatures.setup.mcpProviderSelector;
+        const shouldSendActions = allowNewOverrides && policyFeatures.setup.mcpActionSelector;
         const agentId = shouldSendAgent ? selectedAgentId.trim() || undefined : undefined;
         const kbId = shouldSendKb ? policyConfig.kbId.trim() || undefined : undefined;
         const adminKbIds =
@@ -1350,7 +1285,6 @@ export default function WidgetEmbedPage() {
             : undefined;
         const toolIds =
           shouldSendActions && policyConfig.mcpToolIds.length > 0 ? policyConfig.mcpToolIds : undefined;
-        const route = shouldSendRoute ? policyConfig.route || undefined : undefined;
         const res = await fetch("/api/widget/chat", {
           method: "POST",
           headers: {
@@ -1369,7 +1303,6 @@ export default function WidgetEmbedPage() {
             admin_kb_ids: adminKbIds,
             mcp_tool_ids: toolIds,
             mcp_provider_keys: providerKeys,
-            route,
             visitor: pendingUser || undefined,
           }),
         });
@@ -1898,3 +1831,4 @@ export default function WidgetEmbedPage() {
     </div>
   );
 }
+

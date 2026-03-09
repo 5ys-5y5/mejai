@@ -199,6 +199,115 @@
 - widget.tabBar.policy → setup 하위에 agent 선택 UI 추가.
 - 선택 값은 widget.setup_config.agent_id에 저장하여 중복 설정을 줄임.
 
+## 추가 문제 상세 (2026-03-09)
+
+### 문제 A: prefillMessages 저장값이 런타임 UI에 출력되지 않음
+
+#### 현상
+- `B_chat_widgets.chat_policy.pages./embed.interaction.prefillMessages`에 값이 저장되어 있으나 `/embed` 위젯 대화 영역에 표시되지 않음.
+- `interaction.prefill=true` 상태에서도 초기 안내 메시지 미출력.
+
+#### 원인 (추정 → 검증 예정)
+- `resolveConversationPageFeatures()`에서 `/` 페이지의 prefillMessages를 강제 덮어쓰는 로직으로 인해,
+  `/embed` 전용 prefillMessages가 비워짐.
+- 결과적으로 `/embed`에서 prefillMessages가 빈 배열로 떨어져 UI가 출력하지 않음.
+
+#### 해결 방향
+- `/embed`에 prefillMessages가 명시된 경우에는 `/`의 prefillMessages로 덮어쓰지 않도록 조건을 보완한다.
+- `/embed`에서 값이 비어있을 때만 `/` 값을 fallback 한다.
+
+### 문제 B: allowDeny.mcp.providers / allowDeny.mcp.tools 레거시 항목
+
+#### 현상
+- 정책 패널에 allowDeny.mcp.providers/tools 입력 UI가 노출됨.
+
+#### 해결 방향
+- 레거시 항목으로 간주하여 정책 패널에서 제거.
+- 저장/노출 경로에서 더 이상 사용되지 않도록 UI 입력을 제거.
+
+### 문제 C: setup.agent_id 옵션 소스/표시 혼동
+
+#### 현상
+- setup.agent_id가 `null`일 때 선택 가능한 에이전트 목록 로딩/표시 기준이 불명확.
+
+#### 해결 방향
+- 옵션 소스는 `B_bot_agents` 기준(`usable_id`/`is_public`)만 사용.
+- 라벨은 `name` 우선 사용(표시용 컬럼은 `name`만 존재).
+
+## chrome-devtools 확인 (2026-03-09, 추가 2)
+아래 결과는 수정 반영 후 UI 확인 결과이다.
+
+1. `/embed` prefillMessages 출력
+   - `interaction.prefillMessages=["라인A","라인B"]`가 대화 영역에 출력됨.
+   - `interaction.prefill=true` 조건 유지.
+   - 결과: prefill 출력 정상.
+2. 정책 패널 allowDeny 제거
+   - `/app/conversation` 정책 패널에서 “Allow/Deny” 그룹 미노출 확인.
+   - 결과: 레거시 UI 제거 완료.
+3. `setup.inlineUserKbPrefill` 표시
+   - `/logindemo` 정책 iframe(`tab=policy`)의 사용자 KB입력란 textarea에 프리필 값이 자동 입력됨.
+   - 값: `재입고\n- 코듀로이 볼캡 7/5\n- 프릴 티셔츠 8/2`
+   - 결과: 프리필 입력 정상.
+
+## chrome-devtools 확인 (2026-03-09, 추가 3)
+1. `/logindemo` 메인 위젯(일반 iframe)에서 setup 패널 접근
+   - 메인 iframe 내에서 “설정/정책” 진입 버튼/탭이 노출되지 않음.
+   - `widget.tabBar.enabled=false` 상태라 탭바가 비활성이고, 일반 위젯에서 setup 패널을 열 수 없음.
+   - 결과: 메인 위젯에서 setup 패널 접근 불가 → 프리필 입력값 확인 불가.
+
+## chrome-devtools 확인 (2026-03-09, 추가 4)
+1. `/logindemo` 메인 위젯 탭바 활성화 후 확인
+   - `widget.tabBar.enabled=true` 반영됨.
+   - 탭바 버튼: “대화/리스트/로그인”만 노출됨.
+   - “정책” 탭 미노출 → policy 접근 조건(`policyAccessAllowed`) 불충족 추정.
+   - 결과: 메인 위젯에서 setup 패널 접근 불가 → 프리필 확인 불가.
+
+## chrome-devtools 확인 (2026-03-09, 추가 5)
+1. policy 탭 접근 조건 제거 후 확인
+   - `/embed` 페이지 탭바에 “정책” 탭 노출 확인.
+   - 정책 탭 클릭 후 사용자 KB입력란 textarea에 프리필 값 표시 확인.
+   - 값: `재입고\n- 코듀로이 볼캡 7/5\n- 프릴 티셔츠 8/2`
+
+## chrome-devtools 확인 (2026-03-09, 추가 6)
+1. `/logindemo` 메인 위젯(일반 iframe) 정책 탭 확인
+   - “정책” 탭 노출 확인.
+   - 정책 탭 내 사용자 KB입력란 textarea에 프리필 값 표시 확인.
+   - 값: `재입고\n- 코듀로이 볼캡 7/5\n- 프릴 티셔츠 8/2`
+
+## chrome-devtools 확인 (2026-03-09, 추가 7)
+1. `/app/conversation` 설정 패널 기본값 UI 확인
+   - 템플릿 선택 후 `setup.defaultKbId`, `setup.defaultAdminKbIds`, `setup.defaultRoute`,
+     `setup.defaultMcpProviderKeys`, `setup.defaultMcpToolIds` 노출 여부 확인 필요.
+   - 자동화로 해당 라벨 탐색 실패(패널 확장/가상화 영향 가능).
+   - 수동 확인 필요.
+
+## 설계 변경 (2026-03-09, 추가)
+### setupMode 결정 규칙
+- `setup.modeExisting` / `setup.modeNew`는 UI 노출 여부만 제어.
+- `setupMode`는 실제 활성된 탭(사용자가 선택한 모드) 기준으로 결정.
+- 둘 다 on인 경우 기존 모델 탭을 먼저 노출.
+- 모드 선택이 불가능한 경우에도 `setupMode`는 항상 하나로 결정되도록 보정.
+
+### setup.defaultSetupMode 제거
+- 초기 모드 결정을 위해 사용되던 `setup.defaultSetupMode`는 혼동을 유발하여 삭제.
+- 관련 UI/타입/로직에서 제거.
+
+### setup 기본값(2026-03-09, 추가)
+- `setup.defaultKbId`, `setup.defaultAdminKbIds`, `setup.defaultRoute`, `setup.defaultMcpProviderKeys`, `setup.defaultMcpToolIds` 추가.
+- 값이 `null`이면 기본값 없음으로 처리.
+- 기본값이 존재하면 대화 시 해당 값으로 동작하며, 값이 없으면 기존 로직 유지.
+
+## supabase 확인 (2026-03-09, 추가 3)
+1. inline KB 적용 여부 확인
+   - 최신 `F_audit_turn_specs`에서 `prefix_json.kb.primary.id = "__INLINE_KB__"` 기록 확인.
+   - 프리필 inline KB가 실제 대화에 사용됨.
+
+## supabase 확인 (2026-03-09, 추가 2)
+1. 최근 turn debug 로그에서 inline KB 적용 여부
+   - `F_audit_turn_specs` 최신 항목의 `prefix_json.kb.primary.id`가 `__LAB_NO_KB__`로 기록됨.
+   - 현재는 inline KB 프리필이 대화에 적용되지 않는 상태로 판단됨.
+   - 원인 후보: `setupMode === "new"` 조건에서만 `inline_kb`가 전송됨.
+
 ### 진행 결과
 - setup 하위 `setup.agent_id` UI 추가 완료.
 - 선택/해제 동작 확인(“선택 안 함” 옵션 포함).
@@ -295,9 +404,34 @@
   - KB mode = "입력" → `setup.inlineUserKbInput` 활성, `setup.kbIds` 비활성
   - KB mode = "선택" → `setup.kbIds` 활성, `setup.inlineUserKbInput` 비활성
 
+추가 규칙 (모드 불일치 안내):
+- KB mode = "선택"일 때 `setup.inlineUserKbPrefill` 입력란은 비활성화하되,
+  입력 영역에 `setup.kbMode 모드 불일치` 문구를 표시한다.
+- KB mode = "입력"일 때 `setup.defaultKbId`, `setup.defaultAdminKbIds`는 비활성화하되,
+  셀렉트 박스에 `setup.kbMode 모드 불일치` 문구를 표시한다.
+
 구현 포인트:
 - setup.kbSelector 또는 kb mode 입력을 기준으로 상호 배타적 UI 제어.
 - 정책 저장 구조는 `setup.inlineUserKbInput` + `setup.kbIds`를 유지한다.
+
+### 3-1) 사용자 KB 선택 범위/기본값 분리
+목표: 사용자 KB 입력 UI에서 선택 가능한 KB 범위를 정책으로 제어하고, 기본 선택을 제공한다.
+
+추가 항목:
+- `setup.inlineUserKb` (사용자 KB 선택 범위 필터)
+- `setup.defaultInlineUserKb` (기본 사용자 KB 선택)
+
+규칙:
+- `setup.inlineUserKb`는 null/부분 선택/필터 해제(전체 허용)를 지원한다.
+- `setup.defaultInlineUserKb`는 null을 허용하며 기본은 null이다.
+- 프리필 우선순위: `setup.inlineUserKbPrefill`이 있으면 항상 우선 적용한다.
+- 프리필이 없으면 `setup.defaultInlineUserKb`를 사용해 대화를 지원한다.
+
+필터 규칙:
+- `setup.inlineUserKb`가 null이면 필터를 적용하지 않는다.
+- `setup.inlineUserKb`의 "필터 해제"는 on/off 토글로 제공한다.
+- 필터 해제 = ON 상태면 정책에 의한 추가 필터는 적용하지 않고,
+  기본 제약(usable_id/is_public/user scope)에 따른 목록만 제공한다.
 
 ### 4) greeting/placeholder 일원화 (확정)
 전제:
@@ -337,6 +471,13 @@
 - runtime.selfUpdate.enabled → widget.tabBar.policy 하위로 이동
 - 정책 패널에서 텍스트 입력 항목 노출(위 “추가 설계 1)” 목록)
 
+추가 UI 규칙:
+- `setup.mcpProviderKeys`, `setup.mcpToolIds`를 정책 패널에 추가한다.
+  - 의미: 대화에서 선택 가능한 MCP 범위를 제한하는 allowlist.
+  - default 값은 `setup.defaultMcpProviderKeys`, `setup.defaultMcpToolIds`에 별도로 둔다.
+- `setup.mcpProviderKeys`, `setup.mcpToolIds`, `setup.inlineUserKb`는 null/부분 선택/필터 해제 상태를 지원한다.
+- "필터 해제"는 각 항목에 on/off 토글로 제공한다.
+
 ## 정책 마이그레이션
 - 기존 저장 정책 정리:
   - widget.tabBar.chat.mcp → setup.mcpProviderSelector / setup.mcpActionSelector
@@ -365,6 +506,13 @@
 2. `interaction.prefillMessages`는 줄바꿈 기준으로 배열 요소가 되도록 파싱/저장 로직을 수정한다.
 3. `setup.mcpProviderSelector`/`setup.mcpActionSelector` 경로 정합화는 기존 계획대로 진행한다.
 4. `setup.kbMode=입력`일 때 `setup.inlineUserKbPrefill`을 정책 패널에서 설정하고, 위젯에서 사용자 입력 없이도 대화 가능하도록 프리필을 적용한다(프리필 제거 시 KB 미연결이면 대화 불가).
+5. `setup.kbMode=선택`일 때 `setup.inlineUserKbPrefill` 입력란에는 `setup.kbMode 모드 불일치`가 표시되어야 한다.
+6. `setup.kbMode=입력`일 때 `setup.defaultKbId`, `setup.defaultAdminKbIds` 셀렉트 박스는 비활성화되며 `setup.kbMode 모드 불일치` 문구를 표시한다.
+7. `setup.inlineUserKb`, `setup.defaultInlineUserKb`를 추가하고, 프리필 우선순위는 inlineUserKbPrefill > defaultInlineUserKb로 적용한다.
+8. `setup.mcpProviderKeys`, `setup.mcpToolIds`를 추가하고, 허용 범위 필터로 동작한다(필터 해제 지원).
+9. 런처 위치 프리뷰에서 실제 런처 클릭으로 위젯 팝업이 열려야 한다(실제 위젯 런처와 동일 동작).
+10. 위젯 내 `setup.modeExisting`/`setup.modeNew` 전환 시 신규 입력값이 기본 설정을 덮어쓰고, 숨겨진 항목은 기본 설정을 유지한다.
+11. 위젯 런타임에서 agent override(`agent_id`)를 지원해 setup.modeExisting 입력값이 기본 설정을 덮어쓸 수 있어야 한다.
 
 ### 2. 변경 기록 및 롤백 보장
 - 코드 수정이 있는 경우, 수정 직전의 코드를 반드시 C:\dev\1227\mejai3\mejai\docs\diff 폴더에 기록한다.
@@ -427,6 +575,11 @@
 - supabase MCP로 setup.agent_id 저장 값 null 반영 확인 (2026-03-09)
 - chrome-devtools로 setup.kbMode=입력 전환 및 setup.inlineUserKbPrefill 입력/저장 확인 (2026-03-09)
 - supabase MCP로 setup.inlineUserKbPrefill 저장 반영 확인 (2026-03-09)
+- 런처 위치 프리뷰에서 런처 클릭 시 위젯 팝업 토글 가능하도록 수정 (2026-03-09)
+- 위젯 runtime에서 setup.modeExisting/setup.modeNew 전환 및 신규 입력 override 로직 연결 (2026-03-09)
+- 런처 위치 프리뷰 OPEN/CLOSED 배지 표시 및 토글 동작 연동 (2026-03-09)
+- 위젯 runtime에서 agent_id override 지원 (2026-03-09)
+- 위젯 runtime에서 agent_id override 지원(채팅/스트림 API 반영) (2026-03-09)
 - `npm run build` 성공 (2026-03-09, setup.agent_id 저장 로직 수정 반영)
 - chrome-devtools로 interaction.inputPlaceholder / interaction.prefillMessages 입력 UI 노출 확인 (2026-03-09)
 - chrome-devtools로 setup.kbMode “선택” 전환 후 kbIds 선택 가능 확인 (2026-03-09)
@@ -511,6 +664,10 @@
 - 2026-03-09: supabase MCP로 setup.llms allowlist 2개 저장 확인, setup.kbIds allowlist 2개만 저장 확인, setup.routes allowlist "shipping" 저장(선택값 불일치) 확인.
 - 2026-03-09: chrome-devtools MCP로 setup.kbMode=입력 전환, setup.inlineUserKbPrefill 2줄 입력 후 저장.
 - 2026-03-09: supabase MCP로 setup.inlineUserKbPrefill 저장 반영 확인(줄바꿈 포함).
+- 2026-03-09: chrome-devtools MCP로 런처 위치 프리뷰 런처 클릭 시 WidgetLauncherIframe display가 `none`→`block` 전환되는 것 확인(위젯 팝업 토글 동작).
+- 2026-03-09: embed 런타임에서 setup.modeExisting/setup.modeNew 전환 상태를 model.setupMode에 연결하고, llm/kb/adminKb/mcp override가 요청 payload로 전달되도록 코드 반영.
+- 2026-03-09: 런처 위치 프리뷰 런처 클릭 → OPEN 배지 표시 및 WidgetLauncherIframe display=`block` 확인.
+- 2026-03-09: 위젯 chat/stream API에 agent_id override 경로 추가(설정값/입력값 우선순위 반영).
 
 ## 입력 저장 체크리스트 (2026-03-09)
 

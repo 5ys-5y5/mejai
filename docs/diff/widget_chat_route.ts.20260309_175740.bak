@@ -176,7 +176,6 @@ export async function POST(req: NextRequest) {
   const adminKbIds = body.admin_kb_ids;
   const mcpToolIds = body.mcp_tool_ids;
   const mcpProviderKeys = body.mcp_provider_keys;
-  const route = body.route;
   const overrides = normalizeWidgetOverrides(body.overrides);
   const visitor = body.visitor;
   const runtimeFlags = resolveRuntimeFlags(
@@ -255,22 +254,13 @@ export async function POST(req: NextRequest) {
 
   const requestToolIds: unknown[] = Array.isArray(safeMcpToolIds) ? safeMcpToolIds : [];
   const requestProviderKeys: unknown[] = Array.isArray(safeMcpProviderKeys) ? safeMcpProviderKeys : [];
-  const defaultProviderKeys = Array.isArray(featureFlags.setup.defaultMcpProviderKeys)
-    ? featureFlags.setup.defaultMcpProviderKeys
-    : [];
-  const allowProviderDefaults =
-    featureFlags.mcp.providerSelector || defaultProviderKeys.length > 0;
-  const filteredProviderKeys = allowProviderDefaults
-    ? (requestProviderKeys.length > 0 ? requestProviderKeys : defaultProviderKeys)
+  const filteredProviderKeys = featureFlags.mcp.providerSelector
+    ? requestProviderKeys
         .map((value: unknown) => String(value || "").trim())
         .filter((key: string) => key.length > 0 && isProviderEnabled(key, featureFlags))
     : [];
-  const defaultToolIds = Array.isArray(featureFlags.setup.defaultMcpToolIds)
-    ? featureFlags.setup.defaultMcpToolIds
-    : [];
-  const allowToolDefaults = featureFlags.mcp.actionSelector || defaultToolIds.length > 0;
-  const filteredToolIds = allowToolDefaults
-    ? (requestToolIds.length > 0 ? requestToolIds : defaultToolIds)
+  const filteredToolIds = featureFlags.mcp.actionSelector
+    ? requestToolIds
         .map((value: unknown) => String(value || "").trim())
         .filter((id: string) => id.length > 0 && isToolEnabled(id, featureFlags))
     : [];
@@ -289,35 +279,22 @@ export async function POST(req: NextRequest) {
   const effectiveLlm = featureFlags.setup.llmSelector ? requestedLlm || defaultLlm : defaultLlm;
 
   const normalizedKbId = String(safeKbId || "").trim();
-  const defaultKbId = String(featureFlags.setup.defaultKbId || "").trim();
   const effectiveKbId =
-    (normalizedKbId && isEnabledByGate(normalizedKbId, featureFlags.setup.kbIds)
+    featureFlags.setup.kbSelector && normalizedKbId && isEnabledByGate(normalizedKbId, featureFlags.setup.kbIds)
       ? normalizedKbId
-      : defaultKbId && isEnabledByGate(defaultKbId, featureFlags.setup.kbIds)
-        ? defaultKbId
-        : undefined);
+      : undefined;
   const inlineAllowed = featureFlags.setup.inlineUserKbInput;
   const effectiveInlineKb = inlineAllowed ? String(safeInlineKb || "").trim() || undefined : undefined;
-  const defaultAdminKbIds = Array.isArray(featureFlags.setup.defaultAdminKbIds)
-    ? featureFlags.setup.defaultAdminKbIds
+  const effectiveAdminKbIds = featureFlags.setup.adminKbSelector
+    ? Array.from(
+        new Set(
+          (Array.isArray(safeAdminKbIds) ? safeAdminKbIds : [])
+            .map((value: unknown) => String(value || "").trim())
+            .filter((value: string) => value.length > 0)
+            .filter((value: string) => isEnabledByGate(value, featureFlags.setup.adminKbIds))
+        )
+      )
     : [];
-  const effectiveAdminKbIds = Array.from(
-    new Set(
-      (Array.isArray(safeAdminKbIds) && safeAdminKbIds.length > 0 ? safeAdminKbIds : defaultAdminKbIds)
-        .map((value: unknown) => String(value || "").trim())
-        .filter((value: string) => value.length > 0)
-        .filter((value: string) => isEnabledByGate(value, featureFlags.setup.adminKbIds))
-    )
-  );
-
-  const normalizedRoute = String(route || "").trim();
-  const defaultRoute = String(featureFlags.setup.defaultRoute || "").trim();
-  const effectiveRoute =
-    (normalizedRoute && isEnabledByGate(normalizedRoute, featureFlags.setup.routes)
-      ? normalizedRoute
-      : defaultRoute && isEnabledByGate(defaultRoute, featureFlags.setup.routes)
-        ? defaultRoute
-        : undefined);
 
   const logAndReturn = async (errorCode: string, status: number) => {
     await logWidgetProxyEvent({
@@ -437,7 +414,6 @@ export async function POST(req: NextRequest) {
         kb_id: effectiveKbId,
         inline_kb: effectiveInlineKb,
         admin_kb_ids: allowedAdminKbIds,
-        route: effectiveRoute,
         mcp_tool_ids: allowedMcpTools,
         mcp_provider_keys: filteredProviderKeys,
         page_key: WIDGET_PAGE_KEY,

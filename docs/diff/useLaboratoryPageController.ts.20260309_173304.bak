@@ -137,17 +137,20 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
       const next = prev.map((model) => {
         const existingEnabled = pageFeatures.setup.modeExisting;
         const newEnabled = pageFeatures.setup.modeNew;
-        let resolvedMode =
-          model.setupMode === "existing" || model.setupMode === "new" ? model.setupMode : "existing";
-        if (existingEnabled && newEnabled) {
-          resolvedMode = resolvedMode === "existing" || resolvedMode === "new" ? resolvedMode : "existing";
-        } else if (existingEnabled) {
-          resolvedMode = "existing";
-        } else if (newEnabled) {
-          resolvedMode = "new";
-        } else {
-          resolvedMode = "existing";
-        }
+        const defaultMode =
+          pageFeatures.setup.defaultSetupMode === "existing" && existingEnabled
+            ? "existing"
+            : pageFeatures.setup.defaultSetupMode === "new" && newEnabled
+              ? "new"
+              : existingEnabled
+                ? "existing"
+                : "new";
+        const resolvedMode =
+          existingEnabled && newEnabled
+            ? (model.setupMode === "existing" || model.setupMode === "new" ? model.setupMode : defaultMode)
+            : existingEnabled
+              ? "existing"
+              : "new";
         const nextConversationMode: ConversationMode = resolvedMode === "existing" ? "history" : "new";
         if (model.setupMode !== resolvedMode) {
           changed = true;
@@ -182,6 +185,7 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
   }, [
     pageFeatures.setup.modeExisting,
     pageFeatures.setup.modeNew,
+    pageFeatures.setup.defaultSetupMode,
     effectiveDefaultLlm,
   ]);
 
@@ -657,13 +661,10 @@ export function useLaboratoryPageController(pageKey: ConversationPageKey = "/app
       if (prev.length >= MAX_MODELS) return prev;
       const next = createDefaultModel();
       if (pageFeatures.setup.modeExisting && pageFeatures.setup.modeNew) {
-        next.setupMode = "existing";
-      } else if (pageFeatures.setup.modeExisting) {
-        next.setupMode = "existing";
-      } else if (pageFeatures.setup.modeNew) {
-        next.setupMode = "new";
+        next.setupMode =
+          pageFeatures.setup.defaultSetupMode === "existing" ? "existing" : "new";
       } else {
-        next.setupMode = "existing";
+        next.setupMode = pageFeatures.setup.modeExisting ? "existing" : "new";
       }
       next.conversationMode = next.setupMode === "existing" ? "history" : "new";
       next.config.llm = effectiveDefaultLlm;
