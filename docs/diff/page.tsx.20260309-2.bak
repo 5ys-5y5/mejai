@@ -13,7 +13,6 @@ import { encodeWidgetOverrides } from "@/lib/widgetOverrides";
 import {
   WidgetLauncherRuntime,
   buildWidgetEmbedSrc,
-  type WidgetLauncherPosition,
   type WidgetConversationTab,
 } from "@/components/design-system/widget/WidgetUI.parts";
 import {
@@ -581,47 +580,6 @@ export default function ConversationWidgetPage() {
       },
     } as const;
   }, [policyValue]);
-
-  const launcherConfig = useMemo(() => {
-    const launcher = policyValue?.widget?.launcher;
-    const container = launcher?.container || {};
-    return {
-      bottom: typeof container.bottom === "string" ? container.bottom : undefined,
-      left: typeof container.left === "string" ? container.left : undefined,
-      right: typeof container.right === "string" ? container.right : undefined,
-      zIndex: typeof container.zIndex === "number" ? container.zIndex : undefined,
-      size: typeof launcher?.size === "number" ? launcher.size : undefined,
-    };
-  }, [policyValue]);
-
-  const launcherPosition: WidgetLauncherPosition = useMemo(() => {
-    if (launcherConfig.left && !launcherConfig.right) return "bottom-left";
-    return "bottom-right";
-  }, [launcherConfig.left, launcherConfig.right]);
-
-  const previewPanels = useMemo(
-    () =>
-      [
-        { tab: "chat", label: "Conversation", status: previewTabStatus.chat },
-        { tab: "list", label: "List", status: previewTabStatus.list },
-        { tab: "policy", label: "Policy", status: previewTabStatus.policy },
-        { tab: "login", label: "Login", status: previewTabStatus.login },
-      ] as const,
-    [previewTabStatus]
-  );
-
-  const previewRowCount = useMemo(() => {
-    const count = previewPanels.length;
-    if (count <= 1) return 1;
-    if (count % 3 === 0) return 3;
-    if (count % 2 === 0) return 2;
-    return 1;
-  }, [previewPanels.length]);
-
-  const previewColumnCount = useMemo(() => {
-    const count = previewPanels.length;
-    return Math.max(1, Math.ceil(count / previewRowCount));
-  }, [previewPanels.length, previewRowCount]);
 
   const previewKey = draft?.public_key || draft?.id || "";
   const previewTemplateId = draft?.id || "";
@@ -1200,43 +1158,35 @@ export default function ConversationWidgetPage() {
 
                 <Card className="p-4 space-y-3">
                   <div className="text-xs font-semibold text-slate-700">런처 위치 프리뷰</div>
-                  <div className="text-[11px] text-slate-500">가로 폭을 드래그하여 변경할 수 있습니다.</div>
-                  <div className="w-full">
-                    <div
-                      className="relative h-[260px] max-w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
-                      style={{ resize: "horizontal", overflow: "auto", minWidth: "240px" }}
-                    >
-                      <div ref={setPreviewHost} className="absolute inset-0" />
-                      {previewHost && previewKey ? (
-                        <WidgetLauncherRuntime
-                          cfg={{ overrides: installOverrides }}
-                          baseUrl={typeof window !== "undefined" ? window.location.origin : ""}
-                          publicKey={previewKey}
-                          templateId={previewTemplateId || undefined}
-                          previewMode
-                          visitorId="preview"
-                          sessionId=""
-                          sessionStorageKey={`preview_${previewKey}`}
-                          position={launcherPosition}
-                          brandName={draft.name || "Mejai"}
-                          launcherLabel="💬"
-                          mountNode={previewHost}
-                          previewMeta={previewMeta}
-                          layout="absolute"
-                          bottom={launcherConfig.bottom}
-                          left={launcherConfig.left}
-                          right={launcherConfig.right}
-                          zIndex={launcherConfig.zIndex}
-                          initNonce={previewInitNonce}
-                          disableToggle
-                          onLauncherClick={handleLauncherClick}
-                        />
-                      ) : (
-                        <div className="flex h-full items-center justify-center text-xs text-slate-400">
-                          미리보기 대상 위젯을 선택하세요.
-                        </div>
-                      )}
-                    </div>
+                  <div className="relative h-[260px] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-50">
+                    <div ref={setPreviewHost} className="absolute inset-0" />
+                    {previewHost && previewKey ? (
+                      <WidgetLauncherRuntime
+                        cfg={{ overrides: installOverrides }}
+                        baseUrl={typeof window !== "undefined" ? window.location.origin : ""}
+                        publicKey={previewKey}
+                        templateId={previewTemplateId || undefined}
+                        previewMode
+                        visitorId="preview"
+                        sessionId=""
+                        sessionStorageKey={`preview_${previewKey}`}
+                        position="bottom-right"
+                        brandName={draft.name || "Mejai"}
+                        launcherLabel="💬"
+                        mountNode={previewHost}
+                        previewMeta={previewMeta}
+                        layout="absolute"
+                        bottom="16px"
+                        right="16px"
+                        initNonce={previewInitNonce}
+                        disableToggle
+                        onLauncherClick={handleLauncherClick}
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-xs text-slate-400">
+                        미리보기 대상 위젯을 선택하세요.
+                      </div>
+                    )}
                   </div>
                 </Card>
 
@@ -1248,14 +1198,13 @@ export default function ConversationWidgetPage() {
                     <span>위젯 UI 3분할 프리뷰</span>
                     <span className="text-[11px] font-normal text-slate-500">chat / list / policy / login</span>
                   </div>
-                  <div
-                    className="grid gap-3"
-                    style={{
-                      gridTemplateColumns: `repeat(${previewColumnCount}, minmax(0, 1fr))`,
-                      gridTemplateRows: `repeat(${previewRowCount}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {previewPanels.map((panel) => (
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {([
+                      { tab: "chat", label: "Conversation", status: previewTabStatus.chat },
+                      { tab: "list", label: "List", status: previewTabStatus.list },
+                      { tab: "policy", label: "Policy", status: previewTabStatus.policy },
+                      { tab: "login", label: "Login", status: previewTabStatus.login },
+                    ] as const).map((panel) => (
                       <div key={panel.tab} className="space-y-2">
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-[11px] font-semibold text-slate-600">{panel.label}</div>

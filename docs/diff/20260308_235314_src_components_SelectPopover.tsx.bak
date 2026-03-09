@@ -224,7 +224,6 @@ type MultiSelectPopoverProps = Omit<React.HTMLAttributes<HTMLDivElement>, "onCha
   onChange: (values: string[]) => void;
   options: SelectOption[];
   placeholder?: string;
-  emptyStateLabel?: string;
   className?: string;
   buttonClassName?: string;
   panelClassName?: string;
@@ -243,7 +242,6 @@ export function MultiSelectPopover({
   onChange,
   options,
   placeholder = "선택",
-  emptyStateLabel = "선택 가능한 항목이 없습니다.",
   className,
   buttonClassName,
   panelClassName,
@@ -259,7 +257,6 @@ export function MultiSelectPopover({
 }: MultiSelectPopoverProps) {
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
-  const hasOptions = options.length > 0;
   const setOpen = useCallback(
     (next: boolean) => {
       if (onOpenChange) {
@@ -297,14 +294,6 @@ export function MultiSelectPopover({
     if (!query) return options;
     return options.filter((o) => o.label.toLowerCase().includes(query));
   }, [options, q, searchable]);
-
-  const showSearch = searchable && hasOptions;
-  const showBulk = showBulkActions && hasOptions;
-  const emptyLabel = !hasOptions
-    ? emptyStateLabel
-    : q.trim()
-      ? "검색 결과가 없습니다."
-      : emptyStateLabel;
 
   const groupedFiltered = useMemo(() => {
     const groups: Array<{ key: string; label: string; items: SelectOption[] }> = [];
@@ -460,7 +449,7 @@ export function MultiSelectPopover({
                   }}
                   role="dialog"
                 >
-                  {showSearch ? (
+                  {searchable ? (
                     <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2">
                       <Search className="h-4 w-4 text-slate-400" />
                       <input
@@ -472,7 +461,7 @@ export function MultiSelectPopover({
                       />
                     </div>
                   ) : null}
-                  {showBulk ? (
+                  {showBulkActions ? (
                     <div className="flex items-center gap-2 border-b border-slate-200 px-3 py-2 text-xs">
                       <button
                         type="button"
@@ -507,30 +496,24 @@ export function MultiSelectPopover({
                     style={{
                       maxHeight: Math.max(
                         80,
-                        panelStyle.maxHeight - (showSearch ? 44 : 0) - (showBulk ? 44 : 0)
+                        panelStyle.maxHeight - (searchable ? 44 : 0) - (showBulkActions ? 44 : 0)
                       ),
                     }}
                   >
-                    {filtered.length === 0 ? (
-                      <div className="flex items-center justify-center rounded-xl border border-dashed border-slate-200 px-4 py-6 text-xs text-slate-500">
-                        {emptyLabel}
-                      </div>
-                    ) : hasGroupedOptions ? (
-                      groupedFiltered.map((group, index) => (
-                        <div key={group.key} className={cn(index > 0 ? "pt-2" : "")}>
-                          {group.key !== "__ungrouped__" ? (
-                            <div className="mb-1 border-t border-slate-200 px-2 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-                              {group.label}
+                    {hasGroupedOptions
+                      ? groupedFiltered.map((group, index) => (
+                          <div key={group.key} className={cn(index > 0 ? "pt-2" : "")}>
+                            {group.key !== "__ungrouped__" ? (
+                              <div className="mb-1 border-t border-slate-200 px-2 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                                {group.label}
+                              </div>
+                            ) : null}
+                            <div className="flex flex-col gap-[5px]">
+                              {group.items.map((option) => renderMultiOptionButton(option))}
                             </div>
-                          ) : null}
-                          <div className="flex flex-col gap-[5px]">
-                            {group.items.map((option) => renderMultiOptionButton(option))}
                           </div>
-                        </div>
-                      ))
-                    ) : (
-                      filtered.map((option) => renderMultiOptionButton(option))
-                    )}
+                        ))
+                      : filtered.map((option) => renderMultiOptionButton(option))}
                   </div>
                 </motion.div>
               ) : null}

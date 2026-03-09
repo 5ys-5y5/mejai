@@ -423,16 +423,8 @@ function normalizeThreePhaseLabels(
 }
 
 function normalizePrefillMessages(value: unknown, fallback: string[]) {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item || "").trim()).filter(Boolean);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(/\r?\n/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-  return fallback;
+  if (!Array.isArray(value)) return fallback;
+  return value.map((item) => String(item || "").trim()).filter(Boolean);
 }
 
 function normalizeMcpSelectorLocation(
@@ -441,7 +433,7 @@ function normalizeMcpSelectorLocation(
   if (!page) return page;
   const mcpProvider = page.mcp?.providerSelector;
   const mcpAction = page.mcp?.actionSelector;
-  let nextSetup: Record<string, unknown> | undefined = page.setup ? { ...page.setup } : undefined;
+  let nextSetup = page.setup ? { ...page.setup } : undefined;
   if (mcpProvider !== undefined && nextSetup?.mcpProviderSelector === undefined) {
     nextSetup = { ...(nextSetup || {}), mcpProviderSelector: mcpProvider };
   }
@@ -455,7 +447,7 @@ function normalizeMcpSelectorLocation(
   }
   return {
     ...page,
-    setup: (nextSetup ?? page.setup) as ConversationPageFeaturesOverride["setup"],
+    setup: nextSetup ?? page.setup,
     mcp: nextMcp ?? page.mcp,
   };
 }

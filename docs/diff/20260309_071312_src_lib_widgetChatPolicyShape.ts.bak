@@ -67,19 +67,14 @@ function normalizeWidgetPolicyWidgetFields(
   if (!setupConfig && rootSetupConfig) {
     widget.setup_config = rootSetupConfig;
   }
-  const hasSetupAgent = setupConfig
-    ? Object.prototype.hasOwnProperty.call(setupConfig, "agent_id")
-    : false;
-  if (setupConfig && hasSetupAgent) {
-    const nextAgentId = typeof setupConfig.agent_id === "string" ? setupConfig.agent_id : null;
-    widget.agent_id = nextAgentId;
-  } else {
-    if (!widget.agent_id && typeof base.agent_id === "string") {
-      widget.agent_id = base.agent_id;
-    }
-    if (setupConfig && typeof widget.agent_id === "string" && setupConfig.agent_id !== widget.agent_id) {
-      setupConfig.agent_id = widget.agent_id;
-    }
+  if (!widget.agent_id && setupConfig && typeof setupConfig.agent_id === "string") {
+    widget.agent_id = setupConfig.agent_id;
+  }
+  if (!widget.agent_id && typeof base.agent_id === "string") {
+    widget.agent_id = base.agent_id;
+  }
+  if (setupConfig && typeof widget.agent_id === "string" && setupConfig.agent_id !== widget.agent_id) {
+    setupConfig.agent_id = widget.agent_id;
   }
   if (setupConfig) {
     const kbConfig = isPlainObject(setupConfig.kb) ? { ...(setupConfig.kb as Record<string, unknown>) } : {};

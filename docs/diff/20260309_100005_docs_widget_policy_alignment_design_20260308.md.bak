@@ -348,12 +348,10 @@
 
 ### 예정
 - theme.greeting / theme.input_placeholder 기본값 노출 문제 해결
-- interaction.prefillMessages 줄바꿈 저장(배열 분리) 정규화 보완
 - setup.mcpProviderSelector / setup.mcpActionSelector 노출/저장 경로 점검 및 수정
 - embed policy preview 내 옵션 목록 미표시 문제 원인 분석 및 수정
 - setup.llms/kbIds/adminKbIds/routes allowlist 저장 누락 문제 해결 (withNullFeatureDefaults 보존 로직)
 - `npm run build` 성공 (2026-03-09, withNullFeatureDefaults 보존 로직 반영)
-- `npm run build` 성공 (2026-03-09, normalizePrefillMessages 보완 반영)
 
 ## 테스트 기록
 
@@ -400,16 +398,6 @@
 - 2026-03-09: chrome-devtools MCP로 setup.kbMode=“선택” 전환 후 kbIds 3개 선택.
 - 2026-03-09: supabase MCP로 setup.kbIds allowlist(3개) 저장 반영 확인.
 - 2026-03-09: `npm run build` 성공 (interaction/setup 추가 입력 검증 후).
-- 2026-03-09: chrome-devtools MCP로 widget.tabBar.chat → interaction.prefillMessages 2줄 입력 + inputPlaceholder 빈값 입력 후 저장.
-- 2026-03-09: supabase MCP로 home 템플릿 chat_policy 확인 → prefillMessages `["라인1라인2"]` 유지(줄바꿈 미분리), inputPlaceholder null 유지.
-- 2026-03-09: `npm run build` 성공 (normalizePrefillMessages 보완 반영).
-- 2026-03-09: chrome-devtools MCP로 B_chat_widgets.is_active → widget.launcher 확장 후 theme.launcher_logo_id 등 UI 노출 확인.
-- 2026-03-09: chrome-devtools MCP로 widget.launcher 확장 시 cfg.launcherLabel/cfg.position/theme.launcher_logo_id/theme.primary_color/theme.launcher_bg/launcher.container*/launcher.size UI 노출 확인 (UI 미노출 항목 정정).
-- 2026-03-09: chrome-devtools MCP로 widget.entry_mode=embed, cfg.position=bottom-left 선택 후 저장.
-- 2026-03-09: chrome-devtools MCP로 widget.access.allowed_domains/allowed_paths/theme.allowed_accounts 줄바꿈 입력 후 저장.
-- 2026-03-09: chrome-devtools MCP로 allowDeny mcp.providers/tools allow/deny 줄바꿈 입력 후 저장.
-- 2026-03-09: supabase MCP로 widget.access.allowed_domains/allowed_paths/theme.allowed_accounts 및 allowDeny allow/deny 저장값 확인 → 줄바꿈 미분리(연결된 단일 문자열로 저장).
-- 2026-03-09: supabase MCP로 interaction.prefillMessages 저장값 확인 → 줄바꿈 미분리(단일 문자열).
 
 ## 입력 저장 체크리스트 (2026-03-09)
 
@@ -466,37 +454,31 @@
 | interaction.threePhasePromptHideLabels | 토글 | OFF | OK | 일괄 OFF 적용 후 DB false 확인 |
 | interaction.prefill | 토글 | OFF | OK | 일괄 OFF 적용 후 DB false 확인 |
 | interaction.inputPlaceholder | 텍스트 입력 | 테스트 입력 | OK | `chat_policy.pages./embed.interaction.inputPlaceholder` 반영 |
-| interaction.prefillMessages | 텍스트 입력(배열) | 라인A/라인B | NG | `["라인A라인B"]`로 합쳐짐(줄바꿈 미분리) |
+| interaction.prefillMessages | 텍스트 입력(배열) | 메시지1/메시지2 | OK | 저장 시 `["메시지1메시지2"]`로 합쳐짐 |
 | theme.greeting | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
 | theme.input_placeholder | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
-| widget.entry_mode | 단일 선택 | embed | OK | `chat_policy.widget.entry_mode = "embed"` |
-| widget.embed_view | 단일 선택 | 미테스트 | 미검증 | 선택 UI 확인 필요 |
-| widget.access.allowed_domains | 텍스트 입력(리스트) | example.com/example.org | NG | `["example.comexample.org"]`로 합쳐짐(줄바꿈 미분리) |
-| widget.access.allowed_paths | 텍스트 입력(리스트) | /path1//path2 | NG | `["/path1/path2"]`로 합쳐짐(줄바꿈 미분리) |
-| theme.allowed_accounts | 텍스트 입력(리스트) | account1/account2 | NG | `["account1account2"]`로 합쳐짐(줄바꿈 미분리) |
-| cfg.launcherLabel | 텍스트 입력 | 런처 라벨 테스트 | OK | `chat_policy.widget.cfg.launcherLabel` 반영 |
-| cfg.position | 단일 선택 | bottom-left | OK | `chat_policy.widget.cfg.position = "bottom-left"` |
-| theme.launcher_logo_id | 텍스트 입력 | launcher_logo_123 | OK | `chat_policy.widget.theme.launcher_logo_id` 반영 |
-| theme.primary_color | 텍스트 입력 | #4f46e5 | 미검증 | 색상 입력 저장 여부 확인 필요 |
-| theme.launcher_bg | 텍스트 입력 | #112233 | OK | `chat_policy.widget.theme.launcher_bg` 반영 |
-| launcher.container.bottom | 텍스트 입력 | 20px | OK | `chat_policy.widget.launcher.container.bottom` 반영 |
-| launcher.container.left | 텍스트 입력 | auto | OK | `chat_policy.widget.launcher.container.left` 반영 |
-| launcher.container.right | 텍스트 입력 | 24px | OK | `chat_policy.widget.launcher.container.right` 반영 |
-| launcher.container.gap | 텍스트 입력 | 10px | OK | `chat_policy.widget.launcher.container.gap` 반영 |
-| launcher.container.zIndex | 숫자 입력 | 888 | OK | `chat_policy.widget.launcher.container.zIndex` 반영 |
-| launcher.size | 숫자 입력 | 60 | OK | `chat_policy.widget.launcher.size` 반영 |
-| iframe.width | 텍스트 입력 | 380px | OK | `chat_policy.widget.iframe.width` 반영 |
-| iframe.height | 텍스트 입력 | 600px | OK | `chat_policy.widget.iframe.height` 반영 |
-| iframe.borderRadius | 텍스트 입력 | 12px | OK | `chat_policy.widget.iframe.borderRadius` 반영 |
-| iframe.boxShadow | 텍스트 입력 | 0 10px 30px rgba(0,0,0,0.2) | OK | `chat_policy.widget.iframe.boxShadow` 반영 |
-| iframe.background | 텍스트 입력 | #ffffff | OK | `chat_policy.widget.iframe.background` 반영 |
-| iframe.layout | 단일 선택 | fixed | 미검증 | 선택 UI 노출 확인 필요 |
-| iframe.bottomOffset | 텍스트 입력 | 18px | OK | `chat_policy.widget.iframe.bottomOffset` 반영 |
-| iframe.sideOffset | 텍스트 입력 | 18px | OK | `chat_policy.widget.iframe.sideOffset` 반영 |
-| allowDeny.mcp.providers.allowlist | 텍스트 입력(리스트) | provA/provB | NG | `["provAprovB"]`로 합쳐짐(줄바꿈 미분리) |
-| allowDeny.mcp.providers.denylist | 텍스트 입력(리스트) | provX/provY | NG | `["provXprovY"]`로 합쳐짐(줄바꿈 미분리) |
-| allowDeny.mcp.tools.allowlist | 텍스트 입력(리스트) | toolA/toolB | NG | `["toolAtoolB"]`로 합쳐짐(줄바꿈 미분리) |
-| allowDeny.mcp.tools.denylist | 텍스트 입력(리스트) | toolX/toolY | NG | `["toolXtoolY"]`로 합쳐짐(줄바꿈 미분리) |
+| widget.access.allowed_domains | 텍스트 입력(리스트) | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| widget.access.allowed_paths | 텍스트 입력(리스트) | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| theme.allowed_accounts | 텍스트 입력(리스트) | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| cfg.launcherLabel | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| cfg.position | 단일 선택 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| theme.launcher_logo_id | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| theme.primary_color | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| theme.launcher_bg | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| launcher.container.bottom | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| launcher.container.left | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| launcher.container.right | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| launcher.container.gap | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| launcher.container.zIndex | 숫자 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| launcher.size | 숫자 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| iframe.width | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| iframe.height | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| iframe.borderRadius | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| iframe.boxShadow | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| iframe.background | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| iframe.layout | 단일 선택 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| iframe.bottomOffset | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
+| iframe.sideOffset | 텍스트 입력 | UI 미노출 | N/A | 정책 패널에 입력 UI 없음 |
 - 2026-03-09: `npm run build` 성공 (setup.agent_id 저장 로직 수정 반영).
 
 ## 추가 문제 상세 (2026-03-08)
@@ -557,39 +539,6 @@
 ### 해결 계획
 - WIDGET_PAGE_KEY에서도 widget.setup_config를 제거하지 않도록 commitDraft 로직 수정.
 - widget.agent_id는 정책 저장에서 제거하고, setup_config.agent_id만 유지하도록 정합성 유지.
-
-## 추가 문제 상세 (2026-03-09, 재점검)
-
-### 문제 A: interaction.prefillMessages 줄바꿈 저장 실패
-
-### 현상
-- 정책 패널에서 `interaction.prefillMessages`에 줄바꿈을 포함해 입력해도 저장 시
-  `["라인1라인2"]`처럼 단일 문자열로 저장됨.
-
-### 원인 (추정)
-- 저장 시 `interaction.prefillMessages`가 문자열(또는 문자열 배열 1건)로 들어오면
-  런타임 정규화 단계에서 줄바꿈 분해가 수행되지 않음.
-- UI에서 줄바꿈 파싱이 되지 않거나 저장 단계에서 다시 문자열로 수렴될 가능성 있음.
-
-### 해결 계획
-- 정책 정규화 단계(`normalizePrefillMessages`)에서 문자열 입력도 줄바꿈 기준으로 분해하도록 보완.
-- 정책 패널(`ChatSettingsPanel`) 입력에서 줄바꿈 → 배열 파싱 로직을 유지/확인.
-
-### 문제 B: theme.greeting / theme.input_placeholder 기본 문구 노출
-
-### 현상
-- `theme.greeting`, `theme.input_placeholder` 입력값이 비어있음에도
-  기본 문구가 노출된다는 사용자 보고가 지속됨.
-
-### 원인 (추정)
-- 레거시 데이터(`widget.theme`)가 남아있거나, 빈 문자열이 런타임에서
-  기본 문구로 대체되는 흐름이 존재할 가능성.
-- `interaction.*`와 `theme.*`의 중복 정의로 인해 기준이 혼재될 가능성.
-
-### 해결 계획
-- 정책/런타임에서 `interaction.*`만 유효 기준으로 사용하고
-  `theme.*`는 출력에 영향을 주지 않도록 고정(일원화).
-- 기본 문구를 강제 주입하는 fallback 로직이 있으면 제거/무효화.
 
 ## 추가 문제 상세 (2026-03-09, 재점검)
 

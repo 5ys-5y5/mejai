@@ -1,0 +1,26 @@
+@@
+   const previewOverridesParam = useMemo(() => {
+@@
+   }, [installOverrides]);
++
++  const previewTabStatus = useMemo(() => {
++    const resolved = resolveConversationPageFeatures(WIDGET_PAGE_KEY, policyValue);
++    return {
++      chat: {
++        enabled: resolved?.widget?.tabBar?.chat ?? false,
++        visibility: resolved?.visibility?.widget?.tabBar?.chat ?? "admin",
++      },
++      list: {
++        enabled: resolved?.widget?.tabBar?.list ?? false,
++        visibility: resolved?.visibility?.widget?.tabBar?.list ?? "admin",
++      },
++      policy: {
++        enabled: resolved?.widget?.tabBar?.policy ?? false,
++        visibility: resolved?.visibility?.widget?.tabBar?.policy ?? "admin",
++      },
++      login: {
++        enabled: resolved?.widget?.tabBar?.login ?? false,
++        visibility: resolved?.visibility?.widget?.tabBar?.login ?? "admin",
++      },
++    } as const;
++  }, [policyValue]);

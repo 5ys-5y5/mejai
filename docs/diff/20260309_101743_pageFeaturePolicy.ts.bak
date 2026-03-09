@@ -441,7 +441,7 @@ function normalizeMcpSelectorLocation(
   if (!page) return page;
   const mcpProvider = page.mcp?.providerSelector;
   const mcpAction = page.mcp?.actionSelector;
-  let nextSetup: Record<string, unknown> | undefined = page.setup ? { ...page.setup } : undefined;
+  let nextSetup = page.setup ? { ...page.setup } : undefined;
   if (mcpProvider !== undefined && nextSetup?.mcpProviderSelector === undefined) {
     nextSetup = { ...(nextSetup || {}), mcpProviderSelector: mcpProvider };
   }
@@ -455,7 +455,7 @@ function normalizeMcpSelectorLocation(
   }
   return {
     ...page,
-    setup: (nextSetup ?? page.setup) as ConversationPageFeaturesOverride["setup"],
+    setup: nextSetup ?? page.setup,
     mcp: nextMcp ?? page.mcp,
   };
 }

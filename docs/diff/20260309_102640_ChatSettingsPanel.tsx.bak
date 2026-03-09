@@ -215,23 +215,13 @@ export function ChatSettingsPanel({
       if (pageKey === WIDGET_PAGE_KEY && nextWidget && "agent_id" in nextWidget) {
         delete (nextWidget as WidgetChatPolicyConfig).agent_id;
       }
-      const normalizedPrefillMessages = normalizePrefillMessagesInput(
-        nextDraft.features.interaction?.prefillMessages
-      );
-      const nextFeatures: ConversationPageFeatures = {
-        ...nextDraft.features,
-        interaction: {
-          ...nextDraft.features.interaction,
-          prefillMessages: normalizedPrefillMessages,
-        },
-      };
       const nextProvider: ConversationFeaturesProviderShape = {
         ...base,
         widget: nextWidget,
-        features: nextFeatures,
+        features: nextDraft.features,
         pages: {
           ...(base.pages || {}),
-          [pageKey]: nextFeatures,
+          [pageKey]: nextDraft.features,
         },
         debug: nextDraft.debug,
         debug_copy: {
@@ -1827,14 +1817,6 @@ function setBooleanMap(current: BooleanMap | undefined, key: string, next: boole
 function parseLines(value: string) {
   return value
     .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function normalizePrefillMessagesInput(value: unknown): string[] {
-  const raw = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
-  return raw
-    .flatMap((item) => String(item || "").split(/\r?\n/))
     .map((item) => item.trim())
     .filter(Boolean);
 }

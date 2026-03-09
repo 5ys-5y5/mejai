@@ -1846,7 +1846,7 @@ function ConversationModelChatColumnCore({
     model.sending ||
     (model.setupMode === "existing" && !model.config.kbId) ||
     (model.setupMode === "existing" && (!model.selectedAgentId || (model.conversationMode !== "new" && !model.selectedSessionId)));
-  const defaultInputPlaceholder = "";
+  const defaultInputPlaceholder = "문의 내용을 입력해주세요.";
   const configuredInputPlaceholder = String(interactionFeatures.inputPlaceholder || "").trim();
   const inputPlaceholder =
     model.setupMode === "existing" && model.conversationMode === "history"

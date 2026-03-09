@@ -29,15 +29,6 @@ function fillWithNulls<T extends Record<string, any>>(template: T, target: Recor
       result[key] = null;
     }
   });
-  Object.keys(target).forEach((key) => {
-    if (Object.prototype.hasOwnProperty.call(template, key)) return;
-    const targetValue = target[key];
-    if (isPlainObject(targetValue)) {
-      result[key] = fillWithNulls({}, targetValue as Record<string, unknown>);
-    } else {
-      result[key] = targetValue as unknown;
-    }
-  });
   return result as T;
 }
 

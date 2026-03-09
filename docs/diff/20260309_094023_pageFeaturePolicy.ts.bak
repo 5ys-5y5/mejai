@@ -316,7 +316,10 @@ const DEFAULT_SETUP_UI: ConversationSetupUi = {
   },
 };
 
-const DEFAULT_PREFILL_MESSAGES: string[] = [];
+const DEFAULT_PREFILL_MESSAGES = [
+  "기록한대로 응대하는 AI 상담사를",
+  "압도적으로 저렴하게 사용해보세요",
+];
 
 const DEFAULT_THREE_PHASE_LABELS = {
   confirmed: "확인한 것",
@@ -423,41 +426,8 @@ function normalizeThreePhaseLabels(
 }
 
 function normalizePrefillMessages(value: unknown, fallback: string[]) {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item || "").trim()).filter(Boolean);
-  }
-  if (typeof value === "string") {
-    return value
-      .split(/\r?\n/)
-      .map((item) => item.trim())
-      .filter(Boolean);
-  }
-  return fallback;
-}
-
-function normalizeMcpSelectorLocation(
-  page?: ConversationPageFeaturesOverride
-): ConversationPageFeaturesOverride | undefined {
-  if (!page) return page;
-  const mcpProvider = page.mcp?.providerSelector;
-  const mcpAction = page.mcp?.actionSelector;
-  let nextSetup: Record<string, unknown> | undefined = page.setup ? { ...page.setup } : undefined;
-  if (mcpProvider !== undefined && nextSetup?.mcpProviderSelector === undefined) {
-    nextSetup = { ...(nextSetup || {}), mcpProviderSelector: mcpProvider };
-  }
-  if (mcpAction !== undefined && nextSetup?.mcpActionSelector === undefined) {
-    nextSetup = { ...(nextSetup || {}), mcpActionSelector: mcpAction };
-  }
-  let nextMcp = page.mcp ? { ...page.mcp } : undefined;
-  if (nextMcp) {
-    if (mcpProvider !== undefined) delete (nextMcp as { providerSelector?: boolean }).providerSelector;
-    if (mcpAction !== undefined) delete (nextMcp as { actionSelector?: boolean }).actionSelector;
-  }
-  return {
-    ...page,
-    setup: (nextSetup ?? page.setup) as ConversationPageFeaturesOverride["setup"],
-    mcp: nextMcp ?? page.mcp,
-  };
+  if (!Array.isArray(value)) return fallback;
+  return value.map((item) => String(item || "").trim()).filter(Boolean);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -575,19 +545,6 @@ export function normalizeConversationFeatureProvider(
   }
   if (nextProvider.setup_ui) {
     delete (nextProvider as { setup_ui?: ConversationSetupUiOverride }).setup_ui;
-  }
-
-  if (nextProvider.features) {
-    nextProvider.features = normalizeMcpSelectorLocation(nextProvider.features) || nextProvider.features;
-  }
-  if (nextProvider.pages) {
-    const normalizedPages: Partial<Record<ConversationPageKey, ConversationPageFeaturesOverride>> = {
-      ...(nextProvider.pages || {}),
-    };
-    Object.keys(normalizedPages).forEach((key) => {
-      normalizedPages[key] = normalizeMcpSelectorLocation(normalizedPages[key]);
-    });
-    nextProvider.pages = normalizedPages;
   }
 
   return nextProvider;

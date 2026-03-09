@@ -215,23 +215,13 @@ export function ChatSettingsPanel({
       if (pageKey === WIDGET_PAGE_KEY && nextWidget && "agent_id" in nextWidget) {
         delete (nextWidget as WidgetChatPolicyConfig).agent_id;
       }
-      const normalizedPrefillMessages = normalizePrefillMessagesInput(
-        nextDraft.features.interaction?.prefillMessages
-      );
-      const nextFeatures: ConversationPageFeatures = {
-        ...nextDraft.features,
-        interaction: {
-          ...nextDraft.features.interaction,
-          prefillMessages: normalizedPrefillMessages,
-        },
-      };
       const nextProvider: ConversationFeaturesProviderShape = {
         ...base,
         widget: nextWidget,
-        features: nextFeatures,
+        features: nextDraft.features,
         pages: {
           ...(base.pages || {}),
-          [pageKey]: nextFeatures,
+          [pageKey]: nextDraft.features,
         },
         debug: nextDraft.debug,
         debug_copy: {
@@ -338,10 +328,6 @@ export function ChatSettingsPanel({
   const kbConfig = isObject(setupConfig.kb) ? setupConfig.kb : {};
   const mcpConfig = isObject(setupConfig.mcp) ? setupConfig.mcp : {};
   const llmConfig = isObject(setupConfig.llm) ? setupConfig.llm : {};
-  const isSetupAgentSelected =
-    typeof setupConfig.agent_id === "string" && setupConfig.agent_id.trim().length > 0;
-  const kbMode = features.setup.kbSelector ? "select" : "input";
-  const isKbSelectMode = kbMode === "select";
   const hiddenLabelSet = useMemo(() => new Set(hiddenLabels || []), [hiddenLabels]);
   const isHidden = useCallback((label: string) => hiddenLabelSet.has(label), [hiddenLabelSet]);
   const showWidgetBasics =
@@ -349,6 +335,7 @@ export function ChatSettingsPanel({
     !isHidden("widget.entry_mode") ||
     !isHidden("widget.embed_view");
   const showSetupConfig = !isHidden("widget.setup_config");
+  const showThemeBasics = !isHidden("theme.greeting") || !isHidden("theme.input_placeholder");
   const widgetActiveChecked = widgetActiveValue ?? true;
   const handleWidgetActiveToggle = onWidgetActiveChange || (() => {});
 
@@ -392,39 +379,6 @@ export function ChatSettingsPanel({
     }));
   const updateSetupUi = (path: string[], value: unknown) =>
     updateDraft((current) => ({ ...current, setupUi: setIn(current.setupUi as any, path, value) }));
-
-  const handleKbModeChange = useCallback(
-    (mode: "input" | "select") =>
-      updateDraft((current) => {
-        let nextFeatures = setIn(current.features as any, ["setup", "kbSelector"], mode === "select");
-        nextFeatures = setIn(nextFeatures as any, ["setup", "inlineUserKbInput"], mode === "input");
-        if (mode === "input") {
-          nextFeatures = setIn(nextFeatures as any, ["setup", "kbIds", "allowlist"], undefined);
-          nextFeatures = setIn(nextFeatures as any, ["setup", "adminKbIds", "allowlist"], undefined);
-        }
-        return { ...current, features: nextFeatures };
-      }),
-    [updateDraft]
-  );
-
-  const handleSetupAgentChange = useCallback(
-    (value: string) =>
-      updateDraft((current) => {
-        const nextAgentId = value || null;
-        const nextWidget = setIn(current.widget as any, ["setup_config", "agent_id"], nextAgentId);
-        let nextFeatures = current.features as any;
-        if (nextAgentId) {
-          nextFeatures = setIn(nextFeatures as any, ["setup", "defaultSetupMode"], null);
-          nextFeatures = setIn(nextFeatures as any, ["setup", "defaultLlm"], null);
-          nextFeatures = setIn(nextFeatures as any, ["setup", "llms", "allowlist"], undefined);
-          nextFeatures = setIn(nextFeatures as any, ["setup", "kbIds", "allowlist"], undefined);
-          nextFeatures = setIn(nextFeatures as any, ["setup", "adminKbIds", "allowlist"], undefined);
-          nextFeatures = setIn(nextFeatures as any, ["setup", "routes", "allowlist"], undefined);
-        }
-        return { ...current, widget: nextWidget, features: nextFeatures };
-      }),
-    [updateDraft]
-  );
 
   const moveSetupField = useCallback(
     (from: SetupFieldKey, to: SetupFieldKey) =>
@@ -770,6 +724,37 @@ export function ChatSettingsPanel({
                       value={typeof llmConfig.default === "string" ? llmConfig.default : ""}
                       onChange={(event) => updateWidget(["setup_config", "llm", "default"], event.target.value)}
                       className="h-7 w-[200px] text-[11px]"
+                    />
+                  }
+                />
+              )}
+            </RowGroup>
+          ) : null}
+
+          {showThemeBasics ? (
+            <RowGroup label="widget.theme" displayLabel="대화 기본값">
+              {isHidden("theme.greeting") ? null : (
+            <Row
+              label="theme.greeting"
+              variant={variant}
+              right={
+                    <Input
+                      value={typeof widget.theme?.greeting === "string" ? widget.theme.greeting : ""}
+                      onChange={(event) => updateWidget(["theme", "greeting"], event.target.value)}
+                      className="h-7 w-[260px] text-[11px]"
+                    />
+                  }
+                />
+              )}
+              {isHidden("theme.input_placeholder") ? null : (
+            <Row
+              label="theme.input_placeholder"
+              variant={variant}
+              right={
+                    <Input
+                      value={typeof widget.theme?.input_placeholder === "string" ? widget.theme.input_placeholder : ""}
+                      onChange={(event) => updateWidget(["theme", "input_placeholder"], event.target.value)}
+                      className="h-7 w-[260px] text-[11px]"
                     />
                   }
                 />
@@ -1253,40 +1238,6 @@ export function ChatSettingsPanel({
                   }
                 />
               </ToggleRowGroup>
-              {isHidden("interaction.inputPlaceholder") ? null : (
-                <Row
-                  label="interaction.inputPlaceholder"
-                  right={
-                    <Input
-                      value={
-                        typeof features.interaction.inputPlaceholder === "string"
-                          ? features.interaction.inputPlaceholder
-                          : ""
-                      }
-                      onChange={(event) =>
-                        updateFeatures(["interaction", "inputPlaceholder"], event.target.value)
-                      }
-                      className="h-7 w-[260px] text-[11px]"
-                    />
-                  }
-                />
-              )}
-              {isHidden("interaction.prefillMessages") ? null : (
-                <Row
-                  label="interaction.prefillMessages"
-                  alignTop
-                  right={
-                    <textarea
-                      value={formatLines(features.interaction.prefillMessages)}
-                      onChange={(event) => {
-                        const lines = parseLines(event.target.value);
-                        updateFeatures(["interaction", "prefillMessages"], lines.length ? lines : undefined);
-                      }}
-                      className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-                    />
-                  }
-                />
-              )}
             </RowGroup>
 
             <RowGroup label="allowDeny" displayLabel="Allow/Deny">
@@ -1483,7 +1434,7 @@ export function ChatSettingsPanel({
                           displayLabel={setupUi.labels.inlineUserKbInput || "사용자 KB입력란"}
                           checked={features.setup.inlineUserKbInput}
                           visibility={visibility.setup.inlineUserKbInput}
-                          onToggle={(next) => handleKbModeChange(next ? "input" : "select")}
+                          onToggle={(next) => updateFeatures(["setup", "inlineUserKbInput"], next)}
                           onVisibilityChange={(mode) => updateVisibility(["setup", "inlineUserKbInput"], mode)}
                           editableLabel
                           onLabelChange={(value) => updateSetupUi(["labels", "inlineUserKbInput"], value)}
@@ -1527,7 +1478,7 @@ export function ChatSettingsPanel({
                           displayLabel={setupUi.labels.kbSelector || "KB 선택"}
                           checked={features.setup.kbSelector}
                           visibility={visibility.setup.kbSelector}
-                          onToggle={(next) => handleKbModeChange(next ? "select" : "input")}
+                          onToggle={(next) => updateFeatures(["setup", "kbSelector"], next)}
                           onVisibilityChange={(mode) => updateVisibility(["setup", "kbSelector"], mode)}
                           editableLabel
                           onLabelChange={(value) => updateSetupUi(["labels", "kbSelector"], value)}
@@ -1634,26 +1585,25 @@ export function ChatSettingsPanel({
 
                 </RowGroup>
                 <RowGroup label="setup" displayLabel="Setup">
-                    <Row
+                  <Row
                     label="setup.agent_id"
                     right={
                       <SelectPopover
                         value={typeof setupConfig.agent_id === "string" ? setupConfig.agent_id : ""}
                         options={setupAgentOptions}
-                        onChange={(value) => handleSetupAgentChange(value)}
+                        onChange={(value) => updateWidget(["setup_config", "agent_id"], value || null)}
                         buttonClassName="h-7 text-[11px]"
                         className="w-[220px]"
                       />
                     }
                   />
-                <Row
-                  label="setup.defaultSetupMode"
-                  right={
-                    <SelectPopover
+                  <Row
+                    label="setup.defaultSetupMode"
+                    right={
+                      <SelectPopover
                       value={features.setup.defaultSetupMode || "existing"}
                       options={DEFAULT_SETUP_MODE_OPTIONS}
                       onChange={(value) => updateFeatures(["setup", "defaultSetupMode"], value)}
-                      disabled={isSetupAgentSelected}
                       buttonClassName="h-7 text-[11px]"
                       className="w-[140px]"
                     />
@@ -1666,25 +1616,6 @@ export function ChatSettingsPanel({
                       value={features.setup.defaultLlm || "chatgpt"}
                       options={DEFAULT_LLM_OPTIONS}
                       onChange={(value) => updateFeatures(["setup", "defaultLlm"], value)}
-                      disabled={isSetupAgentSelected}
-                      buttonClassName="h-7 text-[11px]"
-                      className="w-[140px]"
-                    />
-                  }
-                />
-                <Row
-                  label="setup.kbMode"
-                  right={
-                    <SelectPopover
-                      value={kbMode}
-                      options={[
-                        { id: "input", label: "입력" },
-                        { id: "select", label: "선택" },
-                      ]}
-                      onChange={(value) =>
-                        handleKbModeChange(value === "select" ? "select" : "input")
-                      }
-                      disabled={isSetupAgentSelected}
                       buttonClassName="h-7 text-[11px]"
                       className="w-[140px]"
                     />
@@ -1701,7 +1632,6 @@ export function ChatSettingsPanel({
                         options={llmAllowlistOptions}
                         displayMode="count"
                         showBulkActions
-                        disabled={isSetupAgentSelected}
                         className="w-[260px]"
                         buttonClassName="h-7 text-[11px]"
                       />
@@ -1717,7 +1647,6 @@ export function ChatSettingsPanel({
                         }
                         options={kbAllowlistOptions}
                         displayMode="count"
-                        disabled={isSetupAgentSelected || !isKbSelectMode}
                         showBulkActions
                         className="w-[260px]"
                         buttonClassName="h-7 text-[11px]"
@@ -1738,7 +1667,6 @@ export function ChatSettingsPanel({
                         }
                         options={adminKbAllowlistOptions}
                         displayMode="count"
-                        disabled={isSetupAgentSelected || !isKbSelectMode}
                         showBulkActions
                         className="w-[260px]"
                         buttonClassName="h-7 text-[11px]"
@@ -1755,13 +1683,12 @@ export function ChatSettingsPanel({
                         }
                         options={routeAllowlistOptions}
                         displayMode="count"
-                        disabled={isSetupAgentSelected}
                         showBulkActions
                         className="w-[260px]"
                         buttonClassName="h-7 text-[11px]"
                       />
                     }
-                  />
+                    />
                 </RowGroup>
                 <RowGroup label="runtime" displayLabel="Runtime">
                   <ToggleRow
@@ -1827,14 +1754,6 @@ function setBooleanMap(current: BooleanMap | undefined, key: string, next: boole
 function parseLines(value: string) {
   return value
     .split(/\r?\n/)
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function normalizePrefillMessagesInput(value: unknown): string[] {
-  const raw = Array.isArray(value) ? value : typeof value === "string" ? [value] : [];
-  return raw
-    .flatMap((item) => String(item || "").split(/\r?\n/))
     .map((item) => item.trim())
     .filter(Boolean);
 }
