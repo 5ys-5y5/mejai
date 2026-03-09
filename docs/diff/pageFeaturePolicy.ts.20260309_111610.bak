@@ -157,8 +157,6 @@ export type ConversationPageFeatures = {
     mcpActionSelector: boolean;
     /** 인라인 사용자 KB 입력 textarea 노출 */
     inlineUserKbInput: boolean;
-    /** 인라인 사용자 KB 입력 프리필 */
-    inlineUserKbPrefill: string;
     /** 기본 모드 */
     defaultSetupMode: "existing" | "new";
     /** 기본 LLM */
@@ -424,91 +422,17 @@ function normalizeThreePhaseLabels(
   };
 }
 
-const LINE_SPLIT_REGEX = /\\n|\r?\n/;
-
-function normalizeListInput(
-  value: unknown,
-  options: { splitOnComma?: boolean } = {}
-): string[] {
-  const splitRegex = options.splitOnComma ? /\\n|\r?\n|,/ : LINE_SPLIT_REGEX;
-  const raw = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
-  return raw
-    .flatMap((item) => String(item ?? "").split(splitRegex))
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
 function normalizePrefillMessages(value: unknown, fallback: string[]) {
   if (Array.isArray(value)) {
-    return value
-      .flatMap((item) => String(item ?? "").split(LINE_SPLIT_REGEX))
-      .map((item) => item.trim())
-      .filter(Boolean);
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
   }
   if (typeof value === "string") {
     return value
-      .split(LINE_SPLIT_REGEX)
+      .split(/\r?\n/)
       .map((item) => item.trim())
       .filter(Boolean);
   }
   return fallback;
-}
-
-function normalizeIdGateLists(gate?: IdGate): IdGate | undefined {
-  if (!gate) return gate;
-  const allowlist =
-    gate.allowlist === undefined ? undefined : normalizeListInput(gate.allowlist, { splitOnComma: true });
-  const denylist =
-    gate.denylist === undefined ? undefined : normalizeListInput(gate.denylist, { splitOnComma: true });
-  return {
-    ...gate,
-    ...(allowlist !== undefined ? { allowlist } : {}),
-    ...(denylist !== undefined ? { denylist } : {}),
-  };
-}
-
-function normalizePageOverrideLists(
-  page?: ConversationPageFeaturesOverride
-): ConversationPageFeaturesOverride | undefined {
-  if (!page) return page;
-  let nextInteraction = page.interaction;
-  if (page.interaction && page.interaction.prefillMessages !== undefined) {
-    const normalized = normalizePrefillMessages(page.interaction.prefillMessages, []);
-    nextInteraction = { ...page.interaction, prefillMessages: normalized };
-  }
-  let nextMcp = page.mcp;
-  if (page.mcp) {
-    const providers = normalizeIdGateLists(page.mcp.providers);
-    const tools = normalizeIdGateLists(page.mcp.tools);
-    nextMcp = {
-      ...page.mcp,
-      ...(providers ? { providers } : {}),
-      ...(tools ? { tools } : {}),
-    };
-  }
-  let nextSetup = page.setup;
-  if (page.setup) {
-    const llms = normalizeIdGateLists(page.setup.llms);
-    const kbIds = normalizeIdGateLists(page.setup.kbIds);
-    const adminKbIds = normalizeIdGateLists(page.setup.adminKbIds);
-    const routes = normalizeIdGateLists(page.setup.routes);
-    nextSetup = {
-      ...page.setup,
-      ...(llms ? { llms } : {}),
-      ...(kbIds ? { kbIds } : {}),
-      ...(adminKbIds ? { adminKbIds } : {}),
-      ...(routes ? { routes } : {}),
-    };
-  }
-  if (nextInteraction === page.interaction && nextMcp === page.mcp && nextSetup === page.setup) {
-    return page;
-  }
-  return {
-    ...page,
-    ...(nextInteraction ? { interaction: nextInteraction } : {}),
-    ...(nextMcp ? { mcp: nextMcp } : {}),
-    ...(nextSetup ? { setup: nextSetup } : {}),
-  };
 }
 
 function normalizeMcpSelectorLocation(
@@ -655,7 +579,6 @@ export function normalizeConversationFeatureProvider(
 
   if (nextProvider.features) {
     nextProvider.features = normalizeMcpSelectorLocation(nextProvider.features) || nextProvider.features;
-    nextProvider.features = normalizePageOverrideLists(nextProvider.features) || nextProvider.features;
   }
   if (nextProvider.pages) {
     const normalizedPages: Partial<Record<ConversationPageKey, ConversationPageFeaturesOverride>> = {
@@ -663,7 +586,6 @@ export function normalizeConversationFeatureProvider(
     };
     Object.keys(normalizedPages).forEach((key) => {
       normalizedPages[key] = normalizeMcpSelectorLocation(normalizedPages[key]);
-      normalizedPages[key] = normalizePageOverrideLists(normalizedPages[key]);
     });
     nextProvider.pages = normalizedPages;
   }
@@ -731,7 +653,6 @@ export function mergeConversationPageFeatures(
       mcpProviderSelector: override.setup?.mcpProviderSelector ?? base.setup.mcpProviderSelector,
       mcpActionSelector: override.setup?.mcpActionSelector ?? base.setup.mcpActionSelector,
       inlineUserKbInput: override.setup?.inlineUserKbInput ?? base.setup.inlineUserKbInput,
-      inlineUserKbPrefill: String(override.setup?.inlineUserKbPrefill ?? base.setup.inlineUserKbPrefill ?? ""),
       defaultSetupMode: override.setup?.defaultSetupMode ?? base.setup.defaultSetupMode,
       defaultLlm: override.setup?.defaultLlm ?? base.setup.defaultLlm,
     },
@@ -1314,7 +1235,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       mcpProviderSelector: true,
       mcpActionSelector: true,
       inlineUserKbInput: true,
-      inlineUserKbPrefill: "",
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
@@ -1454,7 +1374,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         mcpProviderSelector: true,
         mcpActionSelector: true,
         inlineUserKbInput: false,
-        inlineUserKbPrefill: "",
         defaultSetupMode: "existing",
         defaultLlm: "chatgpt",
     },
@@ -1595,7 +1514,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       mcpProviderSelector: true,
       mcpActionSelector: true,
       inlineUserKbInput: true,
-      inlineUserKbPrefill: "",
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
@@ -1736,7 +1654,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       mcpProviderSelector: true,
       mcpActionSelector: true,
       inlineUserKbInput: true,
-      inlineUserKbPrefill: "",
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },

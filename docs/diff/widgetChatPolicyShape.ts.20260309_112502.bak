@@ -1,6 +1,5 @@
 import {
   WIDGET_PAGE_KEY,
-  normalizeConversationFeatureProvider,
   type ConversationFeaturesProviderShape,
   type ConversationPageFeaturesOverride,
   type ExistingSetupFieldKey,
@@ -36,19 +35,6 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function normalizeWidgetListInput(value: unknown): string[] {
-  const raw = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
-  return raw
-    .flatMap((item) => String(item ?? "").split(/\\n|\r?\n|,/))
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function normalizeWidgetListIfPresent(value: unknown): string[] | undefined {
-  if (value === undefined || value === null) return undefined;
-  return normalizeWidgetListInput(value);
-}
-
 function normalizeWidgetPolicyWidgetFields(
   provider: ConversationFeaturesProviderShape | null
 ): ConversationFeaturesProviderShape | null {
@@ -62,54 +48,38 @@ function normalizeWidgetPolicyWidgetFields(
   const rootIframe = isPlainObject(base.iframe) ? { ...(base.iframe as Record<string, unknown>) } : null;
   const access = isPlainObject(widget.access) ? { ...(widget.access as Record<string, unknown>) } : {};
 
-  const baseAllowedDomains = normalizeWidgetListIfPresent(base.allowed_domains);
-  const baseAllowedPaths = normalizeWidgetListIfPresent(base.allowed_paths);
-  const widgetAllowedDomains = normalizeWidgetListIfPresent(widget.allowed_domains);
-  const widgetAllowedPaths = normalizeWidgetListIfPresent(widget.allowed_paths);
-  if (widgetAllowedDomains !== undefined) {
-    widget.allowed_domains = widgetAllowedDomains;
-  } else if (baseAllowedDomains !== undefined) {
-    widget.allowed_domains = baseAllowedDomains;
+  if (!Array.isArray(widget.allowed_domains) && Array.isArray(base.allowed_domains)) {
+    widget.allowed_domains = base.allowed_domains as unknown[];
   }
-  if (widgetAllowedPaths !== undefined) {
-    widget.allowed_paths = widgetAllowedPaths;
-  } else if (baseAllowedPaths !== undefined) {
-    widget.allowed_paths = baseAllowedPaths;
+  if (!Array.isArray(widget.allowed_paths) && Array.isArray(base.allowed_paths)) {
+    widget.allowed_paths = base.allowed_paths as unknown[];
   }
-  const accessAllowedDomains = normalizeWidgetListIfPresent(access.allowed_domains);
-  const accessAllowedPaths = normalizeWidgetListIfPresent(access.allowed_paths);
-  if (accessAllowedDomains !== undefined) {
-    access.allowed_domains = accessAllowedDomains;
-  } else if (widget.allowed_domains !== undefined) {
+  if (!Array.isArray(access.allowed_domains) && Array.isArray(widget.allowed_domains)) {
     access.allowed_domains = widget.allowed_domains;
   }
-  if (accessAllowedPaths !== undefined) {
-    access.allowed_paths = accessAllowedPaths;
-  } else if (widget.allowed_paths !== undefined) {
+  if (!Array.isArray(access.allowed_paths) && Array.isArray(widget.allowed_paths)) {
     access.allowed_paths = widget.allowed_paths;
   }
 
-  let setupConfig = isPlainObject(widget.setup_config)
+  const setupConfig = isPlainObject(widget.setup_config)
     ? { ...(widget.setup_config as Record<string, unknown>) }
     : null;
   if (!setupConfig && rootSetupConfig) {
-    setupConfig = { ...rootSetupConfig };
+    widget.setup_config = rootSetupConfig;
   }
-  const legacyAgentId =
-    typeof widget.agent_id === "string"
-      ? widget.agent_id
-      : typeof base.agent_id === "string"
-        ? base.agent_id
-        : null;
-  if (setupConfig) {
-    if (!Object.prototype.hasOwnProperty.call(setupConfig, "agent_id") && legacyAgentId) {
-      setupConfig.agent_id = legacyAgentId;
+  const hasSetupAgent = setupConfig
+    ? Object.prototype.hasOwnProperty.call(setupConfig, "agent_id")
+    : false;
+  if (setupConfig && hasSetupAgent) {
+    const nextAgentId = typeof setupConfig.agent_id === "string" ? setupConfig.agent_id : null;
+    widget.agent_id = nextAgentId;
+  } else {
+    if (!widget.agent_id && typeof base.agent_id === "string") {
+      widget.agent_id = base.agent_id;
     }
-  } else if (legacyAgentId) {
-    setupConfig = { agent_id: legacyAgentId };
-  }
-  if ("agent_id" in widget) {
-    delete (widget as { agent_id?: unknown }).agent_id;
+    if (setupConfig && typeof widget.agent_id === "string" && setupConfig.agent_id !== widget.agent_id) {
+      setupConfig.agent_id = widget.agent_id;
+    }
   }
   if (setupConfig) {
     const kbConfig = isPlainObject(setupConfig.kb) ? { ...(setupConfig.kb as Record<string, unknown>) } : {};
@@ -124,15 +94,6 @@ function normalizeWidgetPolicyWidgetFields(
       mcpConfig.tool_ids = base.mcp_tool_ids;
     }
     if (!llmConfig.default && typeof base.llm === "string") llmConfig.default = base.llm;
-    if (kbConfig.admin_kb_ids !== undefined) {
-      kbConfig.admin_kb_ids = normalizeWidgetListInput(kbConfig.admin_kb_ids);
-    }
-    if (mcpConfig.provider_keys !== undefined) {
-      mcpConfig.provider_keys = normalizeWidgetListInput(mcpConfig.provider_keys);
-    }
-    if (mcpConfig.tool_ids !== undefined) {
-      mcpConfig.tool_ids = normalizeWidgetListInput(mcpConfig.tool_ids);
-    }
     if (Object.keys(kbConfig).length > 0) setupConfig.kb = kbConfig;
     if (Object.keys(mcpConfig).length > 0) setupConfig.mcp = mcpConfig;
     if (Object.keys(llmConfig).length > 0) setupConfig.llm = llmConfig;
@@ -142,18 +103,6 @@ function normalizeWidgetPolicyWidgetFields(
   }
   if (!widget.theme && rootTheme) {
     widget.theme = rootTheme;
-  }
-  if (isPlainObject(widget.theme)) {
-    const theme = { ...(widget.theme as Record<string, unknown>) };
-    const allowedAccountsValue =
-      theme.allowed_accounts !== undefined ? theme.allowed_accounts : (theme.allowedAccounts as unknown);
-    if (allowedAccountsValue !== undefined) {
-      theme.allowed_accounts = normalizeWidgetListInput(allowedAccountsValue);
-    }
-    if ("allowedAccounts" in theme) {
-      delete (theme as { allowedAccounts?: unknown }).allowedAccounts;
-    }
-    widget.theme = theme;
   }
   if (!widget.cfg && rootCfg) {
     widget.cfg = rootCfg;
@@ -300,10 +249,7 @@ export function normalizeWidgetChatPolicyRecord(input: unknown): WidgetChatPolic
 
 export function normalizeWidgetChatPolicyProvider(input: unknown): ConversationFeaturesProviderShape | null {
   if (!input) return null;
-  if (isProviderShape(input)) {
-    const normalizedWidget = normalizeWidgetPolicyWidgetFields(input as ConversationFeaturesProviderShape);
-    return normalizeConversationFeatureProvider(normalizedWidget) ?? normalizedWidget;
-  }
+  if (isProviderShape(input)) return normalizeWidgetPolicyWidgetFields(input as ConversationFeaturesProviderShape);
   const record = normalizeWidgetChatPolicyRecord(input);
   if (!record) return null;
   const pageOverride = record.features ?? record.page;
@@ -320,8 +266,7 @@ export function normalizeWidgetChatPolicyProvider(input: unknown): ConversationF
     ...(debugCopy ? { debug_copy: debugCopy } : {}),
     ...(setupFields ? { settings_ui: { setup_fields: setupFields } } : {}),
   };
-  const normalizedWidget = normalizeWidgetPolicyWidgetFields(provider);
-  return normalizeConversationFeatureProvider(normalizedWidget) ?? normalizedWidget;
+  return normalizeWidgetPolicyWidgetFields(provider);
 }
 
 export function normalizeWidgetChatPolicyRecordFromProvider(input: unknown): WidgetChatPolicyRecord | null {

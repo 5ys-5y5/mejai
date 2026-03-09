@@ -364,7 +364,6 @@
 1. `theme.greeting`/`theme.input_placeholder`와 `interaction.inputPlaceholder`/`interaction.prefillMessages`가 동일 기능이면 interaction으로 일원화한다.
 2. `interaction.prefillMessages`는 줄바꿈 기준으로 배열 요소가 되도록 파싱/저장 로직을 수정한다.
 3. `setup.mcpProviderSelector`/`setup.mcpActionSelector` 경로 정합화는 기존 계획대로 진행한다.
-4. `setup.kbMode=입력`일 때 `setup.inlineUserKbPrefill`을 정책 패널에서 설정하고, 위젯에서 사용자 입력 없이도 대화 가능하도록 프리필을 적용한다(프리필 제거 시 KB 미연결이면 대화 불가).
 
 ### 2. 변경 기록 및 롤백 보장
 - 코드 수정이 있는 경우, 수정 직전의 코드를 반드시 C:\dev\1227\mejai3\mejai\docs\diff 폴더에 기록한다.
@@ -425,8 +424,6 @@
 - setup.agent_id “선택 안 함” 저장 불가 원인 확인 및 수정 (commitDraft setup_config 유지)
 - chrome-devtools로 setup.agent_id “선택 안 함” 저장 동작 재검증 (2026-03-09)
 - supabase MCP로 setup.agent_id 저장 값 null 반영 확인 (2026-03-09)
-- chrome-devtools로 setup.kbMode=입력 전환 및 setup.inlineUserKbPrefill 입력/저장 확인 (2026-03-09)
-- supabase MCP로 setup.inlineUserKbPrefill 저장 반영 확인 (2026-03-09)
 - `npm run build` 성공 (2026-03-09, setup.agent_id 저장 로직 수정 반영)
 - chrome-devtools로 interaction.inputPlaceholder / interaction.prefillMessages 입력 UI 노출 확인 (2026-03-09)
 - chrome-devtools로 setup.kbMode “선택” 전환 후 kbIds 선택 가능 확인 (2026-03-09)
@@ -507,10 +504,6 @@
 - 2026-03-09: chrome-devtools MCP로 `c9ab5088-1d28-4f7f-88f4-01c46fa9ddfc` 템플릿 선택 후 텍스트/멀티 선택값 입력 및 저장.
 - 2026-03-09: supabase MCP로 `B_chat_widgets` 조회 성공(대소문자 테이블명 쿼리 수정 필요 확인).
 - 2026-03-09: supabase MCP 결과 기준으로 prefillMessages/allowlist/denylist 줄바꿈 분리 미반영, llms/kbIds/adminKbIds/routes 일부 저장 누락 확인.
-- 2026-03-09: chrome-devtools MCP로 setup.llms(chatgpt+gemini), setup.kbIds(재입고/테스트/전체 정책-1 3개), setup.routes(Core Runtime) 선택 후 저장 시도. setup.adminKbIds 모달 미노출 확인.
-- 2026-03-09: supabase MCP로 setup.llms allowlist 2개 저장 확인, setup.kbIds allowlist 2개만 저장 확인, setup.routes allowlist "shipping" 저장(선택값 불일치) 확인.
-- 2026-03-09: chrome-devtools MCP로 setup.kbMode=입력 전환, setup.inlineUserKbPrefill 2줄 입력 후 저장.
-- 2026-03-09: supabase MCP로 setup.inlineUserKbPrefill 저장 반영 확인(줄바꿈 포함).
 
 ## 입력 저장 체크리스트 (2026-03-09)
 
@@ -518,13 +511,12 @@
 | --- | --- | --- | --- | --- |
 | setup.defaultSetupMode | 단일 선택 | new | OK | `chat_policy.pages./embed.setup.defaultSetupMode = "new"` |
 | setup.defaultLlm | 단일 선택 | gemini | OK | `chat_policy.pages./embed.setup.defaultLlm = "gemini"` |
-| setup.llms | 다중 선택 | chatgpt + gemini | OK | `chat_policy.pages./embed.setup.llms.allowlist = ["gemini","chatgpt"]` |
-| setup.routes | 다중 선택 | Core Runtime | OK | 라벨 “Core Runtime” → id `shipping` 저장은 정상 |
+| setup.llms | 다중 선택 | gemini | NG | 선택 후에도 `chat_policy.pages./embed.setup.llms`가 `{}` 유지 |
+| setup.routes | 다중 선택 | 시도(옵션 미노출) | N/A | 선택 옵션 미노출 |
 | setup.agent_id | 선택 안 함 | null | OK | `chat_policy.widget.setup_config.agent_id = null` |
-| setup.kbMode | 단일 선택 | 입력 | OK | `kbSelector=false`, `inlineUserKbInput=true` 반영 |
-| setup.kbIds | 다중 선택 | 재입고/테스트/전체 정책-1 (3개) | NG | DB allowlist 2개만 저장됨 |
-| setup.adminKbIds | 다중 선택 | (모달 미노출) | N/A | 클릭해도 옵션 모달 미노출(커머스 공통 유지) |
-| setup.inlineUserKbPrefill | 텍스트 입력(멀티라인) | 프리필 KB 내용 테스트 / 두번째 줄 | OK | `chat_policy.pages./embed.setup.inlineUserKbPrefill` 반영 |
+| setup.kbMode | 단일 선택 | 선택 | NG | 저장 후 `kbSelector=false`, `inlineUserKbInput=true` 유지(선택 모드 반영 실패) |
+| setup.kbIds | 다중 선택 | 재입고 | NG | 선택 후에도 `chat_policy.pages./embed.setup.kbIds`가 `{}` 유지 |
+| setup.adminKbIds | 다중 선택 | (옵션 없음) | N/A | 옵션 목록 확인 필요 |
 | visibility (전체) | 단일 선택(일괄) | user | OK | visibility 전 항목 user 저장 확인 |
 | setup.mcpProviderSelector | 토글 | OFF | OK | 일괄 OFF 적용 후 DB false 확인 |
 | setup.mcpActionSelector | 토글 | OFF | OK | 일괄 OFF 적용 후 DB false 확인 |
@@ -609,11 +601,6 @@
   - interaction.prefillMessages: 줄바꿈 입력했으나 DB에는 `["라인1라인2"]` 저장.
   - widget.access.allowed_domains/allowed_paths, theme.allowed_accounts, allowDeny.*: 줄바꿈 입력했으나 DB에는 문자열 합쳐져 저장.
 - 2026-03-09: `npm run build` 성공 (setup.agent_id 저장 로직 수정 반영).
-- 2026-03-09: 추가 재검증 결과
-  - setup.llms: chatgpt+gemini 선택 → DB allowlist 2개 저장 OK.
-  - setup.kbIds: 3개 선택 → DB allowlist 2개만 저장 (NG).
-  - setup.adminKbIds: 모달 미노출로 선택 테스트 불가.
-  - setup.routes: Core Runtime 선택 → DB allowlist "shipping" 저장 (불일치, NG).
 
 ## 추가 문제 상세 (2026-03-08)
 
@@ -724,3 +711,4 @@
 ### 해결 계획
 - fillWithNulls가 target에 존재하는 키(allowlist/denylist 등)를 보존하도록 로직 수정.
 - 수정 대상: `src/lib/widgetPolicyUtils.ts` (화이트리스트 추가 필요)
+

@@ -211,7 +211,7 @@ export function ChatSettingsPanel({
   const commitDraft = useCallback(
     (nextDraft: DraftState) => {
       const base = providerRef.current || {};
-      const nextWidget = normalizeWidgetListsForSave(nextDraft.widget);
+      const nextWidget = nextDraft.widget;
       if (pageKey === WIDGET_PAGE_KEY && nextWidget && "agent_id" in nextWidget) {
         delete (nextWidget as WidgetChatPolicyConfig).agent_id;
       }
@@ -1689,23 +1689,6 @@ export function ChatSettingsPanel({
                     />
                   }
                 />
-                {isKbSelectMode ? null : (
-                  <Row
-                    label="setup.inlineUserKbPrefill"
-                    alignTop
-                    right={
-                      <textarea
-                        value={String(features.setup.inlineUserKbPrefill || "")}
-                        onChange={(event) =>
-                          updateFeatures(["setup", "inlineUserKbPrefill"], event.target.value)
-                        }
-                        disabled={isSetupAgentSelected}
-                        className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        placeholder="인라인 KB 프리필"
-                      />
-                    }
-                  />
-                )}
                   <Row
                     label="setup.llms"
                     right={
@@ -1841,15 +1824,10 @@ function setBooleanMap(current: BooleanMap | undefined, key: string, next: boole
 }
 
 function parseLines(value: string) {
-  const hasTrailingNewline = /\r?\n$/.test(value);
-  const items = value
+  return value
     .split(/\r?\n/)
     .map((item) => item.trim())
     .filter(Boolean);
-  if (hasTrailingNewline) {
-    items.push("");
-  }
-  return items;
 }
 
 function normalizePrefillMessagesInput(value: unknown): string[] {
@@ -1889,67 +1867,10 @@ function parseCsv(value: string) {
 }
 
 function parseLinesAndComma(value: string) {
-  const hasTrailingNewline = /\r?\n$/.test(value);
-  const items = value
+  return value
     .split(/\r?\n|,/)
     .map((item) => item.trim())
     .filter(Boolean);
-  if (hasTrailingNewline) {
-    items.push("");
-  }
-  return items;
-}
-
-function normalizeListForSave(value: unknown): string[] {
-  const raw = Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
-  return raw
-    .flatMap((item) => String(item ?? "").split(/\r?\n|,/))
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function normalizeWidgetListsForSave(widget: WidgetChatPolicyConfig | null | undefined) {
-  if (!widget || !isObject(widget)) return widget;
-  const nextWidget: WidgetChatPolicyConfig = { ...widget };
-  if (isObject(nextWidget.access)) {
-    const access = { ...(nextWidget.access as Record<string, unknown>) };
-    if ("allowed_domains" in access) {
-      access.allowed_domains = normalizeListForSave(access.allowed_domains);
-    }
-    if ("allowed_paths" in access) {
-      access.allowed_paths = normalizeListForSave(access.allowed_paths);
-    }
-    nextWidget.access = access as WidgetChatPolicyConfig["access"];
-  }
-  if (isObject(nextWidget.theme)) {
-    const theme = { ...(nextWidget.theme as Record<string, unknown>) };
-    if ("allowed_accounts" in theme) {
-      theme.allowed_accounts = normalizeListForSave(theme.allowed_accounts);
-    }
-    nextWidget.theme = theme as WidgetChatPolicyConfig["theme"];
-  }
-  if (isObject(nextWidget.setup_config)) {
-    const setupConfig = { ...(nextWidget.setup_config as Record<string, unknown>) };
-    if (isObject(setupConfig.kb)) {
-      const kb = { ...(setupConfig.kb as Record<string, unknown>) };
-      if ("admin_kb_ids" in kb) {
-        kb.admin_kb_ids = normalizeListForSave(kb.admin_kb_ids);
-      }
-      setupConfig.kb = kb;
-    }
-    if (isObject(setupConfig.mcp)) {
-      const mcp = { ...(setupConfig.mcp as Record<string, unknown>) };
-      if ("provider_keys" in mcp) {
-        mcp.provider_keys = normalizeListForSave(mcp.provider_keys);
-      }
-      if ("tool_ids" in mcp) {
-        mcp.tool_ids = normalizeListForSave(mcp.tool_ids);
-      }
-      setupConfig.mcp = mcp;
-    }
-    nextWidget.setup_config = setupConfig as WidgetChatPolicyConfig["setup_config"];
-  }
-  return nextWidget;
 }
 
 function formatLines(values: string[] | undefined) {

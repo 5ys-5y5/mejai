@@ -157,8 +157,6 @@ export type ConversationPageFeatures = {
     mcpActionSelector: boolean;
     /** 인라인 사용자 KB 입력 textarea 노출 */
     inlineUserKbInput: boolean;
-    /** 인라인 사용자 KB 입력 프리필 */
-    inlineUserKbPrefill: string;
     /** 기본 모드 */
     defaultSetupMode: "existing" | "new";
     /** 기본 LLM */
@@ -731,7 +729,6 @@ export function mergeConversationPageFeatures(
       mcpProviderSelector: override.setup?.mcpProviderSelector ?? base.setup.mcpProviderSelector,
       mcpActionSelector: override.setup?.mcpActionSelector ?? base.setup.mcpActionSelector,
       inlineUserKbInput: override.setup?.inlineUserKbInput ?? base.setup.inlineUserKbInput,
-      inlineUserKbPrefill: String(override.setup?.inlineUserKbPrefill ?? base.setup.inlineUserKbPrefill ?? ""),
       defaultSetupMode: override.setup?.defaultSetupMode ?? base.setup.defaultSetupMode,
       defaultLlm: override.setup?.defaultLlm ?? base.setup.defaultLlm,
     },
@@ -1314,7 +1311,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       mcpProviderSelector: true,
       mcpActionSelector: true,
       inlineUserKbInput: true,
-      inlineUserKbPrefill: "",
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
@@ -1454,7 +1450,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
         mcpProviderSelector: true,
         mcpActionSelector: true,
         inlineUserKbInput: false,
-        inlineUserKbPrefill: "",
         defaultSetupMode: "existing",
         defaultLlm: "chatgpt",
     },
@@ -1595,7 +1590,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       mcpProviderSelector: true,
       mcpActionSelector: true,
       inlineUserKbInput: true,
-      inlineUserKbPrefill: "",
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },
@@ -1736,7 +1730,6 @@ export const PAGE_CONVERSATION_FEATURES: Record<string, ConversationPageFeatures
       mcpProviderSelector: true,
       mcpActionSelector: true,
       inlineUserKbInput: true,
-      inlineUserKbPrefill: "",
       defaultSetupMode: "new",
       defaultLlm: "chatgpt",
     },

@@ -260,7 +260,6 @@ export function MultiSelectPopover({
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
   const hasOptions = options.length > 0;
-  const valuesRef = useRef(values);
   const setOpen = useCallback(
     (next: boolean) => {
       if (onOpenChange) {
@@ -346,10 +345,6 @@ export function MultiSelectPopover({
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    valuesRef.current = values;
-  }, [values]);
-
   const updatePanelPosition = useCallback(() => {
     if (!open) return;
     const anchor = buttonRef.current;
@@ -385,13 +380,11 @@ export function MultiSelectPopover({
         key={option.id}
         type="button"
         onClick={() => {
-          const currentValues = valuesRef.current;
-          const isActive = currentValues.includes(option.id);
-          const nextValues = isActive
-            ? currentValues.filter((v) => v !== option.id)
-            : [...currentValues, option.id];
-          valuesRef.current = nextValues;
-          onChange(nextValues);
+          if (active) {
+            onChange(values.filter((v) => v !== option.id));
+          } else {
+            onChange([...values, option.id]);
+          }
         }}
         className={cn(
           "h-8 w-full rounded-xl px-3 text-sm flex items-center justify-between",

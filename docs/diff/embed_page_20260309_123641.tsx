@@ -482,7 +482,6 @@ export default function WidgetEmbedPage() {
   const [loginPhaseIndex, setLoginPhaseIndex] = useState(0);
   const [loginPolicyChars, setLoginPolicyChars] = useState(0);
   const loginTimerRef = useRef<number | null>(null);
-  const inlineKbPrefillAppliedRef = useRef(false);
   const loginPhase = LOGIN_PHASES[loginPhaseIndex] ?? "policy_typing";
   const initialTabAppliedRef = useRef(false);
   const loginPolicyValue = useMemo(
@@ -679,25 +678,6 @@ export default function WidgetEmbedPage() {
       return { ...prev, llm: String(fallback.id) };
     });
   }, [llmOptions, baseFeatures.setup.defaultLlm]);
-
-  useEffect(() => {
-    if (!baseFeatures.setup.inlineUserKbInput || baseFeatures.setup.kbSelector) {
-      inlineKbPrefillAppliedRef.current = false;
-      return;
-    }
-    const prefill = String(baseFeatures.setup.inlineUserKbPrefill || "").trim();
-    if (!prefill) return;
-    setPolicyConfig((prev) => {
-      if (inlineKbPrefillAppliedRef.current) return prev;
-      inlineKbPrefillAppliedRef.current = true;
-      if (prev.inlineKb && prev.inlineKb.trim().length > 0) return prev;
-      return { ...prev, inlineKb: prefill };
-    });
-  }, [
-    baseFeatures.setup.inlineUserKbInput,
-    baseFeatures.setup.kbSelector,
-    baseFeatures.setup.inlineUserKbPrefill,
-  ]);
 
   const theme = (config?.theme || {}) as Record<string, any>;
   const brandName = String(config?.name || "Mejai");

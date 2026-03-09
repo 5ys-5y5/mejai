@@ -381,10 +381,7 @@ export default function ConversationWidgetPage() {
     policySyncRef.current = true;
     const theme = getPolicyWidgetTheme(policyValue);
     const access = getPolicyWidgetAccess(policyValue);
-    const agentId =
-      typeof policyValue.widget?.setup_config?.agent_id === "string"
-        ? policyValue.widget.setup_config.agent_id
-        : null;
+    const agentId = typeof policyValue.widget?.agent_id === "string" ? policyValue.widget.agent_id : null;
     const nextTheme = theme || {};
     const nextDomainText = (access.allowed_domains || []).join("\n");
     const nextPathText = (access.allowed_paths || []).join("\n");

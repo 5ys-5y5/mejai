@@ -1689,23 +1689,6 @@ export function ChatSettingsPanel({
                     />
                   }
                 />
-                {isKbSelectMode ? null : (
-                  <Row
-                    label="setup.inlineUserKbPrefill"
-                    alignTop
-                    right={
-                      <textarea
-                        value={String(features.setup.inlineUserKbPrefill || "")}
-                        onChange={(event) =>
-                          updateFeatures(["setup", "inlineUserKbPrefill"], event.target.value)
-                        }
-                        disabled={isSetupAgentSelected}
-                        className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                        placeholder="인라인 KB 프리필"
-                      />
-                    }
-                  />
-                )}
                   <Row
                     label="setup.llms"
                     right={
