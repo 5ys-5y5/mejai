@@ -2,33 +2,78 @@
 
 import { useEffect, useState } from "react";
 
+type PublicWidgetItem = {
+  id: string;
+  name?: string | null;
+  widget_id?: string | null;
+  public_key: string;
+};
+
+type PublicWidgetResponse = {
+  item?: PublicWidgetItem | null;
+  error?: string | null;
+};
+
 const HOME_POLICY_CONTAINER_ID = "home-widget-policy";
 const HOME_CHAT_CONTAINER_ID = "home-widget-chat";
-const WIDGET_TEMPLATE_ID = "fc12cdac-357a-462d-9437-71d03861aadd";
-const WIDGET_TEMPLATE_PUBLIC_KEY = "mw_pk_b94f0ff55ef60440be8385dca71708c7";
 
 export function HomeWidgetInstallBox() {
+  const [widget, setWidget] = useState<PublicWidgetItem | null>(null);
   const [error, setError] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const hasConfig = Boolean(WIDGET_TEMPLATE_ID && WIDGET_TEMPLATE_PUBLIC_KEY);
 
   useEffect(() => {
-    if (!hasConfig) {
-      setError("WIDGET_CONFIG_MISSING");
-      setLoading(false);
-      return;
-    }
+    let active = true;
+    setLoading(true);
+    fetch(`/api/public-widgets?widget_id=c9ab5088-1d28-4f7f-88f4-01c46fa9ddfc`)
+      .then((res) =>
+        res
+          .json()
+          .then((data) => ({ ok: res.ok, data }))
+          .catch(() => ({ ok: res.ok, data: {} }))
+      )
+      .then(({ ok, data }) => {
+        if (!active) return;
+        if (!ok) {
+          setError(String((data as PublicWidgetResponse)?.error || "WIDGET_LOAD_FAILED"));
+          setWidget(null);
+          setLoading(false);
+          return;
+        }
+        const item = (data as PublicWidgetResponse)?.item || null;
+        if (!item || !item.public_key) {
+          setError("WIDGET_NOT_FOUND");
+          setWidget(null);
+          setLoading(false);
+          return;
+        }
+        setWidget(item);
+        setError("");
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setError("WIDGET_LOAD_FAILED");
+        setWidget(null);
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const widgetId = widget?.widget_id || widget?.id || "";
+  useEffect(() => {
     if (typeof window === "undefined") return;
-    if (error) return;
-    setLoading(false);
+    if (!widget?.public_key || !widgetId || error) return;
 
     const origin = window.location.origin;
     const pageUrl = window.location.href;
     const referrer = document.referrer || "";
 
     const baseConfig = {
-      widget_id: WIDGET_TEMPLATE_ID,
-      public_key: WIDGET_TEMPLATE_PUBLIC_KEY,
+      widget_id: widgetId,
+      public_key: widget.public_key,
       entry_mode: "embed",
       preview: true,
       preview_meta: {
@@ -66,7 +111,7 @@ export function HomeWidgetInstallBox() {
       script.setAttribute("data-mejai-widget-loader", "1");
       document.body.appendChild(script);
     }
-  }, [error, hasConfig]);
+  }, [widget?.public_key, widgetId, error]);
 
   return (
     <div className="container mx-auto w-full max-w-6xl px-6">

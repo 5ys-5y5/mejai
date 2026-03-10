@@ -8,9 +8,31 @@ import { LoginForm } from "@/components/LoginForm";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 const WIDGET_TEMPLATE_ID = "c9ab5088-1d28-4f7f-88f4-01c46fa9ddfc";
-const WIDGET_TEMPLATE_PUBLIC_KEY = "mw_pk_259a616db581a5f66d4aa2f9cd14e322";
-const LOGIN_POLICY_CONTAINER_ID = "login-widget-policy";
-const LOGIN_CHAT_CONTAINER_ID = "login-widget-chat";
+const WIDGET_TEMPLATE_PUBLIC_KEY = String(process.env.NEXT_PUBLIC_LOGIN_WIDGET_PUBLIC_KEY || "").trim();
+const WIDGET_BASE_SRC = `/embed/widget_id=${WIDGET_TEMPLATE_ID}`;
+
+function buildWidgetUrl(extraParams?: Record<string, string>) {
+  const base = WIDGET_BASE_SRC;
+  if (typeof window === "undefined") return base;
+  const search = new URLSearchParams();
+  if (WIDGET_TEMPLATE_PUBLIC_KEY) {
+    search.set("public_key", WIDGET_TEMPLATE_PUBLIC_KEY);
+  }
+  search.set("origin", window.location.origin);
+  search.set("page_url", window.location.href);
+  const preview = window.location.search
+    ? new URLSearchParams(window.location.search).get("preview")
+    : null;
+  const tab = window.location.search ? new URLSearchParams(window.location.search).get("tab") : null;
+  if (preview) search.set("preview", preview);
+  if (tab) search.set("tab", tab);
+  if (extraParams) {
+    Object.entries(extraParams).forEach(([key, value]) => {
+      search.set(key, value);
+    });
+  }
+  return `${base}?${search.toString()}`;
+}
 
 export default function LoginClient() {
   const router = useRouter();
@@ -19,6 +41,8 @@ export default function LoginClient() {
   const [pw, setPw] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [widgetSrc, setWidgetSrc] = useState(WIDGET_BASE_SRC);
+  const [policyWidgetSrc, setPolicyWidgetSrc] = useState(WIDGET_BASE_SRC);
   const isEmbed = searchParams?.get("embed") === "1";
   const [from] = useState(() => {
     if (typeof window === "undefined") return "/app";
@@ -27,55 +51,12 @@ export default function LoginClient() {
   });
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!WIDGET_TEMPLATE_PUBLIC_KEY) return;
-    const params = new URLSearchParams(window.location.search || "");
-    const preview = params.get("preview") === "1";
-    const tabOverride = params.get("tab") || "";
-    const origin = window.location.origin;
-    const pageUrl = window.location.href;
-    const referrer = document.referrer || "";
-
-    const baseConfig = {
-      widget_id: WIDGET_TEMPLATE_ID,
-      public_key: WIDGET_TEMPLATE_PUBLIC_KEY,
-      entry_mode: "embed",
-      preview,
-      preview_meta: {
-        origin,
-        page_url: pageUrl,
-        referrer,
-      },
-    };
-
-    const configs = [
-      {
-        ...baseConfig,
-        tab: tabOverride || "policy",
-        mount_target: `#${LOGIN_POLICY_CONTAINER_ID}`,
-      },
-      {
-        ...baseConfig,
-        tab: tabOverride || "chat",
-        mount_target: `#${LOGIN_CHAT_CONTAINER_ID}`,
-      },
-    ];
-
-    const scopedWindow = window as Window & { mejaiWidget?: unknown; __mejaiWidgetMount?: (input?: unknown) => void };
-    scopedWindow.mejaiWidget = configs;
-
-    if (typeof scopedWindow.__mejaiWidgetMount === "function") {
-      scopedWindow.__mejaiWidgetMount(configs);
-      return;
-    }
-
-    if (!document.querySelector('script[data-mejai-widget-loader="1"]')) {
-      const script = document.createElement("script");
-      script.async = true;
-      script.src = "/widget.js";
-      script.setAttribute("data-mejai-widget-loader", "1");
-      document.body.appendChild(script);
-    }
+    setWidgetSrc(buildWidgetUrl());
+    setPolicyWidgetSrc(
+      buildWidgetUrl({
+        tab: "policy",
+      })
+    );
   }, []);
 
   const handleLogin = async () => {
@@ -124,15 +105,21 @@ export default function LoginClient() {
             />
           </div>
           <div className="mt-6 flex w-full flex-col gap-4">
-            <div
-              id={LOGIN_POLICY_CONTAINER_ID}
-              className="w-full overflow-hidden"
-              style={{ height: 210 }}
+            <iframe
+              title="Login widget (policy)"
+              src={policyWidgetSrc}
+              className="w-full border-0"
+              style={{ height: 210, overflow: "hidden" }}
+              scrolling="no"
+              allow="clipboard-read; clipboard-write"
             />
-            <div
-              id={LOGIN_CHAT_CONTAINER_ID}
-              className="w-full overflow-hidden"
-              style={{ height: 300 }}
+            <iframe
+              title="Login widget"
+              src={widgetSrc}
+              className="w-full border-0"
+              style={{ height: 300, overflow: "hidden" }}
+              scrolling="no"
+              allow="clipboard-read; clipboard-write"
             />
           </div>
         </div>
@@ -151,17 +138,23 @@ export default function LoginClient() {
       afterContent={
         <div className="flex w-full flex-col -space-y-[30px] overflow-hidden rounded-2xl border border-slate-200">
           <div className="w-full overflow-hidden">
-            <div
-              id={LOGIN_POLICY_CONTAINER_ID}
+            <iframe
+              title="Login widget (policy)"
+              src={policyWidgetSrc}
               className="w-full overflow-hidden"
-              style={{ height: 210 }}
+              style={{ height: 210, overflow: "hidden" }}
+              scrolling="no"
+              allow="clipboard-read; clipboard-write"
             />
           </div>
           <div className="w-full overflow-hidden">
-            <div
-              id={LOGIN_CHAT_CONTAINER_ID}
+            <iframe
+              title="Login widget"
+              src={widgetSrc}
               className="w-full overflow-hidden"
-              style={{ height: 300 }}
+              style={{ height: 300, overflow: "hidden" }}
+              scrolling="no"
+              allow="clipboard-read; clipboard-write"
             />
           </div>
         </div>

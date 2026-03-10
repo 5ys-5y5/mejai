@@ -28,7 +28,6 @@ if (globalScope && typeof globalScope.process === "undefined") {
 // ------------------------------------------------------------
 export type WidgetLauncherPosition = "bottom-right" | "bottom-left";
 export type WidgetConversationTab = "chat" | "list" | "policy" | "login";
-export type WidgetLauncherEntryMode = "launcher" | "embed";
 
 export type WidgetLauncherContainerProps = {
   children?: ReactNode;
@@ -44,8 +43,6 @@ export type WidgetLauncherContainerProps = {
   gap?: string;
   className?: string;
   style?: CSSProperties;
-  applyMountStyles?: boolean;
-  applyMountClassName?: boolean;
 };
 
 export type WidgetShellProps = {
@@ -80,8 +77,6 @@ export function WidgetLauncherContainer({
   gap = "12px",
   className,
   style,
-  applyMountStyles = true,
-  applyMountClassName = true,
 }: WidgetLauncherContainerProps) {
   const resolvedStyle = useMemo<CSSProperties>(() => {
     return {
@@ -107,17 +102,15 @@ export function WidgetLauncherContainer({
       mountTo.id = containerId;
     }
     mountTo.setAttribute("panel-lego", "WidgetLauncherContainer");
-    if (className && applyMountClassName) {
+    if (className) {
       mountTo.className = className;
     }
-    if (applyMountStyles) {
-      Object.entries(resolvedStyle).forEach(([key, value]) => {
-        if (value === undefined || value === null) return;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (mountTo.style as any)[key] = value;
-      });
-    }
-  }, [mountTo, containerId, className, resolvedStyle, applyMountStyles, applyMountClassName]);
+    Object.entries(resolvedStyle).forEach(([key, value]) => {
+      if (value === undefined || value === null) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (mountTo.style as any)[key] = value;
+    });
+  }, [mountTo, containerId, className, resolvedStyle]);
 
   if (mountTo) {
     return <>{children}</>;
@@ -357,8 +350,7 @@ export function WidgetLauncherIframe({
 
 type WidgetLauncherWindow = Window & {
   __mejaiWidgetLoaded?: boolean;
-  __mejaiWidgetMount?: (input?: unknown) => void;
-  mejaiWidget?: Record<string, any> | Array<Record<string, any>>;
+  mejaiWidget?: Record<string, any>;
 };
 
 export type WidgetLauncherRuntimeConfig = {
@@ -376,8 +368,6 @@ export type WidgetLauncherRuntimeConfig = {
   brandName: string;
   launcherLabel: string;
   mountNode: HTMLElement;
-  entryMode?: WidgetLauncherEntryMode;
-  tab?: WidgetConversationTab;
   previewMode?: boolean;
   previewMeta?: {
     origin?: string;
@@ -509,8 +499,6 @@ export function WidgetLauncherRuntime({
   brandName,
   launcherLabel,
   mountNode,
-  entryMode,
-  tab,
   previewMode,
   previewMeta,
   defaultOpen = false,
@@ -527,15 +515,10 @@ export function WidgetLauncherRuntime({
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const sessionIdRef = useRef(sessionId);
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  const isEmbedMode = entryMode === "embed";
   const [isMobile, setIsMobile] = useState(false);
   const [themeConfig, setThemeConfig] = useState<Record<string, any>>({});
   const [resolvedName, setResolvedName] = useState(brandName);
   const viewportRafRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    cfgRef.current = cfg;
-  }, [cfg]);
 
   const resolvedIconUrl = useMemo(
     () => resolveLauncherIcon(cfgRef.current, themeConfig, baseUrl),
@@ -567,7 +550,7 @@ export function WidgetLauncherRuntime({
 
   const iframeSrc = useMemo(
     () =>
-      buildWidgetEmbedSrc(baseUrl, embedTarget, visitorId, sessionIdRef.current, overridesParam, previewMeta, tab, {
+      buildWidgetEmbedSrc(baseUrl, embedTarget, visitorId, sessionIdRef.current, overridesParam, previewMeta, undefined, {
         preview: previewMode,
       }),
     [
@@ -578,7 +561,6 @@ export function WidgetLauncherRuntime({
       previewMeta?.origin,
       previewMeta?.page_url,
       previewMeta?.referrer,
-      tab,
       previewMode,
     ]
   );
@@ -608,7 +590,7 @@ export function WidgetLauncherRuntime({
 
   const handleToggle = () => {
     onLauncherClick?.();
-    if (disableToggle || isEmbedMode) return;
+    if (disableToggle) return;
     setIsOpen((prev) => {
       const next = !prev;
       notify(next ? "open" : "close");
@@ -682,15 +664,6 @@ export function WidgetLauncherRuntime({
     media.addListener(handleChange);
     return () => media.removeListener(handleChange);
   }, []);
-
-  useEffect(() => {
-    if (!isEmbedMode) return;
-    if (typeof window === "undefined" || !mountNode) return;
-    const computed = window.getComputedStyle(mountNode);
-    if (!computed || computed.position === "static") {
-      mountNode.style.position = "relative";
-    }
-  }, [isEmbedMode, mountNode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -793,59 +766,44 @@ export function WidgetLauncherRuntime({
   const launcherBottom = isMobile ? "calc(16px + env(safe-area-inset-bottom))" : "24px";
   const launcherRight = isMobile ? "calc(16px + env(safe-area-inset-right))" : "24px";
   const launcherLeft = isMobile ? "calc(16px + env(safe-area-inset-left))" : "24px";
-  const showLauncher = !isEmbedMode;
-  const resolvedOpen = isEmbedMode ? true : isOpen;
-  const iframeLayout = isEmbedMode ? "absolute" : isMobile ? "fixed" : "absolute";
-  const iframeWidth = isEmbedMode ? "100%" : undefined;
-  const iframeHeight = isEmbedMode ? "100%" : undefined;
-  const iframeBorderRadius = isEmbedMode ? "inherit" : undefined;
-  const iframeBoxShadow = isEmbedMode ? "none" : undefined;
-  const iframeBackground = isEmbedMode ? "transparent" : undefined;
-  const iframeStyle = isEmbedMode
-    ? { top: "0", left: "0", right: "0", bottom: "0" }
-    : isMobile
-      ? {
-        top: "var(--mejai-vv-offset-top, 0px)",
-        left: "0",
-        right: "0",
-      }
-      : undefined;
 
   return (
     <WidgetLauncherContainer
       mountTo={mountNode}
       position={position}
-      layout={isEmbedMode ? "absolute" : layout}
-      stack={showLauncher}
-      bottom={isEmbedMode ? "0" : bottom || launcherBottom}
-      right={isEmbedMode ? "0" : right || launcherRight}
-      left={isEmbedMode ? "0" : left || launcherLeft}
+      layout={layout}
+      stack
+      bottom={bottom || launcherBottom}
+      right={right || launcherRight}
+      left={left || launcherLeft}
       zIndex={zIndex}
-      containerId={isEmbedMode ? "" : undefined}
-      applyMountStyles={!isEmbedMode}
-      applyMountClassName={!isEmbedMode}
     >
-      {showLauncher ? (
-        <WidgetLauncherButton
-          brandName={resolvedName}
-          iconUrl={resolvedIconUrl}
-          label={resolvedLabel}
-          primaryColor={resolvedColor}
-          onClick={handleToggle}
-        />
-      ) : null}
+      <WidgetLauncherButton
+        brandName={resolvedName}
+        iconUrl={resolvedIconUrl}
+        label={resolvedLabel}
+        primaryColor={resolvedColor}
+        onClick={handleToggle}
+      />
       <WidgetLauncherIframe
-        position={isEmbedMode ? "bottom-left" : position}
-        layout={iframeLayout}
-        bottomOffset={isEmbedMode ? "0" : isMobile ? "0" : undefined}
-        sideOffset={isEmbedMode ? "0" : isMobile ? "0" : undefined}
-        width={isEmbedMode ? iframeWidth : isMobile ? "100vw" : undefined}
-        height={isEmbedMode ? iframeHeight : isMobile ? "var(--mejai-vh, 100vh)" : undefined}
-        borderRadius={isEmbedMode ? iframeBorderRadius : isMobile ? "0" : undefined}
-        boxShadow={isEmbedMode ? iframeBoxShadow : isMobile ? "none" : undefined}
-        background={iframeBackground}
-        style={iframeStyle}
-        isOpen={resolvedOpen}
+        position={position}
+        layout={isMobile ? "fixed" : "absolute"}
+        bottomOffset={isMobile ? "0" : undefined}
+        sideOffset={isMobile ? "0" : undefined}
+        width={isMobile ? "100vw" : undefined}
+        height={isMobile ? "var(--mejai-vh, 100vh)" : undefined}
+        borderRadius={isMobile ? "0" : undefined}
+        boxShadow={isMobile ? "none" : undefined}
+        style={
+          isMobile
+            ? {
+              top: "var(--mejai-vv-offset-top, 0px)",
+              left: "0",
+              right: "0",
+            }
+            : undefined
+        }
+        isOpen={isOpen}
         src={iframeSrc}
         iframeRef={iframeRef}
         onLoad={handleIframeLoad}
@@ -857,6 +815,9 @@ export function WidgetLauncherRuntime({
 export function mountWidgetLauncher() {
   if (typeof window === "undefined") return;
   const scopedWindow = window as WidgetLauncherWindow;
+  if (scopedWindow.__mejaiWidgetLoaded) return;
+  scopedWindow.__mejaiWidgetLoaded = true;
+
   const script =
     document.currentScript ||
     (() => {
@@ -864,80 +825,66 @@ export function mountWidgetLauncher() {
       return scripts[scripts.length - 1];
     })();
 
-  const scriptDataset = (script as HTMLScriptElement | null)?.dataset;
+  const rawCfg = scopedWindow.mejaiWidget;
+  const cfg = rawCfg && typeof rawCfg === "object" ? (rawCfg as Record<string, any>) : {};
+  const scriptDataset = (script as HTMLScriptElement)?.dataset;
+  const widgetId = String(
+    (scriptDataset && (scriptDataset as DOMStringMap).widgetId) ||
+      cfg.widget_id ||
+      cfg.widgetId ||
+      ""
+  ).trim();
+  const instanceId = String(
+    (scriptDataset && (scriptDataset as DOMStringMap).instanceId) ||
+      cfg.instance_id ||
+      cfg.instanceId ||
+      ""
+  ).trim();
+  const templateId = String(
+    (scriptDataset && (scriptDataset as DOMStringMap).templateId) ||
+      cfg.template_id ||
+      cfg.templateId ||
+      ""
+  ).trim();
+  const fallbackPublicKey = String(
+    (scriptDataset && ((scriptDataset as DOMStringMap).publicKey || (scriptDataset as DOMStringMap).key)) ||
+      cfg.public_key ||
+      cfg.key ||
+      ""
+  ).trim();
+  const instancePublicKey = String(
+    (scriptDataset && (scriptDataset as DOMStringMap).instanceKey) ||
+      cfg.instance_public_key ||
+      cfg.instancePublicKey ||
+      fallbackPublicKey
+  ).trim();
+  const widgetPublicKey = String(
+    (scriptDataset && (scriptDataset as DOMStringMap).widgetKey) ||
+      cfg.widget_public_key ||
+      cfg.widgetPublicKey ||
+      fallbackPublicKey
+  ).trim();
+  const resolvedWidgetId = widgetId || (!instanceId ? templateId : "");
+  if (instanceId) {
+    if (!instancePublicKey || !templateId) return;
+  } else if (!resolvedWidgetId || !widgetPublicKey) {
+    return;
+  }
+  const scriptOverrides = (script as HTMLScriptElement)?.dataset?.overrides;
+  if (scriptOverrides && !cfg.overrides) {
+    try {
+      cfg.overrides = JSON.parse(scriptOverrides);
+    } catch {
+      // ignore invalid overrides
+    }
+  }
+
   let baseUrl = "";
   try {
-    baseUrl = new URL((script as HTMLScriptElement | null)?.src || "").origin;
+    baseUrl = new URL((script as HTMLScriptElement)?.src || "").origin;
   } catch {
     baseUrl = "https://mejai.help";
   }
-
-  const isPlainObject = (value: unknown): value is Record<string, any> =>
-    Boolean(value && typeof value === "object" && !Array.isArray(value));
-
-  const normalizeConfigList = (input: unknown) => {
-    if (Array.isArray(input)) {
-      return input.filter(isPlainObject) as Record<string, any>[];
-    }
-    if (isPlainObject(input)) return [input];
-    return [{}];
-  };
-
-  const readStringValue = (source: Record<string, any> | null | undefined, keys: string[]) => {
-    if (!source) return "";
-    for (const key of keys) {
-      const value = source[key];
-      if (typeof value === "string" && value.trim()) return value.trim();
-    }
-    return "";
-  };
-
-  const readBooleanValue = (source: Record<string, any> | null | undefined, keys: string[]) => {
-    if (!source) return false;
-    for (const key of keys) {
-      const value = source[key];
-      if (typeof value === "boolean") return value;
-      if (typeof value === "string") {
-        const trimmed = value.trim().toLowerCase();
-        if (trimmed === "1" || trimmed === "true" || trimmed === "yes") return true;
-        if (trimmed === "0" || trimmed === "false" || trimmed === "no") return false;
-      }
-    }
-    return false;
-  };
-
-  const readObjectValue = (source: Record<string, any> | null | undefined, keys: string[]) => {
-    if (!source) return undefined;
-    for (const key of keys) {
-      const value = source[key];
-      if (isPlainObject(value)) return value as Record<string, any>;
-    }
-    return undefined;
-  };
-
-  const stripIdentityKeys = (input: Record<string, any>) => {
-    const identityKeys = new Set([
-      "widget_id",
-      "widgetId",
-      "instance_id",
-      "instanceId",
-      "template_id",
-      "templateId",
-      "public_key",
-      "key",
-      "widget_public_key",
-      "widgetPublicKey",
-      "instance_public_key",
-      "instancePublicKey",
-      "overrides",
-    ]);
-    const next: Record<string, any> = {};
-    Object.entries(input).forEach(([key, value]) => {
-      if (identityKeys.has(key)) return;
-      next[key] = value;
-    });
-    return next;
-  };
 
   const visitorStorageKey = "mejai_widget_visitor_id";
   let visitorId = "";
@@ -951,140 +898,47 @@ export function mountWidgetLauncher() {
     visitorId = `mw_vis_${Math.random().toString(36).slice(2, 12)}`;
   }
 
-  const mountConfigs = (input?: unknown) => {
-    const configs = normalizeConfigList(input ?? scopedWindow.mejaiWidget);
-    if (!configs.length) return;
-
-    configs.forEach((rawCfg) => {
-      const cfg = isPlainObject(rawCfg) ? rawCfg : {};
-      const overrides = isPlainObject(cfg.overrides) ? (cfg.overrides as Record<string, any>) : null;
-      const cfgView = overrides ? { ...overrides, ...cfg } : cfg;
-
-      const widgetId = String(cfg.widget_id || cfg.widgetId || scriptDataset?.widgetId || "").trim();
-      const instanceId = String(cfg.instance_id || cfg.instanceId || scriptDataset?.instanceId || "").trim();
-      const templateId = String(cfg.template_id || cfg.templateId || scriptDataset?.templateId || "").trim();
-      const fallbackPublicKey = String(
-        cfg.public_key || cfg.key || scriptDataset?.publicKey || scriptDataset?.key || ""
-      ).trim();
-      const instancePublicKey = String(
-        cfg.instance_public_key || cfg.instancePublicKey || scriptDataset?.instanceKey || fallbackPublicKey
-      ).trim();
-      const widgetPublicKey = String(
-        cfg.widget_public_key || cfg.widgetPublicKey || scriptDataset?.widgetKey || fallbackPublicKey
-      ).trim();
-
-      const resolvedWidgetId = widgetId || (!instanceId ? templateId : "");
-      if (instanceId) {
-        if (!instancePublicKey || !templateId) return;
-      } else if (!resolvedWidgetId || !widgetPublicKey) {
-        return;
-      }
-
-      const entryModeValue = readStringValue(cfgView, ["entry_mode", "entryMode"]).toLowerCase();
-      const entryMode: WidgetLauncherEntryMode | undefined =
-        entryModeValue === "embed" || entryModeValue === "launcher" ? (entryModeValue as WidgetLauncherEntryMode) : undefined;
-
-      const mountTargetValue = readStringValue(cfgView, ["mount_target", "mountTarget", "mount"]);
-      const mountTarget =
-        (cfgView as any).mount_target instanceof HTMLElement
-          ? ((cfgView as any).mount_target as HTMLElement)
-          : (cfgView as any).mountTarget instanceof HTMLElement
-            ? ((cfgView as any).mountTarget as HTMLElement)
-            : typeof mountTargetValue === "string" && mountTargetValue
-              ? document.querySelector(mountTargetValue)
-              : null;
-
-      const embedMode = entryMode === "embed" || Boolean(mountTarget);
-
-      if (embedMode && !(mountTarget instanceof HTMLElement)) {
-        return;
-      }
-
-      const mountNode: HTMLElement =
-        embedMode && mountTarget instanceof HTMLElement
-          ? mountTarget
-          : (() => {
-            const existing = document.getElementById("mejai-widget-container");
-            if (existing) return existing;
-            const next = document.createElement("div");
-            document.body.appendChild(next);
-            return next;
-          })();
-
-      const sessionIdentity = instanceId || resolvedWidgetId || "unknown";
-      const sessionStorageKey = `mejai_widget_session_${sessionIdentity}_${visitorId}`;
-      let sessionId = "";
-      try {
-        sessionId = localStorage.getItem(sessionStorageKey) || "";
-      } catch {
-        sessionId = "";
-      }
-
-      const positionValue = readStringValue(cfgView, ["position"]) || "bottom-right";
-      const position: WidgetLauncherPosition = positionValue.includes("left") ? "bottom-left" : "bottom-right";
-
-      const brandName = readStringValue(cfgView, ["brandName", "brand_name"]) || "Mejai";
-      const launcherLabel = readStringValue(cfgView, ["launcherLabel", "launcher_label"]) || "💬";
-
-      const tabValue = readStringValue(cfgView, ["tab"]);
-      const tab: WidgetConversationTab | undefined =
-        tabValue === "chat" || tabValue === "list" || tabValue === "policy" || tabValue === "login"
-          ? (tabValue as WidgetConversationTab)
-          : undefined;
-
-      const previewMode = readBooleanValue(cfgView, ["preview", "preview_mode", "previewMode"]);
-      const previewMeta = readObjectValue(cfgView, ["preview_meta", "previewMeta"]) as
-        | { origin?: string; page_url?: string; referrer?: string }
-        | undefined;
-
-      const fallbackOverrides = overrides ? null : stripIdentityKeys(cfg);
-      const resolvedOverrides =
-        overrides && Object.keys(overrides).length > 0
-          ? overrides
-          : fallbackOverrides && Object.keys(fallbackOverrides).length > 0
-            ? fallbackOverrides
-            : undefined;
-      const runtimeCfg = resolvedOverrides ? { ...cfg, overrides: resolvedOverrides } : cfg;
-
-      const existingRoot = (mountNode as any).__mejaiWidgetRoot;
-      const root = existingRoot || createRoot(mountNode);
-      if (!existingRoot) {
-        (mountNode as any).__mejaiWidgetRoot = root;
-      }
-
-      root.render(
-        <WidgetLauncherRuntime
-          cfg={runtimeCfg}
-          baseUrl={baseUrl}
-          widgetId={resolvedWidgetId || undefined}
-          widgetPublicKey={widgetPublicKey || undefined}
-          instanceId={instanceId || undefined}
-          instancePublicKey={instancePublicKey || undefined}
-          templateId={templateId || undefined}
-          visitorId={visitorId}
-          sessionId={sessionId}
-          sessionStorageKey={sessionStorageKey}
-          position={position}
-          brandName={brandName}
-          launcherLabel={launcherLabel}
-          mountNode={mountNode}
-          entryMode={entryMode}
-          tab={tab}
-          previewMode={previewMode}
-          previewMeta={previewMeta}
-        />
-      );
-    });
-  };
-
-  if (scopedWindow.__mejaiWidgetMount) {
-    scopedWindow.__mejaiWidgetMount(scopedWindow.mejaiWidget);
-    return;
+  const sessionIdentity = instanceId || resolvedWidgetId || "unknown";
+  const sessionStorageKey = `mejai_widget_session_${sessionIdentity}_${visitorId}`;
+  let sessionId = "";
+  try {
+    sessionId = localStorage.getItem(sessionStorageKey) || "";
+  } catch {
+    sessionId = "";
   }
 
-  scopedWindow.__mejaiWidgetMount = mountConfigs;
-  scopedWindow.__mejaiWidgetLoaded = true;
-  mountConfigs(scopedWindow.mejaiWidget);
+  const positionValue = String(cfg.position || "bottom-right");
+  const position: WidgetLauncherPosition = positionValue.includes("left") ? "bottom-left" : "bottom-right";
+
+  const brandName =
+    typeof cfg.brandName === "string" && cfg.brandName.trim().length > 0 ? cfg.brandName.trim() : "Mejai";
+  const launcherLabel =
+    typeof cfg.launcherLabel === "string" && cfg.launcherLabel.trim().length > 0
+      ? cfg.launcherLabel.trim()
+      : "💬";
+
+  const mountNode = document.createElement("div");
+  document.body.appendChild(mountNode);
+
+  const root = createRoot(mountNode);
+  root.render(
+    <WidgetLauncherRuntime
+      cfg={cfg}
+      baseUrl={baseUrl}
+      widgetId={resolvedWidgetId || undefined}
+      widgetPublicKey={widgetPublicKey || undefined}
+      instanceId={instanceId || undefined}
+      instancePublicKey={instancePublicKey || undefined}
+      templateId={templateId || undefined}
+      visitorId={visitorId}
+      sessionId={sessionId}
+      sessionStorageKey={sessionStorageKey}
+      position={position}
+      brandName={brandName}
+      launcherLabel={launcherLabel}
+      mountNode={mountNode}
+    />
+  );
 }
 
 export type WidgetHeaderLegoProps = {
