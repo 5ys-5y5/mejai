@@ -637,8 +637,9 @@ export default function ConversationWidgetPage() {
     return Math.max(1, Math.ceil(count / previewRowCount));
   }, [previewPanels.length, previewRowCount]);
 
-  const previewKey = draft?.public_key || draft?.id || "";
-  const previewTemplateId = draft?.id || "";
+  const previewWidgetId = draft?.id || "";
+  const previewPublicKey = draft?.public_key || "";
+  const previewIdentity = `${previewWidgetId}:${previewPublicKey}`;
   const launcherPreviewKey = useMemo(
     () => `${previewInitNonce}-${launcherPreviewOpen ? "open" : "closed"}`,
     [launcherPreviewOpen, previewInitNonce]
@@ -646,13 +647,22 @@ export default function ConversationWidgetPage() {
 
   const buildPreviewSrc = useCallback(
     (tab?: WidgetConversationTab) => {
-      if (!previewKey) return "";
+      if (!previewWidgetId || !previewPublicKey) return "";
       const base = typeof window !== "undefined" ? window.location.origin : "";
-      return buildWidgetEmbedSrc(base, previewKey, "preview", "", previewOverridesParam, previewMeta, tab, {
-        preview: true,
-      });
+      return buildWidgetEmbedSrc(
+        base,
+        { widgetId: previewWidgetId, widgetPublicKey: previewPublicKey },
+        "preview",
+        "",
+        previewOverridesParam,
+        previewMeta,
+        tab,
+        {
+          preview: true,
+        }
+      );
     },
-    [previewKey, previewOverridesParam, previewMeta]
+    [previewPublicKey, previewWidgetId, previewOverridesParam, previewMeta]
   );
 
   const handleLauncherClick = useCallback(() => {
@@ -662,7 +672,7 @@ export default function ConversationWidgetPage() {
   }, []);
   useEffect(() => {
     setLauncherPreviewOpen(false);
-  }, [previewKey, previewInitNonce]);
+  }, [previewIdentity, previewInitNonce]);
 
   useEffect(() => {
     if (!launcherHighlight) return;
@@ -671,37 +681,39 @@ export default function ConversationWidgetPage() {
   }, [launcherHighlight]);
 
   const installScript = useMemo(() => {
-    if (!draft?.public_key) return "";
+    if (!draft?.public_key || !draft?.id) return "";
     const base = typeof window !== "undefined" ? window.location.origin : "https://mejai.help";
     const escapedOverrides = installOverridesJson.replace(/\n/g, "\\n");
     const overridesSnippet =
       installOverridesJson.length > 0
-        ? `window.mejaiWidget = { key: "${draft.public_key}", overrides: ${escapedOverrides} };\n`
-        : `window.mejaiWidget = { key: "${draft.public_key}" };\n`;
-    return `<script>\n${overridesSnippet}</script>\n<script async src="${base}/widget.js" data-key="${draft.public_key}"></script>`;
-  }, [draft?.public_key, installOverridesJson]);
+        ? `window.mejaiWidget = { widget_id: "${draft.id}", public_key: "${draft.public_key}", overrides: ${escapedOverrides} };\n`
+        : `window.mejaiWidget = { widget_id: "${draft.id}", public_key: "${draft.public_key}" };\n`;
+    return `<script>\n${overridesSnippet}</script>\n<script async src="${base}/widget.js" data-widget-id="${draft.id}" data-public-key="${draft.public_key}"></script>`;
+  }, [draft?.id, draft?.public_key, installOverridesJson]);
 
   const installUrl = useMemo(() => {
-    if (!draft?.public_key) return "";
+    if (!draft?.public_key || !draft?.id) return "";
     const overridesParam =
       Object.keys(installOverrides).length > 0 ? encodeWidgetOverrides(installOverrides) : "";
     const base = typeof window !== "undefined" ? window.location.origin : "";
-    const src = `${base}/embed/${draft.public_key}`;
-    return overridesParam ? `${src}?ovr=${encodeURIComponent(overridesParam)}` : src;
-  }, [draft?.public_key, installOverrides]);
+    const src = `${base}/embed/widget_id=${encodeURIComponent(draft.id)}?public_key=${encodeURIComponent(
+      draft.public_key
+    )}`;
+    return overridesParam ? `${src}&ovr=${encodeURIComponent(overridesParam)}` : src;
+  }, [draft?.id, draft?.public_key, installOverrides]);
 
   const templatePreviewUrl = useMemo(() => {
-    if (!draft?.id) return "";
+    if (!draft?.id || !draft?.public_key) return "";
     const base = typeof window !== "undefined" ? window.location.origin : "";
     const overrides = policyValue ? { chat_policy: policyValue } : {};
     const overridesParam =
       Object.keys(overrides).length > 0 ? encodeWidgetOverrides(overrides) : "";
-    const url = new URL(`${base}/embed/${draft.id}`);
-    url.searchParams.set("template_id", draft.id);
+    const url = new URL(`${base}/embed/widget_id=${draft.id}`);
+    url.searchParams.set("public_key", draft.public_key);
     url.searchParams.set("preview", "1");
     if (overridesParam) url.searchParams.set("ovr", overridesParam);
     return url.toString();
-  }, [draft?.id, policyValue]);
+  }, [draft?.id, draft?.public_key, policyValue]);
 
   const policyTemplateId = draft?.id && isValidUuid(String(draft.id)) ? String(draft.id) : "";
   const bulkDisabled = !policyTemplateId || isSaving;
@@ -1241,17 +1253,17 @@ export default function ConversationWidgetPage() {
                       style={{ resize: "horizontal", overflow: "auto", minWidth: "240px" }}
                     >
                       <div ref={setPreviewHost} className="absolute inset-0" />
-                      {previewHost && previewKey ? (
+                      {previewHost && previewWidgetId && previewPublicKey ? (
                         <WidgetLauncherRuntime
                           key={launcherPreviewKey}
                           cfg={{ overrides: installOverrides }}
                           baseUrl={typeof window !== "undefined" ? window.location.origin : ""}
-                          publicKey={previewKey}
-                          templateId={previewTemplateId || undefined}
+                          widgetId={previewWidgetId}
+                          widgetPublicKey={previewPublicKey}
                           previewMode
                           visitorId="preview"
                           sessionId=""
-                          sessionStorageKey={`preview_${previewKey}`}
+                          sessionStorageKey={`preview_${previewWidgetId}`}
                           position={launcherPosition}
                           brandName={draft.name || "Mejai"}
                           launcherLabel="💬"
@@ -1311,10 +1323,10 @@ export default function ConversationWidgetPage() {
                           </div>
                         </div>
                         <div className="h-[560px] w-full overflow-hidden rounded-xl border border-slate-200 bg-white">
-                          {previewKey ? (
+                          {previewWidgetId && previewPublicKey ? (
                             panel.status.enabled ? (
                               <iframe
-                                key={`${previewKey}-${panel.tab}-${previewInitNonce}`}
+                                key={`${previewIdentity}-${panel.tab}-${previewInitNonce}`}
                                 title={`Widget ${panel.label} Preview`}
                                 src={buildPreviewSrc(panel.tab)}
                                 className="h-full w-full"

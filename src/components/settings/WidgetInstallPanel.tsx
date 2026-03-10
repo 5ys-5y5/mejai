@@ -10,24 +10,17 @@ import { encodeWidgetOverrides } from "@/lib/widgetOverrides";
 type TemplateItem = {
   id: string;
   name?: string | null;
-  page_keys?: string[] | null;
 };
 
 export function WidgetInstallPanel() {
   const [loading, setLoading] = useState(true);
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [selectedId, setSelectedId] = useState("");
-  const [instanceByTemplate, setInstanceByTemplate] = useState<Record<string, { public_key: string }>>({});
+  const [instanceByTemplate, setInstanceByTemplate] = useState<
+    Record<string, { id: string; public_key: string; template_id: string }>
+  >({});
   const [overridesText, setOverridesText] = useState("");
   const [installOverrides, setInstallOverrides] = useState<Record<string, unknown>>({});
-  const [pageKeysText, setPageKeysText] = useState("");
-  const [savingPageKeys, setSavingPageKeys] = useState(false);
-
-  const normalizeListInput = (value: string) =>
-    value
-      .split(/[\n,]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
 
   useEffect(() => {
     let mounted = true;
@@ -75,21 +68,27 @@ export function WidgetInstallPanel() {
   );
 
   useEffect(() => {
-    setPageKeysText(template?.page_keys?.join("\n") || "");
-  }, [template]);
-
-  useEffect(() => {
     let mounted = true;
     async function issue() {
       if (!template || instanceByTemplate[template.id]) return;
       try {
-        const res = await apiFetch<{ item: { public_key: string } }>("/api/widget-instances", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ template_id: template.id }),
-        });
+        const res = await apiFetch<{ item: { id: string; public_key: string; template_id: string } }>(
+          "/api/widget-instances",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ template_id: template.id }),
+          }
+        );
         if (!mounted) return;
-        setInstanceByTemplate((prev) => ({ ...prev, [template.id]: { public_key: res.item.public_key } }));
+        setInstanceByTemplate((prev) => ({
+          ...prev,
+          [template.id]: {
+            id: res.item.id,
+            public_key: res.item.public_key,
+            template_id: res.item.template_id,
+          },
+        }));
       } catch {
         // ignore
       }
@@ -101,24 +100,26 @@ export function WidgetInstallPanel() {
   }, [template, instanceByTemplate]);
 
   const installScript = useMemo(() => {
-    if (!instance?.public_key) return "";
+    if (!instance?.public_key || !instance?.id || !template?.id) return "";
     const base = typeof window !== "undefined" ? window.location.origin : "https://mejai.help";
     const overrides =
       Object.keys(installOverrides).length > 0 ? JSON.stringify(installOverrides, null, 2).replace(/\n/g, "\\n") : "";
     const overridesSnippet = overrides
-      ? `window.mejaiWidget = { key: \"${instance.public_key}\", overrides: ${overrides} };\\n`
-      : `window.mejaiWidget = { key: \"${instance.public_key}\" };\\n`;
-    return `<script>\\n${overridesSnippet}</script>\\n<script async src=\\\"${base}/widget.js\\\" data-key=\\\"${instance.public_key}\\\"></script>`;
-  }, [installOverrides, instance?.public_key]);
+      ? `window.mejaiWidget = { instance_id: \"${instance.id}\", public_key: \"${instance.public_key}\", template_id: \"${template.id}\", overrides: ${overrides} };\\n`
+      : `window.mejaiWidget = { instance_id: \"${instance.id}\", public_key: \"${instance.public_key}\", template_id: \"${template.id}\" };\\n`;
+    return `<script>\\n${overridesSnippet}</script>\\n<script async src=\\\"${base}/widget.js\\\" data-instance-id=\\\"${instance.id}\\\" data-public-key=\\\"${instance.public_key}\\\" data-template-id=\\\"${template.id}\\\"></script>`;
+  }, [installOverrides, instance?.id, instance?.public_key, template?.id]);
 
   const installUrl = useMemo(() => {
-    if (!instance?.public_key) return "";
+    if (!instance?.public_key || !instance?.id || !template?.id) return "";
     const overridesParam =
       Object.keys(installOverrides).length > 0 ? encodeWidgetOverrides(installOverrides) : "";
     const base = typeof window !== "undefined" ? window.location.origin : "";
-    const src = `${base}/embed/${instance.public_key}`;
-    return overridesParam ? `${src}?ovr=${encodeURIComponent(overridesParam)}` : src;
-  }, [installOverrides, instance?.public_key]);
+    const src = `${base}/embed/instance_id=${encodeURIComponent(instance.id)}?public_key=${encodeURIComponent(
+      instance.public_key
+    )}&template_id=${encodeURIComponent(template.id)}`;
+    return overridesParam ? `${src}&ovr=${encodeURIComponent(overridesParam)}` : src;
+  }, [installOverrides, instance?.id, instance?.public_key, template?.id]);
 
   return (
     <div className="space-y-4">
@@ -131,42 +132,6 @@ export function WidgetInstallPanel() {
           className="w-full"
           buttonClassName="h-9 text-xs"
         />
-        <label className="block">
-          <div className="mb-1 text-xs text-slate-600">템플릿 사용 페이지 키 (줄바꿈 또는 콤마)</div>
-          <textarea
-            value={pageKeysText}
-            onChange={(e) => setPageKeysText(e.target.value)}
-            className="w-full min-h-[70px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
-            placeholder="/app/install\n/app/conversation-dup"
-          />
-          <div className="mt-1 text-[11px] text-slate-500">
-            예: <span className="font-mono">/app/install</span>, <span className="font-mono">/app/conversation-dup</span>
-          </div>
-        </label>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!template || savingPageKeys}
-          onClick={async () => {
-            if (!template) return;
-            setSavingPageKeys(true);
-            try {
-              const pageKeys = normalizeListInput(pageKeysText);
-              const res = await apiFetch<{ item: TemplateItem }>(`/api/widget-templates/${template.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ page_keys: pageKeys }),
-              });
-              setTemplates((prev) =>
-                prev.map((item) => (item.id === template.id ? { ...item, page_keys: res.item.page_keys } : item))
-              );
-            } finally {
-              setSavingPageKeys(false);
-            }
-          }}
-        >
-          페이지 키 저장
-        </Button>
         {loading ? <div className="text-xs text-slate-500">불러오는 중...</div> : null}
       </Card>
 

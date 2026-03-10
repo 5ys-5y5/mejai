@@ -8,12 +8,16 @@ import { LoginForm } from "@/components/LoginForm";
 import { getSupabaseClient } from "@/lib/supabaseClient";
 
 const WIDGET_TEMPLATE_ID = "c9ab5088-1d28-4f7f-88f4-01c46fa9ddfc";
-const WIDGET_BASE_SRC = `/embed/template_key=${WIDGET_TEMPLATE_ID}`;
+const WIDGET_TEMPLATE_PUBLIC_KEY = String(process.env.NEXT_PUBLIC_LOGIN_WIDGET_PUBLIC_KEY || "").trim();
+const WIDGET_BASE_SRC = `/embed/widget_id=${WIDGET_TEMPLATE_ID}`;
 
 function buildWidgetUrl(extraParams?: Record<string, string>) {
   const base = WIDGET_BASE_SRC;
   if (typeof window === "undefined") return base;
   const search = new URLSearchParams();
+  if (WIDGET_TEMPLATE_PUBLIC_KEY) {
+    search.set("public_key", WIDGET_TEMPLATE_PUBLIC_KEY);
+  }
   search.set("origin", window.location.origin);
   search.set("page_url", window.location.href);
   const preview = window.location.search

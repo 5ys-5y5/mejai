@@ -224,7 +224,7 @@ export function ChatSettingsPanel({
       };
       const nextProvider: ConversationFeaturesProviderShape = {
         ...base,
-        widget: nextWidget,
+        widget: nextWidget || undefined,
         features: nextFeatures,
         pages: {
           ...(base.pages || {}),

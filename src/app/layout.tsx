@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Suspense } from "react";
 import { AppNavbarGate } from "@/components/AppNavbarGate";
 import { Toaster } from "sonner";
 import { RouteAnnouncerCleanup } from "@/components/RouteAnnouncerCleanup";
@@ -26,7 +27,9 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className="antialiased">
-        <AppNavbarGate />
+        <Suspense fallback={null}>
+          <AppNavbarGate />
+        </Suspense>
         <main>{children}</main>
         <Toaster position="top-center" />
         <RouteAnnouncerCleanup />

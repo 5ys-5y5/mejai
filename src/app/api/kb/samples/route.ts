@@ -6,7 +6,7 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
   const context = await getServerContext(authHeader, cookieHeader);
-  const querySamples = async (supabase: ReturnType<typeof createAdminSupabaseClient> | typeof context.supabase, orgId?: string) => {
+  const querySamples = async (supabase: ReturnType<typeof createAdminSupabaseClient>, orgId?: string) => {
     let query = supabase
       .from("B_bot_knowledge_bases")
       .select("id, title, content, is_active, created_at")

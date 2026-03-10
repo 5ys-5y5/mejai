@@ -10,10 +10,11 @@ import { toast } from "sonner";
 type WidgetConfig = {
   id: string;
   name?: string | null;
-  public_key?: string | null;
+  template_public_key?: string | null;
+  instance_id?: string | null;
+  instance_public_key?: string | null;
   allowed_domains?: string[] | null;
   is_active?: boolean | null;
-  page_keys?: string[] | null;
 };
 
 export function WidgetQuickstartPanel() {
@@ -45,11 +46,14 @@ export function WidgetQuickstartPanel() {
     void loadWidget();
   }, [loadWidget]);
 
-  const publicKey = (selectedWidget?.public_key || "").trim();
+  const templateId = (selectedWidget?.id || "").trim();
+  const instanceId = (selectedWidget?.instance_id || "").trim();
+  const instancePublicKey = (selectedWidget?.instance_public_key || "").trim();
+  const templatePublicKey = (selectedWidget?.template_public_key || "").trim();
   const snippet = useMemo(() => {
-    if (!publicKey) return "";
-    return `<script async src=\"https://mejai.help/widget.js\" data-key=\"${publicKey}\"></script>`;
-  }, [publicKey]);
+    if (!instanceId || !instancePublicKey || !templateId) return "";
+    return `<script async src=\"https://mejai.help/widget.js\" data-instance-id=\"${instanceId}\" data-public-key=\"${instancePublicKey}\" data-template-id=\"${templateId}\"></script>`;
+  }, [instanceId, instancePublicKey, templateId]);
 
   return (
     <div className="space-y-4">
@@ -61,7 +65,7 @@ export function WidgetQuickstartPanel() {
             options={widgets.map((item) => ({
               id: String(item.id || ""),
               label: String(item.name || item.id || "템플릿"),
-              description: item.public_key ? `키: ${item.public_key}` : undefined,
+              description: item.template_public_key ? `템플릿 키: ${item.template_public_key}` : undefined,
             }))}
             onChange={(value) => setSelectedId(value)}
             className="w-full"
@@ -132,15 +136,17 @@ export function WidgetQuickstartPanel() {
             코드 복사
           </Button>
           <div className="text-xs text-slate-500">
-            복사할 키:{" "}
-            <span className="font-mono text-slate-700">{publicKey || "-"}</span>
+            템플릿 키: <span className="font-mono text-slate-700">{templatePublicKey || "-"}</span>
+          </div>
+          <div className="text-xs text-slate-500">
+            인스턴스 키: <span className="font-mono text-slate-700">{instancePublicKey || "-"}</span>
           </div>
         </div>
       </Card>
 
       <Card className="p-4">
         <div className="text-sm font-semibold text-slate-900">허용 도메인</div>
-        <div className="mt-2 text-xs text-slate-600">등록된 도메인에서만 위젯이 동작합니다.</div>
+        <div className="mt-2 text-xs text-slate-600">현재는 인증 단계에서 도메인 제한을 적용하지 않습니다.</div>
         <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
           {loading ? (
             "불러오는 중..."

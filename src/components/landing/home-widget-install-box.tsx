@@ -2,12 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-const HOME_WIDGET_PAGE_KEY = "/";
-
 type PublicWidgetItem = {
   id: string;
   name?: string | null;
-  template_id: string;
+  widget_id?: string | null;
   public_key: string;
 };
 
@@ -16,9 +14,10 @@ type PublicWidgetResponse = {
   error?: string | null;
 };
 
-function buildEmbedSrc(publicKey: string) {
-  const key = encodeURIComponent(`public_key=${publicKey}`);
-  return `/embed/${key}?preview=1`;
+function buildEmbedSrc(widgetId: string, publicKey: string, tab?: "policy" | "chat") {
+  const params = new URLSearchParams({ public_key: publicKey, preview: "1" });
+  if (tab) params.set("tab", tab);
+  return `/embed/widget_id=${encodeURIComponent(widgetId)}?${params.toString()}`;
 }
 
 export function HomeWidgetInstallBox() {
@@ -29,7 +28,7 @@ export function HomeWidgetInstallBox() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    fetch(`/api/public-widgets?page_key=${encodeURIComponent(HOME_WIDGET_PAGE_KEY)}&name=home`)
+    fetch(`/api/public-widgets?name=home`)
       .then((res) =>
         res
           .json()
@@ -66,39 +65,59 @@ export function HomeWidgetInstallBox() {
     };
   }, []);
 
-  const iframeSrc = useMemo(() => (widget?.public_key ? buildEmbedSrc(widget.public_key) : ""), [widget]);
+  const widgetId = widget?.widget_id || widget?.id || "";
+  const policySrc = useMemo(
+    () => (widget?.public_key && widgetId ? buildEmbedSrc(widgetId, widget.public_key, "policy") : ""),
+    [widget?.public_key, widgetId]
+  );
+  const chatSrc = useMemo(
+    () => (widget?.public_key && widgetId ? buildEmbedSrc(widgetId, widget.public_key, "chat") : ""),
+    [widget?.public_key, widgetId]
+  );
 
   return (
-    <div className="mt-10 rounded-[28px] border border-zinc-200 bg-white/90 p-6 shadow-[0_20px_50px_rgba(15,23,42,0.08)] backdrop-blur">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-[11px] uppercase tracking-[0.32em] text-zinc-500">Home Widget</div>
-          <div className="mt-2 text-lg font-semibold text-zinc-900">B_chat_widgets 홈 템플릿</div>
+    <div className="container mx-auto w-full max-w-6xl px-6">
+      <div className="grid grid-cols-1 gap-[30px] lg:grid-cols-2">
+        <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden rounded-xl border border-zinc-300 bg-white">
+          {loading ? (
+            <div className="flex h-[500px] items-center justify-center text-sm text-zinc-500">위젯 로딩 중...</div>
+          ) : null}
+          {!loading && error ? (
+            <div className="flex h-[500px] flex-col items-center justify-center gap-2 text-sm text-rose-600">
+              <span>위젯을 불러오지 못했습니다.</span>
+              <span className="text-[11px] text-zinc-500">{error}</span>
+            </div>
+          ) : null}
+          {!loading && !error && policySrc ? (
+            <iframe
+              title={`${widget?.name || "Home Widget"} (policy)`}
+              src={policySrc}
+              className="h-[500px] w-full"
+              style={{ border: "none" }}
+              allow="clipboard-write"
+            />
+          ) : null}
         </div>
-        <div className="rounded-full border border-zinc-200 bg-white px-3 py-1 text-[11px] text-zinc-500">
-          page_key: {HOME_WIDGET_PAGE_KEY}
+        <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden rounded-xl border border-zinc-300 bg-white">
+          {loading ? (
+            <div className="flex h-[500px] items-center justify-center text-sm text-zinc-500">위젯 로딩 중...</div>
+          ) : null}
+          {!loading && error ? (
+            <div className="flex h-[500px] flex-col items-center justify-center gap-2 text-sm text-rose-600">
+              <span>위젯을 불러오지 못했습니다.</span>
+              <span className="text-[11px] text-zinc-500">{error}</span>
+            </div>
+          ) : null}
+          {!loading && !error && chatSrc ? (
+            <iframe
+              title={`${widget?.name || "Home Widget"} (chat)`}
+              src={chatSrc}
+              className="h-[500px] w-full"
+              style={{ border: "none" }}
+              allow="clipboard-write"
+            />
+          ) : null}
         </div>
-      </div>
-
-      <div className="mt-5 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50">
-        {loading ? (
-          <div className="flex h-[520px] items-center justify-center text-sm text-zinc-500">위젯 로딩 중...</div>
-        ) : null}
-        {!loading && error ? (
-          <div className="flex h-[520px] flex-col items-center justify-center gap-2 text-sm text-rose-600">
-            <span>위젯을 불러오지 못했습니다.</span>
-            <span className="text-[11px] text-zinc-500">{error}</span>
-          </div>
-        ) : null}
-        {!loading && !error && iframeSrc ? (
-          <iframe
-            title={widget?.name || "Home Widget"}
-            src={iframeSrc}
-            className="h-[520px] w-full"
-            style={{ border: "none" }}
-            allow="clipboard-write"
-          />
-        ) : null}
       </div>
     </div>
   );

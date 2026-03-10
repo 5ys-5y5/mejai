@@ -37,6 +37,7 @@ function mapTemplateRow(row: Record<string, any>) {
     ...row,
     theme,
     template_id: null,
+    public_key: row.public_key || null,
     agent_id: setupConfig?.agent_id ?? null,
     setup_config: (setupConfig || null) as WidgetSetupConfig | null,
     allowed_domains: access.allowed_domains || [],
@@ -150,9 +151,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const name = body.name !== undefined ? String(body.name || "").trim() || existing.name : existing.name;
   const isActive = body.is_active !== undefined ? Boolean(body.is_active) : existing.is_active;
   const isPublic = body.is_public !== undefined ? Boolean(body.is_public) : existing.is_public;
-  const pageKeysProvided = Array.isArray(body.page_keys);
-  const nextPageKeys = pageKeysProvided ? normalizeStringArray(body.page_keys) : null;
-
   const { data, error } = await supabaseAdmin
     .from("B_chat_widgets")
     .update({
@@ -160,7 +158,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       chat_policy: policyWithAccess,
       is_active: isActive,
       is_public: isPublic,
-      ...(pageKeysProvided ? { page_keys: nextPageKeys } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq("id", resolvedParams.id)

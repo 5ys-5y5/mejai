@@ -1,15 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import { getServerContext } from "@/lib/serverAuth";
 import { issueWidgetToken } from "@/lib/widgetToken";
-import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
 import { WIDGET_PAGE_KEY, type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
 import { normalizeWidgetOverrides } from "@/lib/widgetTemplateMeta";
-import { filterWidgetOverridesByPolicy, resolveWidgetBasePolicy, resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
+import {
+  filterWidgetOverridesByPolicy,
+  resolveWidgetBasePolicy,
+  resolveWidgetRuntimeConfig,
+  type WidgetInstanceRow,
+  type WidgetTemplateRow,
+} from "@/lib/widgetRuntimeConfig";
 import { ensureTemplateSharedInstance } from "@/lib/widgetSharedInstance";
 import { normalizeWidgetChatPolicyProvider } from "@/lib/widgetChatPolicyShape";
 import { getPolicyWidgetAccess } from "@/lib/widgetPolicyUtils";
+
+type TemplateRow = WidgetTemplateRow & {
+  public_key?: string | null;
+};
+type InstanceRow = WidgetInstanceRow;
 
 function nowIso() {
   return new Date().toISOString();
@@ -50,28 +59,6 @@ function readOrigin(input: Record<string, any>) {
   return "";
 }
 
-async function isPreviewAdmin(req: NextRequest) {
-  const authHeader = req.headers.get("authorization") || "";
-  const cookieHeader = req.headers.get("cookie") || "";
-  const context = await getServerContext(authHeader, cookieHeader);
-  if ("error" in context) return false;
-  const { data: access } = await context.supabase
-    .from("A_iam_user_access_maps")
-    .select("is_admin")
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  return Boolean(access?.is_admin);
-}
-
-function isSameOriginPreview(req: NextRequest) {
-  const requestOrigin = String(req.headers.get("origin") || "").trim();
-  const requestReferer = String(req.headers.get("referer") || "").trim();
-  const serverOrigin = new URL(req.url).origin;
-  if (requestOrigin && requestOrigin === serverOrigin) return true;
-  if (requestReferer && requestReferer.startsWith(serverOrigin)) return true;
-  return false;
-}
-
 function resolveWidgetUiSettingsSource(policy: ConversationFeaturesProviderShape | null) {
   const pageKey = WIDGET_PAGE_KEY;
   const hasPageOverride = Boolean(policy?.pages && policy.pages[pageKey]);
@@ -91,14 +78,18 @@ export async function POST(req: NextRequest) {
   if (!body) {
     return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
   }
-  const publicKey = String(body.public_key || body.key || "").trim();
+  const instanceId = String(body.instance_id || "").trim();
   const templateId = String(body.template_id || "").trim();
-  const previewMode = body.preview === true || body.preview === "true";
-  const previewAllowed = previewMode
-    ? (await isPreviewAdmin(req)) || isSameOriginPreview(req)
-    : false;
-  if (!publicKey && !templateId) {
-    return NextResponse.json({ error: "PUBLIC_KEY_REQUIRED" }, { status: 400 });
+  const widgetId = String(body.widget_id || "").trim() || (!instanceId ? templateId : "");
+  const fallbackPublicKey = String(body.public_key || body.key || "").trim();
+  const widgetPublicKey = String(body.widget_public_key || "").trim() || (!instanceId ? fallbackPublicKey : "");
+  const instancePublicKey = String(body.instance_public_key || "").trim() || (instanceId ? fallbackPublicKey : "");
+  if (instanceId) {
+    if (!instancePublicKey || !templateId) {
+      return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 400 });
+    }
+  } else if (!widgetId || !widgetPublicKey) {
+    return NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 400 });
   }
   const overrides = normalizeWidgetOverrides(body.overrides);
 
@@ -112,35 +103,44 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let { data: instance, error: widgetError } = publicKey
-    ? await supabaseAdmin
-        .from("B_chat_widget_instances")
-        .select("*")
-        .eq("public_key", publicKey)
-        .eq("is_active", true)
-        .maybeSingle()
-    : { data: null, error: null };
+  let instance: InstanceRow | null = null;
+  let template: TemplateRow | null = null;
 
-  if (widgetError) {
-    return NextResponse.json({ error: widgetError.message }, { status: 400 });
-  }
-  const resolvedTemplateId = templateId || (!instance && publicKey && isUuid(publicKey) ? publicKey : "");
-  if (!instance && resolvedTemplateId) {
-    const { data: template } = await supabaseAdmin
-      .from("B_chat_widgets")
+  if (instanceId) {
+    const { data, error } = await supabaseAdmin
+      .from("B_chat_widget_instances")
       .select("*")
-      .eq("id", resolvedTemplateId)
+      .eq("id", instanceId)
       .maybeSingle();
-    if (!template || !template.is_active) {
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (!data || !data.is_active) {
       return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
     }
-    if (!template.is_public && !previewAllowed) {
+    if (String(data.public_key || "") !== instancePublicKey) {
+      return NextResponse.json({ error: "AUTH_FAILED" }, { status: 403 });
+    }
+    if (String(data.template_id || "") !== templateId) {
+      return NextResponse.json({ error: "TEMPLATE_MISMATCH" }, { status: 400 });
+    }
+    instance = data as InstanceRow;
+  } else if (widgetId) {
+    const { data, error } = await supabaseAdmin.from("B_chat_widgets").select("*").eq("id", widgetId).maybeSingle();
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (!data || !data.is_active) {
       return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
     }
+    if (String(data.public_key || "") !== widgetPublicKey) {
+      return NextResponse.json({ error: "AUTH_FAILED" }, { status: 403 });
+    }
+    template = data as TemplateRow;
     const templatePolicy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
     const access = getPolicyWidgetAccess(templatePolicy);
     try {
-      instance = await ensureTemplateSharedInstance(supabaseAdmin, template, access);
+      instance = (await ensureTemplateSharedInstance(supabaseAdmin, template, access)) as InstanceRow;
     } catch (error) {
       return NextResponse.json(
         { error: error instanceof Error ? error.message : "INSTANCE_CREATE_FAILED" },
@@ -153,16 +153,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
 
-  const { data: template } = await supabaseAdmin
-    .from("B_chat_widgets")
-    .select("*")
-    .eq("id", instance.template_id)
-    .maybeSingle();
-  if (!template || !template.is_active) {
-    return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
-  }
-  if ((!template.is_public || !instance.is_public) && !previewAllowed) {
-    return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+  if (!template) {
+    const { data, error } = await supabaseAdmin
+      .from("B_chat_widgets")
+      .select("*")
+      .eq("id", instance.template_id)
+      .maybeSingle();
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+    if (!data || !data.is_active) {
+      return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+    }
+    template = data as TemplateRow;
   }
 
   const basePolicy = resolveWidgetBasePolicy(template, instance);
@@ -170,35 +173,6 @@ export async function POST(req: NextRequest) {
   const resolved = resolveWidgetRuntimeConfig(template, instance, filteredOverrides);
   const origin = readOrigin(body);
   const pageUrl = String(body.page_url || body.pageUrl || body.referrer || "").trim();
-  const host = extractHostFromUrl(origin || pageUrl);
-  if (!previewAllowed) {
-    const allowedDomains = Array.isArray(resolved.allowed_domains) ? resolved.allowed_domains : [];
-    if (allowedDomains.length > 0 && !matchAllowedDomain(host, allowedDomains)) {
-      return NextResponse.json({ error: "DOMAIN_NOT_ALLOWED" }, { status: 403 });
-    }
-    const allowedPaths = resolved.allowed_paths as unknown[];
-    if (allowedPaths.length > 0 && pageUrl) {
-      let pathname = "";
-      try {
-        pathname = new URL(pageUrl).pathname || "/";
-      } catch {
-        pathname = "";
-      }
-      const normalizedPaths = allowedPaths
-        .map((p: unknown) => String(p || "").trim())
-        .filter((value): value is string => Boolean(value));
-      if (normalizedPaths.length > 0) {
-        const ok = normalizedPaths.some((rule) => {
-          if (rule === "*") return true;
-          if (!rule.startsWith("/")) return pathname.startsWith(`/${rule}`);
-          return pathname.startsWith(rule);
-        });
-        if (!ok) {
-          return NextResponse.json({ error: "PATH_NOT_ALLOWED" }, { status: 403 });
-        }
-      }
-    }
-  }
 
   const visitorId = readVisitorId(body);
   const now = nowIso();
@@ -308,8 +282,4 @@ export async function POST(req: NextRequest) {
       setup_config: resolved.setup_config,
     },
   });
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

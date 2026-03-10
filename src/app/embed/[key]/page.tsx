@@ -78,9 +78,9 @@ type AuthState = {
 
 const TEMPLATE_KEY_PREFIX = "template_key=";
 const PUBLIC_KEY_PREFIX = "public_key=";
+const WIDGET_ID_PREFIX = "widget_id=";
+const INSTANCE_ID_PREFIX = "instance_id=";
 const PARAMETER_FLAG_KEYS = ["parameter", "paremeter"];
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const PUBLIC_KEY_REGEX = /^mw_pk_/i;
 const AUTH_STATE_STORAGE_KEY = "mejai_widget_auth_state";
 const EMPTY_STRINGS: string[] = [];
 const EMPTY_OPTIONS: SelectOption[] = [];
@@ -367,6 +367,12 @@ function extractKeyMode(rawKey: string) {
   } catch {
     decoded = trimmed;
   }
+  if (decoded.startsWith(INSTANCE_ID_PREFIX)) {
+    return { key: decoded.slice(INSTANCE_ID_PREFIX.length), mode: "instance" as const };
+  }
+  if (decoded.startsWith(WIDGET_ID_PREFIX)) {
+    return { key: decoded.slice(WIDGET_ID_PREFIX.length), mode: "widget" as const };
+  }
   if (decoded.startsWith(PUBLIC_KEY_PREFIX)) {
     return { key: decoded.slice(PUBLIC_KEY_PREFIX.length), mode: "public" as const };
   }
@@ -392,7 +398,17 @@ function extractQueryOverrides(searchParams: URLSearchParams | null) {
     if (!rawKey || !rawValue) continue;
     if (PARAMETER_FLAG_KEYS.includes(rawKey)) continue;
     if (rawKey === "ovr" || rawKey === "origin" || rawKey === "page_url" || rawKey === "referrer") continue;
-    if (rawKey === "preview" || rawKey === "tab" || rawKey === "template_id" || rawKey === "public_key") continue;
+    if (
+      rawKey === "preview" ||
+      rawKey === "tab" ||
+      rawKey === "template_id" ||
+      rawKey === "public_key" ||
+      rawKey === "widget_id" ||
+      rawKey === "instance_id" ||
+      rawKey === "widget_public_key" ||
+      rawKey === "instance_public_key"
+    )
+      continue;
     if (!rawKey.startsWith(featurePrefix)) continue;
     const keyPath = ["widget", ...rawKey.slice(featurePrefix.length).split(".").filter(Boolean)];
     if (keyPath.length === 0) continue;
@@ -451,6 +467,19 @@ export default function WidgetEmbedPage() {
   const previewOrigin = useMemo(() => String(searchParams?.get("origin") || "").trim(), [searchParams]);
   const previewPageUrl = useMemo(() => String(searchParams?.get("page_url") || "").trim(), [searchParams]);
   const previewReferrer = useMemo(() => String(searchParams?.get("referrer") || "").trim(), [searchParams]);
+  const queryWidgetId = useMemo(() => String(searchParams?.get("widget_id") || "").trim(), [searchParams]);
+  const queryInstanceId = useMemo(() => String(searchParams?.get("instance_id") || "").trim(), [searchParams]);
+  const queryTemplateId = useMemo(() => String(searchParams?.get("template_id") || "").trim(), [searchParams]);
+  const queryPublicKey = useMemo(
+    () =>
+      String(
+        searchParams?.get("public_key") ||
+          searchParams?.get("widget_public_key") ||
+          searchParams?.get("instance_public_key") ||
+          ""
+      ).trim(),
+    [searchParams]
+  );
   const isPreview = useMemo(() => {
     const raw = String(searchParams?.get("preview") || "").trim().toLowerCase();
     return raw === "1" || raw === "true";
@@ -845,7 +874,7 @@ export default function WidgetEmbedPage() {
             title: String(item.title || "샘플"),
             content: String(item.content || ""),
           }))
-          .filter((item) => item.id && item.content.trim().length > 0);
+          .filter((item: { id: string; content: string }) => item.id && item.content.trim().length > 0);
         setInlineKbSamples(normalized);
       })
       .catch(() => {
@@ -1023,8 +1052,7 @@ export default function WidgetEmbedPage() {
       };
       const seedSession = options?.forceNew ? "" : sessionSeedRef.current;
       if (seedSession) sessionSeedRef.current = "";
-      const requestPreview =
-        isPreview || keyMode === "template" || (keyMode === "auto" && UUID_REGEX.test(key) && !PUBLIC_KEY_REGEX.test(key));
+      const requestPreview = isPreview;
       const fallbackOrigin =
         typeof window !== "undefined" ? String(window.location.origin || "").trim() : "";
       const fallbackPageUrl =
@@ -1032,6 +1060,11 @@ export default function WidgetEmbedPage() {
       const resolvedOrigin = resolveOrigin() || fallbackOrigin;
       const resolvedPageUrl = meta.page_url || referrer || fallbackPageUrl;
       const resolvedReferrer = meta.referrer || referrer || "";
+      const resolvedInstanceId = keyMode === "instance" ? key : queryInstanceId;
+      const resolvedWidgetId =
+        keyMode === "widget" ? key : keyMode === "template" ? key : queryWidgetId;
+      const resolvedPublicKey = queryPublicKey || (keyMode === "public" ? key : "");
+      const resolvedTemplateId = queryTemplateId;
       let resolvedOverrides = pendingOverrides || mergedOverrides || undefined;
       if (parameterEnabled && resolvedOrigin) {
         const normalizedOrigin = normalizeDomain(resolvedOrigin);
@@ -1047,7 +1080,10 @@ export default function WidgetEmbedPage() {
         }
       }
       const payload = {
-        public_key: undefined as string | undefined,
+        widget_id: undefined as string | undefined,
+        widget_public_key: undefined as string | undefined,
+        instance_id: undefined as string | undefined,
+        instance_public_key: undefined as string | undefined,
         template_id: undefined as string | undefined,
         preview: requestPreview,
         origin: resolvedOrigin,
@@ -1060,16 +1096,13 @@ export default function WidgetEmbedPage() {
           ...user,
         },
       };
-      if (keyMode === "template") {
-        payload.template_id = key || undefined;
-      } else if (keyMode === "public") {
-        payload.public_key = key || undefined;
-      } else if (PUBLIC_KEY_REGEX.test(key)) {
-        payload.public_key = key || undefined;
-      } else if (isPreview || parameterEnabled || UUID_REGEX.test(key)) {
-        payload.template_id = key || undefined;
-      } else {
-        payload.public_key = key || undefined;
+      if (resolvedInstanceId) {
+        payload.instance_id = resolvedInstanceId || undefined;
+        payload.instance_public_key = resolvedPublicKey || undefined;
+        payload.template_id = resolvedTemplateId || undefined;
+      } else if (resolvedWidgetId) {
+        payload.widget_id = resolvedWidgetId || undefined;
+        payload.widget_public_key = resolvedPublicKey || undefined;
       }
       try {
         const res = await fetch("/api/widget/init", {
@@ -1166,6 +1199,10 @@ export default function WidgetEmbedPage() {
       parameterEnabled,
       pendingMeta,
       pendingOverrides,
+      queryInstanceId,
+      queryPublicKey,
+      queryTemplateId,
+      queryWidgetId,
       visitorId,
     ]
   );

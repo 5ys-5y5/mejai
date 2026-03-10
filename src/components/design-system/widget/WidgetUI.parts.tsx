@@ -356,7 +356,10 @@ type WidgetLauncherWindow = Window & {
 export type WidgetLauncherRuntimeConfig = {
   cfg: Record<string, any>;
   baseUrl: string;
-  publicKey: string;
+  widgetId?: string;
+  widgetPublicKey?: string;
+  instanceId?: string;
+  instancePublicKey?: string;
   templateId?: string;
   visitorId: string;
   sessionId: string;
@@ -417,9 +420,17 @@ function resolveLauncherColor(cfg: Record<string, any>, themeConfig: Record<stri
   );
 }
 
+export type WidgetEmbedTarget = {
+  widgetId?: string;
+  widgetPublicKey?: string;
+  instanceId?: string;
+  instancePublicKey?: string;
+  templateId?: string;
+};
+
 export function buildWidgetEmbedSrc(
   baseUrl: string,
-  publicKey: string,
+  target: WidgetEmbedTarget,
   visitorId: string,
   sessionId: string,
   overridesParam?: string,
@@ -431,7 +442,25 @@ export function buildWidgetEmbedSrc(
   tab?: WidgetConversationTab,
   options?: { preview?: boolean }
 ) {
-  let src = `${baseUrl}/embed/${encodeURIComponent(publicKey)}?vid=${encodeURIComponent(visitorId)}`;
+  const widgetId = String(target.widgetId || "").trim();
+  const widgetPublicKey = String(target.widgetPublicKey || "").trim();
+  const instanceId = String(target.instanceId || "").trim();
+  const instancePublicKey = String(target.instancePublicKey || "").trim();
+  const templateId = String(target.templateId || "").trim();
+
+  let src = "";
+  if (instanceId && instancePublicKey && templateId) {
+    src = `${baseUrl}/embed/instance_id=${encodeURIComponent(instanceId)}?public_key=${encodeURIComponent(
+      instancePublicKey
+    )}&template_id=${encodeURIComponent(templateId)}`;
+  } else if (widgetId && widgetPublicKey) {
+    src = `${baseUrl}/embed/widget_id=${encodeURIComponent(widgetId)}?public_key=${encodeURIComponent(
+      widgetPublicKey
+    )}`;
+  } else {
+    return "";
+  }
+  src += `&vid=${encodeURIComponent(visitorId)}`;
   if (sessionId) {
     src += `&sid=${encodeURIComponent(sessionId)}`;
   }
@@ -458,7 +487,10 @@ export function buildWidgetEmbedSrc(
 export function WidgetLauncherRuntime({
   cfg,
   baseUrl,
-  publicKey,
+  widgetId,
+  widgetPublicKey,
+  instanceId,
+  instancePublicKey,
   templateId,
   visitorId,
   sessionId,
@@ -506,14 +538,24 @@ export function WidgetLauncherRuntime({
     return encodeWidgetOverrides(cfgRef.current.overrides as Record<string, unknown>);
   }, []);
 
+  const embedTarget = useMemo<WidgetEmbedTarget>(() => {
+    if (instanceId && instancePublicKey && templateId) {
+      return { instanceId, instancePublicKey, templateId };
+    }
+    if (widgetId && widgetPublicKey) {
+      return { widgetId, widgetPublicKey };
+    }
+    return {};
+  }, [instanceId, instancePublicKey, templateId, widgetId, widgetPublicKey]);
+
   const iframeSrc = useMemo(
     () =>
-      buildWidgetEmbedSrc(baseUrl, publicKey, visitorId, sessionIdRef.current, overridesParam, previewMeta, undefined, {
+      buildWidgetEmbedSrc(baseUrl, embedTarget, visitorId, sessionIdRef.current, overridesParam, previewMeta, undefined, {
         preview: previewMode,
       }),
     [
       baseUrl,
-      publicKey,
+      embedTarget,
       visitorId,
       overridesParam,
       previewMeta?.origin,
@@ -686,9 +728,21 @@ export function WidgetLauncherRuntime({
 
   useEffect(() => {
     try {
-      const url = `${baseUrl}/api/widget/config?key=${encodeURIComponent(publicKey)}${
-        templateId ? `&template_id=${encodeURIComponent(templateId)}` : ""
-      }${overridesParam ? `&ovr=${encodeURIComponent(overridesParam)}` : ""}`;
+      const params = new URLSearchParams();
+      if (instanceId && instancePublicKey && templateId) {
+        params.set("instance_id", instanceId);
+        params.set("public_key", instancePublicKey);
+        params.set("template_id", templateId);
+      } else if (widgetId && widgetPublicKey) {
+        params.set("widget_id", widgetId);
+        params.set("public_key", widgetPublicKey);
+      } else {
+        return;
+      }
+      if (overridesParam) {
+        params.set("ovr", overridesParam);
+      }
+      const url = `${baseUrl}/api/widget/config?${params.toString()}`;
       fetch(url)
         .then((res) => {
           if (!res || !res.ok) return null;
@@ -707,7 +761,7 @@ export function WidgetLauncherRuntime({
     } catch {
       // ignore
     }
-  }, [baseUrl, publicKey, templateId, overridesParam]);
+  }, [baseUrl, instanceId, instancePublicKey, templateId, widgetId, widgetPublicKey, overridesParam]);
 
   const launcherBottom = isMobile ? "calc(16px + env(safe-area-inset-bottom))" : "24px";
   const launcherRight = isMobile ? "calc(16px + env(safe-area-inset-right))" : "24px";
@@ -774,14 +828,48 @@ export function mountWidgetLauncher() {
   const rawCfg = scopedWindow.mejaiWidget;
   const cfg = rawCfg && typeof rawCfg === "object" ? (rawCfg as Record<string, any>) : {};
   const scriptDataset = (script as HTMLScriptElement)?.dataset;
-  const templateId =
+  const widgetId = String(
+    (scriptDataset && (scriptDataset as DOMStringMap).widgetId) ||
+      cfg.widget_id ||
+      cfg.widgetId ||
+      ""
+  ).trim();
+  const instanceId = String(
+    (scriptDataset && (scriptDataset as DOMStringMap).instanceId) ||
+      cfg.instance_id ||
+      cfg.instanceId ||
+      ""
+  ).trim();
+  const templateId = String(
     (scriptDataset && (scriptDataset as DOMStringMap).templateId) ||
-    String(cfg.template_id || cfg.templateId || "").trim();
-  const publicKey =
-    (scriptDataset && (scriptDataset as DOMStringMap).key) ||
-    cfg.key ||
-    (templateId ? templateId : "");
-  if (!publicKey) return;
+      cfg.template_id ||
+      cfg.templateId ||
+      ""
+  ).trim();
+  const fallbackPublicKey = String(
+    (scriptDataset && ((scriptDataset as DOMStringMap).publicKey || (scriptDataset as DOMStringMap).key)) ||
+      cfg.public_key ||
+      cfg.key ||
+      ""
+  ).trim();
+  const instancePublicKey = String(
+    (scriptDataset && (scriptDataset as DOMStringMap).instanceKey) ||
+      cfg.instance_public_key ||
+      cfg.instancePublicKey ||
+      fallbackPublicKey
+  ).trim();
+  const widgetPublicKey = String(
+    (scriptDataset && (scriptDataset as DOMStringMap).widgetKey) ||
+      cfg.widget_public_key ||
+      cfg.widgetPublicKey ||
+      fallbackPublicKey
+  ).trim();
+  const resolvedWidgetId = widgetId || (!instanceId ? templateId : "");
+  if (instanceId) {
+    if (!instancePublicKey || !templateId) return;
+  } else if (!resolvedWidgetId || !widgetPublicKey) {
+    return;
+  }
   const scriptOverrides = (script as HTMLScriptElement)?.dataset?.overrides;
   if (scriptOverrides && !cfg.overrides) {
     try {
@@ -810,7 +898,8 @@ export function mountWidgetLauncher() {
     visitorId = `mw_vis_${Math.random().toString(36).slice(2, 12)}`;
   }
 
-  const sessionStorageKey = `mejai_widget_session_${publicKey}_${visitorId}`;
+  const sessionIdentity = instanceId || resolvedWidgetId || "unknown";
+  const sessionStorageKey = `mejai_widget_session_${sessionIdentity}_${visitorId}`;
   let sessionId = "";
   try {
     sessionId = localStorage.getItem(sessionStorageKey) || "";
@@ -836,7 +925,10 @@ export function mountWidgetLauncher() {
     <WidgetLauncherRuntime
       cfg={cfg}
       baseUrl={baseUrl}
-      publicKey={String(publicKey)}
+      widgetId={resolvedWidgetId || undefined}
+      widgetPublicKey={widgetPublicKey || undefined}
+      instanceId={instanceId || undefined}
+      instancePublicKey={instancePublicKey || undefined}
       templateId={templateId || undefined}
       visitorId={visitorId}
       sessionId={sessionId}

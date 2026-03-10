@@ -14,6 +14,7 @@ type TemplateRow = {
   is_public?: boolean | null;
   chat_policy?: Record<string, unknown> | null;
   created_by?: string | null;
+  public_key?: string | null;
 };
 
 type InstanceRow = {
@@ -39,8 +40,9 @@ function mapTemplateToWidgetConfig(template: TemplateRow, instance?: InstanceRow
     allowed_paths: access.allowed_paths || [],
     theme,
     is_active: template.is_active ?? true,
-    public_key: instance?.public_key || null,
-    page_keys: Array.isArray((template as any).page_keys) ? ((template as any).page_keys as string[]) : [],
+    template_public_key: template.public_key || null,
+    instance_id: instance?.id || null,
+    instance_public_key: instance?.public_key || null,
   };
 }
 
@@ -65,16 +67,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }
 
-  const url = new URL(req.url);
-  const pageKey = String(url.searchParams.get("page_key") || "").trim();
   let query = context.supabase
     .from("B_chat_widgets")
     .select("*")
     .eq("created_by", context.user.id)
     .order("created_at", { ascending: false });
-  if (pageKey) {
-    query = query.contains("page_keys", [pageKey]);
-  }
   const { data, error } = await query;
 
   if (error) {
@@ -146,9 +143,7 @@ export async function POST(req: NextRequest) {
   const isActive = typeof body.is_active === "boolean" ? body.is_active : true;
   const rotateKey = body.rotate_key === true;
   const templateId = String(body.template_id || "").trim();
-  const pageKeysProvided = Array.isArray(body.page_keys);
-  const nextPageKeys = pageKeysProvided ? normalizeStringArray(body.page_keys) : [];
-  const pageKey = String(body.page_key || "").trim();
+  const templatePublicKey = makePublicKey();
 
   let supabaseAdmin;
   try {
@@ -187,14 +182,8 @@ export async function POST(req: NextRequest) {
     allowed_paths: allowedPaths,
   };
   const policyWithAccess = setPolicyWidgetAccess(policyWithSetup, nextAccess);
-  const existingPageKeys = Array.isArray((existingTemplate as any)?.page_keys)
-    ? normalizeStringArray((existingTemplate as any).page_keys)
-    : [];
-  const mergedPageKeys = pageKeysProvided
-    ? nextPageKeys
-    : pageKey
-      ? Array.from(new Set([...existingPageKeys, pageKey]))
-      : existingPageKeys;
+  const resolvedTemplatePublicKey =
+    existingTemplate && existingTemplate.public_key ? String(existingTemplate.public_key) : templatePublicKey;
 
   let templateRow: TemplateRow;
   if (existingTemplate?.id) {
@@ -204,7 +193,7 @@ export async function POST(req: NextRequest) {
         name,
         chat_policy: policyWithAccess,
         is_active: isActive,
-        ...(pageKeysProvided || pageKey ? { page_keys: mergedPageKeys } : {}),
+        ...(existingTemplate.public_key ? {} : { public_key: resolvedTemplatePublicKey }),
         updated_at: nowIso,
       })
       .eq("id", existingTemplate.id)
@@ -222,7 +211,7 @@ export async function POST(req: NextRequest) {
         chat_policy: policyWithAccess,
         is_active: isActive,
         is_public: true,
-        page_keys: mergedPageKeys,
+        public_key: resolvedTemplatePublicKey,
         created_by: context.user.id,
         created_at: nowIso,
         updated_at: nowIso,

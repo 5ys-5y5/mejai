@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { normalizeStringArray, type WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
@@ -52,6 +53,7 @@ function mapTemplateRow(row: Record<string, any>) {
     ...row,
     theme,
     template_id: null,
+    public_key: row.public_key || null,
     agent_id: setupConfig?.agent_id ?? null,
     setup_config: (setupConfig || null) as WidgetSetupConfig | null,
     allowed_domains: access.allowed_domains || [],
@@ -126,7 +128,7 @@ export async function POST(req: NextRequest) {
   );
   const isActive = typeof body.is_active === "boolean" ? body.is_active : true;
   const isPublic = typeof body.is_public === "boolean" ? body.is_public : false;
-  const pageKeys = Array.isArray(body.page_keys) ? normalizeStringArray(body.page_keys) : [];
+  const publicKey = `mw_pk_${crypto.randomBytes(16).toString("hex")}`;
 
   const chatPolicyShape = normalizeWidgetChatPolicyProvider(chatPolicy);
   const policyWithTheme = setPolicyWidgetTheme(chatPolicyShape, theme);
@@ -150,7 +152,7 @@ export async function POST(req: NextRequest) {
       chat_policy: policyWithAccess,
       is_active: isActive,
       is_public: isPublic,
-      page_keys: pageKeys,
+      public_key: publicKey,
       created_by: context.user.id,
       created_at: nowIso,
       updated_at: nowIso,

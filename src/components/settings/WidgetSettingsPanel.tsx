@@ -12,12 +12,13 @@ type WidgetConfig = {
   id?: string;
   name?: string | null;
   agent_id?: string | null;
-  public_key?: string | null;
+  template_public_key?: string | null;
+  instance_id?: string | null;
+  instance_public_key?: string | null;
   allowed_domains?: string[] | null;
   allowed_paths?: string[] | null;
   theme?: Record<string, unknown> | null;
   is_active?: boolean | null;
-  page_keys?: string[] | null;
 };
 
 type AgentItem = {
@@ -61,7 +62,6 @@ export function WidgetSettingsPanel() {
   const [domainText, setDomainText] = useState("");
   const [pathText, setPathText] = useState("");
   const [allowedAccountsText, setAllowedAccountsText] = useState("");
-  const [pageKeysText, setPageKeysText] = useState("");
 
   const selectedWidget = useMemo(
     () => widgets.find((item) => item.id && item.id === selectedId) || null,
@@ -82,7 +82,6 @@ export function WidgetSettingsPanel() {
     if (current) {
       const nextDomains = current.allowed_domains || [];
       const nextPaths = current.allowed_paths || [];
-      const nextPageKeys = current.page_keys || [];
       const nextAccounts = normalizeThemeList(
         (current.theme || {}).allowed_accounts || (current.theme || {}).allowedAccounts
       );
@@ -96,7 +95,6 @@ export function WidgetSettingsPanel() {
       });
       setDomainText(nextDomains.join("\n"));
       setPathText(nextPaths.join("\n"));
-      setPageKeysText(nextPageKeys.join("\n"));
       setAllowedAccountsText(nextAccounts.join("\n"));
     } else {
       setDraft({
@@ -109,7 +107,6 @@ export function WidgetSettingsPanel() {
       });
       setDomainText("");
       setPathText("");
-      setPageKeysText("");
       setAllowedAccountsText("");
     }
   }, []);
@@ -151,7 +148,6 @@ export function WidgetSettingsPanel() {
     try {
       const allowedDomains = normalizeListInput(domainText);
       const allowedPaths = normalizeListInput(pathText);
-      const pageKeys = normalizeListInput(pageKeysText);
       const allowedAccounts = normalizeListInput(allowedAccountsText);
       const payload = {
         template_id: selectedWidget?.id,
@@ -159,7 +155,6 @@ export function WidgetSettingsPanel() {
         agent_id: draft.agent_id || null,
         allowed_domains: allowedDomains,
         allowed_paths: allowedPaths,
-        page_keys: pageKeys,
         theme: { ...(draft.theme || {}), allowed_accounts: allowedAccounts },
         is_active: Boolean(draft.is_active),
         rotate_key: rotateKey,
@@ -210,7 +205,7 @@ export function WidgetSettingsPanel() {
             options={widgets.map((item) => ({
               id: String(item.id || ""),
               label: String(item.name || item.id || "템플릿"),
-              description: item.public_key ? `키: ${item.public_key}` : undefined,
+              description: item.template_public_key ? `템플릿 키: ${item.template_public_key}` : undefined,
             }))}
             onChange={(value) => setSelectedId(value)}
             className="w-full"
@@ -248,7 +243,7 @@ export function WidgetSettingsPanel() {
             <span className="font-mono">shop.example.com</span>.{" "}
             <span className="font-mono">https://</span>는 있어도 무시되며,{" "}
             <span className="font-mono">*.example.com</span> 형태로 모든 서브도메인을 허용할 수 있습니다.
-            이 목록에 없는 도메인에서는 위젯이 열리지 않습니다.
+            현재는 인증 단계에서 도메인 제한을 적용하지 않습니다.
           </div>
         </label>
         <label className="block">
@@ -261,18 +256,8 @@ export function WidgetSettingsPanel() {
           <div className="mt-1 text-[11px] text-slate-500">
             도메인 안에서 위젯이 보일 페이지를 제한합니다. 비워두면 도메인 내 모든 페이지에서 작동합니다.{" "}
             <span className="font-mono">/support</span>처럼 입력하면 해당 경로로 시작하는 페이지에서만 보이고,{" "}
-            <span className="font-mono">*</span>는 모든 경로 허용입니다.
-          </div>
-        </label>
-        <label className="block">
-          <div className="mb-1 text-xs text-slate-600">템플릿 사용 페이지 키 (줄바꿈 또는 콤마)</div>
-          <textarea
-            value={pageKeysText}
-            onChange={(e) => setPageKeysText(e.target.value)}
-            className="w-full min-h-[70px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
-          />
-          <div className="mt-1 text-[11px] text-slate-500">
-            예: <span className="font-mono">/app/install</span>, <span className="font-mono">/app/conversation-dup</span>
+            <span className="font-mono">*</span>는 모든 경로 허용입니다. 현재는 인증 단계에서 경로 제한을 적용하지
+            않습니다.
           </div>
         </label>
         <label className="block">
@@ -345,11 +330,18 @@ export function WidgetSettingsPanel() {
           {saving ? "저장 중..." : "저장"}
         </Button>
         <Button type="button" variant="outline" onClick={() => handleSave(true)} disabled={saving}>
-          키 재발급
+          인스턴스 키 재발급
         </Button>
-        {selectedWidget?.public_key ? (
+        {selectedWidget?.template_public_key ? (
           <div className="text-xs text-slate-500 flex items-center">
-            현재 키: <span className="ml-1 font-mono text-slate-700">{selectedWidget.public_key}</span>
+            템플릿 키:{" "}
+            <span className="ml-1 font-mono text-slate-700">{selectedWidget.template_public_key}</span>
+          </div>
+        ) : null}
+        {selectedWidget?.instance_public_key ? (
+          <div className="text-xs text-slate-500 flex items-center">
+            인스턴스 키:{" "}
+            <span className="ml-1 font-mono text-slate-700">{selectedWidget.instance_public_key}</span>
           </div>
         ) : null}
       </Card>

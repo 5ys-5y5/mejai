@@ -1,13 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import { getServerContext } from "@/lib/serverAuth";
-import { extractHostFromUrl, matchAllowedDomain } from "@/lib/widgetUtils";
 import { decodeWidgetOverrides } from "@/lib/widgetOverrides";
 import { normalizeWidgetOverrides } from "@/lib/widgetTemplateMeta";
-import { filterWidgetOverridesByPolicy, resolveWidgetBasePolicy, resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
+import {
+  filterWidgetOverridesByPolicy,
+  resolveWidgetBasePolicy,
+  resolveWidgetRuntimeConfig,
+  type WidgetInstanceRow,
+  type WidgetTemplateRow,
+} from "@/lib/widgetRuntimeConfig";
 import { ensureTemplateSharedInstance } from "@/lib/widgetSharedInstance";
 import { normalizeWidgetChatPolicyProvider } from "@/lib/widgetChatPolicyShape";
 import { getPolicyWidgetAccess } from "@/lib/widgetPolicyUtils";
+
+type TemplateRow = WidgetTemplateRow & {
+  public_key?: string | null;
+};
+type InstanceRow = WidgetInstanceRow;
 
 function withCors(res: NextResponse, origin?: string | null) {
   res.headers.set("Access-Control-Allow-Origin", origin || "*");
@@ -24,31 +33,28 @@ export async function OPTIONS(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const publicKey = String(url.searchParams.get("key") || url.searchParams.get("public_key") || "").trim();
+  const publicKey = String(
+    url.searchParams.get("public_key") ||
+      url.searchParams.get("widget_public_key") ||
+      url.searchParams.get("instance_public_key") ||
+      url.searchParams.get("key") ||
+      ""
+  ).trim();
+  const instanceId = String(url.searchParams.get("instance_id") || "").trim();
   const templateIdParam = String(url.searchParams.get("template_id") || "").trim();
+  const widgetIdParam = String(url.searchParams.get("widget_id") || "").trim();
+  const widgetId = widgetIdParam || (!instanceId ? templateIdParam : "");
   const overridesParam = String(url.searchParams.get("ovr") || "").trim();
-  const previewParam = String(url.searchParams.get("preview") || "").trim().toLowerCase();
   const originHeader = req.headers.get("origin");
-  if (!publicKey) {
-    return withCors(NextResponse.json({ error: "PUBLIC_KEY_REQUIRED" }, { status: 400 }), originHeader);
+
+  if (instanceId) {
+    if (!publicKey || !templateIdParam) {
+      return withCors(NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 400 }), originHeader);
+    }
+  } else if (!widgetId || !publicKey) {
+    return withCors(NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 400 }), originHeader);
   }
   const overrides = normalizeWidgetOverrides(decodeWidgetOverrides(overridesParam));
-  const allowPreview = previewParam === "1" || previewParam === "true";
-
-  let allowAdminPreview = false;
-  if (allowPreview) {
-    const authHeader = req.headers.get("authorization") || "";
-    const cookieHeader = req.headers.get("cookie") || "";
-    const context = await getServerContext(authHeader, cookieHeader);
-    if (!("error" in context)) {
-      const { data: access } = await context.supabase
-        .from("A_iam_user_access_maps")
-        .select("is_admin")
-        .eq("user_id", context.user.id)
-        .maybeSingle();
-      allowAdminPreview = Boolean(access?.is_admin);
-    }
-  }
 
   let supabaseAdmin;
   try {
@@ -63,31 +69,44 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  let { data: instance, error } = await supabaseAdmin
-    .from("B_chat_widget_instances")
-    .select("id, template_id, public_key, name, is_active, chat_policy, is_public")
-    .eq("public_key", publicKey)
-    .eq("is_active", true)
-    .maybeSingle();
+  let instance: InstanceRow | null = null;
+  let template: TemplateRow | null = null;
 
-  if (error) {
-    return withCors(NextResponse.json({ error: error.message }, { status: 400 }), originHeader);
-  }
-  const resolvedTemplateId = templateIdParam || (!instance ? publicKey : "");
-
-  let templateId = instance ? String(instance.template_id) : "";
-  if (!instance && resolvedTemplateId) {
-    const { data: template } = await supabaseAdmin
-      .from("B_chat_widgets")
-      .select("id, name, is_active, chat_policy, is_public, created_by")
-      .eq("id", resolvedTemplateId)
+  if (instanceId) {
+    const { data, error } = await supabaseAdmin
+      .from("B_chat_widget_instances")
+      .select("id, template_id, public_key, name, is_active, chat_policy, is_public")
+      .eq("id", instanceId)
       .maybeSingle();
-    if (!template || !template.is_active) {
+    if (error) {
+      return withCors(NextResponse.json({ error: error.message }, { status: 400 }), originHeader);
+    }
+    if (!data || !data.is_active) {
       return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
     }
-    if (!template.is_public && !allowAdminPreview) {
+    if (String(data.public_key || "") !== publicKey) {
+      return withCors(NextResponse.json({ error: "AUTH_FAILED" }, { status: 403 }), originHeader);
+    }
+    if (String(data.template_id || "") !== templateIdParam) {
+      return withCors(NextResponse.json({ error: "TEMPLATE_MISMATCH" }, { status: 400 }), originHeader);
+    }
+    instance = data as InstanceRow;
+  } else if (widgetId) {
+    const { data, error } = await supabaseAdmin
+      .from("B_chat_widgets")
+      .select("id, name, is_active, chat_policy, is_public, created_by, public_key")
+      .eq("id", widgetId)
+      .maybeSingle();
+    if (error) {
+      return withCors(NextResponse.json({ error: error.message }, { status: 400 }), originHeader);
+    }
+    if (!data || !data.is_active) {
       return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
     }
+    if (String(data.public_key || "") !== publicKey) {
+      return withCors(NextResponse.json({ error: "AUTH_FAILED" }, { status: 403 }), originHeader);
+    }
+    template = data as TemplateRow;
     const templatePolicy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
     const access = getPolicyWidgetAccess(templatePolicy);
     try {
@@ -100,7 +119,7 @@ export async function GET(req: NextRequest) {
         is_active: true,
         is_public: true,
         chat_policy: shared.chat_policy || null,
-      };
+      } satisfies InstanceRow;
     } catch (error) {
       return withCors(
         NextResponse.json(
@@ -110,34 +129,30 @@ export async function GET(req: NextRequest) {
         originHeader
       );
     }
-    templateId = String(template.id);
   }
 
   if (!instance) {
     return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
   }
 
-  const { data: template } = await supabaseAdmin
-    .from("B_chat_widgets")
-    .select("id, name, is_active, chat_policy, is_public, created_by")
-    .eq("id", templateId)
-    .maybeSingle();
-  if (!template || !template.is_active) {
-    return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
-  }
-  if ((!template.is_public || !instance.is_public) && !allowAdminPreview) {
-    return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
+  if (!template) {
+    const { data, error } = await supabaseAdmin
+      .from("B_chat_widgets")
+      .select("id, name, is_active, chat_policy, is_public, created_by, public_key")
+      .eq("id", instance.template_id)
+      .maybeSingle();
+    if (error) {
+      return withCors(NextResponse.json({ error: error.message }, { status: 400 }), originHeader);
+    }
+    if (!data || !data.is_active) {
+      return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
+    }
+    template = data as TemplateRow;
   }
 
   const basePolicy = resolveWidgetBasePolicy(template, instance);
   const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
   const resolved = resolveWidgetRuntimeConfig(template, instance, filteredOverrides);
-
-  const allowedDomains = resolved.allowed_domains;
-  const originHost = extractHostFromUrl(originHeader || "");
-  if (allowedDomains.length > 0 && originHost && !matchAllowedDomain(originHost, allowedDomains)) {
-    return withCors(NextResponse.json({ error: "DOMAIN_NOT_ALLOWED" }, { status: 403 }), originHeader);
-  }
 
   return withCors(
     NextResponse.json({
