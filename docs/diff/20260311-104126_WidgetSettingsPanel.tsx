@@ -15,6 +15,8 @@ type WidgetConfig = {
   template_public_key?: string | null;
   instance_id?: string | null;
   instance_public_key?: string | null;
+  allowed_domains?: string[] | null;
+  allowed_paths?: string[] | null;
   theme?: Record<string, unknown> | null;
   is_active?: boolean | null;
 };
@@ -26,6 +28,23 @@ type AgentItem = {
   is_active?: boolean | null;
 };
 
+function normalizeListInput(value: string) {
+  return value
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeThemeList(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return normalizeListInput(value);
+  }
+  return [];
+}
+
 export function WidgetSettingsPanel() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -35,9 +54,14 @@ export function WidgetSettingsPanel() {
   const [draft, setDraft] = useState<WidgetConfig>({
     name: "Web Widget",
     agent_id: "",
+    allowed_domains: [],
+    allowed_paths: [],
     theme: {},
     is_active: true,
   });
+  const [domainText, setDomainText] = useState("");
+  const [pathText, setPathText] = useState("");
+  const [allowedAccountsText, setAllowedAccountsText] = useState("");
 
   const selectedWidget = useMemo(
     () => widgets.find((item) => item.id && item.id === selectedId) || null,
@@ -56,19 +80,34 @@ export function WidgetSettingsPanel() {
 
   const applyWidgetToDraft = useCallback((current: WidgetConfig | null) => {
     if (current) {
+      const nextDomains = current.allowed_domains || [];
+      const nextPaths = current.allowed_paths || [];
+      const nextAccounts = normalizeThemeList(
+        (current.theme || {}).allowed_accounts || (current.theme || {}).allowedAccounts
+      );
       setDraft({
         name: current.name || "Web Widget",
         agent_id: current.agent_id || "",
+        allowed_domains: nextDomains,
+        allowed_paths: nextPaths,
         theme: current.theme || {},
         is_active: typeof current.is_active === "boolean" ? current.is_active : true,
       });
+      setDomainText(nextDomains.join("\n"));
+      setPathText(nextPaths.join("\n"));
+      setAllowedAccountsText(nextAccounts.join("\n"));
     } else {
       setDraft({
         name: "Web Widget",
         agent_id: "",
+        allowed_domains: [],
+        allowed_paths: [],
         theme: {},
         is_active: true,
       });
+      setDomainText("");
+      setPathText("");
+      setAllowedAccountsText("");
     }
   }, []);
 
@@ -107,11 +146,16 @@ export function WidgetSettingsPanel() {
   const handleSave = async (rotateKey = false) => {
     setSaving(true);
     try {
+      const allowedDomains = normalizeListInput(domainText);
+      const allowedPaths = normalizeListInput(pathText);
+      const allowedAccounts = normalizeListInput(allowedAccountsText);
       const payload = {
         template_id: selectedWidget?.id,
         name: draft.name,
         agent_id: draft.agent_id || null,
-        theme: draft.theme || {},
+        allowed_domains: allowedDomains,
+        allowed_paths: allowedPaths,
+        theme: { ...(draft.theme || {}), allowed_accounts: allowedAccounts },
         is_active: Boolean(draft.is_active),
         rotate_key: rotateKey,
       };
@@ -133,6 +177,12 @@ export function WidgetSettingsPanel() {
       if (!selectedId) {
         setSelectedId(res.item.id || "");
       }
+      setDraft((prev) => ({
+        ...prev,
+        allowed_domains: allowedDomains,
+        allowed_paths: allowedPaths,
+        theme: { ...(prev.theme || {}), allowed_accounts: allowedAccounts },
+      }));
       toast.success("위젯 설정이 저장되었습니다.");
     } catch (error) {
       toast.error("저장에 실패했습니다.");
@@ -180,6 +230,47 @@ export function WidgetSettingsPanel() {
             className="w-full"
             buttonClassName="h-9 text-xs"
           />
+        </label>
+        <label className="block">
+          <div className="mb-1 text-xs text-slate-600">허용 도메인 (줄바꿈 또는 콤마)</div>
+          <textarea
+            value={domainText}
+            onChange={(e) => setDomainText(e.target.value)}
+            className="w-full min-h-[90px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
+          />
+          <div className="mt-1 text-[11px] text-slate-500">
+            위젯을 띄울 웹사이트 주소를 적습니다. 예: <span className="font-mono">example.com</span>,{" "}
+            <span className="font-mono">shop.example.com</span>.{" "}
+            <span className="font-mono">https://</span>는 있어도 무시되며,{" "}
+            <span className="font-mono">*.example.com</span> 형태로 모든 서브도메인을 허용할 수 있습니다.
+            현재는 인증 단계에서 도메인 제한을 적용하지 않습니다.
+          </div>
+        </label>
+        <label className="block">
+          <div className="mb-1 text-xs text-slate-600">허용 경로 (선택, 줄바꿈)</div>
+          <textarea
+            value={pathText}
+            onChange={(e) => setPathText(e.target.value)}
+            className="w-full min-h-[70px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
+          />
+          <div className="mt-1 text-[11px] text-slate-500">
+            도메인 안에서 위젯이 보일 페이지를 제한합니다. 비워두면 도메인 내 모든 페이지에서 작동합니다.{" "}
+            <span className="font-mono">/support</span>처럼 입력하면 해당 경로로 시작하는 페이지에서만 보이고,{" "}
+            <span className="font-mono">*</span>는 모든 경로 허용입니다. 현재는 인증 단계에서 경로 제한을 적용하지
+            않습니다.
+          </div>
+        </label>
+        <label className="block">
+          <div className="mb-1 text-xs text-slate-600">허용 계정 (줄바꿈 또는 콤마)</div>
+          <textarea
+            value={allowedAccountsText}
+            onChange={(e) => setAllowedAccountsText(e.target.value)}
+            className="w-full min-h-[70px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
+          />
+          <div className="mt-1 text-[11px] text-slate-500">
+            로그인 사용자 식별자를 입력합니다. 여기 등록된 계정에만 위젯의 <span className="font-semibold">정책 탭</span>
+            등 운영용 기능이 노출됩니다. 일반 고객 채팅에는 영향이 없습니다.
+          </div>
         </label>
         <label className="block">
           <div className="mb-1 text-xs text-slate-600">환영 메시지</div>

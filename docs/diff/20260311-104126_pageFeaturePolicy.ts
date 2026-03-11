@@ -255,6 +255,10 @@ export type WidgetChatPolicyConfig = {
   name?: string;
   agent_id?: string;
   setup_config?: WidgetSetupConfig | null;
+  access?: {
+    allowed_domains?: string[] | null;
+    allowed_paths?: string[] | null;
+  };
   entry_mode?: "launcher" | "embed";
   embed_view?: "chat" | "setup" | "both" | "list";
   theme?: Record<string, unknown>;
@@ -279,6 +283,8 @@ export type WidgetChatPolicyConfig = {
     bottomOffset?: string;
     sideOffset?: string;
   };
+  allowed_domains?: string[];
+  allowed_paths?: string[];
 };
 
 export type ConversationFeaturesProviderShape = {

@@ -3,8 +3,8 @@ import crypto from "crypto";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { normalizeWidgetChatPolicyProvider, normalizeWidgetChatPolicyRecordFromProvider } from "@/lib/widgetChatPolicyShape";
-import { type WidgetSetupConfig, normalizeStringArray } from "@/lib/widgetTemplateMeta";
-import { getPolicyWidgetAccess, getPolicyWidgetSetupConfig, getPolicyWidgetTheme, setPolicyWidgetAccess, setPolicyWidgetSetupConfig, setPolicyWidgetTheme } from "@/lib/widgetPolicyUtils";
+import { type WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
+import { getPolicyWidgetSetupConfig, getPolicyWidgetTheme, setPolicyWidgetSetupConfig, setPolicyWidgetTheme } from "@/lib/widgetPolicyUtils";
 import { ensureTemplateSharedInstance } from "@/lib/widgetSharedInstance";
 
 type TemplateRow = {
@@ -31,13 +31,10 @@ function mapTemplateToWidgetConfig(template: TemplateRow, instance?: InstanceRow
   const policy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
   const theme = getPolicyWidgetTheme(policy);
   const setupConfig = getPolicyWidgetSetupConfig(policy);
-  const access = getPolicyWidgetAccess(policy);
   return {
     id: template.id,
     name: template.name || "Web Widget",
     agent_id: setupConfig?.agent_id || null,
-    allowed_domains: access.allowed_domains || [],
-    allowed_paths: access.allowed_paths || [],
     theme,
     is_active: template.is_active ?? true,
     template_public_key: template.public_key || null,
@@ -94,10 +91,9 @@ export async function GET(req: NextRequest) {
   await Promise.all(
     templates.map(async (template) => {
       const policy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
-      const access = getPolicyWidgetAccess(policy);
       if (!supabaseAdmin) return;
       try {
-        const shared = await ensureTemplateSharedInstance(supabaseAdmin, template, access);
+        const shared = await ensureTemplateSharedInstance(supabaseAdmin, template);
         instanceMap.set(template.id, {
           id: shared.id,
           public_key: shared.public_key,
@@ -137,8 +133,6 @@ export async function POST(req: NextRequest) {
   const nowIso = new Date().toISOString();
   const name = String(body.name || "").trim() || "Web Widget";
   const agentId = String(body.agent_id || "").trim() || null;
-  const allowedDomains = normalizeStringArray(body.allowed_domains);
-  const allowedPaths = normalizeStringArray(body.allowed_paths);
   const theme = typeof body.theme === "object" && body.theme ? body.theme : {};
   const isActive = typeof body.is_active === "boolean" ? body.is_active : true;
   const rotateKey = body.rotate_key === true;
@@ -177,11 +171,6 @@ export async function POST(req: NextRequest) {
   const chatPolicyShape = normalizeWidgetChatPolicyProvider(chatPolicy);
   const policyWithTheme = setPolicyWidgetTheme(chatPolicyShape, theme);
   const policyWithSetup = setPolicyWidgetSetupConfig(policyWithTheme, nextSetupConfig);
-  const nextAccess = {
-    allowed_domains: allowedDomains,
-    allowed_paths: allowedPaths,
-  };
-  const policyWithAccess = setPolicyWidgetAccess(policyWithSetup, nextAccess);
   const resolvedTemplatePublicKey =
     existingTemplate && existingTemplate.public_key ? String(existingTemplate.public_key) : templatePublicKey;
 
@@ -191,7 +180,7 @@ export async function POST(req: NextRequest) {
       .from("B_chat_widgets")
       .update({
         name,
-        chat_policy: policyWithAccess,
+        chat_policy: policyWithSetup,
         is_active: isActive,
         ...(existingTemplate.public_key ? {} : { public_key: resolvedTemplatePublicKey }),
         updated_at: nowIso,
@@ -208,7 +197,7 @@ export async function POST(req: NextRequest) {
       .from("B_chat_widgets")
       .insert({
         name,
-        chat_policy: policyWithAccess,
+        chat_policy: policyWithSetup,
         is_active: isActive,
         is_public: true,
         public_key: resolvedTemplatePublicKey,
@@ -226,7 +215,7 @@ export async function POST(req: NextRequest) {
 
   let instance: InstanceRow | null = null;
   try {
-    const shared = await ensureTemplateSharedInstance(supabaseAdmin, templateRow, nextAccess, nowIso);
+    const shared = await ensureTemplateSharedInstance(supabaseAdmin, templateRow, nowIso);
     instance = { id: shared.id, public_key: shared.public_key, template_id: shared.template_id };
   } catch (error) {
     return NextResponse.json(

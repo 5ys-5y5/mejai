@@ -21,6 +21,8 @@ export type WidgetSetupConfig = {
 export type WidgetOverrides = {
   name?: string | null;
   agent_id?: string | null;
+  allowed_domains?: string[] | null;
+  allowed_paths?: string[] | null;
   theme?: Record<string, unknown> | null;
   setup_config?: WidgetSetupConfig | null;
   chat_policy?: WidgetChatPolicyInput | null;
@@ -77,6 +79,8 @@ export function normalizeWidgetOverrides(value: unknown): WidgetOverrides {
   return {
     name: typeof value.name === "string" ? value.name : null,
     agent_id: typeof value.agent_id === "string" ? value.agent_id : null,
+    allowed_domains: normalizeStringArray(value.allowed_domains),
+    allowed_paths: normalizeStringArray(value.allowed_paths),
     theme,
     setup_config: setupConfig,
     chat_policy: chatPolicy,

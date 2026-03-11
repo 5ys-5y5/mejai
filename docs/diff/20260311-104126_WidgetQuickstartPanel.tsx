@@ -13,6 +13,7 @@ type WidgetConfig = {
   template_public_key?: string | null;
   instance_id?: string | null;
   instance_public_key?: string | null;
+  allowed_domains?: string[] | null;
   is_active?: boolean | null;
 };
 
@@ -140,6 +141,23 @@ export function WidgetQuickstartPanel() {
           <div className="text-xs text-slate-500">
             인스턴스 키: <span className="font-mono text-slate-700">{instancePublicKey || "-"}</span>
           </div>
+        </div>
+      </Card>
+
+      <Card className="p-4">
+        <div className="text-sm font-semibold text-slate-900">허용 도메인</div>
+        <div className="mt-2 text-xs text-slate-600">현재는 인증 단계에서 도메인 제한을 적용하지 않습니다.</div>
+        <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
+          {loading ? (
+            "불러오는 중..."
+          ) : selectedWidget?.allowed_domains && selectedWidget.allowed_domains.length > 0 ? (
+            selectedWidget.allowed_domains.join(", ")
+          ) : (
+            "허용 도메인이 등록되지 않았습니다."
+          )}
+        </div>
+        <div className="mt-2 text-[11px] text-slate-500">
+          도메인 편집은 “채팅 위젯” 탭에서 가능합니다.
         </div>
       </Card>
 

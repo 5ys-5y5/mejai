@@ -1073,6 +1073,55 @@ export function ChatSettingsPanel({
             />
           </RowGroup>
 
+          <RowGroup label="widget.access" displayLabel="노출/권한">
+            {isHidden("widget.access.allowed_domains") ? null : (
+              <Row
+                label="widget.access.allowed_domains"
+                alignTop
+                right={
+                  <textarea
+                    value={formatLines(Array.isArray(widget.access?.allowed_domains) ? widget.access?.allowed_domains : undefined)}
+                    onChange={(event) =>
+                      updateWidget(["access", "allowed_domains"], parseLinesAndComma(event.target.value))
+                    }
+                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  />
+                }
+              />
+            )}
+            {isHidden("widget.access.allowed_paths") ? null : (
+              <Row
+                label="widget.access.allowed_paths"
+                alignTop
+                right={
+                  <textarea
+                    value={formatLines(Array.isArray(widget.access?.allowed_paths) ? widget.access?.allowed_paths : undefined)}
+                    onChange={(event) =>
+                      updateWidget(["access", "allowed_paths"], parseLinesAndComma(event.target.value))
+                    }
+                    className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                  />
+                }
+              />
+            )}
+            <Row
+              label="theme.allowed_accounts"
+              alignTop
+              right={
+                <textarea
+                  value={
+                    formatLines(
+                      Array.isArray(widget.theme?.allowed_accounts)
+                        ? (widget.theme?.allowed_accounts as string[])
+                        : undefined
+                    )
+                  }
+                  onChange={(event) => updateWidget(["theme", "allowed_accounts"], parseLinesAndComma(event.target.value))}
+                  className="min-h-[70px] w-[260px] rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                />
+              }
+            />
+          </RowGroup>
         </ToggleRowGroup>
 
         <ToggleRowGroup
@@ -2136,6 +2185,23 @@ function normalizeListForSave(value: unknown): string[] {
 function normalizeWidgetListsForSave(widget: WidgetChatPolicyConfig | null | undefined) {
   if (!widget || !isObject(widget)) return widget;
   const nextWidget: WidgetChatPolicyConfig = { ...widget };
+  if (isObject(nextWidget.access)) {
+    const access = { ...(nextWidget.access as Record<string, unknown>) };
+    if ("allowed_domains" in access) {
+      access.allowed_domains = normalizeListForSave(access.allowed_domains);
+    }
+    if ("allowed_paths" in access) {
+      access.allowed_paths = normalizeListForSave(access.allowed_paths);
+    }
+    nextWidget.access = access as WidgetChatPolicyConfig["access"];
+  }
+  if (isObject(nextWidget.theme)) {
+    const theme = { ...(nextWidget.theme as Record<string, unknown>) };
+    if ("allowed_accounts" in theme) {
+      theme.allowed_accounts = normalizeListForSave(theme.allowed_accounts);
+    }
+    nextWidget.theme = theme as WidgetChatPolicyConfig["theme"];
+  }
   if (isObject(nextWidget.setup_config)) {
     const setupConfig = { ...(nextWidget.setup_config as Record<string, unknown>) };
     if (isObject(setupConfig.kb)) {

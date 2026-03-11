@@ -9,11 +9,14 @@ import {
   type WidgetOverrides,
   type WidgetSetupConfig,
   mergeTheme,
+  normalizeStringArray,
 } from "@/lib/widgetTemplateMeta";
 import {
+  getPolicyWidgetAccess,
   getPolicyWidgetSetupConfig,
   getPolicyWidgetTheme,
   mergeWidgetPolicies,
+  setPolicyWidgetAccess,
   setPolicyWidgetSetupConfig,
   setPolicyWidgetTheme,
 } from "@/lib/widgetPolicyUtils";
@@ -44,6 +47,8 @@ export type ResolvedWidgetConfig = {
   template: WidgetTemplateRow;
   instance: WidgetInstanceRow;
   name: string;
+  allowed_domains: string[];
+  allowed_paths: string[];
   theme: Record<string, unknown>;
   setup_config: WidgetSetupConfig | null;
   chat_policy: ConversationFeaturesProviderShape | null;
@@ -122,19 +127,35 @@ export function resolveWidgetRuntimeConfig(
 
   const resolvedName = template.name || "Web Widget";
 
+  const baseAccess = getPolicyWidgetAccess(basePolicy);
+  const resolvedDomains =
+    normalizeStringArray(overrides?.allowed_domains).length > 0
+      ? normalizeStringArray(overrides?.allowed_domains)
+      : normalizeStringArray(baseAccess.allowed_domains);
+  const resolvedPaths =
+    normalizeStringArray(overrides?.allowed_paths).length > 0
+      ? normalizeStringArray(overrides?.allowed_paths)
+      : normalizeStringArray(baseAccess.allowed_paths);
+
   const baseSetup = getPolicyWidgetSetupConfig(basePolicy) || null;
   const overrideSetup = overrides?.setup_config || null;
   const mergedSetup = mergeSetupConfig(baseSetup, overrideSetup);
 
   const resolvedPolicyWithTheme = setPolicyWidgetTheme(resolvedPolicy, overrideTheme);
   const resolvedPolicyWithSetup = setPolicyWidgetSetupConfig(resolvedPolicyWithTheme, mergedSetup);
+  const resolvedPolicyWithAccess = setPolicyWidgetAccess(resolvedPolicyWithSetup, {
+    allowed_domains: resolvedDomains,
+    allowed_paths: resolvedPaths,
+  });
 
   return {
     template,
     instance,
     name: resolvedName,
+    allowed_domains: resolvedDomains,
+    allowed_paths: resolvedPaths,
     theme: overrideTheme,
     setup_config: mergedSetup,
-    chat_policy: resolvedPolicyWithSetup,
+    chat_policy: resolvedPolicyWithAccess,
   };
 }

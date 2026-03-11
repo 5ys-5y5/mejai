@@ -8,10 +8,8 @@ import {
 import {
   getPolicyWidgetSetupConfig,
   getPolicyWidgetTheme,
-  getPolicyWidgetAccess,
   setPolicyWidgetSetupConfig,
   setPolicyWidgetTheme,
-  setPolicyWidgetAccess,
 } from "@/lib/widgetPolicyUtils";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -140,16 +138,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const existingPolicy = normalizeWidgetChatPolicyProvider(existing.chat_policy || null);
   const existingTheme = getPolicyWidgetTheme(existingPolicy);
   const existingSetup = getPolicyWidgetSetupConfig(existingPolicy);
-  const existingAccess = getPolicyWidgetAccess(existingPolicy);
   let mergedProvider = providerShape;
   if (Object.keys(getPolicyWidgetTheme(providerShape)).length === 0 && Object.keys(existingTheme).length > 0) {
     mergedProvider = setPolicyWidgetTheme(mergedProvider, existingTheme);
   }
   if (!getPolicyWidgetSetupConfig(providerShape) && existingSetup) {
     mergedProvider = setPolicyWidgetSetupConfig(mergedProvider, existingSetup);
-  }
-  if (Object.keys(getPolicyWidgetAccess(providerShape)).length === 0 && Object.keys(existingAccess).length > 0) {
-    mergedProvider = setPolicyWidgetAccess(mergedProvider, existingAccess);
   }
 
   const safeProvider = providerShape || {};

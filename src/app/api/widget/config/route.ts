@@ -10,8 +10,6 @@ import {
   type WidgetTemplateRow,
 } from "@/lib/widgetRuntimeConfig";
 import { ensureTemplateSharedInstance } from "@/lib/widgetSharedInstance";
-import { normalizeWidgetChatPolicyProvider } from "@/lib/widgetChatPolicyShape";
-import { getPolicyWidgetAccess } from "@/lib/widgetPolicyUtils";
 
 type TemplateRow = WidgetTemplateRow & {
   public_key?: string | null;
@@ -107,10 +105,8 @@ export async function GET(req: NextRequest) {
       return withCors(NextResponse.json({ error: "AUTH_FAILED" }, { status: 403 }), originHeader);
     }
     template = data as TemplateRow;
-    const templatePolicy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
-    const access = getPolicyWidgetAccess(templatePolicy);
     try {
-      const shared = await ensureTemplateSharedInstance(supabaseAdmin, template, access);
+      const shared = await ensureTemplateSharedInstance(supabaseAdmin, template);
       instance = {
         id: shared.id,
         template_id: shared.template_id,
@@ -161,7 +157,6 @@ export async function GET(req: NextRequest) {
         name: resolved.name,
         theme: resolved.theme || {},
         public_key: instance.public_key,
-        allowed_domains: resolved.allowed_domains,
         chat_policy: resolved.chat_policy,
         setup_config: resolved.setup_config,
       },

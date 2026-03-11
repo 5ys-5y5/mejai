@@ -84,6 +84,8 @@ export type DebugPayload = {
   widgetPublicKey?: string | null;
   widgetAgentId?: string | null;
   widgetOrgId?: string | null;
+  widgetAllowedDomains?: string[];
+  widgetAllowedPaths?: string[];
   requestDomain?: string | null;
   requestOrigin?: string | null;
   requestWidgetOrgIdPresent?: boolean;
@@ -383,11 +385,8 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
     payload.widgetPublicKey ||
     payload.widgetAgentId ||
     payload.widgetOrgId ||
-    (payload.widgetId ||
-    payload.widgetName ||
-    payload.widgetPublicKey ||
-    payload.widgetAgentId ||
-    payload.widgetOrgId)
+    (Array.isArray(payload.widgetAllowedDomains) && payload.widgetAllowedDomains.length > 0) ||
+    (Array.isArray(payload.widgetAllowedPaths) && payload.widgetAllowedPaths.length > 0)
       ? {
           widget: {
             ...(payload.widgetId ? { id: payload.widgetId } : {}),
@@ -395,6 +394,12 @@ function buildStructuredDebugPrefix(payload: DebugPayload) {
             ...(payload.widgetPublicKey ? { public_key: payload.widgetPublicKey } : {}),
             ...(payload.widgetAgentId ? { agent_id: payload.widgetAgentId } : {}),
             ...(payload.widgetOrgId ? { org_id: payload.widgetOrgId } : {}),
+            ...(Array.isArray(payload.widgetAllowedDomains) && payload.widgetAllowedDomains.length > 0
+              ? { allowed_domains: payload.widgetAllowedDomains }
+              : {}),
+            ...(Array.isArray(payload.widgetAllowedPaths) && payload.widgetAllowedPaths.length > 0
+              ? { allowed_paths: payload.widgetAllowedPaths }
+              : {}),
           },
         }
       : {}),

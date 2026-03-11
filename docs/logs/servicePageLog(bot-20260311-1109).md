@@ -1,3 +1,9 @@
+
+
+SESSION_ID: 7e49d7a0-95d8-4aed-a006-ab33961e677c
+PAGE: /app/laboratory
+KIND: conversation
+
 디버그 대원칙:
 - 본 원칙은 F_audit_mcp_tools, F_audit_events, F_audit_turn_specs 테이블에 내용을 기록할 때에 최소한의 디버깅으로 최대한의 개선을 위해 반드시 준수하여 해당 테이블에 기록하게 할 것(기록하는 기능 설계시 아래의 원칙 미준수가 감지되면 개선하여 기록하도록 할 것)
 - 원인 미확인은 로그 누락/정밀도 부족에서 발생한다.

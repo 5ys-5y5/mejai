@@ -460,6 +460,8 @@ export async function POST(req: NextRequest) {
         "x-widget-name": encodeHeaderValue(String(resolved.name || template.name || instance.name || "")),
         "x-widget-public-key": String(instance.public_key || ""),
         "x-widget-agent-id": effectiveAgentId ? encodeHeaderValue(effectiveAgentId) : "",
+        "x-widget-allowed-domains": encodeHeaderJson(resolved.allowed_domains || []),
+        "x-widget-allowed-paths": encodeHeaderJson(resolved.allowed_paths || []),
       },
       body: JSON.stringify({
         message,

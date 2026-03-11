@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import { normalizeStringArray, type WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
+import { type WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 import {
   normalizeWidgetChatPolicyProvider,
   normalizeWidgetChatPolicyRecordFromProvider,
 } from "@/lib/widgetChatPolicyShape";
-import {
-  getPolicyWidgetAccess,
-  getPolicyWidgetSetupConfig,
-  getPolicyWidgetTheme,
-  setPolicyWidgetAccess,
-  setPolicyWidgetSetupConfig,
-  setPolicyWidgetTheme,
-} from "@/lib/widgetPolicyUtils";
+import { getPolicyWidgetSetupConfig, getPolicyWidgetTheme, setPolicyWidgetSetupConfig, setPolicyWidgetTheme } from "@/lib/widgetPolicyUtils";
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
   if ("error" in context) return { ok: false, status: 401, error: context.error };
@@ -32,7 +25,6 @@ function mapTemplateRow(row: Record<string, any>) {
   const basePolicy = normalizeWidgetChatPolicyProvider(row.chat_policy || null);
   const setupConfig = getPolicyWidgetSetupConfig(basePolicy);
   const theme = getPolicyWidgetTheme(basePolicy);
-  const access = getPolicyWidgetAccess(basePolicy);
   return {
     ...row,
     theme,
@@ -40,8 +32,6 @@ function mapTemplateRow(row: Record<string, any>) {
     public_key: row.public_key || null,
     agent_id: setupConfig?.agent_id ?? null,
     setup_config: (setupConfig || null) as WidgetSetupConfig | null,
-    allowed_domains: access.allowed_domains || [],
-    allowed_paths: access.allowed_paths || [],
     chat_policy: basePolicy,
   };
 }
@@ -129,16 +119,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     : agentIdProvided
       ? { agent_id: normalizedAgentId }
       : null;
-  const access = {
-    allowed_domains:
-      body.allowed_domains !== undefined
-        ? normalizeStringArray(body.allowed_domains)
-        : getPolicyWidgetAccess(basePolicy).allowed_domains || [],
-    allowed_paths:
-      body.allowed_paths !== undefined
-        ? normalizeStringArray(body.allowed_paths)
-        : getPolicyWidgetAccess(basePolicy).allowed_paths || [],
-  };
   const chatPolicy = normalizeWidgetChatPolicyRecordFromProvider(
     body.chat_policy && typeof body.chat_policy === "object" ? body.chat_policy : existing.chat_policy
   );
@@ -146,7 +126,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const chatPolicyShape = normalizeWidgetChatPolicyProvider(chatPolicy);
   const policyWithTheme = setPolicyWidgetTheme(chatPolicyShape, theme);
   const policyWithSetup = setPolicyWidgetSetupConfig(policyWithTheme, setupConfig);
-  const policyWithAccess = setPolicyWidgetAccess(policyWithSetup, access);
 
   const name = body.name !== undefined ? String(body.name || "").trim() || existing.name : existing.name;
   const isActive = body.is_active !== undefined ? Boolean(body.is_active) : existing.is_active;
@@ -155,7 +134,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .from("B_chat_widgets")
     .update({
       name,
-      chat_policy: policyWithAccess,
+      chat_policy: policyWithSetup,
       is_active: isActive,
       is_public: isPublic,
       updated_at: new Date().toISOString(),

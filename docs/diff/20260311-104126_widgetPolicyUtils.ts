@@ -6,6 +6,11 @@ import {
 } from "@/lib/conversation/pageFeaturePolicy";
 import type { WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 
+type WidgetAccess = {
+  allowed_domains?: string[] | null;
+  allowed_paths?: string[] | null;
+};
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
@@ -107,6 +112,29 @@ export function setPolicyWidgetSetupConfig(
     widget: {
       ...widget,
       setup_config: setupConfig && isPlainObject(setupConfig) ? setupConfig : null,
+    },
+  };
+}
+
+export function getPolicyWidgetAccess(
+  policy: ConversationFeaturesProviderShape | null | undefined
+): WidgetAccess {
+  const widget = readPolicyWidget(policy);
+  const access = widget.access;
+  return isPlainObject(access) ? (access as WidgetAccess) : {};
+}
+
+export function setPolicyWidgetAccess(
+  policy: ConversationFeaturesProviderShape | null | undefined,
+  access: WidgetAccess | null
+): ConversationFeaturesProviderShape {
+  const base = isPlainObject(policy) ? { ...(policy as Record<string, unknown>) } : {};
+  const widget = readPolicyWidget(policy);
+  return {
+    ...(base as ConversationFeaturesProviderShape),
+    widget: {
+      ...widget,
+      access: access && isPlainObject(access) ? access : {},
     },
   };
 }

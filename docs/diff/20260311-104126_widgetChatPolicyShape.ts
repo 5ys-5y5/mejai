@@ -45,6 +45,11 @@ function normalizeWidgetListInput(value: unknown): string[] {
     .filter(Boolean);
 }
 
+function normalizeWidgetListIfPresent(value: unknown): string[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  return normalizeWidgetListInput(value);
+}
+
 function normalizeWidgetPolicyWidgetFields(
   provider: ConversationFeaturesProviderShape | null
 ): ConversationFeaturesProviderShape | null {
@@ -56,6 +61,34 @@ function normalizeWidgetPolicyWidgetFields(
   const rootCfg = isPlainObject(base.cfg) ? { ...(base.cfg as Record<string, unknown>) } : null;
   const rootLauncher = isPlainObject(base.launcher) ? { ...(base.launcher as Record<string, unknown>) } : null;
   const rootIframe = isPlainObject(base.iframe) ? { ...(base.iframe as Record<string, unknown>) } : null;
+  const access = isPlainObject(widget.access) ? { ...(widget.access as Record<string, unknown>) } : {};
+
+  const baseAllowedDomains = normalizeWidgetListIfPresent(base.allowed_domains);
+  const baseAllowedPaths = normalizeWidgetListIfPresent(base.allowed_paths);
+  const widgetAllowedDomains = normalizeWidgetListIfPresent(widget.allowed_domains);
+  const widgetAllowedPaths = normalizeWidgetListIfPresent(widget.allowed_paths);
+  if (widgetAllowedDomains !== undefined) {
+    widget.allowed_domains = widgetAllowedDomains;
+  } else if (baseAllowedDomains !== undefined) {
+    widget.allowed_domains = baseAllowedDomains;
+  }
+  if (widgetAllowedPaths !== undefined) {
+    widget.allowed_paths = widgetAllowedPaths;
+  } else if (baseAllowedPaths !== undefined) {
+    widget.allowed_paths = baseAllowedPaths;
+  }
+  const accessAllowedDomains = normalizeWidgetListIfPresent(access.allowed_domains);
+  const accessAllowedPaths = normalizeWidgetListIfPresent(access.allowed_paths);
+  if (accessAllowedDomains !== undefined) {
+    access.allowed_domains = accessAllowedDomains;
+  } else if (widget.allowed_domains !== undefined) {
+    access.allowed_domains = widget.allowed_domains;
+  }
+  if (accessAllowedPaths !== undefined) {
+    access.allowed_paths = accessAllowedPaths;
+  } else if (widget.allowed_paths !== undefined) {
+    access.allowed_paths = widget.allowed_paths;
+  }
 
   let setupConfig = isPlainObject(widget.setup_config)
     ? { ...(widget.setup_config as Record<string, unknown>) }
@@ -111,6 +144,18 @@ function normalizeWidgetPolicyWidgetFields(
   if (!widget.theme && rootTheme) {
     widget.theme = rootTheme;
   }
+  if (isPlainObject(widget.theme)) {
+    const theme = { ...(widget.theme as Record<string, unknown>) };
+    const allowedAccountsValue =
+      theme.allowed_accounts !== undefined ? theme.allowed_accounts : (theme.allowedAccounts as unknown);
+    if (allowedAccountsValue !== undefined) {
+      theme.allowed_accounts = normalizeWidgetListInput(allowedAccountsValue);
+    }
+    if ("allowedAccounts" in theme) {
+      delete (theme as { allowedAccounts?: unknown }).allowedAccounts;
+    }
+    widget.theme = theme;
+  }
   if (!widget.cfg && rootCfg) {
     widget.cfg = rootCfg;
   }
@@ -126,6 +171,10 @@ function normalizeWidgetPolicyWidgetFields(
   if (!widget.embed_view && typeof base.embed_view === "string") {
     widget.embed_view = base.embed_view;
   }
+  if (Object.keys(access).length > 0) {
+    widget.access = access;
+  }
+
   return { ...(provider as ConversationFeaturesProviderShape), widget };
 }
 

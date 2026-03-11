@@ -2,7 +2,6 @@
 
 import { MatrixRainBackground } from "@/components/landing/matrix-rain-background";
 import { HomeWidgetInstallBox } from "@/components/landing/home-widget-install-box";
-import { Card } from "@/components/design-system";
 
 export function LandingConversationHero() {
 
@@ -14,9 +13,7 @@ export function LandingConversationHero() {
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[500px] bg-gradient-to-t from-white to-transparent" />
       <div className="relative container mx-auto w-full max-w-6xl px-6">
         <div className="px-5 md:px-8 py-6">
-          <Card className="border-0 bg-transparent shadow-none">
-            <HomeWidgetInstallBox />
-          </Card>
+          <HomeWidgetInstallBox />
         </div>
 
       </div>

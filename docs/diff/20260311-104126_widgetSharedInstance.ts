@@ -1,6 +1,11 @@
 import crypto from "crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+export type WidgetAccess = {
+  allowed_domains?: string[] | null;
+  allowed_paths?: string[] | null;
+};
+
 type TemplateRow = {
   id: string;
   name?: string | null;
@@ -22,7 +27,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function buildSharedChatPolicy(existing: Record<string, unknown> | null) {
+function buildSharedChatPolicy(existing: Record<string, unknown> | null, access: WidgetAccess) {
   const base = isPlainObject(existing) ? { ...existing } : {};
   const widget = isPlainObject(base.widget) ? { ...(base.widget as Record<string, unknown>) } : {};
   return {
@@ -30,6 +35,10 @@ function buildSharedChatPolicy(existing: Record<string, unknown> | null) {
     widget: {
       ...widget,
       instance_kind: "template_shared",
+      access: {
+        allowed_domains: access.allowed_domains || [],
+        allowed_paths: access.allowed_paths || [],
+      },
     },
   };
 }
@@ -37,6 +46,7 @@ function buildSharedChatPolicy(existing: Record<string, unknown> | null) {
 export async function ensureTemplateSharedInstance(
   supabaseAdmin: SupabaseClient,
   template: TemplateRow,
+  access: WidgetAccess,
   nowIso = new Date().toISOString()
 ) {
   const { data: existing } = await supabaseAdmin
@@ -49,7 +59,7 @@ export async function ensureTemplateSharedInstance(
     .maybeSingle();
 
   if (existing?.id) {
-    const nextPolicy = buildSharedChatPolicy(existing.chat_policy as Record<string, unknown> | null);
+    const nextPolicy = buildSharedChatPolicy(existing.chat_policy as Record<string, unknown> | null, access);
     await supabaseAdmin
       .from("B_chat_widget_instances")
       .update({
@@ -68,7 +78,7 @@ export async function ensureTemplateSharedInstance(
       public_key: makePublicKey(),
       name: template.name || "Widget Template",
       is_active: true,
-      chat_policy: buildSharedChatPolicy(null),
+      chat_policy: buildSharedChatPolicy(null, access),
       is_public: true,
       editable_id: createdBy ? [createdBy] : [],
       usable_id: [],

@@ -26,13 +26,19 @@ import {
   type FeatureVisibilityMode,
 } from "@/lib/conversation/pageFeaturePolicy";
 import type { WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
-import { getPolicyWidgetTheme, withNullFeatureDefaults } from "@/lib/widgetPolicyUtils";
+import {
+  getPolicyWidgetAccess,
+  getPolicyWidgetTheme,
+  withNullFeatureDefaults,
+} from "@/lib/widgetPolicyUtils";
 
 type TemplateItem = {
   id: string;
   name?: string | null;
   agent_id?: string | null;
   public_key?: string | null;
+  allowed_domains?: string[] | null;
+  allowed_paths?: string[] | null;
   theme?: Record<string, unknown> | null;
   is_active?: boolean | null;
   setup_config?: WidgetSetupConfig | null;
@@ -70,6 +76,13 @@ type McpTool = {
   usable_id?: string[] | string | null;
   editable_id?: string[] | string | null;
 };
+
+function normalizeListInput(value: string) {
+  return value
+    .split(/[\n,]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
 function normalizeIdList(value: unknown) {
   if (Array.isArray(value)) {
@@ -158,6 +171,8 @@ export default function ConversationWidgetPage() {
   const [templates, setTemplates] = useState<TemplateItem[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [draft, setDraft] = useState<TemplateItem | null>(null);
+  const [domainText, setDomainText] = useState("");
+  const [pathText, setPathText] = useState("");
   const [kbItems, setKbItems] = useState<KbItem[]>([]);
   const [inlineKbSampleOptions, setInlineKbSampleOptions] = useState<SelectOption[]>([]);
   const [agents, setAgents] = useState<AgentItem[]>([]);
@@ -213,12 +228,16 @@ export default function ConversationWidgetPage() {
     (input: {
       name?: string | null;
       agent_id?: string | null;
+      allowed_domains?: string[] | null;
+      allowed_paths?: string[] | null;
       theme?: Record<string, unknown> | null;
         is_active?: boolean | null;
       }) =>
         JSON.stringify({
           name: String(input.name || "").trim(),
           agent_id: input.agent_id ? String(input.agent_id) : null,
+          allowed_domains: (input.allowed_domains || []).map((item) => String(item || "").trim()),
+          allowed_paths: (input.allowed_paths || []).map((item) => String(item || "").trim()),
           theme: normalizeThemeValue(input.theme || null),
           is_active: input.is_active !== false,
         }),
@@ -230,10 +249,12 @@ export default function ConversationWidgetPage() {
       JSON.stringify({
         name: String(current?.name || "").trim(),
         agent_id: current?.agent_id ? String(current.agent_id) : null,
+        allowed_domains: normalizeListInput(domainText),
+        allowed_paths: normalizeListInput(pathText),
         theme: normalizeThemeValue(current?.theme || null),
           is_active: current?.is_active !== false,
         }),
-      [normalizeThemeValue]
+      [domainText, normalizeThemeValue, pathText]
     );
 
   const isDirty = useMemo(() => {
@@ -353,10 +374,12 @@ export default function ConversationWidgetPage() {
     if (!selectedId) return;
     const current = templates.find((item) => item.id === selectedId) || null;
     setDraft(current);
-    if (current) {
-      setInstallOverridesText("");
-      setInstallOverrides({});
-      const hasPolicyField = Object.prototype.hasOwnProperty.call(current, "chat_policy");
+      if (current) {
+        setDomainText((current.allowed_domains || []).join("\n"));
+        setPathText((current.allowed_paths || []).join("\n"));
+        setInstallOverridesText("");
+        setInstallOverrides({});
+        const hasPolicyField = Object.prototype.hasOwnProperty.call(current, "chat_policy");
       if (hasPolicyField) {
         setPolicyValue(current.chat_policy || null);
         setPolicyBaselineFingerprint(buildPolicyFingerprint(current.chat_policy || null));
@@ -368,11 +391,14 @@ export default function ConversationWidgetPage() {
     if (!policyValue) return;
     policySyncRef.current = true;
     const theme = getPolicyWidgetTheme(policyValue);
+    const access = getPolicyWidgetAccess(policyValue);
     const agentId =
       typeof policyValue.widget?.setup_config?.agent_id === "string"
         ? policyValue.widget.setup_config.agent_id
         : null;
     const nextTheme = theme || {};
+    const nextDomainText = (access.allowed_domains || []).join("\n");
+    const nextPathText = (access.allowed_paths || []).join("\n");
     setDraft((prev) => {
       if (!prev) return prev;
       const sameTheme = JSON.stringify(prev.theme || {}) === JSON.stringify(nextTheme);
@@ -384,6 +410,8 @@ export default function ConversationWidgetPage() {
         agent_id: agentId,
       };
     });
+    setDomainText((prev) => (prev === nextDomainText ? prev : nextDomainText));
+    setPathText((prev) => (prev === nextPathText ? prev : nextPathText));
     setTimeout(() => {
       policySyncRef.current = false;
     }, 0);
@@ -391,10 +419,19 @@ export default function ConversationWidgetPage() {
 
   useEffect(() => {
     if (!draft) return;
+    const domainList = (draft.allowed_domains || []).map((item) => String(item || "").trim()).filter(Boolean);
+    const pathList = (draft.allowed_paths || []).map((item) => String(item || "").trim()).filter(Boolean);
     const hasPreview = Boolean(previewMeta.origin || previewMeta.page_url || previewMeta.referrer);
     if (hasPreview) return;
-    const origin = typeof window !== "undefined" ? window.location.origin : "";
-    const path = "/";
+    const origin =
+      domainList.length > 0
+        ? domainList[0].startsWith("http")
+          ? domainList[0]
+          : `https://${domainList[0]}`
+        : typeof window !== "undefined"
+          ? window.location.origin
+          : "";
+    const path = pathList.length > 0 && pathList[0] !== "*" ? pathList[0] : "/";
     setPreviewMeta({
       origin,
       page_url: origin ? `${origin}${path.startsWith("/") ? path : `/${path}`}` : "",
@@ -781,7 +818,7 @@ export default function ConversationWidgetPage() {
       setPolicySaving(false);
       setSaveSyncing(false);
     }
-  }, [policyTemplateId, policyValue, draft]);
+  }, [policyTemplateId, policyValue, draft, domainText, pathText]);
 
   const canApplyBulk =
     !bulkDisabled && (bulkEnabledSelection !== null || bulkVisibilitySelection !== null);

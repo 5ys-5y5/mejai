@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import { normalizeWidgetChatPolicyProvider } from "@/lib/widgetChatPolicyShape";
-import { getPolicyWidgetAccess } from "@/lib/widgetPolicyUtils";
 
 function makePublicKey() {
   return `mw_pk_${crypto.randomBytes(16).toString("hex")}`;
@@ -60,9 +58,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "TEMPLATE_NOT_FOUND" }, { status: 404 });
   }
 
-  const templatePolicy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
-  const access = getPolicyWidgetAccess(templatePolicy);
-
   const nowIso = new Date().toISOString();
   const publicKey = makePublicKey();
   const name = String(body.name || template.name || "Widget Instance").trim() || "Widget Instance";
@@ -77,14 +72,6 @@ export async function POST(req: NextRequest) {
       public_key: publicKey,
       name,
       is_active: true,
-      chat_policy: {
-        widget: {
-          access: {
-            allowed_domains: access.allowed_domains || [],
-            allowed_paths: access.allowed_paths || [],
-          },
-        },
-      },
       is_public: isPublic,
       editable_id: editableId,
       usable_id: usableId,

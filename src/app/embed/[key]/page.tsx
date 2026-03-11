@@ -44,7 +44,6 @@ type WidgetConfig = {
   theme?: Record<string, unknown> | null;
   public_key?: string | null;
   chat_policy?: ConversationFeaturesProviderShape | null;
-  allowed_domains?: string[] | null;
   setup_config?: Record<string, unknown> | null;
 };
 
@@ -262,10 +261,6 @@ function normalizeOriginList(value: unknown) {
   return normalizeThemeList(value).map((item) => item.replace(/^['"]|['"]$/g, ""));
 }
 
-function normalizeAccountValue(value: unknown) {
-  return String(value || "").trim().toLowerCase();
-}
-
 function normalizeAuthState(raw: unknown): AuthState | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
@@ -345,20 +340,6 @@ function mergeObjects(base: Record<string, unknown>, next: Record<string, unknow
   return result;
 }
 
-function normalizeDomain(value: string) {
-  const raw = String(value || "").trim();
-  if (!raw) return "";
-  try {
-    const url = new URL(raw.startsWith("http") ? raw : `http://${raw}`);
-    return url.hostname;
-  } catch {
-    return raw
-      .replace(/^https?:\/\//, "")
-      .replace(/\/.*$/, "")
-      .replace(/:\d+$/, "");
-  }
-}
-
 function extractKeyMode(rawKey: string) {
   const trimmed = String(rawKey || "").trim();
   let decoded = trimmed;
@@ -424,34 +405,6 @@ function extractQueryOverrides(searchParams: URLSearchParams | null) {
   }
 
   return Object.keys(overrides).length > 0 ? overrides : null;
-}
-
-function collectUserIdentifiers(user?: Record<string, any> | null) {
-  if (!user) return [] as string[];
-  const values: Array<unknown> = [
-    user.id,
-    user.email,
-    user.username,
-    user.name,
-    user.user_id,
-    user.userId,
-    user.account,
-    user.account_id,
-    user.accountId,
-    user.external_id,
-    user.externalId,
-  ];
-  const profile = user.profile;
-  if (profile && typeof profile === "object") {
-    const profileRecord = profile as Record<string, any>;
-    values.push(profileRecord.id, profileRecord.email, profileRecord.username, profileRecord.name);
-  }
-  const account = user.account;
-  if (account && typeof account === "object") {
-    const accountRecord = account as Record<string, any>;
-    values.push(accountRecord.id, accountRecord.email, accountRecord.name);
-  }
-  return values.map(normalizeAccountValue).filter(Boolean);
 }
 
 export default function WidgetEmbedPage() {
@@ -827,19 +780,6 @@ export default function WidgetEmbedPage() {
   const headerIcon = launcherIconUrl || "/brand/logo.png";
   const isAdminOrDebug = isAdminUser || debugBypass;
   const statusLabel = isAdminOrDebug ? status : "";
-  const allowedAccounts = useMemo(
-    () => normalizeThemeList(theme.allowed_accounts || theme.allowedAccounts),
-    [theme]
-  );
-  const allowedAccountSet = useMemo(
-    () => new Set(allowedAccounts.map(normalizeAccountValue).filter(Boolean)),
-    [allowedAccounts]
-  );
-  const userIdentifiers = useMemo(() => collectUserIdentifiers(pendingUser), [pendingUser]);
-  const accountAllowed = allowedAccountSet.size > 0 && userIdentifiers.some((value) => allowedAccountSet.has(value));
-
-  const allowedDomains = Array.isArray(config?.allowed_domains) ? config.allowed_domains : [];
-  const domainAllowed = allowedDomains.length === 0 ? true : matchAllowedDomain(originHost, allowedDomains);
   const policyFeatureAllowed = pageFeatures.widget?.tabBar?.policy || pageFeatures.widget?.setupPanel;
   const showPolicyTab = forcedTab === "policy" ? true : Boolean(policyFeatureAllowed);
   const policyFeatures = useMemo(
@@ -1066,19 +1006,6 @@ export default function WidgetEmbedPage() {
       const resolvedPublicKey = queryPublicKey || (keyMode === "public" ? key : "");
       const resolvedTemplateId = queryTemplateId;
       let resolvedOverrides = pendingOverrides || mergedOverrides || undefined;
-      if (parameterEnabled && resolvedOrigin) {
-        const normalizedOrigin = normalizeDomain(resolvedOrigin);
-        const existing = resolvedOverrides && typeof resolvedOverrides === "object" ? resolvedOverrides : null;
-        const allowed =
-          existing && Array.isArray((existing as Record<string, unknown>).allowed_domains)
-            ? ((existing as Record<string, unknown>).allowed_domains as string[])
-            : [];
-        if (allowed.length === 0 && normalizedOrigin) {
-          resolvedOverrides = mergeObjects(existing || {}, {
-            allowed_domains: [normalizedOrigin],
-          });
-        }
-      }
       const payload = {
         widget_id: undefined as string | undefined,
         widget_public_key: undefined as string | undefined,
