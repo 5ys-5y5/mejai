@@ -44,19 +44,13 @@ export default function SettingsPage() {
     const redirectToAdmin = (target: string) => {
       router.replace(`/app/admin?tab=${target}`);
     };
-    const redirectToConversation = () => {
-      router.replace("/app/conversation");
-    };
     if (rawTab === "widget" || rawTab === "quickstart") {
       redirectToInstall(rawTab);
     }
     if (rawTab === "env") {
       redirectToInstall("env");
     }
-    if (rawTab === "chat") {
-      redirectToConversation();
-    }
-    if (rawTab === "proposal" || rawTab === "performance") {
+    if (rawTab === "chat" || rawTab === "proposal" || rawTab === "performance") {
       redirectToAdmin(rawTab);
     }
   }, [rawTab, router]);
