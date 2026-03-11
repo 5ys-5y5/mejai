@@ -1,0 +1,807 @@
+[
+  {
+    "def": "B_chat_widgets.name",
+    "path": null,
+    "kind": "column"
+  },
+  {
+    "def": "B_chat_widgets.is_active",
+    "path": null,
+    "kind": "column"
+  },
+  {
+    "def": "widget.base",
+    "path": "$.widget.base",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.name",
+    "path": "$.widget.name",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.entry_mode",
+    "path": "$.widget.entry_mode",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.embed_view",
+    "path": "$.widget.embed_view",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.agent_id",
+    "path": "$.widget.agent_id",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.launcher",
+    "path": "$.features.widget.launcher",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.chatPanel",
+    "path": "$.features.widget.chatPanel",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.historyPanel",
+    "path": "$.features.widget.historyPanel",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.setupPanel",
+    "path": "$.features.widget.setupPanel",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.setup_config",
+    "path": "$.widget.setup_config",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup_config.kb.mode",
+    "path": "$.widget.setup_config.kb.mode",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup_config.kb.kb_id",
+    "path": "$.widget.setup_config.kb.kb_id",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup_config.kb.admin_kb_ids",
+    "path": "$.widget.setup_config.kb.admin_kb_ids",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup_config.mcp.provider_keys",
+    "path": "$.widget.setup_config.mcp.provider_keys",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup_config.mcp.tool_ids",
+    "path": "$.widget.setup_config.mcp.tool_ids",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup_config.llm.default",
+    "path": "$.widget.setup_config.llm.default",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "cfg.launcherLabel",
+    "path": "$.widget.cfg.launcherLabel",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "cfg.position",
+    "path": "$.widget.cfg.position",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "theme.launcher_logo_id",
+    "path": "$.widget.theme.launcher_logo_id",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "theme.primary_color",
+    "path": "$.widget.theme.primary_color",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "theme.launcher_bg",
+    "path": "$.widget.theme.launcher_bg",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "launcher.container.bottom",
+    "path": "$.widget.launcher.container.bottom",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "launcher.container.left",
+    "path": "$.widget.launcher.container.left",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "launcher.container.right",
+    "path": "$.widget.launcher.container.right",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "launcher.container.gap",
+    "path": "$.widget.launcher.container.gap",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "launcher.container.zIndex",
+    "path": "$.widget.launcher.container.zIndex",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "launcher.size",
+    "path": "$.widget.launcher.size",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.iframe",
+    "path": "$.widget.iframe",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "iframe.width",
+    "path": "$.widget.iframe.width",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "iframe.height",
+    "path": "$.widget.iframe.height",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "iframe.borderRadius",
+    "path": "$.widget.iframe.borderRadius",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "iframe.boxShadow",
+    "path": "$.widget.iframe.boxShadow",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "iframe.background",
+    "path": "$.widget.iframe.background",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "iframe.layout",
+    "path": "$.widget.iframe.layout",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "iframe.bottomOffset",
+    "path": "$.widget.iframe.bottomOffset",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "iframe.sideOffset",
+    "path": "$.widget.iframe.sideOffset",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.header.enabled",
+    "path": "$.features.widget.header.enabled",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.header.logo",
+    "path": "$.features.widget.header.logo",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.header.status",
+    "path": "$.features.widget.header.status",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.header.agentAction",
+    "path": "$.features.widget.header.agentAction",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.header.newConversation",
+    "path": "$.features.widget.header.newConversation",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.header.close",
+    "path": "$.features.widget.header.close",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.tabBar.enabled",
+    "path": "$.features.widget.tabBar.enabled",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.defaultTab",
+    "path": "$.features.widget.defaultTab",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.tabBar.chat",
+    "path": "$.features.widget.tabBar.chat",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.tabBar.list",
+    "path": "$.features.widget.tabBar.list",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.tabBar.login",
+    "path": "$.features.widget.tabBar.login",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "widget.tabBar.policy",
+    "path": "$.features.widget.tabBar.policy",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "adminPanel",
+    "path": "$.adminPanel",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "adminPanel.enabled",
+    "path": "$.features.adminPanel.enabled",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "adminPanel.logsToggle",
+    "path": "$.features.adminPanel.logsToggle",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "adminPanel.copyConversation",
+    "path": "$.features.adminPanel.copyConversation",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction",
+    "path": "$.interaction",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.quickReplies",
+    "path": "$.features.interaction.quickReplies",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.productCards",
+    "path": "$.features.interaction.productCards",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.inputSubmit",
+    "path": "$.features.interaction.inputSubmit",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.threePhasePrompt",
+    "path": "$.features.interaction.threePhasePrompt",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.threePhasePromptLabels",
+    "path": "$.features.interaction.threePhasePromptLabels",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.threePhasePromptShowConfirmed",
+    "path": "$.features.interaction.threePhasePromptShowConfirmed",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.threePhasePromptShowConfirming",
+    "path": "$.features.interaction.threePhasePromptShowConfirming",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.threePhasePromptShowNext",
+    "path": "$.features.interaction.threePhasePromptShowNext",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.threePhasePromptHideLabels",
+    "path": "$.features.interaction.threePhasePromptHideLabels",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.inputPlaceholder",
+    "path": "$.features.interaction.inputPlaceholder",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.prefill",
+    "path": "$.features.interaction.prefill",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.prefillMessages",
+    "path": "$.features.interaction.prefillMessages",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.widgetHeaderAgentAction",
+    "path": "$.features.interaction.widgetHeaderAgentAction",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.widgetHeaderNewConversation",
+    "path": "$.features.interaction.widgetHeaderNewConversation",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "interaction.widgetHeaderClose",
+    "path": "$.features.interaction.widgetHeaderClose",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.mode",
+    "path": "$.features.setup.mode",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.modelSelector",
+    "path": "$.features.setup.modelSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.modeExisting",
+    "path": "$.features.setup.modeExisting",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.agentSelector",
+    "path": "$.features.setup.agentSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.versionSelector",
+    "path": "$.features.setup.versionSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.sessionSelector",
+    "path": "$.features.setup.sessionSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.conversationMode",
+    "path": "$.features.setup.conversationMode",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.sessionIdSearch",
+    "path": "$.features.setup.sessionIdSearch",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.modeNew",
+    "path": "$.features.setup.modeNew",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.inlineUserKbInput",
+    "path": "$.features.setup.inlineUserKbInput",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.llmSelector",
+    "path": "$.features.setup.llmSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.kbSelector",
+    "path": "$.features.setup.kbSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.adminKbSelector",
+    "path": "$.features.setup.adminKbSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.routeSelector",
+    "path": "$.features.setup.routeSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.mcpProviderSelector",
+    "path": "$.features.setup.mcpProviderSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.mcpActionSelector",
+    "path": "$.features.setup.mcpActionSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup",
+    "path": "$.setup",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.agent_id",
+    "path": "$.features.setup.agent_id",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.defaultLlm",
+    "path": "$.features.setup.defaultLlm",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.defaultKbId",
+    "path": "$.features.setup.defaultKbId",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.defaultAdminKbIds",
+    "path": "$.features.setup.defaultAdminKbIds",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.defaultRoute",
+    "path": "$.features.setup.defaultRoute",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.defaultMcpProviderKeys",
+    "path": "$.features.setup.defaultMcpProviderKeys",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.defaultMcpToolIds",
+    "path": "$.features.setup.defaultMcpToolIds",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.mcpProviderKeys",
+    "path": "$.features.setup.mcpProviderKeys",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.mcpToolIds",
+    "path": "$.features.setup.mcpToolIds",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.kbMode",
+    "path": "$.features.setup.kbMode",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.inlineUserKbPrefill",
+    "path": "$.features.setup.inlineUserKbPrefill",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.inlineUserKb",
+    "path": "$.features.setup.inlineUserKb",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.defaultInlineUserKb",
+    "path": "$.features.setup.defaultInlineUserKb",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.llms",
+    "path": "$.features.setup.llms",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.kbIds",
+    "path": "$.features.setup.kbIds",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.adminKbIds",
+    "path": "$.features.setup.adminKbIds",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "setup.routes",
+    "path": "$.features.setup.routes",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "mcp.providerSelector",
+    "path": "$.features.mcp.providerSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "mcp.actionSelector",
+    "path": "$.features.mcp.actionSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "mcp.providers",
+    "path": "$.features.mcp.providers",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "mcp.tools",
+    "path": "$.features.mcp.tools",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "runtime",
+    "path": "$.runtime",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "runtime.selfUpdate.enabled",
+    "path": "$.runtime.selfUpdate.enabled",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "settings_ui.setup_fields",
+    "path": "$.settings_ui.setup_fields",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "settings_ui.feature_labels",
+    "path": "$.settings_ui.feature_labels",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.adminPanel.enabled",
+    "path": "$.features.visibility.adminPanel.enabled",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.adminPanel.logsToggle",
+    "path": "$.features.visibility.adminPanel.logsToggle",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.adminPanel.copyConversation",
+    "path": "$.features.visibility.adminPanel.copyConversation",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.quickReplies",
+    "path": "$.features.visibility.interaction.quickReplies",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.productCards",
+    "path": "$.features.visibility.interaction.productCards",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.threePhasePrompt",
+    "path": "$.features.visibility.interaction.threePhasePrompt",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.threePhasePromptShowConfirmed",
+    "path": "$.features.visibility.interaction.threePhasePromptShowConfirmed",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.threePhasePromptShowConfirming",
+    "path": "$.features.visibility.interaction.threePhasePromptShowConfirming",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.threePhasePromptShowNext",
+    "path": "$.features.visibility.interaction.threePhasePromptShowNext",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.threePhasePromptHideLabels",
+    "path": "$.features.visibility.interaction.threePhasePromptHideLabels",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.prefill",
+    "path": "$.features.visibility.interaction.prefill",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.inputSubmit",
+    "path": "$.features.visibility.interaction.inputSubmit",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.widgetHeaderAgentAction",
+    "path": "$.features.visibility.interaction.widgetHeaderAgentAction",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.widgetHeaderNewConversation",
+    "path": "$.features.visibility.interaction.widgetHeaderNewConversation",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.interaction.widgetHeaderClose",
+    "path": "$.features.visibility.interaction.widgetHeaderClose",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.modelSelector",
+    "path": "$.features.visibility.setup.modelSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.agentSelector",
+    "path": "$.features.visibility.setup.agentSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.versionSelector",
+    "path": "$.features.visibility.setup.versionSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.sessionSelector",
+    "path": "$.features.visibility.setup.sessionSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.conversationMode",
+    "path": "$.features.visibility.setup.conversationMode",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.llmSelector",
+    "path": "$.features.visibility.setup.llmSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.kbSelector",
+    "path": "$.features.visibility.setup.kbSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.adminKbSelector",
+    "path": "$.features.visibility.setup.adminKbSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.modeExisting",
+    "path": "$.features.visibility.setup.modeExisting",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.sessionIdSearch",
+    "path": "$.features.visibility.setup.sessionIdSearch",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.modeNew",
+    "path": "$.features.visibility.setup.modeNew",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.routeSelector",
+    "path": "$.features.visibility.setup.routeSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.mcpProviderSelector",
+    "path": "$.features.visibility.setup.mcpProviderSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.mcpActionSelector",
+    "path": "$.features.visibility.setup.mcpActionSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.setup.inlineUserKbInput",
+    "path": "$.features.visibility.setup.inlineUserKbInput",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.mcp.providerSelector",
+    "path": "$.features.visibility.mcp.providerSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.mcp.actionSelector",
+    "path": "$.features.visibility.mcp.actionSelector",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.launcher",
+    "path": "$.features.visibility.widget.launcher",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.header.enabled",
+    "path": "$.features.visibility.widget.header.enabled",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.header.logo",
+    "path": "$.features.visibility.widget.header.logo",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.header.status",
+    "path": "$.features.visibility.widget.header.status",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.header.agentAction",
+    "path": "$.features.visibility.widget.header.agentAction",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.header.newConversation",
+    "path": "$.features.visibility.widget.header.newConversation",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.header.close",
+    "path": "$.features.visibility.widget.header.close",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.tabBar.enabled",
+    "path": "$.features.visibility.widget.tabBar.enabled",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.tabBar.chat",
+    "path": "$.features.visibility.widget.tabBar.chat",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.tabBar.list",
+    "path": "$.features.visibility.widget.tabBar.list",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.tabBar.policy",
+    "path": "$.features.visibility.widget.tabBar.policy",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.tabBar.login",
+    "path": "$.features.visibility.widget.tabBar.login",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.chatPanel",
+    "path": "$.features.visibility.widget.chatPanel",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.historyPanel",
+    "path": "$.features.visibility.widget.historyPanel",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "visibility.widget.setupPanel",
+    "path": "$.features.visibility.widget.setupPanel",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "debug",
+    "path": "$.debug",
+    "kind": "chat_policy"
+  },
+  {
+    "def": "debug_copy",
+    "path": "$.debug_copy",
+    "kind": "chat_policy"
+  }
+]

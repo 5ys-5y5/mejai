@@ -11,7 +11,6 @@ import {
   setPolicyWidgetSetupConfig,
   setPolicyWidgetTheme,
 } from "@/lib/widgetPolicyUtils";
-import { syncTemplateInstances } from "@/lib/widgetSharedInstance";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -123,7 +122,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   const { data: existing, error: existingError } = await supabaseAdmin
     .from("B_chat_widgets")
-    .select("id, name, is_active, is_public, chat_policy")
+    .select("id, name, is_active, chat_policy")
     .eq("id", templateId)
     .maybeSingle();
 
@@ -147,13 +146,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     mergedProvider = setPolicyWidgetSetupConfig(mergedProvider, existingSetup);
   }
 
-  const safeProvider = mergedProvider || {};
-  const nowIso = new Date().toISOString();
+  const safeProvider = providerShape || {};
   const { error } = await supabaseAdmin
     .from("B_chat_widgets")
     .update({
-      chat_policy: safeProvider,
-      updated_at: nowIso,
+      chat_policy: mergedProvider,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", templateId)
     .select("id")
@@ -161,24 +159,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
-  }
-
-  try {
-    await syncTemplateInstances(
-      supabaseAdmin,
-      {
-        template_id: templateId,
-        chat_policy: safeProvider,
-        is_active: existing.is_active ?? null,
-        is_public: existing.is_public ?? null,
-      },
-      nowIso
-    );
-  } catch (syncError) {
-    return NextResponse.json(
-      { error: syncError instanceof Error ? syncError.message : "INSTANCE_SYNC_FAILED" },
-      { status: 500 }
-    );
   }
 
   return NextResponse.json({ ok: true });

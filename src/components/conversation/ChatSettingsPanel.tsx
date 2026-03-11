@@ -230,11 +230,6 @@ export function ChatSettingsPanel({
           ...(base.pages || {}),
           [pageKey]: nextFeatures,
         },
-        debug: nextDraft.debug,
-        debug_copy: {
-          ...(base.debug_copy || {}),
-          [pageKey]: nextDraft.debug,
-        },
         settings_ui: {
           ...(base.settings_ui || {}),
           setup_fields: {

@@ -85,32 +85,3 @@ export async function ensureTemplateSharedInstance(
 
   return created as InstanceRow;
 }
-
-type TemplateInstanceSyncInput = {
-  template_id: string;
-  chat_policy: Record<string, unknown> | null;
-  is_active?: boolean | null;
-  is_public?: boolean | null;
-};
-
-export async function syncTemplateInstances(
-  supabaseAdmin: SupabaseClient,
-  input: TemplateInstanceSyncInput,
-  nowIso = new Date().toISOString()
-) {
-  const payload: Record<string, unknown> = {
-    chat_policy: input.chat_policy,
-    updated_at: nowIso,
-  };
-  if (input.is_active !== undefined) payload.is_active = input.is_active;
-  if (input.is_public !== undefined) payload.is_public = input.is_public;
-
-  const { error } = await supabaseAdmin
-    .from("B_chat_widget_instances")
-    .update(payload)
-    .eq("template_id", input.template_id);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-}

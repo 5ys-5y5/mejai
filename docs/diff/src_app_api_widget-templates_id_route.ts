@@ -7,7 +7,6 @@ import {
   normalizeWidgetChatPolicyRecordFromProvider,
 } from "@/lib/widgetChatPolicyShape";
 import { getPolicyWidgetSetupConfig, getPolicyWidgetTheme, setPolicyWidgetSetupConfig, setPolicyWidgetTheme } from "@/lib/widgetPolicyUtils";
-import { syncTemplateInstances } from "@/lib/widgetSharedInstance";
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
   if ("error" in context) return { ok: false, status: 401, error: context.error };
@@ -131,7 +130,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const name = body.name !== undefined ? String(body.name || "").trim() || existing.name : existing.name;
   const isActive = body.is_active !== undefined ? Boolean(body.is_active) : existing.is_active;
   const isPublic = body.is_public !== undefined ? Boolean(body.is_public) : existing.is_public;
-  const nowIso = new Date().toISOString();
   const { data, error } = await supabaseAdmin
     .from("B_chat_widgets")
     .update({
@@ -139,7 +137,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       chat_policy: policyWithSetup,
       is_active: isActive,
       is_public: isPublic,
-      updated_at: nowIso,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", resolvedParams.id)
     .select("*")
@@ -147,24 +145,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
-  }
-
-  try {
-    await syncTemplateInstances(
-      supabaseAdmin,
-      {
-        template_id: resolvedParams.id,
-        chat_policy: policyWithSetup,
-        is_active: isActive,
-        is_public: isPublic,
-      },
-      nowIso
-    );
-  } catch (syncError) {
-    return NextResponse.json(
-      { error: syncError instanceof Error ? syncError.message : "INSTANCE_SYNC_FAILED" },
-      { status: 500 }
-    );
   }
 
   return NextResponse.json({ item: mapTemplateRow(data as Record<string, any>) });

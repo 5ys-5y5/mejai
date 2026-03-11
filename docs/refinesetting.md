@@ -1,0 +1,405 @@
+**목표**
+- 기준 커밋: `b41f020e7a5f99bbee0e10e0892fc93fc2160d73`
+- `/app/conversation`에서 사용자 입력을 받는 항목 + 위젯 UI/기능에 영향을 주는 항목은 `B_chat_widgets.chat_policy`와 `B_chat_widget_instances.chat_policy`에 모두 저장
+- 위젯 UI/기능에 영향이 없는 항목(예: 디버그 로그 on/off)은 저장 대상에서 제외
+- `interaction.prefillMessages`처럼 텍스트 입력은 보이지만 on/off가 숨겨진 항목은 삭제 금지(저장 대상 유지)
+
+**체크리스트 (모든 정의명)**
+- [ ] `B_chat_widgets.name` | 분류: table column | 저장 대상: yes (widgets/instances) | 메모: 템플릿/인스턴스 이름
+- [ ] `B_chat_widgets.is_active` | 분류: table column | 저장 대상: yes (widgets/instances) | 메모: 활성화
+
+- [ ] `widget.base` | 분류: group label | 저장 대상: no | 메모: UI 그룹 라벨
+- [ ] `widget.name` | 분류: widget | 저장 대상: yes | 메모: 위젯 이름 (숨김)
+- [ ] `widget.entry_mode` | 분류: widget | 저장 대상: yes | 메모: 위젯 진입 모드
+- [ ] `widget.embed_view` | 분류: widget | 저장 대상: yes | 메모: embed 뷰 옵션
+- [ ] `widget.agent_id` | 분류: widget | 저장 대상: yes | 메모: 기본 에이전트
+- [ ] `widget.launcher` | 분류: widget | 저장 대상: yes | 메모: 런처 표시 여부
+- [ ] `widget.chatPanel` | 분류: widget | 저장 대상: yes | 메모: 채팅 패널 표시
+- [ ] `widget.historyPanel` | 분류: widget | 저장 대상: yes | 메모: 히스토리 패널 표시
+- [ ] `widget.setupPanel` | 분류: widget | 저장 대상: yes | 메모: 정책/설정 패널 표시
+- [ ] `widget.setup_config` | 분류: group label | 저장 대상: no | 메모: UI 그룹 라벨
+- [ ] `setup_config.kb.mode` | 분류: widget.setup_config | 저장 대상: yes | 메모: KB 모드
+- [ ] `setup_config.kb.kb_id` | 분류: widget.setup_config | 저장 대상: yes | 메모: KB ID
+- [ ] `setup_config.kb.admin_kb_ids` | 분류: widget.setup_config | 저장 대상: yes | 메모: 관리자 KB IDs
+- [ ] `setup_config.mcp.provider_keys` | 분류: widget.setup_config | 저장 대상: yes | 메모: MCP provider 키
+- [ ] `setup_config.mcp.tool_ids` | 분류: widget.setup_config | 저장 대상: yes | 메모: MCP tool IDs
+- [ ] `setup_config.llm.default` | 분류: widget.setup_config | 저장 대상: yes | 메모: 기본 LLM
+
+- [ ] `widget.launcher` | 분류: group label | 저장 대상: no | 메모: UI 그룹 라벨
+- [ ] `cfg.launcherLabel` | 분류: launcher | 저장 대상: yes | 메모: 런처 라벨
+- [ ] `cfg.position` | 분류: launcher | 저장 대상: yes | 메모: 런처 위치
+- [ ] `theme.launcher_logo_id` | 분류: theme | 저장 대상: yes | 메모: 런처 로고
+- [ ] `theme.primary_color` | 분류: theme | 저장 대상: yes | 메모: 기본 색상
+- [ ] `theme.launcher_bg` | 분류: theme | 저장 대상: yes | 메모: 런처 배경
+- [ ] `launcher.container.bottom` | 분류: launcher | 저장 대상: yes | 메모: 런처 bottom
+- [ ] `launcher.container.left` | 분류: launcher | 저장 대상: yes | 메모: 런처 left
+- [ ] `launcher.container.right` | 분류: launcher | 저장 대상: yes | 메모: 런처 right
+- [ ] `launcher.container.gap` | 분류: launcher | 저장 대상: yes | 메모: 런처 gap
+- [ ] `launcher.container.zIndex` | 분류: launcher | 저장 대상: yes | 메모: 런처 z-index
+- [ ] `launcher.size` | 분류: launcher | 저장 대상: yes | 메모: 런처 크기
+
+- [ ] `widget.iframe` | 분류: group label | 저장 대상: no | 메모: UI 그룹 라벨
+- [ ] `iframe.width` | 분류: iframe | 저장 대상: yes | 메모: 위젯 폭
+- [ ] `iframe.height` | 분류: iframe | 저장 대상: yes | 메모: 위젯 높이
+- [ ] `iframe.borderRadius` | 분류: iframe | 저장 대상: yes | 메모: 모서리
+- [ ] `iframe.boxShadow` | 분류: iframe | 저장 대상: yes | 메모: 그림자
+- [ ] `iframe.background` | 분류: iframe | 저장 대상: yes | 메모: 배경
+- [ ] `iframe.layout` | 분류: iframe | 저장 대상: yes | 메모: 레이아웃
+- [ ] `iframe.bottomOffset` | 분류: iframe | 저장 대상: yes | 메모: bottom offset
+- [ ] `iframe.sideOffset` | 분류: iframe | 저장 대상: yes | 메모: side offset
+
+- [ ] `widget.header.enabled` | 분류: widget | 저장 대상: yes | 메모: 헤더 표시
+- [ ] `widget.header.logo` | 분류: widget | 저장 대상: yes | 메모: 로고 표시
+- [ ] `widget.header.status` | 분류: widget | 저장 대상: yes | 메모: 상태 표시
+- [ ] `widget.header.agentAction` | 분류: widget | 저장 대상: yes | 메모: 에이전트 액션
+- [ ] `widget.header.newConversation` | 분류: widget | 저장 대상: yes | 메모: 새 대화
+- [ ] `widget.header.close` | 분류: widget | 저장 대상: yes | 메모: 닫기
+
+- [ ] `widget.tabBar.enabled` | 분류: widget | 저장 대상: yes | 메모: 탭바 표시
+- [ ] `widget.defaultTab` | 분류: widget | 저장 대상: yes | 메모: 기본 탭
+- [ ] `widget.tabBar.chat` | 분류: widget | 저장 대상: yes | 메모: 채팅 탭
+- [ ] `widget.tabBar.list` | 분류: widget | 저장 대상: yes | 메모: 리스트 탭
+- [ ] `widget.tabBar.login` | 분류: widget | 저장 대상: yes | 메모: 로그인 탭
+- [ ] `widget.tabBar.policy` | 분류: widget | 저장 대상: yes | 메모: 정책 탭
+
+- [ ] `adminPanel` | 분류: group label | 저장 대상: no | 메모: UI 그룹 라벨
+- [ ] `adminPanel.enabled` | 분류: adminPanel | 저장 대상: yes | 메모: 어드민 패널 표시
+- [ ] `adminPanel.logsToggle` | 분류: adminPanel | 저장 대상: yes | 메모: 로그 토글 표시
+- [ ] `adminPanel.copyConversation` | 분류: adminPanel | 저장 대상: yes | 메모: 복사 기능
+
+- [ ] `interaction` | 분류: group label | 저장 대상: no | 메모: UI 그룹 라벨
+- [ ] `interaction.quickReplies` | 분류: interaction | 저장 대상: yes | 메모: 퀵리플라이
+- [ ] `interaction.productCards` | 분류: interaction | 저장 대상: yes | 메모: 상품 카드
+- [ ] `interaction.inputSubmit` | 분류: interaction | 저장 대상: yes | 메모: 입력 전송
+- [ ] `interaction.threePhasePrompt` | 분류: interaction | 저장 대상: yes | 메모: 3단계 프롬프트
+- [ ] `interaction.threePhasePromptLabels` | 분류: interaction | 저장 대상: yes | 메모: 3단계 라벨 텍스트
+- [ ] `interaction.threePhasePromptShowConfirmed` | 분류: interaction | 저장 대상: yes | 메모: confirmed 표시
+- [ ] `interaction.threePhasePromptShowConfirming` | 분류: interaction | 저장 대상: yes | 메모: confirming 표시
+- [ ] `interaction.threePhasePromptShowNext` | 분류: interaction | 저장 대상: yes | 메모: next 표시
+- [ ] `interaction.threePhasePromptHideLabels` | 분류: interaction | 저장 대상: yes | 메모: 라벨 숨김
+- [ ] `interaction.inputPlaceholder` | 분류: interaction | 저장 대상: yes | 메모: 입력 placeholder
+- [ ] `interaction.prefill` | 분류: interaction | 저장 대상: yes | 메모: 프리필 on/off (숨김이어도 저장)
+- [ ] `interaction.prefillMessages` | 분류: interaction | 저장 대상: yes | 메모: 프리필 메시지 (on/off 숨김이어도 저장)
+- [ ] `interaction.widgetHeaderAgentAction` | 분류: interaction | 저장 대상: yes | 메모: 헤더 에이전트 액션 표시
+- [ ] `interaction.widgetHeaderNewConversation` | 분류: interaction | 저장 대상: yes | 메모: 헤더 새 대화 표시
+- [ ] `interaction.widgetHeaderClose` | 분류: interaction | 저장 대상: yes | 메모: 헤더 닫기 표시
+
+- [ ] `setup.mode` | 분류: group label | 저장 대상: no | 메모: UI 그룹 라벨
+- [ ] `setup.modelSelector` | 분류: setup | 저장 대상: yes | 메모: 모델 선택
+- [ ] `setup.modeExisting` | 분류: setup | 저장 대상: yes | 메모: 기존 세션
+- [ ] `setup.agentSelector` | 분류: setup | 저장 대상: yes | 메모: 에이전트 선택
+- [ ] `setup.versionSelector` | 분류: setup | 저장 대상: yes | 메모: 버전 선택
+- [ ] `setup.sessionSelector` | 분류: setup | 저장 대상: yes | 메모: 세션 선택
+- [ ] `setup.conversationMode` | 분류: setup | 저장 대상: yes | 메모: 대화 모드
+- [ ] `setup.sessionIdSearch` | 분류: setup | 저장 대상: yes | 메모: 세션 검색
+- [ ] `setup.modeNew` | 분류: setup | 저장 대상: yes | 메모: 신규 세션
+- [ ] `setup.inlineUserKbInput` | 분류: setup | 저장 대상: yes | 메모: inline KB 입력
+- [ ] `setup.llmSelector` | 분류: setup | 저장 대상: yes | 메모: LLM 선택
+- [ ] `setup.kbSelector` | 분류: setup | 저장 대상: yes | 메모: KB 선택
+- [ ] `setup.adminKbSelector` | 분류: setup | 저장 대상: yes | 메모: 관리자 KB 선택
+- [ ] `setup.routeSelector` | 분류: setup | 저장 대상: yes | 메모: 라우트 선택
+- [ ] `setup.mcpProviderSelector` | 분류: setup | 저장 대상: yes | 메모: MCP provider 선택
+- [ ] `setup.mcpActionSelector` | 분류: setup | 저장 대상: yes | 메모: MCP action 선택
+
+- [ ] `setup` | 분류: group label | 저장 대상: no | 메모: UI 그룹 라벨
+- [ ] `setup.agent_id` | 분류: setup | 저장 대상: yes | 메모: 기본 에이전트 (setup)
+- [ ] `setup.defaultLlm` | 분류: setup | 저장 대상: yes | 메모: 기본 LLM
+- [ ] `setup.defaultKbId` | 분류: setup | 저장 대상: yes | 메모: 기본 KB
+- [ ] `setup.defaultAdminKbIds` | 분류: setup | 저장 대상: yes | 메모: 기본 관리자 KB
+- [ ] `setup.defaultRoute` | 분류: setup | 저장 대상: yes | 메모: 기본 라우트
+- [ ] `setup.defaultMcpProviderKeys` | 분류: setup | 저장 대상: yes | 메모: 기본 MCP providers
+- [ ] `setup.defaultMcpToolIds` | 분류: setup | 저장 대상: yes | 메모: 기본 MCP tools
+- [ ] `setup.mcpProviderKeys` | 분류: setup | 저장 대상: yes | 메모: MCP providers
+- [ ] `setup.mcpToolIds` | 분류: setup | 저장 대상: yes | 메모: MCP tools
+- [ ] `setup.kbMode` | 분류: setup | 저장 대상: yes | 메모: KB 모드
+- [ ] `setup.inlineUserKbPrefill` | 분류: setup | 저장 대상: yes | 메모: inline KB prefill
+- [ ] `setup.inlineUserKb` | 분류: setup | 저장 대상: yes | 메모: inline KB
+- [ ] `setup.defaultInlineUserKb` | 분류: setup | 저장 대상: yes | 메모: 기본 inline KB
+- [ ] `setup.llms` | 분류: setup | 저장 대상: yes | 메모: LLM 목록
+- [ ] `setup.kbIds` | 분류: setup | 저장 대상: yes | 메모: KB 목록
+- [ ] `setup.adminKbIds` | 분류: setup | 저장 대상: yes | 메모: 관리자 KB 목록
+- [ ] `setup.routes` | 분류: setup | 저장 대상: yes | 메모: 라우트 목록
+
+- [ ] `mcp.providerSelector` | 분류: mcp | 저장 대상: yes | 메모: MCP provider 선택 표시
+- [ ] `mcp.actionSelector` | 분류: mcp | 저장 대상: yes | 메모: MCP action 선택 표시
+- [ ] `mcp.providers` | 분류: mcp | 저장 대상: yes | 메모: MCP provider 게이트
+- [ ] `mcp.tools` | 분류: mcp | 저장 대상: yes | 메모: MCP tool 게이트
+
+- [ ] `runtime` | 분류: group label | 저장 대상: no | 메모: UI 그룹 라벨
+- [ ] `runtime.selfUpdate.enabled` | 분류: runtime | 저장 대상: yes | 메모: 런타임 self-update (영향 있음으로 처리)
+
+- [ ] `settings_ui.setup_fields` | 분류: settings_ui | 저장 대상: yes | 메모: UI 필드 구성
+- [ ] `settings_ui.feature_labels` | 분류: settings_ui | 저장 대상: yes | 메모: 라벨(표시명)
+
+- [ ] `visibility.adminPanel.enabled` | 분류: visibility | 저장 대상: yes | 메모: 어드민 패널 가시성
+- [ ] `visibility.adminPanel.logsToggle` | 분류: visibility | 저장 대상: yes | 메모: 로그 토글 가시성
+- [ ] `visibility.adminPanel.copyConversation` | 분류: visibility | 저장 대상: yes | 메모: 복사 기능 가시성
+- [ ] `visibility.interaction.quickReplies` | 분류: visibility | 저장 대상: yes | 메모: 퀵리플라이 가시성
+- [ ] `visibility.interaction.productCards` | 분류: visibility | 저장 대상: yes | 메모: 상품 카드 가시성
+- [ ] `visibility.interaction.threePhasePrompt` | 분류: visibility | 저장 대상: yes | 메모: 3단계 프롬프트 가시성
+- [ ] `visibility.interaction.threePhasePromptShowConfirmed` | 분류: visibility | 저장 대상: yes | 메모: confirmed 가시성
+- [ ] `visibility.interaction.threePhasePromptShowConfirming` | 분류: visibility | 저장 대상: yes | 메모: confirming 가시성
+- [ ] `visibility.interaction.threePhasePromptShowNext` | 분류: visibility | 저장 대상: yes | 메모: next 가시성
+- [ ] `visibility.interaction.threePhasePromptHideLabels` | 분류: visibility | 저장 대상: yes | 메모: 라벨 숨김 가시성
+- [ ] `visibility.interaction.prefill` | 분류: visibility | 저장 대상: yes | 메모: 프리필 가시성
+- [ ] `visibility.interaction.inputSubmit` | 분류: visibility | 저장 대상: yes | 메모: 입력 전송 가시성
+- [ ] `visibility.interaction.widgetHeaderAgentAction` | 분류: visibility | 저장 대상: yes | 메모: 헤더 에이전트 액션 가시성
+- [ ] `visibility.interaction.widgetHeaderNewConversation` | 분류: visibility | 저장 대상: yes | 메모: 헤더 새 대화 가시성
+- [ ] `visibility.interaction.widgetHeaderClose` | 분류: visibility | 저장 대상: yes | 메모: 헤더 닫기 가시성
+- [ ] `visibility.setup.modelSelector` | 분류: visibility | 저장 대상: yes | 메모: 모델 선택 가시성
+- [ ] `visibility.setup.agentSelector` | 분류: visibility | 저장 대상: yes | 메모: 에이전트 선택 가시성
+- [ ] `visibility.setup.versionSelector` | 분류: visibility | 저장 대상: yes | 메모: 버전 선택 가시성
+- [ ] `visibility.setup.sessionSelector` | 분류: visibility | 저장 대상: yes | 메모: 세션 선택 가시성
+- [ ] `visibility.setup.conversationMode` | 분류: visibility | 저장 대상: yes | 메모: 대화 모드 가시성
+- [ ] `visibility.setup.llmSelector` | 분류: visibility | 저장 대상: yes | 메모: LLM 선택 가시성
+- [ ] `visibility.setup.kbSelector` | 분류: visibility | 저장 대상: yes | 메모: KB 선택 가시성
+- [ ] `visibility.setup.adminKbSelector` | 분류: visibility | 저장 대상: yes | 메모: 관리자 KB 선택 가시성
+- [ ] `visibility.setup.modeExisting` | 분류: visibility | 저장 대상: yes | 메모: 기존 세션 가시성
+- [ ] `visibility.setup.sessionIdSearch` | 분류: visibility | 저장 대상: yes | 메모: 세션 검색 가시성
+- [ ] `visibility.setup.modeNew` | 분류: visibility | 저장 대상: yes | 메모: 신규 세션 가시성
+- [ ] `visibility.setup.routeSelector` | 분류: visibility | 저장 대상: yes | 메모: 라우트 선택 가시성
+- [ ] `visibility.setup.mcpProviderSelector` | 분류: visibility | 저장 대상: yes | 메모: MCP provider 선택 가시성
+- [ ] `visibility.setup.mcpActionSelector` | 분류: visibility | 저장 대상: yes | 메모: MCP action 선택 가시성
+- [ ] `visibility.setup.inlineUserKbInput` | 분류: visibility | 저장 대상: yes | 메모: inline KB 입력 가시성
+- [ ] `visibility.mcp.providerSelector` | 분류: visibility | 저장 대상: yes | 메모: MCP provider selector 가시성
+- [ ] `visibility.mcp.actionSelector` | 분류: visibility | 저장 대상: yes | 메모: MCP action selector 가시성
+- [ ] `visibility.widget.launcher` | 분류: visibility | 저장 대상: yes | 메모: 런처 가시성
+- [ ] `visibility.widget.header.enabled` | 분류: visibility | 저장 대상: yes | 메모: 헤더 표시 가시성
+- [ ] `visibility.widget.header.logo` | 분류: visibility | 저장 대상: yes | 메모: 헤더 로고 가시성
+- [ ] `visibility.widget.header.status` | 분류: visibility | 저장 대상: yes | 메모: 헤더 상태 가시성
+- [ ] `visibility.widget.header.agentAction` | 분류: visibility | 저장 대상: yes | 메모: 헤더 에이전트 액션 가시성
+- [ ] `visibility.widget.header.newConversation` | 분류: visibility | 저장 대상: yes | 메모: 헤더 새 대화 가시성
+- [ ] `visibility.widget.header.close` | 분류: visibility | 저장 대상: yes | 메모: 헤더 닫기 가시성
+- [ ] `visibility.widget.tabBar.enabled` | 분류: visibility | 저장 대상: yes | 메모: 탭바 가시성
+- [ ] `visibility.widget.tabBar.chat` | 분류: visibility | 저장 대상: yes | 메모: 채팅 탭 가시성
+- [ ] `visibility.widget.tabBar.list` | 분류: visibility | 저장 대상: yes | 메모: 리스트 탭 가시성
+- [ ] `visibility.widget.tabBar.policy` | 분류: visibility | 저장 대상: yes | 메모: 정책 탭 가시성
+- [ ] `visibility.widget.tabBar.login` | 분류: visibility | 저장 대상: yes | 메모: 로그인 탭 가시성
+- [ ] `visibility.widget.chatPanel` | 분류: visibility | 저장 대상: yes | 메모: 채팅 패널 가시성
+- [ ] `visibility.widget.historyPanel` | 분류: visibility | 저장 대상: yes | 메모: 히스토리 패널 가시성
+- [ ] `visibility.widget.setupPanel` | 분류: visibility | 저장 대상: yes | 메모: 정책/설정 패널 가시성
+
+- [ ] `debug` | 분류: debug | 저장 대상: no | 메모: 위젯 UI/기능 영향 없음 (예외 항목)
+- [ ] `debug_copy` | 분류: debug | 저장 대상: no | 메모: 위젯 UI/기능 영향 없음 (예외 항목)
+
+**DB 저장 현황 (Supabase 확인 결과)**
+**저장됨 (문제 없음)**
+- [x] `B_chat_widgets.name`
+- [x] `B_chat_widgets.is_active`
+- [x] `widget.setup_config`
+- [x] `widget.header.enabled`
+- [x] `widget.header.logo`
+- [x] `widget.header.status`
+- [x] `widget.header.agentAction`
+- [x] `widget.header.newConversation`
+- [x] `widget.header.close`
+- [x] `widget.tabBar.enabled`
+- [x] `widget.defaultTab`
+- [x] `widget.tabBar.chat`
+- [x] `widget.tabBar.list`
+- [x] `widget.tabBar.login`
+- [x] `widget.tabBar.policy`
+- [x] `adminPanel.enabled`
+- [x] `adminPanel.logsToggle`
+- [x] `adminPanel.copyConversation`
+- [x] `interaction.quickReplies`
+- [x] `interaction.productCards`
+- [x] `interaction.inputSubmit`
+- [x] `interaction.threePhasePrompt`
+- [x] `interaction.threePhasePromptLabels`
+- [x] `interaction.threePhasePromptShowConfirmed`
+- [x] `interaction.threePhasePromptShowConfirming`
+- [x] `interaction.threePhasePromptShowNext`
+- [x] `interaction.threePhasePromptHideLabels`
+- [x] `interaction.inputPlaceholder`
+- [x] `interaction.prefillMessages`
+- [x] `setup.modelSelector`
+- [x] `setup.modeExisting`
+- [x] `setup.agentSelector`
+- [x] `setup.versionSelector`
+- [x] `setup.sessionSelector`
+- [x] `setup.conversationMode`
+- [x] `setup.sessionIdSearch`
+- [x] `setup.modeNew`
+- [x] `setup.inlineUserKbInput`
+- [x] `setup.llmSelector`
+- [x] `setup.kbSelector`
+- [x] `setup.adminKbSelector`
+- [x] `setup.routeSelector`
+- [x] `setup.mcpProviderSelector`
+- [x] `setup.mcpActionSelector`
+- [x] `setup.defaultLlm`
+- [x] `setup.defaultKbId`
+- [x] `setup.defaultAdminKbIds`
+- [x] `setup.defaultRoute`
+- [x] `setup.defaultMcpProviderKeys`
+- [x] `setup.defaultMcpToolIds`
+- [x] `setup.mcpProviderKeys`
+- [x] `setup.mcpToolIds`
+- [x] `setup.inlineUserKbPrefill`
+- [x] `setup.inlineUserKb`
+- [x] `setup.defaultInlineUserKb`
+- [x] `setup.llms`
+- [x] `setup.kbIds`
+- [x] `setup.adminKbIds`
+- [x] `setup.routes`
+- [x] `visibility.adminPanel.enabled`
+- [x] `visibility.adminPanel.logsToggle`
+- [x] `visibility.adminPanel.copyConversation`
+- [x] `visibility.interaction.quickReplies`
+- [x] `visibility.interaction.productCards`
+- [x] `visibility.interaction.threePhasePrompt`
+- [x] `visibility.interaction.threePhasePromptShowConfirmed`
+- [x] `visibility.interaction.threePhasePromptShowConfirming`
+- [x] `visibility.interaction.threePhasePromptShowNext`
+- [x] `visibility.interaction.threePhasePromptHideLabels`
+- [x] `visibility.interaction.inputSubmit`
+- [x] `visibility.setup.modelSelector`
+- [x] `visibility.setup.agentSelector`
+- [x] `visibility.setup.versionSelector`
+- [x] `visibility.setup.sessionSelector`
+- [x] `visibility.setup.conversationMode`
+- [x] `visibility.setup.llmSelector`
+- [x] `visibility.setup.kbSelector`
+- [x] `visibility.setup.adminKbSelector`
+- [x] `visibility.setup.modeExisting`
+- [x] `visibility.setup.sessionIdSearch`
+- [x] `visibility.setup.modeNew`
+- [x] `visibility.setup.routeSelector`
+- [x] `visibility.setup.mcpProviderSelector`
+- [x] `visibility.setup.mcpActionSelector`
+- [x] `visibility.setup.inlineUserKbInput`
+- [x] `visibility.widget.launcher`
+- [x] `visibility.widget.header.enabled`
+- [x] `visibility.widget.header.logo`
+- [x] `visibility.widget.header.status`
+- [x] `visibility.widget.header.agentAction`
+- [x] `visibility.widget.header.newConversation`
+- [x] `visibility.widget.header.close`
+- [x] `visibility.widget.tabBar.enabled`
+- [x] `visibility.widget.tabBar.chat`
+- [x] `visibility.widget.tabBar.list`
+- [x] `visibility.widget.tabBar.policy`
+- [x] `visibility.widget.tabBar.login`
+
+**저장되지 않음**
+- [ ] `widget.base`
+- [ ] `widget.name` (컬럼에는 있음, chat_policy에는 없음)
+- [ ] `widget.entry_mode`
+- [ ] `widget.embed_view`
+- [ ] `widget.agent_id`
+- [ ] `widget.launcher`
+- [ ] `widget.chatPanel`
+- [ ] `widget.historyPanel`
+- [ ] `widget.setupPanel`
+- [ ] `setup_config.kb.mode`
+- [ ] `setup_config.kb.kb_id`
+- [ ] `setup_config.kb.admin_kb_ids`
+- [ ] `setup_config.mcp.provider_keys`
+- [ ] `setup_config.mcp.tool_ids`
+- [ ] `setup_config.llm.default`
+- [ ] `cfg.launcherLabel`
+- [ ] `cfg.position`
+- [ ] `theme.launcher_logo_id`
+- [ ] `theme.primary_color`
+- [ ] `theme.launcher_bg`
+- [ ] `launcher.container.bottom`
+- [ ] `launcher.container.left`
+- [ ] `launcher.container.right`
+- [ ] `launcher.container.gap`
+- [ ] `launcher.container.zIndex`
+- [ ] `launcher.size`
+- [ ] `widget.iframe`
+- [ ] `iframe.width`
+- [ ] `iframe.height`
+- [ ] `iframe.borderRadius`
+- [ ] `iframe.boxShadow`
+- [ ] `iframe.background`
+- [ ] `iframe.layout`
+- [ ] `iframe.bottomOffset`
+- [ ] `iframe.sideOffset`
+- [ ] `adminPanel` (그룹 라벨)
+- [ ] `interaction` (그룹 라벨)
+- [ ] `interaction.prefill`
+- [ ] `interaction.widgetHeaderAgentAction`
+- [ ] `interaction.widgetHeaderNewConversation`
+- [ ] `interaction.widgetHeaderClose`
+- [ ] `setup.mode`
+- [ ] `setup` (그룹 라벨)
+- [ ] `setup.agent_id`
+- [ ] `setup.kbMode`
+- [ ] `mcp.providerSelector`
+- [ ] `mcp.actionSelector`
+- [ ] `mcp.providers`
+- [ ] `mcp.tools`
+- [ ] `runtime`
+- [ ] `runtime.selfUpdate.enabled`
+- [ ] `settings_ui.setup_fields`
+- [ ] `settings_ui.feature_labels`
+- [ ] `visibility.interaction.prefill`
+- [ ] `visibility.interaction.widgetHeaderAgentAction`
+- [ ] `visibility.interaction.widgetHeaderNewConversation`
+- [ ] `visibility.interaction.widgetHeaderClose`
+- [ ] `visibility.mcp.providerSelector`
+- [ ] `visibility.mcp.actionSelector`
+- [ ] `visibility.widget.chatPanel`
+- [ ] `visibility.widget.historyPanel`
+- [ ] `visibility.widget.setupPanel`
+- [ ] `debug`
+- [ ] `debug_copy`
+
+**복구 대상 (위젯 구현 영향 + 디자인/레이아웃 포함)**
+- [ ] `widget.entry_mode`
+- [ ] `widget.embed_view`
+- [ ] `widget.agent_id`
+- [ ] `widget.launcher`
+- [ ] `widget.chatPanel`
+- [ ] `widget.historyPanel`
+- [ ] `widget.setupPanel`
+- [ ] `setup_config.kb.mode`
+- [ ] `setup_config.kb.kb_id`
+- [ ] `setup_config.kb.admin_kb_ids`
+- [ ] `setup_config.mcp.provider_keys`
+- [ ] `setup_config.mcp.tool_ids`
+- [ ] `setup_config.llm.default`
+- [ ] `cfg.launcherLabel`
+- [ ] `cfg.position`
+- [ ] `theme.launcher_logo_id`
+- [ ] `theme.primary_color`
+- [ ] `theme.launcher_bg`
+- [ ] `launcher.container.bottom`
+- [ ] `launcher.container.left`
+- [ ] `launcher.container.right`
+- [ ] `launcher.container.gap`
+- [ ] `launcher.container.zIndex`
+- [ ] `launcher.size`
+- [ ] `iframe.width`
+- [ ] `iframe.height`
+- [ ] `iframe.borderRadius`
+- [ ] `iframe.boxShadow`
+- [ ] `iframe.background`
+- [ ] `iframe.layout`
+- [ ] `iframe.bottomOffset`
+- [ ] `iframe.sideOffset`
+- [ ] `interaction.prefill`
+- [ ] `interaction.widgetHeaderAgentAction`
+- [ ] `interaction.widgetHeaderNewConversation`
+- [ ] `interaction.widgetHeaderClose`
+- [ ] `setup.agent_id`
+- [ ] `setup.kbMode`
+- [ ] `mcp.providerSelector`
+- [ ] `mcp.actionSelector`
+- [ ] `mcp.providers`
+- [ ] `mcp.tools`
+- [ ] `runtime.selfUpdate.enabled`
+- [ ] `settings_ui.setup_fields`
+- [ ] `settings_ui.feature_labels`
+- [ ] `visibility.interaction.prefill`
+- [ ] `visibility.interaction.widgetHeaderAgentAction`
+- [ ] `visibility.interaction.widgetHeaderNewConversation`
+- [ ] `visibility.interaction.widgetHeaderClose`
+- [ ] `visibility.mcp.providerSelector`
+- [ ] `visibility.mcp.actionSelector`
+- [ ] `visibility.widget.chatPanel`
+- [ ] `visibility.widget.historyPanel`
+- [ ] `visibility.widget.setupPanel`
