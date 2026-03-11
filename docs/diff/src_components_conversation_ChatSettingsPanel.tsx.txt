@@ -177,12 +177,12 @@ export function ChatSettingsPanel({
   const buildDraft = useCallback(
     (provider: ConversationFeaturesProviderShape | null): DraftState => {
       const baseFeatures = getDefaultConversationPageFeatures(pageKey);
-      const rawPageFeatures = provider?.features ?? {};
+      const rawPageFeatures = provider?.pages?.[pageKey] ?? provider?.features ?? {};
       const features = preserveNulls
         ? (fillWithNulls(baseFeatures, rawPageFeatures) as ConversationPageFeatures)
         : mergeConversationPageFeatures(
-            baseFeatures,
-            provider?.features
+            mergeConversationPageFeatures(baseFeatures, provider?.features),
+            provider?.pages?.[pageKey]
           );
       const widget = normalizeWidgetChatPolicyConfig(provider?.widget ?? null);
       const debug = provider?.debug ?? {};
@@ -226,16 +226,29 @@ export function ChatSettingsPanel({
         ...base,
         widget: nextWidget || undefined,
         features: nextFeatures,
+        pages: {
+          ...(base.pages || {}),
+          [pageKey]: nextFeatures,
+        },
+        settings_ui: {
+          ...(base.settings_ui || {}),
+          setup_fields: {
+            ...(base.settings_ui?.setup_fields || {}),
+            [pageKey]: {
+              order: nextDraft.setupUi.order,
+              labels: nextDraft.setupUi.labels,
+              existing_order: nextDraft.setupUi.existingOrder,
+              existing_labels: nextDraft.setupUi.existingLabels,
+            },
+          },
+          feature_labels: {
+            ...(base.settings_ui?.feature_labels || {}),
+            [pageKey]: nextDraft.setupUi.featureLabels || {},
+          },
+        },
       };
       const normalized = normalizeConversationFeatureProvider(nextProvider) || {};
-      const cleaned = { ...(normalized as Record<string, unknown>) };
-      delete cleaned.pages;
-      delete cleaned.page_registry;
-      delete cleaned.debug;
-      delete cleaned.debug_copy;
-      delete cleaned.setup_ui;
-      delete cleaned.settings_ui;
-      onChange?.(cleaned as ConversationFeaturesProviderShape);
+      onChange?.(normalized);
     },
     [onChange, pageKey]
   );
@@ -1152,18 +1165,6 @@ export function ChatSettingsPanel({
               onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
               defaultOpen
             >
-              {isHidden("widget.chatPanel") ? null : (
-                <ToggleRow
-                  label="widget.chatPanel"
-                  displayLabel={resolveFeatureLabel("widget.chatPanel")}
-                  editableLabel
-                  onLabelChange={(value) => updateFeatureLabel("widget.chatPanel", value)}
-                  checked={features.widget.chatPanel}
-                  visibility={visibility.widget.chatPanel}
-                  onToggle={(next) => setTabBarPanelEnabled("chat", next)}
-                  onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
-                />
-              )}
             <RowGroup label="adminPanel" displayLabel="Admin Panel">
               <ToggleRow
                 label="adminPanel.enabled"
@@ -1228,18 +1229,6 @@ export function ChatSettingsPanel({
                 onToggle={(next) => updateFeatures(["interaction", "inputSubmit"], next)}
                 onVisibilityChange={(mode) => updateVisibility(["interaction", "inputSubmit"], mode)}
               />
-              {isHidden("interaction.prefill") ? null : (
-                <ToggleRow
-                  label="interaction.prefill"
-                  displayLabel={resolveFeatureLabel("interaction.prefill")}
-                  editableLabel
-                  onLabelChange={(value) => updateFeatureLabel("interaction.prefill", value)}
-                  checked={features.interaction.prefill}
-                  visibility={visibility.interaction.prefill}
-                  onToggle={(next) => updateFeatures(["interaction", "prefill"], next)}
-                  onVisibilityChange={(mode) => updateVisibility(["interaction", "prefill"], mode)}
-                />
-              )}
               <ToggleRowGroup
                 label="interaction.threePhasePrompt"
                 displayLabel={resolveFeatureLabel("interaction.threePhasePrompt")}
@@ -1348,95 +1337,10 @@ export function ChatSettingsPanel({
                   }
                 />
               )}
-              {isHidden("interaction.widgetHeaderAgentAction") ? null : (
-                <ToggleRow
-                  label="interaction.widgetHeaderAgentAction"
-                  displayLabel={resolveFeatureLabel("interaction.widgetHeaderAgentAction")}
-                  editableLabel
-                  onLabelChange={(value) => updateFeatureLabel("interaction.widgetHeaderAgentAction", value)}
-                  checked={features.interaction.widgetHeaderAgentAction}
-                  visibility={visibility.interaction.widgetHeaderAgentAction}
-                  onToggle={(next) => updateFeatures(["interaction", "widgetHeaderAgentAction"], next)}
-                  onVisibilityChange={(mode) => updateVisibility(["interaction", "widgetHeaderAgentAction"], mode)}
-                />
-              )}
-              {isHidden("interaction.widgetHeaderNewConversation") ? null : (
-                <ToggleRow
-                  label="interaction.widgetHeaderNewConversation"
-                  displayLabel={resolveFeatureLabel("interaction.widgetHeaderNewConversation")}
-                  editableLabel
-                  onLabelChange={(value) => updateFeatureLabel("interaction.widgetHeaderNewConversation", value)}
-                  checked={features.interaction.widgetHeaderNewConversation}
-                  visibility={visibility.interaction.widgetHeaderNewConversation}
-                  onToggle={(next) => updateFeatures(["interaction", "widgetHeaderNewConversation"], next)}
-                  onVisibilityChange={(mode) =>
-                    updateVisibility(["interaction", "widgetHeaderNewConversation"], mode)
-                  }
-                />
-              )}
-              {isHidden("interaction.widgetHeaderClose") ? null : (
-                <ToggleRow
-                  label="interaction.widgetHeaderClose"
-                  displayLabel={resolveFeatureLabel("interaction.widgetHeaderClose")}
-                  editableLabel
-                  onLabelChange={(value) => updateFeatureLabel("interaction.widgetHeaderClose", value)}
-                  checked={features.interaction.widgetHeaderClose}
-                  visibility={visibility.interaction.widgetHeaderClose}
-                  onToggle={(next) => updateFeatures(["interaction", "widgetHeaderClose"], next)}
-                  onVisibilityChange={(mode) => updateVisibility(["interaction", "widgetHeaderClose"], mode)}
-                />
-              )}
-            </RowGroup>
-
-            <RowGroup label="mcp" displayLabel="MCP">
-              {isHidden("mcp.providerSelector") ? null : (
-                <ToggleRow
-                  label="mcp.providerSelector"
-                  displayLabel={resolveFeatureLabel("mcp.providerSelector")}
-                  editableLabel
-                  onLabelChange={(value) => updateFeatureLabel("mcp.providerSelector", value)}
-                  checked={features.mcp.providerSelector}
-                  visibility={visibility.mcp.providerSelector}
-                  onToggle={(next) => updateFeatures(["mcp", "providerSelector"], next)}
-                  onVisibilityChange={(mode) => updateVisibility(["mcp", "providerSelector"], mode)}
-                />
-              )}
-              {isHidden("mcp.actionSelector") ? null : (
-                <ToggleRow
-                  label="mcp.actionSelector"
-                  displayLabel={resolveFeatureLabel("mcp.actionSelector")}
-                  editableLabel
-                  onLabelChange={(value) => updateFeatureLabel("mcp.actionSelector", value)}
-                  checked={features.mcp.actionSelector}
-                  visibility={visibility.mcp.actionSelector}
-                  onToggle={(next) => updateFeatures(["mcp", "actionSelector"], next)}
-                  onVisibilityChange={(mode) => updateVisibility(["mcp", "actionSelector"], mode)}
-                />
-              )}
-              {isHidden("mcp.providers") ? null : (
-                <div>
-                  {renderAllowDenyBlock(
-                    "mcp.providers",
-                    resolveFeatureLabel("mcp.providers") || "mcp.providers",
-                    features.mcp.providers,
-                    (next) => updateFeatures(["mcp", "providers"], next)
-                  )}
-                </div>
-              )}
-              {isHidden("mcp.tools") ? null : (
-                <div>
-                  {renderAllowDenyBlock(
-                    "mcp.tools",
-                    resolveFeatureLabel("mcp.tools") || "mcp.tools",
-                    features.mcp.tools,
-                    (next) => updateFeatures(["mcp", "tools"], next)
-                  )}
-                </div>
-              )}
             </RowGroup>
 
           </ToggleRowGroup>
-          <ToggleRowGroup
+          <ToggleRow
             label="widget.tabBar.list"
             displayLabel={resolveFeatureLabel("widget.tabBar.list")}
             editableLabel
@@ -1445,20 +1349,7 @@ export function ChatSettingsPanel({
             visibility={visibility.widget.tabBar.list}
             onToggle={(next) => setTabBarPanelEnabled("list", next)}
             onVisibilityChange={(mode) => setTabBarPanelVisibility("list", mode)}
-          >
-            {isHidden("widget.historyPanel") ? null : (
-              <ToggleRow
-                label="widget.historyPanel"
-                displayLabel={resolveFeatureLabel("widget.historyPanel")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("widget.historyPanel", value)}
-                checked={features.widget.historyPanel}
-                visibility={visibility.widget.historyPanel}
-                onToggle={(next) => setTabBarPanelEnabled("list", next)}
-                onVisibilityChange={(mode) => setTabBarPanelVisibility("list", mode)}
-              />
-            )}
-          </ToggleRowGroup>
+          />
           <ToggleRow
             label="widget.tabBar.login"
             displayLabel={resolveFeatureLabel("widget.tabBar.login")}
@@ -1479,18 +1370,6 @@ export function ChatSettingsPanel({
             onToggle={(next) => setTabBarPanelEnabled("policy", next)}
             onVisibilityChange={(mode) => setTabBarPanelVisibility("policy", mode)}
           >
-            {isHidden("widget.setupPanel") ? null : (
-              <ToggleRow
-                label="widget.setupPanel"
-                displayLabel={resolveFeatureLabel("widget.setupPanel")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("widget.setupPanel", value)}
-                checked={features.widget.setupPanel}
-                visibility={visibility.widget.setupPanel}
-                onToggle={(next) => setTabBarPanelEnabled("policy", next)}
-                onVisibilityChange={(mode) => setTabBarPanelVisibility("policy", mode)}
-              />
-            )}
             <RowGroup label="setup.mode" displayLabel="Setup Mode">
                 <ToggleRow
                   label="setup.modelSelector"

@@ -147,13 +147,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     mergedProvider = setPolicyWidgetSetupConfig(mergedProvider, existingSetup);
   }
 
-  const safeProvider = mergedProvider ? { ...(mergedProvider as Record<string, unknown>) } : {};
-  delete safeProvider.pages;
-  delete safeProvider.page_registry;
-  delete safeProvider.debug;
-  delete safeProvider.debug_copy;
-  delete safeProvider.setup_ui;
-  delete safeProvider.settings_ui;
+  const safeProvider = mergedProvider || {};
   const nowIso = new Date().toISOString();
   const { error } = await supabaseAdmin
     .from("B_chat_widgets")

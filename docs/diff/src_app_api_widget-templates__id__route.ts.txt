@@ -127,15 +127,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const chatPolicyShape = normalizeWidgetChatPolicyProvider(chatPolicy);
   const policyWithTheme = setPolicyWidgetTheme(chatPolicyShape, theme);
   const policyWithSetup = setPolicyWidgetSetupConfig(policyWithTheme, setupConfig);
-  const cleanedPolicy = policyWithSetup ? { ...(policyWithSetup as Record<string, unknown>) } : null;
-  if (cleanedPolicy) {
-    delete cleanedPolicy.pages;
-    delete cleanedPolicy.page_registry;
-    delete cleanedPolicy.debug;
-    delete cleanedPolicy.debug_copy;
-    delete cleanedPolicy.setup_ui;
-    delete cleanedPolicy.settings_ui;
-  }
 
   const name = body.name !== undefined ? String(body.name || "").trim() || existing.name : existing.name;
   const isActive = body.is_active !== undefined ? Boolean(body.is_active) : existing.is_active;
@@ -145,7 +136,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .from("B_chat_widgets")
     .update({
       name,
-      chat_policy: cleanedPolicy,
+      chat_policy: policyWithSetup,
       is_active: isActive,
       is_public: isPublic,
       updated_at: nowIso,
@@ -163,7 +154,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       supabaseAdmin,
       {
         template_id: resolvedParams.id,
-        chat_policy: cleanedPolicy,
+        chat_policy: policyWithSetup,
         is_active: isActive,
         is_public: isPublic,
       },

@@ -1,3 +1,0 @@
-widget.agent_id
-widget.name
-widget.setup_config

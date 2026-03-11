@@ -1152,18 +1152,6 @@ export function ChatSettingsPanel({
               onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
               defaultOpen
             >
-              {isHidden("widget.chatPanel") ? null : (
-                <ToggleRow
-                  label="widget.chatPanel"
-                  displayLabel={resolveFeatureLabel("widget.chatPanel")}
-                  editableLabel
-                  onLabelChange={(value) => updateFeatureLabel("widget.chatPanel", value)}
-                  checked={features.widget.chatPanel}
-                  visibility={visibility.widget.chatPanel}
-                  onToggle={(next) => setTabBarPanelEnabled("chat", next)}
-                  onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
-                />
-              )}
             <RowGroup label="adminPanel" displayLabel="Admin Panel">
               <ToggleRow
                 label="adminPanel.enabled"
@@ -1436,7 +1424,7 @@ export function ChatSettingsPanel({
             </RowGroup>
 
           </ToggleRowGroup>
-          <ToggleRowGroup
+          <ToggleRow
             label="widget.tabBar.list"
             displayLabel={resolveFeatureLabel("widget.tabBar.list")}
             editableLabel
@@ -1445,20 +1433,7 @@ export function ChatSettingsPanel({
             visibility={visibility.widget.tabBar.list}
             onToggle={(next) => setTabBarPanelEnabled("list", next)}
             onVisibilityChange={(mode) => setTabBarPanelVisibility("list", mode)}
-          >
-            {isHidden("widget.historyPanel") ? null : (
-              <ToggleRow
-                label="widget.historyPanel"
-                displayLabel={resolveFeatureLabel("widget.historyPanel")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("widget.historyPanel", value)}
-                checked={features.widget.historyPanel}
-                visibility={visibility.widget.historyPanel}
-                onToggle={(next) => setTabBarPanelEnabled("list", next)}
-                onVisibilityChange={(mode) => setTabBarPanelVisibility("list", mode)}
-              />
-            )}
-          </ToggleRowGroup>
+          />
           <ToggleRow
             label="widget.tabBar.login"
             displayLabel={resolveFeatureLabel("widget.tabBar.login")}
@@ -1469,6 +1444,42 @@ export function ChatSettingsPanel({
             onToggle={(next) => setTabBarPanelEnabled("login", next)}
             onVisibilityChange={(mode) => setTabBarPanelVisibility("login", mode)}
           />
+          {isHidden("widget.chatPanel") ? null : (
+            <ToggleRow
+              label="widget.chatPanel"
+              displayLabel={resolveFeatureLabel("widget.chatPanel")}
+              editableLabel
+              onLabelChange={(value) => updateFeatureLabel("widget.chatPanel", value)}
+              checked={features.widget.chatPanel}
+              visibility={visibility.widget.chatPanel}
+              onToggle={(next) => setTabBarPanelEnabled("chat", next)}
+              onVisibilityChange={(mode) => setTabBarPanelVisibility("chat", mode)}
+            />
+          )}
+          {isHidden("widget.historyPanel") ? null : (
+            <ToggleRow
+              label="widget.historyPanel"
+              displayLabel={resolveFeatureLabel("widget.historyPanel")}
+              editableLabel
+              onLabelChange={(value) => updateFeatureLabel("widget.historyPanel", value)}
+              checked={features.widget.historyPanel}
+              visibility={visibility.widget.historyPanel}
+              onToggle={(next) => setTabBarPanelEnabled("list", next)}
+              onVisibilityChange={(mode) => setTabBarPanelVisibility("list", mode)}
+            />
+          )}
+          {isHidden("widget.setupPanel") ? null : (
+            <ToggleRow
+              label="widget.setupPanel"
+              displayLabel={resolveFeatureLabel("widget.setupPanel")}
+              editableLabel
+              onLabelChange={(value) => updateFeatureLabel("widget.setupPanel", value)}
+              checked={features.widget.setupPanel}
+              visibility={visibility.widget.setupPanel}
+              onToggle={(next) => setTabBarPanelEnabled("policy", next)}
+              onVisibilityChange={(mode) => setTabBarPanelVisibility("policy", mode)}
+            />
+          )}
           <ToggleRowGroup
             label="widget.tabBar.policy"
             displayLabel={resolveFeatureLabel("widget.tabBar.policy")}
@@ -1479,18 +1490,6 @@ export function ChatSettingsPanel({
             onToggle={(next) => setTabBarPanelEnabled("policy", next)}
             onVisibilityChange={(mode) => setTabBarPanelVisibility("policy", mode)}
           >
-            {isHidden("widget.setupPanel") ? null : (
-              <ToggleRow
-                label="widget.setupPanel"
-                displayLabel={resolveFeatureLabel("widget.setupPanel")}
-                editableLabel
-                onLabelChange={(value) => updateFeatureLabel("widget.setupPanel", value)}
-                checked={features.widget.setupPanel}
-                visibility={visibility.widget.setupPanel}
-                onToggle={(next) => setTabBarPanelEnabled("policy", next)}
-                onVisibilityChange={(mode) => setTabBarPanelVisibility("policy", mode)}
-              />
-            )}
             <RowGroup label="setup.mode" displayLabel="Setup Mode">
                 <ToggleRow
                   label="setup.modelSelector"

@@ -95,9 +95,16 @@ from "B_chat_widgets";
 ```
 
 ## 테스트 기록 체크리스트
-- [ ] Chrome DevTools: `/app/conversation` 저장 payload에 `pages` 없음 확인
-- [ ] Chrome DevTools: `/embed`에서 baseConfig/URL 오버라이드 정상 적용 확인
-- [ ] Supabase: `chat_policy`에서 `pages` 미존재 확인 (사용자 실행)
+- [x] Chrome DevTools: `/app/conversation` 저장 payload에 `pages` 없음 확인 (2026-03-11)
+- [x] Chrome DevTools: `/embed`에서 URL 파라미터 오버라이드(`tab=policy`) 정상 적용 확인 (2026-03-11)
+- [x] Chrome DevTools: `/embed`에서 baseConfig 오버라이드(tab=policy) 정상 적용 확인 (2026-03-11)
+- [x] Supabase: `chat_policy`에서 `pages` 미존재 확인 (사용자 실행, 2026-03-11)
+
+## 테스트 기록
+- 2026-03-11: Chrome DevTools에서 `/app/conversation` 저장 요청 `POST /api/widget-templates/{id}/chat-policy`의 request body에 `pages/settings_ui/debug` 미포함 확인.
+- 2026-03-11: Supabase에서 `B_chat_widgets` `pages` 포함 0/3, `B_chat_widget_instances` `pages` 포함 0/45 확인.
+- 2026-03-11: Chrome DevTools에서 `/embed`에 `tab=policy` URL 파라미터 적용 시 정책 탭 활성화 확인.
+- 2026-03-11: baseConfig로 `tab=policy`를 전달해 iframe `/embed` 로드 및 정책 탭 활성화 확인.
 
 ---
 

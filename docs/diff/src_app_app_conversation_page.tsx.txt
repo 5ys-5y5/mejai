@@ -765,17 +765,10 @@ export default function ConversationWidgetPage() {
       }
       const normalizedPolicy = normalizeConversationFeatureProvider(policyValue);
       const mergedPolicy = withNullFeatureDefaults(normalizedPolicy, WIDGET_PAGE_KEY);
-      const cleanedPolicy = { ...(mergedPolicy as Record<string, unknown>) };
-      delete cleanedPolicy.pages;
-      delete cleanedPolicy.page_registry;
-      delete cleanedPolicy.debug;
-      delete cleanedPolicy.debug_copy;
-      delete cleanedPolicy.setup_ui;
-      delete cleanedPolicy.settings_ui;
       await apiFetch(`/api/widget-templates/${policyTemplateId}/chat-policy`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ provider: cleanedPolicy }),
+        body: JSON.stringify({ provider: mergedPolicy }),
       });
       setPolicyLoading(true);
       const latestPolicy = await apiFetch<{ provider?: ConversationFeaturesProviderShape | null }>(

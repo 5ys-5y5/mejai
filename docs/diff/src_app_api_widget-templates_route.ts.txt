@@ -119,15 +119,6 @@ export async function POST(req: NextRequest) {
   const chatPolicyShape = normalizeWidgetChatPolicyProvider(chatPolicy);
   const policyWithTheme = setPolicyWidgetTheme(chatPolicyShape, theme);
   const policyWithSetup = setPolicyWidgetSetupConfig(policyWithTheme, setupConfig);
-  const cleanedPolicy = policyWithSetup ? { ...(policyWithSetup as Record<string, unknown>) } : null;
-  if (cleanedPolicy) {
-    delete cleanedPolicy.pages;
-    delete cleanedPolicy.page_registry;
-    delete cleanedPolicy.debug;
-    delete cleanedPolicy.debug_copy;
-    delete cleanedPolicy.setup_ui;
-    delete cleanedPolicy.settings_ui;
-  }
 
   let supabaseAdmin;
   try {
@@ -143,7 +134,7 @@ export async function POST(req: NextRequest) {
     .from("B_chat_widgets")
     .insert({
       name,
-      chat_policy: cleanedPolicy,
+      chat_policy: policyWithSetup,
       is_active: isActive,
       is_public: isPublic,
       public_key: publicKey,
