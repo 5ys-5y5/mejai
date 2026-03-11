@@ -154,7 +154,7 @@ export default function LoginClient() {
             <div
               id={LOGIN_POLICY_CONTAINER_ID}
               className="w-full overflow-hidden"
-              style={{ height: 210 }}
+              style={{ height: 250 }}
             />
           </div>
           <div className="w-full overflow-hidden">

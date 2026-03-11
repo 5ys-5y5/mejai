@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 
 const HOME_POLICY_CONTAINER_ID = "home-widget-policy";
 const HOME_CHAT_CONTAINER_ID = "home-widget-chat";
-const WIDGET_TEMPLATE_ID = "fc12cdac-357a-462d-9437-71d03861aadd";
-const WIDGET_TEMPLATE_PUBLIC_KEY = "mw_pk_b94f0ff55ef60440be8385dca71708c7";
+const WIDGET_TEMPLATE_ID = "c9ab5088-1d28-4f7f-88f4-01c46fa9ddfc";
+const WIDGET_TEMPLATE_PUBLIC_KEY = "mw_pk_259a616db581a5f66d4aa2f9cd14e322";
 
 export function HomeWidgetInstallBox() {
   const [error, setError] = useState<string>("");
@@ -30,7 +30,7 @@ export function HomeWidgetInstallBox() {
       widget_id: WIDGET_TEMPLATE_ID,
       public_key: WIDGET_TEMPLATE_PUBLIC_KEY,
       entry_mode: "embed",
-      preview: true,
+      preview: false,
       preview_meta: {
         origin,
         page_url: pageUrl,
@@ -69,34 +69,35 @@ export function HomeWidgetInstallBox() {
   }, [error, hasConfig]);
 
   return (
-    <div className="container mx-auto w-full max-w-6xl px-6">
-      <div className="grid grid-cols-1 gap-[30px] lg:grid-cols-2">
-        <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden rounded-xl border border-zinc-300 bg-white">
+    <div className="container mx-auto w-full max-w-md px-6">
+      <div className="flex w-full flex-col -space-y-[30px] overflow-hidden rounded-2xl border border-slate-200">
+        <div className="w-full overflow-hidden">
           {loading ? (
-            <div className="flex h-[500px] items-center justify-center text-sm text-zinc-500">위젯 로딩 중...</div>
+            <div className="flex h-[210px] items-center justify-center text-sm text-zinc-500">위젯 로딩 중...</div>
           ) : null}
           {!loading && error ? (
-            <div className="flex h-[500px] flex-col items-center justify-center gap-2 text-sm text-rose-600">
+            <div className="flex h-[210px] flex-col items-center justify-center gap-2 text-sm text-rose-600">
               <span>위젯을 불러오지 못했습니다.</span>
               <span className="text-[11px] text-zinc-500">{error}</span>
             </div>
           ) : null}
           {!loading && !error ? (
-            <div id={HOME_POLICY_CONTAINER_ID} className="h-[500px] w-full" />
+            <div id={HOME_POLICY_CONTAINER_ID} className="min-h-[250px] w-full overflow-hidden" />
           ) : null}
         </div>
-        <div className="min-h-[380px] max-h-[500px] h-full overflow-hidden rounded-xl border border-zinc-300 bg-white">
+
+        <div className="w-full overflow-hidden">
           {loading ? (
-            <div className="flex h-[500px] items-center justify-center text-sm text-zinc-500">위젯 로딩 중...</div>
+            <div className="flex h-[300px] items-center justify-center text-sm text-zinc-500">위젯 로딩 중...</div>
           ) : null}
           {!loading && error ? (
-            <div className="flex h-[500px] flex-col items-center justify-center gap-2 text-sm text-rose-600">
+            <div className="flex h-[300px] flex-col items-center justify-center gap-2 text-sm text-rose-600">
               <span>위젯을 불러오지 못했습니다.</span>
               <span className="text-[11px] text-zinc-500">{error}</span>
             </div>
           ) : null}
           {!loading && !error ? (
-            <div id={HOME_CHAT_CONTAINER_ID} className="h-[500px] w-full" />
+            <div id={HOME_CHAT_CONTAINER_ID} className="w-full overflow-hidden" style={{ height: 300 }} />
           ) : null}
         </div>
       </div>
