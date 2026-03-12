@@ -1447,11 +1447,12 @@ export async function POST(req: NextRequest) {
         effectivePrevBotContext.reuse_pending ||
         effectivePrevBotContext.phone_reuse_pending
     );
-    const detectedIntent = resolvedContext.detectedIntent;
-    const isTransactionalIntent =
-      TRANSACTIONAL_INTENTS.has(resolvedIntent) || TRANSACTIONAL_INTENTS.has(detectedIntent);
-    const intentRouteInitial =
-      hasPendingFlow || hasExpectedInputs || isTransactionalIntent ? "transactional" : "kb_answer";
+    const isTransactionalIntent = TRANSACTIONAL_INTENTS.has(resolvedIntent);
+    const intentRoute = kbContentPresent && !hasExpectedInputs && !hasPendingFlow && !isTransactionalIntent
+      ? "kb_answer"
+      : isTransactionalIntent
+        ? "transactional"
+        : "general";
     await insertEvent(
       context,
       sessionId,
@@ -1459,7 +1460,7 @@ export async function POST(req: NextRequest) {
       "INTENT_ROUTED",
       {
         intent_selected: resolvedIntent,
-        intent_route: intentRouteInitial,
+        intent_route: intentRoute,
         has_expected_inputs: hasExpectedInputs,
         has_pending_flow: hasPendingFlow,
         transactional_intent: isTransactionalIntent,
@@ -1467,7 +1468,7 @@ export async function POST(req: NextRequest) {
       },
       { intent_name: resolvedIntent }
     );
-    if (intentRouteInitial === "kb_answer") {
+    if (intentRoute === "kb_answer") {
       markStage("kb_answer.start");
       if (!kbMatch && kbContentPresent && !kbMatchLogged) {
         await insertEvent(
@@ -1519,7 +1520,7 @@ export async function POST(req: NextRequest) {
         latestTurnId,
         "KB_LLM_PROMPT_BUILT",
         {
-          intent_route: intentRouteInitial,
+          intent_route: intentRoute,
           kb_context_size: kbPrompt.prompt.kbContextSize,
           kb_context_source: kbPrompt.prompt.kbContextSource,
           kb_topics: kbPrompt.prompt.kbTopics,
@@ -1531,7 +1532,6 @@ export async function POST(req: NextRequest) {
       let kbAnswerText = "";
       let kbModel = "kb_llm";
       let kbEmptyReason: string | null = null;
-      let finalIntentRoute = intentRouteInitial;
       if (kbPrompt.answerability.canAnswer) {
         try {
           const answerRes = await runLlm(
@@ -1558,7 +1558,6 @@ export async function POST(req: NextRequest) {
           },
           { intent_name: resolvedIntent }
         );
-        finalIntentRoute = "general";
       } else {
         await insertEvent(
           context,
@@ -1572,9 +1571,6 @@ export async function POST(req: NextRequest) {
           },
           { intent_name: resolvedIntent }
         );
-      }
-      if (kbModel === "kb_llm_fallback" || kbModel === "kb_llm_empty") {
-        finalIntentRoute = "general";
       }
       const debugAnswer = formatOutputDefault(kbAnswerText);
       const reply = makeReply(kbAnswerText, kbModel, mcpActions);
@@ -1594,7 +1590,7 @@ export async function POST(req: NextRequest) {
         ],
         bot_context: {
           intent_name: resolvedIntent,
-          intent_route: finalIntentRoute,
+          intent_route: intentRoute,
           entity: policyContext.entity,
           selected_order_id: resolvedOrderId,
           customer_verification_token: customerVerificationToken,
@@ -1617,7 +1613,6 @@ export async function POST(req: NextRequest) {
           answer: reply,
           model: kbModel,
           debug_answer: debugAnswer,
-          intent_route: finalIntentRoute,
         },
         { intent_name: resolvedIntent }
       );

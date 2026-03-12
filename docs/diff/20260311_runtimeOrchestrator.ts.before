@@ -63,8 +63,7 @@ import {
   getRecentTurns,
   resolveProductDecision,
 } from "../services/dataAccess";
-import { resolveKbMatch, type KbMatchResult } from "../services/kbMatchRuntime";
-import { buildKbAnswerPrompt } from "../services/kbAnswerRuntime";
+import { buildKbAnswerText, resolveKbMatch, type KbMatchResult } from "../services/kbMatchRuntime";
 import { fetchEndUserMemoryEntity } from "../services/endUserRuntime";
 import { insertEvent, insertFinalTurn, upsertDebugLog } from "../services/auditRuntime";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
@@ -184,15 +183,6 @@ const EXECUTION_GUARD_RULES = {
   },
 } as const;
 
-const TRANSACTIONAL_INTENTS = new Set([
-  "restock_inquiry",
-  "restock_subscribe",
-  "order_change",
-  "shipping_inquiry",
-  "refund_request",
-  "admin_login",
-]);
-
 
 export async function POST(req: NextRequest) {
   const debugEnabled = process.env.DEBUG_RUNTIME_CHAT === "1" || process.env.NODE_ENV !== "production";
@@ -232,7 +222,6 @@ export async function POST(req: NextRequest) {
   let latestTurnId: string | null = null;
   let resolvedIntent = "general";
   let kbMatch: KbMatchResult | null = null;
-  let kbMatchLogged = false;
   let lastDebugPrefixJson: Record<string, any> | null = null;
   let auditMessage: string | null = null;
   let auditConversationMode: string | null = null;
@@ -1389,7 +1378,6 @@ export async function POST(req: NextRequest) {
         },
         { intent_name: resolvedIntent }
       );
-      kbMatchLogged = true;
     } else {
       kbMatch = null;
     }
@@ -1437,197 +1425,6 @@ export async function POST(req: NextRequest) {
     policyContext = resolvedContext.policyContext;
     auditIntent = resolvedIntent;
     auditEntity = (policyContext.entity || {}) as Record<string, any>;
-    const hasExpectedInputs =
-      Boolean(expectedInput) || (Array.isArray(expectedInputs) && expectedInputs.length > 0);
-    const hasPendingFlow = Boolean(
-      effectivePrevBotContext.restock_pending ||
-        effectivePrevBotContext.address_pending ||
-        effectivePrevBotContext.intent_scope_pending ||
-        effectivePrevBotContext.intent_disambiguation_pending ||
-        effectivePrevBotContext.reuse_pending ||
-        effectivePrevBotContext.phone_reuse_pending
-    );
-    const detectedIntent = resolvedContext.detectedIntent;
-    const isTransactionalIntent =
-      TRANSACTIONAL_INTENTS.has(resolvedIntent) || TRANSACTIONAL_INTENTS.has(detectedIntent);
-    const intentRouteInitial =
-      hasPendingFlow || hasExpectedInputs || isTransactionalIntent ? "transactional" : "kb_answer";
-    await insertEvent(
-      context,
-      sessionId,
-      latestTurnId,
-      "INTENT_ROUTED",
-      {
-        intent_selected: resolvedIntent,
-        intent_route: intentRouteInitial,
-        has_expected_inputs: hasExpectedInputs,
-        has_pending_flow: hasPendingFlow,
-        transactional_intent: isTransactionalIntent,
-        kb_content_present: kbContentPresent,
-      },
-      { intent_name: resolvedIntent }
-    );
-    if (intentRouteInitial === "kb_answer") {
-      markStage("kb_answer.start");
-      if (!kbMatch && kbContentPresent && !kbMatchLogged) {
-        await insertEvent(
-          context,
-          sessionId,
-          latestTurnId,
-          "KB_MATCH_STARTED",
-          {
-            query_text: message,
-            kb_id: kb.id,
-            admin_kb_ids: adminKbs.map((item) => item.id).filter(Boolean),
-            phase: "kb_answer",
-          },
-          { intent_name: resolvedIntent }
-        );
-        kbMatch = resolveKbMatch({
-          query: message,
-          kb: { id: kb.id, title: kb.title, content: kb.content || null },
-          adminKbs: adminKbs.map((item) => ({ id: item.id, title: item.title, content: item.content || null })),
-        });
-        await insertEvent(
-          context,
-          sessionId,
-          latestTurnId,
-          "KB_MATCH_COMPLETED",
-          {
-            matched: Boolean(kbMatch && kbMatch.matched),
-            score: kbMatch?.score ?? null,
-            key: kbMatch?.key ?? null,
-            section: kbMatch?.section ?? null,
-            source_kb_id: kbMatch?.source?.id ?? null,
-            source_kb_title: kbMatch?.source?.title ?? null,
-            phase: "kb_answer",
-          },
-          { intent_name: resolvedIntent }
-        );
-        kbMatchLogged = true;
-      }
-      pushRuntimeCall("src/app/api/runtime/chat/services/kbAnswerRuntime.ts", "buildKbAnswerPrompt");
-      const kbPrompt = buildKbAnswerPrompt({
-        message,
-        kb: { id: kb.id, title: kb.title, content: kb.content || null },
-        adminKbs: adminKbs.map((item) => ({ id: item.id, title: item.title, content: item.content || null })),
-        match: kbMatch,
-      });
-      await insertEvent(
-        context,
-        sessionId,
-        latestTurnId,
-        "KB_LLM_PROMPT_BUILT",
-        {
-          intent_route: intentRouteInitial,
-          kb_context_size: kbPrompt.prompt.kbContextSize,
-          kb_context_source: kbPrompt.prompt.kbContextSource,
-          kb_topics: kbPrompt.prompt.kbTopics,
-          evidence_keys: kbPrompt.prompt.evidenceKeys,
-          answerability: kbPrompt.answerability,
-        },
-        { intent_name: resolvedIntent }
-      );
-      let kbAnswerText = "";
-      let kbModel = "kb_llm";
-      let kbEmptyReason: string | null = null;
-      let finalIntentRoute = intentRouteInitial;
-      if (kbPrompt.answerability.canAnswer) {
-        try {
-          const answerRes = await runLlm(
-            (agent.llm || "chatgpt") as "chatgpt" | "gemini",
-            kbPrompt.prompt.messages
-          );
-          kbAnswerText = String(answerRes.text || "").trim();
-          kbModel = answerRes.model;
-        } catch (error) {
-          kbEmptyReason = error instanceof Error ? error.message : "LLM_ERROR";
-        }
-      }
-      if (!kbAnswerText) {
-        kbAnswerText = kbPrompt.fallback;
-        kbModel = kbPrompt.answerability.canAnswer ? "kb_llm_empty" : "kb_llm_fallback";
-        await insertEvent(
-          context,
-          sessionId,
-          latestTurnId,
-          "KB_LLM_ANSWER_EMPTY",
-          {
-            reason: kbEmptyReason || kbPrompt.answerability.reason,
-            fallback_used: true,
-          },
-          { intent_name: resolvedIntent }
-        );
-        finalIntentRoute = "general";
-      } else {
-        await insertEvent(
-          context,
-          sessionId,
-          latestTurnId,
-          "KB_LLM_ANSWER_READY",
-          {
-            model: kbModel,
-            answer_length: kbAnswerText.length,
-            evidence_keys: kbPrompt.prompt.evidenceKeys,
-          },
-          { intent_name: resolvedIntent }
-        );
-      }
-      if (kbModel === "kb_llm_fallback" || kbModel === "kb_llm_empty") {
-        finalIntentRoute = "general";
-      }
-      const debugAnswer = formatOutputDefault(kbAnswerText);
-      const reply = makeReply(kbAnswerText, kbModel, mcpActions);
-      await insertTurn({
-        session_id: sessionId,
-        seq: nextSeq,
-        transcript_text: message,
-        answer_text: debugAnswer,
-        final_answer: reply,
-        kb_references: [
-          { kb_id: kb.id, title: kb.title, version: kb.version },
-          ...adminKbs.map((adminKb: { id?: string; title?: string; version?: string }) => ({
-            kb_id: adminKb.id,
-            title: adminKb.title,
-            version: adminKb.version,
-          })),
-        ],
-        bot_context: {
-          intent_name: resolvedIntent,
-          intent_route: finalIntentRoute,
-          entity: policyContext.entity,
-          selected_order_id: resolvedOrderId,
-          customer_verification_token: customerVerificationToken,
-          mcp_actions: mcpActions,
-          user_facing_message: reply,
-          debug_answer: debugAnswer,
-          kb_answerability: kbPrompt.answerability,
-          kb_context_source: kbPrompt.prompt.kbContextSource,
-          kb_context_size: kbPrompt.prompt.kbContextSize,
-          kb_evidence_keys: kbPrompt.prompt.evidenceKeys,
-          kb_topics: kbPrompt.prompt.kbTopics,
-        },
-      });
-      await insertEvent(
-        context,
-        sessionId,
-        latestTurnId,
-        "FINAL_ANSWER_READY",
-        {
-          answer: reply,
-          model: kbModel,
-          debug_answer: debugAnswer,
-          intent_route: finalIntentRoute,
-        },
-        { intent_name: resolvedIntent }
-      );
-      return respond({
-        session_id: sessionId,
-        step: "final",
-        message: reply,
-        mcp_actions: mcpActions,
-      });
-    }
     markStage("input_stage.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts", "runInputStageRuntime");
     const inputStage = await runInputStageRuntime({
@@ -1705,6 +1502,68 @@ export async function POST(req: NextRequest) {
     lastMcpStatus = null;
     lastMcpError = null;
     lastMcpCount = null;
+    if (kbMatch && kbMatch.matched && resolvedIntent === "faq") {
+      const kbAnswer = buildKbAnswerText(kbMatch);
+      if (kbAnswer) {
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "KB_ANSWER_SELECTED",
+          {
+            key: kbMatch.key,
+            score: kbMatch.score,
+            source_kb_id: kbMatch.source.id,
+            source_kb_title: kbMatch.source.title,
+          },
+          { intent_name: resolvedIntent }
+        );
+        const debugAnswer = formatOutputDefault(kbAnswer);
+        const reply = makeReply(kbAnswer, "deterministic_kb_match", mcpActions);
+        await insertTurn({
+          session_id: sessionId,
+          seq: nextSeq,
+          transcript_text: message,
+          answer_text: debugAnswer,
+          final_answer: reply,
+          kb_references: [
+            { kb_id: kb.id, title: kb.title, version: kb.version },
+            ...adminKbs.map((adminKb: { id?: string; title?: string; version?: string }) => ({
+              kb_id: adminKb.id,
+              title: adminKb.title,
+              version: adminKb.version,
+            })),
+          ],
+          bot_context: {
+            intent_name: resolvedIntent,
+            entity: policyContext.entity,
+            selected_order_id: resolvedOrderId,
+            customer_verification_token: customerVerificationToken,
+            mcp_actions: mcpActions,
+            user_facing_message: reply,
+            debug_answer: debugAnswer,
+          },
+        });
+        await insertEvent(
+          context,
+          sessionId,
+          latestTurnId,
+          "FINAL_ANSWER_READY",
+          {
+            answer: reply,
+            model: "deterministic_kb_match",
+            debug_answer: debugAnswer,
+          },
+          { intent_name: resolvedIntent }
+        );
+        return respond({
+          session_id: sessionId,
+          step: "final",
+          message: reply,
+          mcp_actions: mcpActions,
+        });
+      }
+    }
     markStage("mcp_ops.start");
     pushRuntimeCall("src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts", "createRuntimeMcpOps");
     const { noteMcp, noteMcpSkip, flushMcpSkipLogs } = createRuntimeMcpOps({

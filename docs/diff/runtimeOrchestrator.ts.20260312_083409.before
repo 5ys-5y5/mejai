@@ -1447,9 +1447,7 @@ export async function POST(req: NextRequest) {
         effectivePrevBotContext.reuse_pending ||
         effectivePrevBotContext.phone_reuse_pending
     );
-    const detectedIntent = resolvedContext.detectedIntent;
-    const isTransactionalIntent =
-      TRANSACTIONAL_INTENTS.has(resolvedIntent) || TRANSACTIONAL_INTENTS.has(detectedIntent);
+    const isTransactionalIntent = TRANSACTIONAL_INTENTS.has(resolvedIntent);
     const intentRouteInitial =
       hasPendingFlow || hasExpectedInputs || isTransactionalIntent ? "transactional" : "kb_answer";
     await insertEvent(

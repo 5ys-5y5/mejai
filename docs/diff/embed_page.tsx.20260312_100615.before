@@ -75,12 +75,6 @@ type AuthState = {
   customer_verification_token?: string | null;
 };
 
-type InlineKbBroadcastMessage = {
-  type: "inline_kb_update" | "inline_kb_request" | "inline_kb_response";
-  value?: string;
-  sender?: string;
-};
-
 const TEMPLATE_KEY_PREFIX = "template_key=";
 const PUBLIC_KEY_PREFIX = "public_key=";
 const WIDGET_ID_PREFIX = "widget_id=";
@@ -501,57 +495,15 @@ export default function WidgetEmbedPage() {
     mcp: false,
     route: false,
   });
-    const [policyConfig, setPolicyConfig] = useState<PolicyConfig>({
-      llm: "chatgpt",
-      inlineKb: "",
-      kbId: "",
-      adminKbIds: [],
-      route: "",
-      mcpProviderKeys: [],
-      mcpToolIds: [],
-    });
-    const inlineKbSessionKey = sessionSeed || sessionId || visitorId;
-    const inlineKbChannelName = useMemo(() => {
-      const sourceKey = queryInstanceId || queryWidgetId || key;
-      if (!sourceKey || !inlineKbSessionKey) return "";
-      return `mejai_inline_kb_${sourceKey}_${inlineKbSessionKey}`;
-    }, [inlineKbSessionKey, key, queryInstanceId, queryWidgetId]);
-    const inlineKbStorageKey = inlineKbChannelName;
-    const inlineKbChannelIdRef = useRef(buildId());
-    const inlineKbChannelRef = useRef<BroadcastChannel | null>(null);
-    const [inlineKbShared, setInlineKbShared] = useState("");
-    const inlineKbSharedRef = useRef("");
-    const policyInlineKbRef = useRef("");
-    const readInlineKbStorage = useCallback(() => {
-      if (!inlineKbStorageKey || typeof window === "undefined") return "";
-      try {
-        return localStorage.getItem(inlineKbStorageKey) || "";
-      } catch {
-        return "";
-      }
-    }, [inlineKbStorageKey]);
-    const syncInlineKbShared = useCallback((value: string) => {
-      const trimmed = String(value || "").trim();
-      if (inlineKbSharedRef.current === trimmed) return;
-      inlineKbSharedRef.current = trimmed;
-      setInlineKbShared(trimmed);
-    }, []);
-    const broadcastInlineKb = useCallback(
-      (value: string) => {
-        if (!inlineKbChannelName || typeof window === "undefined") return;
-        if (typeof BroadcastChannel === "undefined") return;
-        const channel = inlineKbChannelRef.current || new BroadcastChannel(inlineKbChannelName);
-        channel.postMessage({
-          type: "inline_kb_update",
-          value: value || "",
-          sender: inlineKbChannelIdRef.current,
-        });
-        if (!inlineKbChannelRef.current) {
-          channel.close();
-        }
-      },
-      [inlineKbChannelName]
-    );
+  const [policyConfig, setPolicyConfig] = useState<PolicyConfig>({
+    llm: "chatgpt",
+    inlineKb: "",
+    kbId: "",
+    adminKbIds: [],
+    route: "",
+    mcpProviderKeys: [],
+    mcpToolIds: [],
+  });
   const [setupMode, setSetupMode] = useState<"existing" | "new">("new");
   const [conversationMode, setConversationMode] =
     useState<ConversationModelChatColumnLegoProps["model"]["conversationMode"]>("new");
@@ -951,79 +903,13 @@ export default function WidgetEmbedPage() {
     [allowedTabs, configLoaded, forcedTab, tabResolved]
   );
 
-    useEffect(() => {
-      widgetTokenRef.current = widgetToken;
-    }, [widgetToken]);
+  useEffect(() => {
+    widgetTokenRef.current = widgetToken;
+  }, [widgetToken]);
 
-    useEffect(() => {
-      policyInlineKbRef.current = policyConfig.inlineKb;
-    }, [policyConfig.inlineKb]);
-
-    useEffect(() => {
-      if (!inlineKbChannelName || typeof window === "undefined") return;
-      if (typeof BroadcastChannel === "undefined") return;
-      const channel = new BroadcastChannel(inlineKbChannelName);
-      inlineKbChannelRef.current = channel;
-      const handleMessage = (event: MessageEvent<InlineKbBroadcastMessage>) => {
-        const payload = event.data;
-        if (!payload || typeof payload !== "object") return;
-        if (payload.sender && payload.sender === inlineKbChannelIdRef.current) return;
-        if (payload.type === "inline_kb_request") {
-          channel.postMessage({
-            type: "inline_kb_response",
-            value: policyInlineKbRef.current || "",
-            sender: inlineKbChannelIdRef.current,
-          });
-          return;
-        }
-        if (payload.type === "inline_kb_update" || payload.type === "inline_kb_response") {
-          syncInlineKbShared(typeof payload.value === "string" ? payload.value : "");
-        }
-      };
-      channel.addEventListener("message", handleMessage);
-      if (activeTab !== "policy") {
-        channel.postMessage({ type: "inline_kb_request", sender: inlineKbChannelIdRef.current });
-      }
-      return () => {
-        channel.removeEventListener("message", handleMessage);
-        channel.close();
-        if (inlineKbChannelRef.current === channel) {
-          inlineKbChannelRef.current = null;
-        }
-      };
-    }, [activeTab, inlineKbChannelName, syncInlineKbShared]);
-
-    useEffect(() => {
-      if (activeTab !== "policy") return;
-      const value = policyConfig.inlineKb || "";
-      if (inlineKbStorageKey && typeof window !== "undefined") {
-        try {
-          if (value) {
-            localStorage.setItem(inlineKbStorageKey, value);
-          } else {
-            localStorage.removeItem(inlineKbStorageKey);
-          }
-        } catch {
-          // ignore storage errors
-        }
-      }
-      if (inlineKbChannelName && typeof window !== "undefined" && typeof BroadcastChannel !== "undefined") {
-        const channel = inlineKbChannelRef.current || new BroadcastChannel(inlineKbChannelName);
-        channel.postMessage({
-          type: "inline_kb_update",
-          value,
-          sender: inlineKbChannelIdRef.current,
-        });
-        if (!inlineKbChannelRef.current) {
-          channel.close();
-        }
-      }
-      syncInlineKbShared(value);
-    }, [activeTab, inlineKbChannelName, inlineKbStorageKey, policyConfig.inlineKb, syncInlineKbShared]);
-
-    useEffect(() => {
-      sessionSeedRef.current = sessionSeed;
-    }, [sessionSeed]);
+  useEffect(() => {
+    sessionSeedRef.current = sessionSeed;
+  }, [sessionSeed]);
 
   const appendBotNotice = useCallback(
     (content: string, detail?: Record<string, unknown>) => {
@@ -1424,11 +1310,7 @@ export default function WidgetEmbedPage() {
         const shouldSendAgent =
           allowExistingOverrides && (policyFeatures.setup.agentSelector || policyFeatures.setup.modelSelector);
         const shouldSendLlm = allowNewOverrides && policyFeatures.setup.llmSelector;
-        const shouldSendInlineKb = policyFeatures.setup.inlineUserKbInput;
-        const inlineKbFromStorage = readInlineKbStorage().trim();
-        const inlineKbFromShared = inlineKbShared.trim();
-        const inlineKbFromState = activeTab === "policy" ? policyConfig.inlineKb.trim() : "";
-        const inlineKbCandidate = inlineKbFromStorage || inlineKbFromShared || inlineKbFromState;
+        const shouldSendInlineKb = allowNewOverrides && policyFeatures.setup.inlineUserKbInput;
         const shouldSendKb =
           allowNewOverrides &&
           (policyFeatures.setup.kbSelector || Boolean(baseFeatures.setup.defaultKbId));
@@ -1476,7 +1358,7 @@ export default function WidgetEmbedPage() {
             preview: isPreview,
             agent_id: agentId,
             llm: shouldSendLlm ? policyConfig.llm || undefined : undefined,
-              inline_kb: shouldSendInlineKb ? inlineKbCandidate || undefined : undefined,
+            inline_kb: shouldSendInlineKb ? policyConfig.inlineKb.trim() || undefined : undefined,
             kb_id: kbId,
             admin_kb_ids: adminKbIds,
             mcp_tool_ids: toolIds,
@@ -1597,14 +1479,11 @@ export default function WidgetEmbedPage() {
       }
     },
     [
-      activeTab,
-      inlineKbShared,
       isPreview,
       policyFeatures,
       pendingUser,
       pendingOverrides,
       policyConfig,
-      readInlineKbStorage,
       refreshSessionLogs,
       sending,
       sessionId,
@@ -1919,13 +1798,7 @@ export default function WidgetEmbedPage() {
     onSelectSession: () => undefined,
     onSearchSessionById: () => undefined,
     onChangeConversationMode: (mode) => setConversationMode(mode),
-    onInlineKbChange: (value) => {
-      setPolicyConfig((prev) => ({ ...prev, inlineKb: value }));
-      if (activeTab === "policy") {
-        syncInlineKbShared(value);
-        broadcastInlineKb(value);
-      }
-    },
+    onInlineKbChange: (value) => setPolicyConfig((prev) => ({ ...prev, inlineKb: value })),
     onInlineKbSampleApply: handleApplyInlineKbSamples,
     onLlmChange: (value) => setPolicyConfig((prev) => ({ ...prev, llm: value })),
     onToggleLlmInfo: () => setDetailsOpen((prev) => ({ ...prev, llm: !prev.llm })),

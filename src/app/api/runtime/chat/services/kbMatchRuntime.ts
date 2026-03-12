@@ -1,0 +1,296 @@
+export type KbMatchSource = {
+  id: string;
+  title: string;
+  type: "primary" | "admin";
+};
+
+export type KbMatchResult = {
+  matched: boolean;
+  score: number;
+  key: string;
+  section: string | null;
+  answer: string;
+  source: KbMatchSource;
+  matchedAlias?: string | null;
+};
+
+type KbInput = {
+  id?: string | null;
+  title?: string | null;
+  content?: string | null;
+  type: "primary" | "admin";
+};
+
+type KbEntry = {
+  key: string;
+  section: string | null;
+  lines: string[];
+  source: KbMatchSource;
+  aliases: string[];
+};
+
+const KB_SYNONYMS: Record<string, string[]> = {
+  신청기간: ["신청 시기", "신청기간", "접수 기간", "접수 시기", "신청 마감", "마감일", "접수 마감"],
+  신청방법: ["신청 방법", "접수 방법", "신청하는 방법", "어떻게 신청"],
+  신청대상: ["신청 대상", "지원 대상", "누가 신청", "자격"],
+  제출서류: ["제출 서류", "필요 서류", "서류", "사업계획서"],
+  선정절차및평가방법: ["선정 절차", "평가 방법", "평가 절차", "심사 절차"],
+  지원내용: ["지원 내용", "지원금", "지원 자금", "지원 프로그램"],
+  문의처: ["문의", "연락처", "문의처", "전화번호", "문의 전화"],
+};
+
+const MIN_MATCH_SCORE = 0.62;
+const BODY_KEY_MAX_LEN = 40;
+
+function normalizeMatchText(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[\s\p{P}\p{S}]+/gu, "")
+    .trim();
+}
+
+function normalizeTokenText(value: string) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[\p{P}\p{S}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function tokenize(value: string) {
+  const normalized = normalizeTokenText(value);
+  if (!normalized) return [];
+  return normalized.split(" ").map((token) => token.trim()).filter((token) => token.length >= 2);
+}
+
+function isSectionHeader(line: string) {
+  if (!line) return false;
+  if (line.startsWith("-") || line.startsWith("※")) return false;
+  if (/\t/.test(line)) return false;
+  if (/[.:]/.test(line)) return false;
+  if (/[(),]/.test(line)) return false;
+  if (line.length > 20) return false;
+  return true;
+}
+
+function buildAliasList(key: string) {
+  const normalizedKey = normalizeMatchText(key);
+  const aliasSet = new Set<string>();
+  const rawAliases = [key];
+  const synonyms = KB_SYNONYMS[normalizedKey] || KB_SYNONYMS[key] || [];
+  rawAliases.push(...synonyms);
+  rawAliases.forEach((alias) => {
+    const normalized = normalizeMatchText(alias);
+    if (normalized) aliasSet.add(normalized);
+  });
+  return Array.from(aliasSet);
+}
+
+function createEntry(input: { key: string; section: string | null; lines: string[]; source: KbMatchSource }): KbEntry {
+  return {
+    key: input.key,
+    section: input.section,
+    lines: input.lines,
+    source: input.source,
+    aliases: buildAliasList(input.key),
+  };
+}
+
+function buildFallbackKey(text: string, index: number) {
+  const trimmed = String(text || "").trim();
+  if (trimmed) {
+    return trimmed.length > BODY_KEY_MAX_LEN ? trimmed.slice(0, BODY_KEY_MAX_LEN) : trimmed;
+  }
+  return `본문${index}`;
+}
+
+function parseKbEntries(input: KbInput): KbEntry[] {
+  const content = String(input.content || "").trim();
+  if (!content) return [];
+  const source: KbMatchSource = {
+    id: String(input.id || "").trim() || "unknown",
+    title: String(input.title || "").trim() || "KB",
+    type: input.type,
+  };
+  const entries: KbEntry[] = [];
+  const lines = content.split(/\r?\n/);
+  let currentSection: string | null = null;
+  let sectionBuffer: string[] = [];
+  let lastEntry: KbEntry | null = null;
+  let unsectionedIndex = 0;
+
+  const flushSectionBuffer = () => {
+    const cleaned = sectionBuffer.map((line) => line.trim()).filter(Boolean);
+    if (cleaned.length === 0) return;
+    const key = currentSection || buildFallbackKey(cleaned[0], (unsectionedIndex += 1));
+    entries.push(createEntry({ key, section: currentSection, lines: cleaned, source }));
+    sectionBuffer = [];
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = String(rawLine || "").trim();
+    if (!trimmed) continue;
+
+    const kvMatch = trimmed.match(/^([^\t]+)\t+(.+)$/);
+    if (kvMatch) {
+      flushSectionBuffer();
+      const key = kvMatch[1].trim();
+      const value = kvMatch[2].trim();
+      const entry = createEntry({ key, section: currentSection, lines: [value], source });
+      entries.push(entry);
+      lastEntry = entry;
+      continue;
+    }
+
+    const colonMatch = trimmed.match(/^([^:：]+)\s*[:：]\s*(.+)$/);
+    if (colonMatch) {
+      flushSectionBuffer();
+      const key = colonMatch[1].trim();
+      const value = colonMatch[2].trim();
+      const entry = createEntry({ key, section: currentSection, lines: [value], source });
+      entries.push(entry);
+      lastEntry = entry;
+      continue;
+    }
+
+    const spaceMatch = trimmed.match(/^(.{2,})\s{2,}(.+)$/);
+    if (spaceMatch) {
+      flushSectionBuffer();
+      const key = spaceMatch[1].trim();
+      const value = spaceMatch[2].trim();
+      const entry = createEntry({ key, section: currentSection, lines: [value], source });
+      entries.push(entry);
+      lastEntry = entry;
+      continue;
+    }
+
+    if (isSectionHeader(trimmed)) {
+      flushSectionBuffer();
+      currentSection = trimmed;
+      sectionBuffer = [];
+      lastEntry = null;
+      continue;
+    }
+
+    if (lastEntry) {
+      lastEntry.lines.push(trimmed);
+    } else {
+      sectionBuffer.push(trimmed);
+    }
+  }
+
+  flushSectionBuffer();
+  return entries;
+}
+
+function scoreEntry(queryNormalized: string, queryTokens: string[], entry: KbEntry) {
+  if (!queryNormalized) return 0;
+  let score = 0;
+  const aliasHit = entry.aliases.find((alias) => alias && (queryNormalized.includes(alias) || alias.includes(queryNormalized)));
+  if (aliasHit) {
+    score = 0.9;
+  }
+  if (score === 0) {
+    const keyNormalized = normalizeMatchText(entry.key);
+    if (keyNormalized && (queryNormalized.includes(keyNormalized) || keyNormalized.includes(queryNormalized))) {
+      score = 0.85;
+    }
+  }
+  if (score === 0) {
+    const combinedNormalized = normalizeMatchText(`${entry.key} ${entry.lines.join(" ")}`);
+    if (combinedNormalized && queryNormalized && combinedNormalized.includes(queryNormalized)) {
+      score = 0.72;
+    }
+  }
+  if (score === 0 && queryTokens.length > 0) {
+    const combinedTokenText = normalizeTokenText(`${entry.key} ${entry.lines.join(" ")}`);
+    let hit = 0;
+    queryTokens.forEach((token) => {
+      if (token && combinedTokenText.includes(token)) hit += 1;
+    });
+    if (hit > 0) {
+      const ratio = hit / queryTokens.length;
+      if (ratio >= 0.75) score = 0.74;
+      else if (ratio >= 0.5) score = 0.66;
+      else if (ratio >= 0.34) score = 0.58;
+    }
+  }
+  if (entry.source.type === "primary") {
+    score += 0.03;
+  }
+  return score;
+}
+
+function buildAnswerText(entry: KbEntry) {
+  const lines = entry.lines.map((line) => line.trim()).filter(Boolean);
+  if (lines.length === 0) return "";
+  const body = lines.join("\n");
+  const keyNormalized = normalizeMatchText(entry.key);
+  const bodyNormalized = normalizeMatchText(body);
+  if (keyNormalized && !bodyNormalized.startsWith(keyNormalized)) {
+    return `${entry.key} ${body}`.trim();
+  }
+  return body.trim();
+}
+
+export function resolveKbMatch(input: {
+  query: string;
+  kb: { id?: string | null; title?: string | null; content?: string | null };
+  adminKbs: Array<{ id?: string | null; title?: string | null; content?: string | null }>;
+}): KbMatchResult | null {
+  const query = String(input.query || "").trim();
+  if (!query) return null;
+  const sources: KbInput[] = [];
+  if (input.kb) {
+    sources.push({
+      id: input.kb.id,
+      title: input.kb.title,
+      content: input.kb.content,
+      type: "primary",
+    });
+  }
+  (input.adminKbs || []).forEach((kb) => {
+    sources.push({
+      id: kb.id,
+      title: kb.title,
+      content: kb.content,
+      type: "admin",
+    });
+  });
+
+  const entries = sources.flatMap((source) => parseKbEntries(source));
+  if (entries.length === 0) return null;
+
+  const queryNormalized = normalizeMatchText(query);
+  const queryTokens = tokenize(query);
+
+  let best: { entry: KbEntry; score: number; alias: string | null } | null = null;
+  entries.forEach((entry) => {
+    const score = scoreEntry(queryNormalized, queryTokens, entry);
+    if (score <= 0) return;
+    if (!best || score > best.score) {
+      const alias = entry.aliases.find((a) => a && (queryNormalized.includes(a) || a.includes(queryNormalized))) || null;
+      best = { entry, score, alias };
+    }
+  });
+
+  if (!best) return null;
+  const resolvedBest = best as { entry: KbEntry; score: number; alias: string | null };
+  if (resolvedBest.score < MIN_MATCH_SCORE) return null;
+  const answer = buildAnswerText(resolvedBest.entry);
+  if (!answer) return null;
+
+  return {
+    matched: true,
+    score: Number(resolvedBest.score.toFixed(3)),
+    key: resolvedBest.entry.key,
+    section: resolvedBest.entry.section,
+    answer,
+    source: resolvedBest.entry.source,
+    matchedAlias: resolvedBest.alias,
+  };
+}
+
+export function buildKbAnswerText(match: KbMatchResult) {
+  return String(match?.answer || "").trim();
+}

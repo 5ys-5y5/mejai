@@ -25,7 +25,6 @@ type ContextResolutionParams = {
   prevZipFromTranscript: string | null;
   recentEntity: Record<string, string | null> | null;
   prevChoices: Array<{ order_id?: string }>;
-  kbMatch?: { matched?: boolean | null } | null;
   derivedChannel: string | null;
   derivedOrderId: string | null;
   derivedPhone: string | null;
@@ -192,7 +191,6 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     prevZipFromTranscript,
     recentEntity,
     prevChoices,
-    kbMatch,
     derivedChannel,
     derivedOrderId,
     derivedPhone,
@@ -453,19 +451,11 @@ export async function resolveIntentAndPolicyContext(params: ContextResolutionPar
     Boolean(derivedAddress) ||
     Boolean(confirmedAddress) ||
     Boolean(prevBotContext.address_pending);
-  const allowKbIntent =
-    Boolean(kbMatch && kbMatch.matched) &&
-    !hasExpectedInputs &&
-    !prevBotContext.restock_pending &&
-    !prevBotContext.reuse_pending &&
-    !prevBotContext.phone_reuse_pending &&
-    !prevBotContext.intent_scope_pending;
-  const kbSuggestedIntent = allowKbIntent ? "faq" : null;
   let seededIntent =
     forcedIntentQueue.length > 0
       ? forcedIntentQueue[0]
       : detectedIntent === "general"
-        ? (kbSuggestedIntent || prevIntent || "general")
+        ? (prevIntent || "general")
         : detectedIntent;
   if (lockIntentToRestockSubscribe) seededIntent = "restock_subscribe";
   if (seededIntent === "shipping_inquiry" && hasAddressSignal && isAddressChangeUtterance(message)) {
