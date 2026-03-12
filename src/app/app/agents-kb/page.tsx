@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Bot, Pencil, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, Pencil, Plus, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import RagStorageBadge from "@/components/RagStorageBadge";
@@ -524,14 +524,6 @@ export default function AgentsKbPage({ initialTab }: { initialTab?: TabKey }) {
                   <Plus className="mr-2 inline h-4 w-4" />
                   New Agent
                 </Link>
-                <Link
-                  href="/app/laboratory"
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm hover:bg-slate-50"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <Bot className="mr-2 inline h-4 w-4" />
-                  Laboratory
-                </Link>
               </div>
               <div className="text-xs text-slate-500">
                 Total: {agentsLoading ? "-" : activeAgents.length}
@@ -597,14 +589,6 @@ export default function AgentsKbPage({ initialTab }: { initialTab?: TabKey }) {
                               <AlertTriangle className="h-4 w-4" />
                             </button>
                           ) : null}
-                          <Link
-                            href={`/app/laboratory?agentId=${encodeURIComponent(agent.id)}`}
-                            aria-label="Open laboratory"
-                            onClick={(event) => event.stopPropagation()}
-                            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                          >
-                            <Bot className="h-4 w-4" />
-                          </Link>
                           <button
                             type="button"
                             onClick={(event) => {

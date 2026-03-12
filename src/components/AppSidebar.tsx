@@ -5,12 +5,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Book,
-  Bot,
   ClipboardCheck,
   CreditCard,
   HomeIcon,
   Inbox,
-  Phone,
   PhoneCall,
   Route as RouteIcon,
   Shield,
@@ -245,24 +243,11 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
 
         <SidebarGroup header="구성" collapsed={collapsed}>
           <SidebarLink to="/app/agents" icon={Users} label="에이전트" collapsed={collapsed} onClick={onNavigate} />
-          <SidebarLink
-            to="/app/laboratory"
-            icon={Bot}
-            label="실험실"
-            collapsed={collapsed}
-            onClick={onNavigate}
-          />
-          <SidebarLink to="/app/eval" icon={ClipboardCheck} label="평가/관리" collapsed={collapsed} onClick={onNavigate} />
           <SidebarLink to="/app/kb" icon={Book} label="지식 베이스" collapsed={collapsed} onClick={onNavigate} />
           <SidebarLink to="/app/rules" icon={RouteIcon} label="규칙" collapsed={collapsed} onClick={onNavigate} />
         </SidebarGroup>
 
         <SidebarGroup header="온보딩" collapsed={collapsed}>
-          <SidebarLink to="/onboarding" icon={Phone} label="번호/정책 설정" collapsed={collapsed} onClick={onNavigate} />
-        </SidebarGroup>
-
-        <SidebarGroup header="설정" collapsed={collapsed}>
-          <SidebarLink to="/app/settings" icon={Settings} label="설정" collapsed={collapsed} onClick={onNavigate} />
           <SidebarLink
             to="/app/install"
             icon={ClipboardCheck}
@@ -270,6 +255,10 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
             collapsed={collapsed}
             onClick={onNavigate}
           />
+        </SidebarGroup>
+
+        <SidebarGroup header="설정" collapsed={collapsed}>
+          <SidebarLink to="/app/settings" icon={Settings} label="설정" collapsed={collapsed} onClick={onNavigate} />
           {isAdminUser ? (
             <SidebarLink to="/app/admin" icon={Shield} label="어드민" collapsed={collapsed} onClick={onNavigate} />
           ) : null}

@@ -1,0 +1,226 @@
+# 삭제 대상 페이지 구현 코드 목록 (2026-03-12)
+
+## 조사 방식
+- chrome-devtools: `http://localhost:3000/app/eval`, `http://localhost:3000/app/laboratory`, `http://localhost:3000/onboarding` 렌더링 확인
+- supabase mcp: public schema 테이블 목록 확인 (`A_iam_organizations`, `A_iam_user_access_maps` 존재)
+
+## /app/eval
+- Runtime 확인: 페이지 헤더 "평가/관리", 평가 항목 카드 4개 렌더링
+- Route:
+- `src/app/app/eval/page.tsx`
+- 네비/라우팅:
+- [지정1]
+- [지정2]
+
+## /app/laboratory
+- Runtime 확인: 페이지 헤더 "실험실", WS 상태/모델 추가/세션 헤더/채팅 패널 렌더링
+- Route:
+- `src/app/app/laboratory/page.tsx`
+- 전용 클라이언트 로직:
+- `src/lib/conversation/client/useConversationPageController.ts`
+- `src/lib/conversation/client/useLaboratoryPageController.ts`
+- `src/lib/conversation/client/useLaboratoryConversationActions.ts`
+- `src/lib/conversation/client/laboratoryTransport.ts`
+- 공유 클라이언트/상태:
+- `src/lib/conversation/client/laboratoryPageState.ts`
+- `src/lib/conversation/client/runtimeClient.ts`
+- API routes:
+- `src/app/api/laboratory/run/route.ts`
+- `src/app/api/laboratory/logs/route.ts`
+- `src/app/api/laboratory/transcript-snapshot/route.ts`
+- `src/app/api/transcript/copy/route.ts`
+- 정책/피처 맵:
+- `src/lib/conversation/pageFeaturePolicy.ts`
+- `src/lib/transcriptCopyPolicy.ts`
+- 링크/참조:
+- [지정2]
+- [지정3]
+- [지정4]
+- [지정5]
+- [지정6]
+- [지정7]
+
+## /onboarding
+- Runtime 확인: 4단계 온보딩 위저드/사업체 정보 폼 렌더링
+- Route:
+- `src/app/onboarding/page.tsx`
+- Supabase 사용:
+- `src/app/onboarding/page.tsx`
+- `src/lib/supabaseClient.ts`
+- 링크/참조:
+- [지정2]
+- `src/components/HelpPanel.tsx`
+- `src/app/app/page.tsx`
+- [지정5]
+
+## 삭제 영향 없는 항목 (repo 내 단독 참조 확인)
+- 보장 범위: repo 코드 기준 `rg` 검색 결과만 근거로 함 (외부/타시스템 호출은 범위 밖)
+- /app/eval:
+- `src/app/app/eval/page.tsx`
+- /app/laboratory:
+- `src/app/app/laboratory/page.tsx`
+- `src/lib/conversation/client/useConversationPageController.ts`
+- `src/lib/conversation/client/useLaboratoryPageController.ts`
+- `src/lib/conversation/client/useLaboratoryConversationActions.ts`
+- `src/lib/conversation/client/laboratoryTransport.ts`
+- `src/app/api/laboratory/run/route.ts`
+- `src/app/api/laboratory/transcript-snapshot/route.ts`
+- /onboarding:
+- `src/app/onboarding/page.tsx`
+- 참고: A_iam_organizations 접근 로직 (동일 파일)
+
+## 삭제 시 남는 영향 (파괴적 기능 영향은 아니지만 남는 연결)
+- /app/eval: 링크/타이틀 404 연결
+- [지정1]
+- [지정2]
+- /app/laboratory: 링크/정책/기본값/미들웨어 문자열 잔존
+- [지정2]
+- [지정3]
+- [지정4]
+- [지정5]
+- [지정6]
+- [지정7]
+- `src/lib/conversation/pageFeaturePolicy.ts`
+- `src/lib/transcriptCopyPolicy.ts`
+- `src/app/api/transcript/copy/route.ts`
+- /onboarding: 링크 404 연결
+- [지정2]
+- `src/components/HelpPanel.tsx`
+- `src/app/app/page.tsx`
+
+## 결론
+- 코드 수정 없이 라우트 파일만 삭제해도 다른 기능 자체는 동작
+- 남는 링크/정책/기본값은 사용자 404 또는 불필요한 정책 엔트리 유발 가능
+
+## 사용자 지정 보존 파일
+- [지정1]: `src/components/AppShell.tsx`
+- [지정2]: `src/components/AppSidebar.tsx`
+- [지정3]: `src/app/app/agents/[id]/page.tsx`
+- [지정4]: `src/app/app/agents-kb/page.tsx`
+- [지정5]: `src/app/app/design-system/page.tsx`
+- [지정6]: `src/app/embed/[key]/page.tsx`
+- [지정7]: `src/middleware.ts`
+
+## llm 지정 보존 파일
+- 대상: http://localhost:3000/ 위젯 대화 실행 경로
+- `src/app/page.tsx`
+- `src/components/landing/conversation-hero.tsx`
+- `src/components/landing/home-widget-install-box.tsx`
+- `public/widget.js`
+- `src/components/design-system/index.ts`
+- `src/components/design-system/widget/WidgetUI.parts.tsx`
+- `src/components/design-system/conversation/ConversationUI.parts.tsx`
+- [지정6]
+- `src/lib/conversation/pageFeaturePolicy.ts`
+- `src/lib/conversation/inlineKbSamples.ts`
+- `src/lib/conversation/client/useConversationAdminStatus.ts`
+- `src/lib/conversation/client/runtimeClient.ts`
+- `src/lib/conversation/client/runtimeMessageMapping.ts`
+- `src/lib/conversation/client/copyExecutor.ts`
+- `src/lib/conversation/client/laboratoryPageState.ts`
+- `src/lib/transcriptCopyPolicy.ts`
+- `src/lib/widgetRuntimeConfig.ts`
+- `src/lib/widgetChatPolicyShape.ts`
+- `src/lib/widgetPolicyUtils.ts`
+- `src/lib/widgetTemplateMeta.ts`
+- `src/lib/widgetSharedInstance.ts`
+- `src/lib/widgetOverrides.ts`
+- `src/lib/widgetUtils.ts`
+- `src/lib/widgetToken.ts`
+- `src/lib/runtimeFlags.ts`
+- `src/lib/runtimeResponseTranscript.ts`
+- `src/lib/debugTranscript.ts`
+- `src/lib/serverAuth.ts`
+- `src/lib/supabaseAdmin.ts`
+- `src/app/api/widget/chat/route.ts`
+- `src/app/api/widget/config/route.ts`
+- `src/app/api/widget/event/route.ts`
+- `src/app/api/widget/history/route.ts`
+- `src/app/api/widget/init/route.ts`
+- `src/app/api/widget/logs/route.ts`
+- `src/app/api/widget/sessions/route.ts`
+- `src/app/api/widget/stream/route.ts`
+- `src/app/api/transcript/copy/route.ts`
+- `src/app/api/runtime/chat/route.ts`
+- `src/app/api/runtime/chat/handlers/orderChangeHandler.ts`
+- `src/app/api/runtime/chat/handlers/refundHandler.ts`
+- `src/app/api/runtime/chat/handlers/restockHandler.ts`
+- `src/app/api/runtime/chat/policies/composed.ts`
+- `src/app/api/runtime/chat/policies/intentSlotPolicy.ts`
+- `src/app/api/runtime/chat/policies/lexicon.ts`
+- `src/app/api/runtime/chat/policies/primitives.ts`
+- `src/app/api/runtime/chat/policies/principles.ts`
+- `src/app/api/runtime/chat/policies/registry.ts`
+- `src/app/api/runtime/chat/policies/renderPolicy.ts`
+- `src/app/api/runtime/chat/policies/replyStyleRuntime.ts`
+- `src/app/api/runtime/chat/policies/restockResponsePolicy.ts`
+- `src/app/api/runtime/chat/policies/uiPolicy.ts`
+- `src/app/api/runtime/chat/presentation/runtimeResponseSchema.ts`
+- `src/app/api/runtime/chat/presentation/ui-responseDecorators.ts`
+- `src/app/api/runtime/chat/presentation/ui-runtimeResponseRuntime.ts`
+- `src/app/api/runtime/chat/runtime/contextResolutionRuntime.ts`
+- `src/app/api/runtime/chat/runtime/errorRuntime.ts`
+- `src/app/api/runtime/chat/runtime/finalizeRuntime.ts`
+- `src/app/api/runtime/chat/runtime/guardedEventRuntime.ts`
+- `src/app/api/runtime/chat/runtime/inputContractRuntime.ts`
+- `src/app/api/runtime/chat/runtime/intentCapabilityRuntime.ts`
+- `src/app/api/runtime/chat/runtime/intentCompletionRuntime.ts`
+- `src/app/api/runtime/chat/runtime/intentContractRuntime.ts`
+- `src/app/api/runtime/chat/runtime/intentDisambiguationRuntime.ts`
+- `src/app/api/runtime/chat/runtime/intentRuntime.ts`
+- `src/app/api/runtime/chat/runtime/intentScopeGateRuntime.ts`
+- `src/app/api/runtime/chat/runtime/mcpToolRegistry.ts`
+- `src/app/api/runtime/chat/runtime/memoryReuseRuntime.ts`
+- `src/app/api/runtime/chat/runtime/otpRuntime.ts`
+- `src/app/api/runtime/chat/runtime/pendingStateRuntime.ts`
+- `src/app/api/runtime/chat/runtime/policyInputRuntime.ts`
+- `src/app/api/runtime/chat/runtime/postActionRuntime.ts`
+- `src/app/api/runtime/chat/runtime/postToolRuntime.ts`
+- `src/app/api/runtime/chat/runtime/preTurnGuardRuntime.ts`
+- `src/app/api/runtime/chat/runtime/promptTemplateRuntime.ts`
+- `src/app/api/runtime/chat/runtime/quickReplyConfigRuntime.ts`
+- `src/app/api/runtime/chat/runtime/restockPendingRuntime.ts`
+- `src/app/api/runtime/chat/runtime/runtimeBootstrap.ts`
+- `src/app/api/runtime/chat/runtime/runtimeConversationIoRuntime.ts`
+- `src/app/api/runtime/chat/runtime/runtimeEngine.ts`
+- `src/app/api/runtime/chat/runtime/runtimeInitializationRuntime.ts`
+- `src/app/api/runtime/chat/runtime/runtimeInputStageRuntime.ts`
+- `src/app/api/runtime/chat/runtime/runtimeMcpOpsRuntime.ts`
+- `src/app/api/runtime/chat/runtime/runtimeOrchestrator.ts`
+- `src/app/api/runtime/chat/runtime/runtimePipelineState.ts`
+- `src/app/api/runtime/chat/runtime/runtimeStepContracts.ts`
+- `src/app/api/runtime/chat/runtime/runtimeSupport.ts`
+- `src/app/api/runtime/chat/runtime/runtimeTurnIo.ts`
+- `src/app/api/runtime/chat/runtime/selectionResolutionRuntime.ts`
+- `src/app/api/runtime/chat/runtime/sessionRuntime.ts`
+- `src/app/api/runtime/chat/runtime/slotDerivationRuntime.ts`
+- `src/app/api/runtime/chat/runtime/toolRuntime.ts`
+- `src/app/api/runtime/chat/runtime/toolStagePipelineRuntime.ts`
+- `src/app/api/runtime/chat/services/auditRuntime.ts`
+- `src/app/api/runtime/chat/services/dataAccess.ts`
+- `src/app/api/runtime/chat/services/endUserRuntime.ts`
+- `src/app/api/runtime/chat/services/kbAnswerRuntime.ts`
+- `src/app/api/runtime/chat/services/kbMatchRuntime.ts`
+- `src/app/api/runtime/chat/services/mcpRuntime.ts`
+- `src/app/api/runtime/chat/services/restockSubscriptionRuntime.ts`
+- `src/app/api/runtime/chat/shared/addressCandidateUtils.ts`
+- `src/app/api/runtime/chat/shared/confirmedEntity.ts`
+- `src/app/api/runtime/chat/shared/runtimeTypes.ts`
+- `src/app/api/runtime/chat/shared/slotUtils.ts`
+- `src/app/api/runtime/chat/shared/types.ts`
+
+## 1차 삭제 대상
+- `src/app/app/eval/page.tsx`
+- `src/app/app/laboratory/page.tsx`
+- `src/lib/conversation/client/useConversationPageController.ts`
+- `src/lib/conversation/client/useLaboratoryPageController.ts`
+- `src/lib/conversation/client/useLaboratoryConversationActions.ts`
+- `src/lib/conversation/client/laboratoryTransport.ts`
+- `src/app/api/laboratory/run/route.ts`
+- `src/app/api/laboratory/transcript-snapshot/route.ts`
+- `src/app/onboarding/page.tsx`
+- `src/lib/conversation/pageFeaturePolicy.ts` [겹침]
+- `src/lib/transcriptCopyPolicy.ts` [겹침]
+- `src/app/api/transcript/copy/route.ts` [겹침]
+- `src/components/HelpPanel.tsx`
+- `src/app/app/page.tsx`

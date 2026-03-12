@@ -63,6 +63,13 @@ function normalizeIdList(value?: string[] | null) {
   return [...value].map((item) => String(item || "").trim()).filter(Boolean).sort();
 }
 
+function normalizeNullableText(value: unknown) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 function isSameIdList(a?: string[] | null, b?: string[] | null) {
   const left = normalizeIdList(a);
   const right = normalizeIdList(b);
@@ -163,8 +170,8 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   if (body.agent_type === null || typeof body.agent_type === "string") payload.agent_type = body.agent_type;
   if (body.industry === null || typeof body.industry === "string") payload.industry = body.industry;
   if (body.use_case === null || typeof body.use_case === "string") payload.use_case = body.use_case;
-  if (body.website === null || typeof body.website === "string") payload.website = body.website;
-  if (body.goal === null || typeof body.goal === "string") payload.goal = body.goal;
+  if (body.website === null || typeof body.website === "string") payload.website = normalizeNullableText(body.website) ?? null;
+  if (body.goal === null || typeof body.goal === "string") payload.goal = normalizeNullableText(body.goal) ?? null;
   if (typeof body.is_active === "boolean") payload.is_active = body.is_active;
 
   if (payload.name !== undefined && payload.name.trim().length === 0) {
@@ -209,11 +216,11 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const nextMcpToolIds = payload.mcp_tool_ids ?? existing.mcp_tool_ids ?? [];
   const nextAdminKbIds =
     payload.admin_kb_ids === undefined ? (existing.admin_kb_ids ?? null) : payload.admin_kb_ids;
-  const nextAgentType = payload.agent_type ?? existing.agent_type ?? null;
-  const nextIndustry = payload.industry ?? existing.industry ?? null;
-  const nextUseCase = payload.use_case ?? existing.use_case ?? null;
-  const nextWebsite = payload.website ?? existing.website ?? null;
-  const nextGoal = payload.goal ?? existing.goal ?? null;
+  const nextAgentType = payload.agent_type === undefined ? (existing.agent_type ?? null) : payload.agent_type;
+  const nextIndustry = payload.industry === undefined ? (existing.industry ?? null) : payload.industry;
+  const nextUseCase = payload.use_case === undefined ? (existing.use_case ?? null) : payload.use_case;
+  const nextWebsite = payload.website === undefined ? (existing.website ?? null) : payload.website;
+  const nextGoal = payload.goal === undefined ? (existing.goal ?? null) : payload.goal;
   const shouldActivate = payload.is_active === true;
   const shouldDeactivate = payload.is_active === false;
 

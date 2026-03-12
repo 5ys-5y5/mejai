@@ -136,8 +136,8 @@ export default function NewAgentPage() {
   }, [step, llm, selectedKbId]);
 
   const canSubmit = useMemo(() => {
-    return agentName.trim().length > 0 && goal.trim().length > 0 && Boolean(selectedKbId);
-  }, [agentName, goal, selectedKbId]);
+    return agentName.trim().length > 0 && Boolean(selectedKbId);
+  }, [agentName, selectedKbId]);
 
   const mcpProviderOptions = useMemo(() => {
     const byProvider = new Map<string, { key: string; count: number }>();
@@ -249,7 +249,7 @@ export default function NewAgentPage() {
         kb_id: selectedKbId,
         mcp_tool_ids: isPaid ? selectedMcpProviders : [],
         website: website.trim() || null,
-        goal: goal.trim(),
+        goal: goal.trim() || null,
       };
       await apiFetch("/api/agents", {
         method: "POST",
@@ -480,7 +480,7 @@ export default function NewAgentPage() {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-900">주요 목표 *</label>
+              <label className="text-sm font-medium text-slate-900">주요 목표 (선택)</label>
               <textarea
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}

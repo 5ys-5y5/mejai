@@ -26,6 +26,13 @@ function normalizeIdArray(value: unknown) {
   return value.map((item) => String(item || "").trim()).filter(Boolean);
 }
 
+function normalizeNullableText(value: unknown) {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
 export async function GET(req: NextRequest) {
   const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
@@ -84,6 +91,8 @@ export async function POST(req: NextRequest) {
   }
 
   const normalizedAdminKbIds = normalizeIdArray(body.admin_kb_ids);
+  const normalizedWebsite = normalizeNullableText(body.website);
+  const normalizedGoal = normalizeNullableText(body.goal);
 
   const newId = crypto.randomUUID();
   const payload = {
@@ -97,8 +106,8 @@ export async function POST(req: NextRequest) {
     agent_type: body.agent_type ?? null,
     industry: body.industry ?? null,
     use_case: body.use_case ?? null,
-    website: body.website ?? null,
-    goal: body.goal ?? null,
+    website: normalizedWebsite ?? null,
+    goal: normalizedGoal ?? null,
     version: body.version ?? "1.0",
     is_active: body.is_active ?? true,
     org_id: context.orgId,

@@ -427,8 +427,8 @@ export default function AgentDetailPage() {
   const hasChanges = configChanged || metaChanged;
 
   const canSave = useMemo(() => {
-    return name.trim().length > 0 && goal.trim().length > 0 && kbId && hasChanges && !saving;
-  }, [name, goal, kbId, hasChanges, saving]);
+    return name.trim().length > 0 && kbId && hasChanges && !saving;
+  }, [name, kbId, hasChanges, saving]);
 
   const refreshAgents = async () => {
     try {
@@ -452,7 +452,7 @@ export default function AgentDetailPage() {
       if (llm !== baseLlm) payload.llm = llm;
       if ((kbId || "") !== (baseKbId || "")) payload.kb_id = kbId;
       if (website.trim() !== baseWebsite.trim()) payload.website = website.trim() || null;
-      if (goal.trim() !== baseGoal.trim()) payload.goal = goal.trim();
+      if (goal.trim() !== baseGoal.trim()) payload.goal = goal.trim() || null;
       if (JSON.stringify(normalizeIds(mcpToolIds)) !== JSON.stringify(normalizeIds(baseMcpToolIds))) {
         payload.mcp_tool_ids = mcpToolIds;
       }
@@ -816,7 +816,7 @@ export default function AgentDetailPage() {
               </div>
 
               <div className="grid gap-2">
-                <label className="text-sm font-medium text-slate-900">주요 목표 *</label>
+                <label className="text-sm font-medium text-slate-900">주요 목표 (선택)</label>
                 <textarea
                   value={goal}
                   onChange={(e) => setGoal(e.target.value)}
