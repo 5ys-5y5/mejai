@@ -1,0 +1,736 @@
+# `/app/create` 통합 생성 페이지 설계서
+
+작성일: 2026-03-13  
+대상 서비스: `http://localhost:3000/app` 내부 운영 콘솔  
+목표: `http://localhost:3000/app/create` 에서 에이전트, KB, MCP, 위젯을 하나의 페이지 안에서 탭 전환 방식으로 생성/수정/업데이트/삭제할 수 있게 만들고, 좌측 네비게이션의 `온보딩` 그룹 아래 `생성하기` 항목으로 접근할 수 있게 한다.
+
+## 1. 문서 목적
+
+이 문서는 바로 구현에 들어갈 수 있는 수준의 실행 설계 문서다.  
+추상적인 아이디어 정리가 아니라 다음 항목을 모두 포함한다.
+
+1. 현재 코드베이스 기준의 실제 구현 위치
+2. `/app` UI를 준수하기 위한 공통 레이아웃 규칙
+3. 탭별 동작, 데이터 흐름, 예외 처리 방식
+4. 수정 허용 화이트리스트
+5. 수정 전 이해확정 절차
+6. 백업/롤백 절차
+7. MCP 테스트 절차와 기록 형식
+
+## 2. 수정 전 이해확정 절차
+
+구현 시작 전에 아래 이해 항목을 사용자에게 그대로 제시하고, 사용자가 명시적으로 확정했을 때만 코드 수정을 시작한다.
+
+1. 새 경로는 `C:\dev\1227\mejai3\mejai\src\app\app\create\page.tsx` 에 추가한다.
+2. 좌측 내비게이션의 `온보딩` 그룹 아래에 `생성하기` 링크를 추가한다.
+3. `생성하기` 페이지는 `Agents`, `Knowledge Base`, `MCP`, `Widget` 4개 탭을 가진다.
+4. 4개 탭은 서로 다른 기능을 제공하지만, 레이아웃 구조와 액션 배치는 동일한 UI 규칙을 따른다.
+5. 페이지의 시각 언어는 현재 `/app` 대시보드와 동일해야 하며, `src/components` 와 `src/components/design-system` 의 컴포넌트를 우선 사용한다.
+6. 기존 `/app/agents`, `/app/kb`, `/app/install` 페이지는 유지하고, `/app/create` 는 온보딩 및 통합 작업 공간으로 추가한다.
+7. Agent/KB/Widget 은 기존 API를 우선 재사용하고, MCP CRUD 는 부족한 API를 보강하는 방향으로 설계한다.
+8. 본 문서의 화이트리스트에 없는 파일을 수정해야 하는 상황이 생기면 즉시 중단하고 사용자 승인을 다시 받는다.
+
+사용자 확정 문구 예시:
+
+```text
+위 8개 이해 항목이 맞습니다. 이 범위로 진행하세요.
+```
+
+확정이 없으면 구현에 착수하지 않는다.
+
+## 3. 현재 상태 확인 결과
+
+### 3.1 UI/라우팅 관찰
+
+현재 `/app` 는 `AppShell` 기반 레이아웃을 사용한다.
+
+- `C:\dev\1227\mejai3\mejai\src\components\AppShell.tsx`
+  - 경로별 페이지 타이틀을 관리한다.
+- `C:\dev\1227\mejai3\mejai\src\components\AppSidebar.tsx`
+  - 좌측 사이드바 그룹과 링크를 관리한다.
+  - 현재 `온보딩` 그룹에는 `설치하기`만 존재한다.
+- `C:\dev\1227\mejai3\mejai\src\app\app\layout.tsx`
+  - `RequireAuth` 와 `AppShell` 로 `/app/*` 전체를 감싼다.
+
+### 3.2 현재 도메인 화면/컴포넌트 관찰
+
+- Agent 편집: `C:\dev\1227\mejai3\mejai\src\components\agents\AgentEditor.tsx`
+- KB 편집: `C:\dev\1227\mejai3\mejai\src\components\kb\KbEditor.tsx`
+- Widget 설정: `C:\dev\1227\mejai3\mejai\src\components\settings\WidgetSettingsPanel.tsx`
+- Widget 설치: `C:\dev\1227\mejai3\mejai\src\components\settings\WidgetInstallPanel.tsx`
+- 디자인 시스템 export: `C:\dev\1227\mejai3\mejai\src\components\design-system\index.ts`
+
+### 3.3 API 관찰
+
+이미 존재하는 계약:
+
+- Agent
+  - `POST /api/agents`
+  - `PATCH /api/agents/[id]`
+  - `DELETE /api/agents/[id]`
+- KB
+  - `POST /api/kb`
+  - `PATCH /api/kb/[id]`
+  - `DELETE /api/kb/[id]`
+  - `GET /api/kb/metrics`
+- Widget
+  - `GET /api/widgets`
+  - `POST /api/widgets`
+  - `GET /api/widget-templates`
+  - `PATCH /api/widget-templates/[id]`
+  - `DELETE /api/widget-templates/[id]`
+  - `POST /api/widget-instances`
+- MCP
+  - `GET /api/mcp`
+  - `GET /api/mcp/providers`
+  - `GET /api/mcp/providers/[provider]/actions`
+  - `GET /api/mcp/tools`
+
+현재 부족한 계약:
+
+- MCP 생성/수정/삭제 API는 아직 없다.
+- 따라서 `/app/create` 의 MCP 탭은 기존 읽기 API만으로는 목표를 달성할 수 없으며, CRUD 계약을 새로 추가해야 한다.
+
+### 3.4 Supabase 확인 결과
+
+`supabase` MCP 기준으로 다음 핵심 테이블이 이미 존재한다.
+
+- `public.B_bot_agents`
+- `public.B_bot_knowledge_bases`
+- `public.C_mcp_tools`
+- `public.B_chat_widgets`
+- `public.B_chat_widget_instances`
+
+기본 설계 기준으로는 신규 스키마 추가가 필요하지 않다.  
+즉, 본 설계의 1차 구현은 DB 마이그레이션 없이 API/화면 레이어만으로 진행하는 것을 원칙으로 한다.
+
+### 3.5 Chrome DevTools 확인 결과
+
+`chrome-devtools` 로 `http://localhost:3000/app` 확인 결과:
+
+- 좌측 사이드바는 `홈`, `모니터링`, `구성`, `온보딩`, `설정` 그룹 구조를 사용한다.
+- `온보딩` 그룹에는 현재 `설치하기` 링크만 존재한다.
+- 상단 헤더와 본문 컨테이너는 `/app` 대시보드의 흰 배경, slate 계열, 카드 중심 UI를 사용한다.
+
+## 4. 구현 목표와 비목표
+
+### 4.1 포함 범위
+
+1. `/app/create` 신규 페이지 추가
+2. `온보딩 > 생성하기` 네비게이션 추가
+3. `Agents / Knowledge Base / MCP / Widget` 탭 추가
+4. 각 탭에서 목록 조회 + 상세 편집 + 생성 + 수정 + 삭제 제공
+5. `/app` 과 일관된 시각 언어 유지
+6. 공통 UI를 `src/components` 아래 재사용 가능한 구성으로 분리
+
+### 4.2 제외 범위
+
+1. 기존 `/app/agents`, `/app/kb`, `/app/install` 제거 또는 대체
+2. 신규 DB 스키마 추가
+3. 기존 페이지의 전면 리디자인
+4. 온보딩 외 그룹 재분류
+5. MCP를 특정 provider 전용 하드코딩 UI로 만드는 것
+
+## 5. UX 및 정보 구조 설계
+
+## 5.1 라우트
+
+- 기본 경로: `/app/create`
+- 탭 쿼리: `/app/create?tab=agents|kb|mcp|widget`
+- 기본 탭: `agents`
+
+탭 상태는 URL query string 과 동기화한다.  
+브라우저 새로고침과 공유 링크에서도 같은 탭이 열려야 한다.
+
+## 5.2 좌측 내비게이션 배치
+
+위치:
+
+- 그룹: `온보딩`
+- 항목 라벨: `생성하기`
+- 예상 경로: `/app/create`
+- 아이콘: `Plus` 또는 `PlusSquare`
+
+정책:
+
+- `설치하기` 와 동일 그룹에 배치한다.
+- `구성` 그룹으로 옮기지 않는다.
+- 모바일 드로어와 데스크톱 사이드바 모두 동일하게 노출한다.
+
+## 5.3 페이지 레이아웃
+
+페이지는 현재 `/app` 대시보드와 동일한 프레임을 따른다.
+
+- 컨테이너: `px-5 md:px-8 py-6`
+- 최대 폭: `mx-auto w-full max-w-6xl`
+- 상단: 타이틀 + 설명 + 전역 액션
+- 중단: `UnderlineTabs` 기반 탭 바
+- 하단: 공통 2열 master-detail 편집 영역
+
+데스크톱:
+
+- 좌측 35%: 리소스 목록
+- 우측 65%: 선택 항목 편집 패널
+
+모바일:
+
+- 탭 바는 상단에 유지
+- 목록과 편집 패널을 세로 스택
+- 선택 시 편집 섹션으로 스크롤 이동
+
+## 5.4 모든 탭에 공통으로 적용할 UI 규칙
+
+공통 구조:
+
+1. 페이지 헤더
+2. 탭 바
+3. 탭 설명 배너
+4. 좌측 목록 패널
+5. 우측 편집 패널
+6. 하단 저장/삭제 액션 바
+
+공통 액션:
+
+- `새 항목`
+- `저장`
+- `삭제`
+- `새로고침`
+
+공통 상태:
+
+- 로딩
+- 빈 상태
+- 권한 부족
+- 저장 성공/실패
+- 미저장 변경 감지
+
+공통 디자인 요소 우선순위:
+
+1. `@/components/design-system` export
+2. `@/components/ui/*`
+3. 이미 존재하는 `src/components` 의 실사용 컴포넌트
+4. 페이지 전용 Tailwind 클래스
+
+직접 활용해야 할 컴포넌트 후보:
+
+- `UnderlineTabs`
+- `Card`
+- `Button`
+- `Input`
+- `Badge`
+- `PanelCard`
+- `StateBanner`
+- `SectionBlock`
+- `SelectPopover`
+- `MultiSelectPopover`
+- `RagStorageBadge`
+
+주의:
+
+- `PageActionBarShell`, `SidebarNavigationShell` 같은 demo shell 은 시각 레퍼런스로만 삼고, 그대로 생산 코드에 넣지 않는다.
+- 운영 UI의 실제 구성에는 `Card`, `PanelCard`, `StateBanner`, `UnderlineTabs` 를 사용한다.
+
+## 6. 탭별 상세 설계
+
+## 6.1 Agents 탭
+
+목적:
+
+- Agent 목록 확인
+- Agent 생성
+- Agent 수정
+- Agent 삭제
+- LLM, KB, MCP 연결 상태를 한 화면에서 편집
+
+좌측 목록 패널:
+
+- 제목: `Agents`
+- 보조 정보: 총 개수, 활성 버전 여부, 연결 이슈 배지
+- 각 행 표시:
+  - 이름
+  - `LLM / KB / MCP` 요약
+  - 버전
+  - 생성 시각
+  - 연결 이상 여부
+
+우측 편집 패널:
+
+- 기존 `AgentEditor` 와 동일한 데이터 계약을 사용하되, `/app/create` 전용 UI 쉘 안에 배치한다.
+- 에이전트 기본 정보, LLM 선택, KB 선택, MCP 다중 선택을 제공한다.
+- 저장 시 기존 계약을 그대로 사용한다.
+
+데이터 소스:
+
+- `GET /api/agents?limit=200`
+- `GET /api/kb?limit=200`
+- `GET /api/mcp/tools`
+
+저장 계약:
+
+- 신규 생성: `POST /api/agents`
+- 수정: `PATCH /api/agents/[id]`
+- 삭제: `DELETE /api/agents/[id]`
+
+버전 정책:
+
+- LLM, KB, MCP 변경은 기존 Agent API가 새 버전을 생성하는 현재 동작을 그대로 유지한다.
+- 단순 이름/메타 변경은 현재 버전 patch 로 처리한다.
+
+## 6.2 Knowledge Base 탭
+
+목적:
+
+- KB 생성/수정/삭제
+- 버전과 활성 상태 확인
+- 지표 확인
+
+좌측 목록 패널:
+
+- 제목: `Knowledge Base`
+- `RagStorageBadge` 표시
+- 각 행 표시:
+  - 제목
+  - 상태
+  - 버전
+  - Calls
+  - Satisfaction
+  - Created
+
+우측 편집 패널:
+
+- KB 본문 편집
+- 카테고리 편집
+- 활성화 토글
+- 필요 시 연결된 Agent 업데이트 대상 선택
+
+데이터 소스:
+
+- `GET /api/kb?limit=200`
+- `GET /api/kb/metrics?ids=...`
+
+저장 계약:
+
+- 신규 생성: `POST /api/kb`
+- 수정: `PATCH /api/kb/[id]`
+- 삭제: `DELETE /api/kb/[id]`
+
+버전 정책:
+
+- 본문 변경은 기존 KB API의 새 버전 생성 정책을 그대로 따른다.
+- 제목/카테고리 변경은 현행 API 규칙을 그대로 따른다.
+
+## 6.3 MCP 탭
+
+목적:
+
+- MCP provider/action 목록 확인
+- MCP action 생성
+- MCP action 수정
+- MCP action 삭제
+
+중요한 설계 원칙:
+
+- 이 탭은 provider 이름별 하드코딩 UI가 아니라 `tool contract` 중심 UI여야 한다.
+- 즉, `C_mcp_tools` 의 공통 필드와 `mcpToolsService` 의 정규화 규칙을 기준으로 모든 provider 가 동일한 편집 흐름을 사용해야 한다.
+
+좌측 목록 패널:
+
+- 상단 provider 필터 카드
+- provider 별 action 수 표시
+- action 목록 행 표시:
+  - 이름
+  - provider
+  - HTTP method
+  - endpoint
+  - version
+  - active 여부
+
+우측 편집 패널 필드:
+
+- `name`
+- `provider_key`
+- `scope_key`
+- `endpoint_path`
+- `http_method`
+- `description`
+- `schema_json`
+- `version`
+- `is_active`
+- `is_public`
+- `is_destructive`
+- `rate_limit_per_min`
+- `masking_rules`
+- `conditions`
+- `usable_id`
+- `editable_id`
+
+권한 정책:
+
+- MCP CRUD 는 admin 전용으로 제한한다.
+- admin 이 아닌 사용자는 탭 진입은 가능하지만 `StateBanner` 로 권한 부족을 보여주고 폼을 비활성화한다.
+
+새 API 계약:
+
+1. `POST /api/mcp/tools`
+   - provider 독립적인 공통 payload 로 생성
+2. `PATCH /api/mcp/tools/[id]`
+   - 동일 공통 payload 로 수정
+3. `DELETE /api/mcp/tools/[id]`
+   - 삭제 전 `B_bot_agents.mcp_tool_ids` 참조 여부를 검사
+   - 참조 중이면 `409 MCP_TOOL_IN_USE` 반환
+
+이 삭제 정책은 개별 화면 hotfix 가 아니라 공통 계약 레벨에서 막아야 한다.
+
+기존 조회 API 재사용:
+
+- `GET /api/mcp`
+- `GET /api/mcp/providers`
+- `GET /api/mcp/providers/[provider]/actions`
+- `GET /api/mcp/tools`
+
+## 6.4 Widget 탭
+
+목적:
+
+- 위젯 템플릿 생성/수정/삭제
+- 연결 Agent 지정
+- 테마와 greeting 설정
+- 인스턴스 키/설치 스크립트 확인
+
+좌측 목록 패널:
+
+- 제목: `Widget`
+- 각 행 표시:
+  - 이름
+  - 연결된 Agent
+  - 활성 여부
+  - template key 존재 여부
+  - instance key 존재 여부
+
+우측 편집 패널:
+
+- 위젯 이름
+- Agent 선택
+- Greeting
+- Input placeholder
+- Launcher icon URL
+- 활성화 여부
+- 키 재발급
+- 설치 코드/미리보기 URL 표시
+
+데이터/계약:
+
+- 목록/저장/키 재발급: `GET /api/widgets`, `POST /api/widgets`
+- 삭제: `DELETE /api/widget-templates/[id]`
+- 필요 시 상세 patch: `PATCH /api/widget-templates/[id]`
+- 설치 인스턴스 보강: `POST /api/widget-instances`
+
+주의:
+
+- 현재 widget delete 가 template 삭제만 수행하므로, instance 정리 정책이 실제로 안전한지 구현 전에 확인해야 한다.
+- 만약 related instance 정리가 보장되지 않으면, hard delete 버튼을 즉시 노출하지 말고 `비활성화` 우선으로 구현한 뒤 사용자 승인 후 API 보강을 진행한다.
+
+권한 정책:
+
+- Widget 생성/수정/삭제는 admin 전용으로 제한한다.
+- 비관리자는 읽기 전용 또는 접근 불가 배너를 본다.
+
+## 7. 페이지 상태 및 상호작용 설계
+
+## 7.1 상태 모델
+
+페이지 상위 컨트롤러는 아래 상태를 관리한다.
+
+- `activeTab`
+- 탭별 목록 데이터
+- 탭별 loading/error
+- 탭별 선택된 항목 ID
+- 탭별 draft state
+- 탭별 dirty state
+- 권한 상태 (`isAdmin`)
+
+탭 전환 정책:
+
+- 탭 전환 시 현재 탭의 draft 는 메모리에 유지한다.
+- dirty 상태일 때 다른 탭으로 이동하면 경고를 띄운다.
+- 새로고침 후에는 서버 상태 기준으로 다시 로드한다.
+
+## 7.2 목록-상세 동기화 정책
+
+1. 목록에서 항목 선택
+2. 우측 편집 패널 로드
+3. 저장 성공 후 목록 재조회
+4. 저장된 항목을 다시 선택 상태로 유지
+
+삭제 후 정책:
+
+- 삭제 성공 시 현재 선택 항목을 해제
+- 남은 첫 항목이 있으면 자동 선택
+- 없으면 `빈 상태 + 새 항목 만들기` UI 표시
+
+## 7.3 공통 오류 처리
+
+- 서버 오류: 상단 `StateBanner` + `toast.error`
+- 권한 오류: 편집 패널 상단 `StateBanner`
+- 빈 데이터: 목록 카드 내부 empty state
+- 로딩: skeleton 또는 `text-slate-500` 로딩 라벨
+
+## 8. 구현 구조 제안
+
+## 8.1 신규 컴포넌트 구조
+
+새 페이지는 한 파일에 몰아 넣지 않고, 공통 쉘과 탭 컴포넌트로 분리한다.
+
+- `CreateWorkspacePage`
+  - 탭 상태, query sync, 권한, 공통 로딩
+- `CreateResourceShell`
+  - 공통 헤더, 탭 설명, 좌측 목록/우측 편집 레이아웃
+- `CreateAgentsTab`
+  - Agent 전용 데이터 로딩/저장
+- `CreateKbTab`
+  - KB 전용 데이터 로딩/저장
+- `CreateMcpTab`
+  - MCP 전용 데이터 로딩/저장
+- `CreateWidgetTab`
+  - Widget 전용 데이터 로딩/저장
+
+## 8.2 기존 컴포넌트 재사용 정책
+
+재사용 우선순위:
+
+1. `Card`, `Button`, `Input`, `Badge`
+2. `UnderlineTabs`, `PanelCard`, `StateBanner`, `SectionBlock`
+3. `SelectPopover`, `MultiSelectPopover`
+4. `RagStorageBadge`
+
+기존 `AgentEditor`, `KbEditor`, `WidgetSettingsPanel` 은 참조 대상으로 보되, 그대로 전체를 넣어서 탭마다 서로 다른 시각 구조가 되지 않도록 한다.  
+즉, 기존 컴포넌트의 데이터 계약은 활용하되 `/app/create` 의 공통 쉘을 최우선으로 유지한다.
+
+## 9. 수정 허용 화이트리스트
+
+아래 목록은 본 설계 기준의 최초 수정 허용 파일 제안이다.  
+목록 외 파일 수정이 필요하면 즉시 중단하고 사용자 승인을 다시 받아야 한다.  
+단, `C:\dev\1227\mejai3\mejai\docs\diff\...` 아래 백업 파일 생성은 롤백 보장을 위한 필수 예외로 허용한다.
+
+| 파일 | 작업 유형 | 허용 사유 및 범위 |
+|---|---|---|
+| `C:\dev\1227\mejai3\mejai\src\app\app\create\page.tsx` | 신규 생성 | `/app/create` 라우트 진입점 추가만 허용 |
+| `C:\dev\1227\mejai3\mejai\src\components\AppSidebar.tsx` | 수정 | `온보딩 > 생성하기` 링크 추가만 허용 |
+| `C:\dev\1227\mejai3\mejai\src\components\AppShell.tsx` | 수정 | `/app/create` 페이지 타이틀 매핑 추가만 허용 |
+| `C:\dev\1227\mejai3\mejai\src\components\create\CreateWorkspacePage.tsx` | 신규 생성 | 탭 orchestration, query sync, 공통 state 관리 |
+| `C:\dev\1227\mejai3\mejai\src\components\create\CreateResourceShell.tsx` | 신규 생성 | 공통 master-detail UI shell 정의 |
+| `C:\dev\1227\mejai3\mejai\src\components\create\CreateAgentsTab.tsx` | 신규 생성 | Agent 탭 전용 목록/편집 UI |
+| `C:\dev\1227\mejai3\mejai\src\components\create\CreateKbTab.tsx` | 신규 생성 | KB 탭 전용 목록/편집 UI |
+| `C:\dev\1227\mejai3\mejai\src\components\create\CreateMcpTab.tsx` | 신규 생성 | MCP 탭 전용 목록/편집 UI |
+| `C:\dev\1227\mejai3\mejai\src\components\create\CreateWidgetTab.tsx` | 신규 생성 | Widget 탭 전용 목록/편집 UI |
+| `C:\dev\1227\mejai3\mejai\src\app\api\mcp\tools\route.ts` | 수정 | MCP 생성용 `POST` 계약 추가만 허용 |
+| `C:\dev\1227\mejai3\mejai\src\app\api\mcp\tools\[id]\route.ts` | 신규 생성 | MCP 수정/삭제용 `PATCH`/`DELETE` 계약 추가만 허용 |
+| `C:\dev\1227\mejai3\mejai\src\lib\mcpToolsService.ts` | 수정 | MCP 공통 정규화/삭제 참조 검사 helper 보강만 허용 |
+| `C:\dev\1227\mejai3\mejai\src\app\api\widgets\route.ts` | 수정 가능 후보 | Widget 탭에서 필요한 응답 shape 정규화가 필요할 때만 제한적으로 허용 |
+| `C:\dev\1227\mejai3\mejai\src\app\api\widget-templates\[id]\route.ts` | 수정 가능 후보 | Widget delete / sync 안전성 보강이 필요할 때만 제한적으로 허용 |
+
+화이트리스트에서 의도적으로 제외한 파일:
+
+- `C:\dev\1227\mejai3\mejai\src\components\agents\AgentEditor.tsx`
+- `C:\dev\1227\mejai3\mejai\src\components\kb\KbEditor.tsx`
+- `C:\dev\1227\mejai3\mejai\src\components\settings\WidgetSettingsPanel.tsx`
+- `C:\dev\1227\mejai3\mejai\src\app\app\agents\page.tsx`
+- `C:\dev\1227\mejai3\mejai\src\app\app\kb\page.tsx`
+- `C:\dev\1227\mejai3\mejai\src\app\app\install\page.tsx`
+
+이유:
+
+- 기존 화면의 동작 보존이 우선이다.
+- `/app/create` 는 통합 작업 공간을 새로 추가하는 방식이어야 한다.
+- 기존 편집기 내부를 섣불리 건드리면 연쇄 회귀가 발생할 수 있다.
+
+## 10. 변경 기록 및 롤백 보장
+
+이 절차는 구현 시 매번 반드시 수행한다.
+
+1. `C:\dev\1227\mejai3\mejai\docs\diff` 폴더가 없으면 먼저 생성한다.
+2. 수정할 기존 파일은 수정 직전에 원본 전체를 백업한다.
+3. 백업 파일명 규칙은 다음과 같이 고정한다.
+
+```text
+C:\dev\1227\mejai3\mejai\docs\diff\YYYYMMDD-HHMMSS__상대경로를_언더스코어로변환.before
+```
+
+예시:
+
+```text
+C:\dev\1227\mejai3\mejai\docs\diff\20260313-154500__src_components_AppSidebar.tsx.before
+```
+
+4. 신규 파일은 백업 대상이 아니지만, 최초 생성 이후 재수정할 때는 직전 버전을 동일 규칙으로 백업한다.
+5. 롤백이 가능하도록 최소한 파일 전체 내용이 들어가야 한다.
+6. 백업 없이 수정하는 행위는 금지한다.
+
+## 11. 실행 정책
+
+## 11.1 범위 외 수정 금지
+
+- 사용자 확정 범위를 넘는 UI 변경 금지
+- 관련 없는 페이지 스타일 변경 금지
+- 기존 페이지의 텍스트/네비게이션 재배치 금지
+- 공통 컴포넌트에 목적 외 속성 추가 금지
+
+## 11.2 빌드 및 검증 의무
+
+구현 단계에서는 다음을 반드시 수행한다.
+
+1. 의미 있는 수정 묶음이 끝날 때마다 `npm run build`
+2. 빌드 오류가 나면 다른 수정 전에 먼저 해결
+3. 큰 파일 수정 시 수정 직후 해당 구간 재열람
+4. 긴 함수 내부 수정은 블록 닫힘을 먼저 확인
+
+## 11.3 DB 변경 정책
+
+기본 설계는 DB 스키마 변경 없이 구현하는 것을 원칙으로 한다.  
+만약 구현 중 DB 컬럼 추가/변경이 정말 필요해지면:
+
+1. 즉시 중단한다.
+2. 사용자에게 필요 이유를 설명한다.
+3. SQL 쿼리만 제공한다.
+4. 직접 DB 수정은 수행하지 않는다.
+
+## 12. 구현 순서
+
+1. 사용자에게 8개 이해 항목을 제시하고 확정 받기
+2. 수정 대상 기존 파일 원본을 `docs/diff` 에 백업하기
+3. `AppSidebar`, `AppShell`, `/app/create` 라우트 최소 진입점 만들기
+4. `CreateWorkspacePage` 와 `CreateResourceShell` 로 공통 UI 먼저 만들기
+5. Agent 탭 연결
+6. KB 탭 연결
+7. Widget 탭 연결
+8. MCP CRUD API 추가 후 MCP 탭 연결
+9. 탭 간 dirty state 경고, 에러 배너, empty state 정리
+10. `npm run build`
+11. `chrome-devtools` 와 `supabase` MCP 테스트
+12. 테스트 기록과 결과를 문서 하단에 남기기
+
+탭 구현 우선순위:
+
+1. Agents
+2. KB
+3. Widget
+4. MCP
+
+이 순서를 쓰는 이유:
+
+- Agent/KB/Widget 은 기존 계약 재사용이 가능하다.
+- MCP 는 CRUD API 추가가 필요하므로 가장 마지막에 붙이는 것이 리스크가 낮다.
+
+## 13. 탭별 구현 완료 기준
+
+### 13.1 Agents
+
+- 목록에서 Agent 선택 가능
+- 신규 생성 가능
+- 수정 후 재조회 가능
+- 삭제 가능
+- KB/MCP/LLM 연결 정보가 목록과 편집에 모두 반영됨
+
+### 13.2 KB
+
+- 목록/지표 표시 가능
+- 신규 생성 가능
+- 수정 시 버전 생성 동작 유지
+- 삭제 가능
+- `RagStorageBadge` 정상 표시
+
+### 13.3 MCP
+
+- provider/action 조회 가능
+- 신규 생성 가능
+- 수정 가능
+- 참조 중인 tool 삭제 시 안전하게 차단됨
+- admin 이 아닌 사용자에게는 편집이 비활성화됨
+
+### 13.4 Widget
+
+- 목록/선택 가능
+- 신규 생성 가능
+- 수정/키 재발급 가능
+- 설치 코드 표시 가능
+- 삭제 또는 비활성화 동작이 계약상 안전하게 보장됨
+
+## 14. 리스크와 대응
+
+### 14.1 MCP CRUD 부재
+
+리스크:
+
+- 현재 읽기 API만 존재하므로 목표 달성 불가
+
+대응:
+
+- `mcp/tools` 계약을 provider-agnostic CRUD 로 확장
+- 삭제 시 agent 참조 검사 추가
+
+### 14.2 Widget 삭제 안전성
+
+리스크:
+
+- template 삭제 후 instance 정리 보장이 코드만으로 확실하지 않음
+
+대응:
+
+- 구현 전 API 동작 확인
+- 필요 시 `비활성화` 우선 노출
+- hard delete 는 사용자 승인 후 계약 보강
+
+### 14.3 기존 편집기와의 UI 불일치
+
+리스크:
+
+- `AgentEditor`, `KbEditor`, `WidgetSettingsPanel` 을 그대로 삽입하면 탭 간 UI가 달라질 수 있음
+
+대응:
+
+- `/app/create` 는 공통 shell 이 우선
+- 기존 컴포넌트는 데이터 계약 참고용으로 사용
+- 필요한 경우 새 탭 전용 컴포넌트로 동일 UI 규칙을 유지
+
+## 15. 테스트 체크리스트
+
+- [x] `chrome-devtools` 로 현재 `/app` 사이드바 구조 확인
+- [x] `supabase` MCP 로 관련 테이블 존재 확인
+- [ ] `/app/create` 라우트가 열리는지 확인
+- [ ] 사이드바 `온보딩 > 생성하기` 링크 동작 확인
+- [ ] `?tab=agents` deep link 확인
+- [ ] `?tab=kb` deep link 확인
+- [ ] `?tab=mcp` deep link 확인
+- [ ] `?tab=widget` deep link 확인
+- [ ] Agent 생성/수정/삭제 확인
+- [ ] KB 생성/수정/삭제 확인
+- [ ] MCP 생성/수정/삭제 확인
+- [ ] Widget 생성/수정/키 재발급/삭제 확인
+- [ ] 모바일 뷰에서 목록/편집 스택 동작 확인
+- [ ] `npm run build` 통과 확인
+
+## 16. 테스트 기록
+
+- 2026-03-13 `chrome-devtools`
+  - `http://localhost:3000/app` 접속 확인
+  - 현재 사이드바 그룹 구조 확인: `홈`, `모니터링`, `구성`, `온보딩`, `설정`
+  - `온보딩` 그룹에는 현재 `설치하기`만 존재함을 확인
+  - `/app` 대시보드 본문이 `Card` 기반 slate/white 톤 UI임을 확인
+
+- 2026-03-13 `supabase`
+  - 관련 테이블 존재 확인:
+    - `B_bot_agents`
+    - `B_bot_knowledge_bases`
+    - `C_mcp_tools`
+    - `B_chat_widgets`
+    - `B_chat_widget_instances`
+  - 기본 설계 기준 신규 DB 스키마 추가가 필요 없음을 확인
+
+- 2026-03-13 구현 테스트
+  - 아직 구현 전이므로 미실행
+
+## 17. 최종 결론
+
+`/app/create` 는 새 라우트를 추가하는 방식으로 구현하고, 기존 `/app` 레이아웃과 동일한 시각 규칙을 따르는 공통 master-detail 탭 작업 공간으로 설계한다.  
+Agent/KB/Widget 은 기존 계약 재사용이 가능하며, MCP 는 공통 CRUD 계약을 먼저 추가해야 한다.  
+실제 구현은 본 문서의 이해확정 절차, 화이트리스트, `docs/diff` 백업 정책, MCP 테스트 의무를 모두 충족한 뒤에만 시작한다.
