@@ -750,7 +750,6 @@ C:\dev\1227\mejai3\mejai\docs\diff\20260313-154500__src_components_AppSidebar.ts
   - `/app/create?tab=mcp` 에서 상단 nav `도구` 탭 활성 상태의 computed style 이 `border-amber-300`, `bg-amber-100` 으로 적용되는 것을 확인
   - `/app/create` 상단 nav 의 `도구` 탭은 `CreateWorkspacePage` 에서 `isAdmin` 일 때만 렌더링되도록 조정했으며, 현재 세션은 관리자 상태로 확인되어 비관리자 실세션 렌더링은 코드 경로 기준으로 검토함
   - `/app/create` 상단 nav 의 `템플릿` 탭은 `CreateWorkspacePage` 에서 `isAdmin` 일 때만 렌더링되도록 조정했고, `?tab=widget` 기존 쿼리는 관리자 세션에서 `?tab=template` 로 정규화되도록 확인
-  - `/app/create?tab=template` 에서 상단 nav `템플릿` 탭 활성 상태의 computed style 이 `border-amber-300`, `bg-amber-100` 으로 적용되는 것을 확인
   - `supabase` MCP `list_tables` 재확인으로 `A_iam_user_access_maps` 테이블이 유지되고 있어 `/api/user-profile.is_admin` 기반 관리자 분기 전제가 유효함을 확인
 
 - 2026-03-13 `npm run build`

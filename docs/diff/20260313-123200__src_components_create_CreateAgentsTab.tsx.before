@@ -130,7 +130,7 @@ export function CreateAgentsTab() {
         setSelectedId(active[0]?.id || null);
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "비서 목록을 불러오지 못했습니다.");
+      setError(loadError instanceof Error ? loadError.message : "에이전트 목록을 불러오지 못했습니다.");
       setAgents([]);
       setKbItems([]);
       setMcpTools([]);
@@ -228,11 +228,11 @@ export function CreateAgentsTab() {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      toast.error("비서 이름을 입력해 주세요.");
+      toast.error("에이전트 이름을 입력해 주세요.");
       return;
     }
     if (!kbId) {
-      toast.error("연결할 지식을 선택해 주세요.");
+      toast.error("연결할 KB를 선택해 주세요.");
       return;
     }
     setSaving(true);
@@ -251,7 +251,7 @@ export function CreateAgentsTab() {
             is_active: true,
           }),
         });
-        toast.success("비서가 생성되었습니다.");
+        toast.success("에이전트가 생성되었습니다.");
         await loadData(created.id);
         setSelectedId(created.id);
         setIsCreating(false);
@@ -268,11 +268,11 @@ export function CreateAgentsTab() {
             goal: goal.trim() || null,
           }),
         });
-        toast.success("비서가 저장되었습니다.");
+        toast.success("에이전트가 저장되었습니다.");
         await loadData(saved.id);
       }
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : "비서 저장에 실패했습니다.");
+      toast.error(saveError instanceof Error ? saveError.message : "에이전트 저장에 실패했습니다.");
     } finally {
       setSaving(false);
     }
@@ -280,42 +280,42 @@ export function CreateAgentsTab() {
 
   const handleDelete = async () => {
     if (!selectedAgent) return;
-    if (!window.confirm("선택한 비서를 삭제할까요?")) return;
+    if (!window.confirm("선택한 에이전트를 삭제할까요?")) return;
     try {
       await apiFetch(`/api/agents/${selectedAgent.id}`, { method: "DELETE" });
-      toast.success("비서가 삭제되었습니다.");
+      toast.success("에이전트가 삭제되었습니다.");
       setSelectedId(null);
       setIsCreating(false);
       await loadData();
     } catch (deleteError) {
-      toast.error(deleteError instanceof Error ? deleteError.message : "비서 삭제에 실패했습니다.");
+      toast.error(deleteError instanceof Error ? deleteError.message : "에이전트 삭제에 실패했습니다.");
     }
   };
 
   const banner = error ? (
-    <StateBanner tone="danger" title="비서 로딩 실패" description={error} />
+    <StateBanner tone="danger" title="Agents 로딩 실패" description={error} />
   ) : mcpTools.length === 0 ? (
     <StateBanner
       tone="warning"
-      title="도구 없음"
-      description="연결된 도구가 없습니다. 비서는 도구 없이도 저장할 수 있습니다."
+      title="MCP 도구 없음"
+      description="관리자 권한이 없거나 연결된 MCP 도구가 없습니다. 에이전트는 MCP 없이도 저장할 수 있습니다."
     />
   ) : null;
 
   return (
     <CreateResourceShell
-      description="좌측에서 비서를 고르고, 우측에서 LLM · 지식 · 도구 연결과 기본 정보를 한 번에 수정합니다."
+      description="좌측에서 에이전트를 고르고, 우측에서 LLM · KB · MCP 연결과 기본 정보를 한 번에 수정합니다."
       helperText="새 항목을 누르면 빈 폼으로 전환되고, 저장 후 활성 버전이 목록에 반영됩니다."
       banner={banner}
-      listTitle="비서 목록"
+      listTitle="에이전트 목록"
       listCountLabel={`총 ${loading ? "-" : activeAgents.length}개`}
-      createLabel="새 비서"
+      createLabel="새 에이전트"
       onCreate={handleCreate}
       onRefresh={() => void loadData(selectedId, isCreating)}
       refreshDisabled={loading}
       listContent={
         activeAgents.length === 0 && !loading ? (
-          <div className="p-4 text-sm text-slate-500">생성된 비서가 없습니다.</div>
+          <div className="p-4 text-sm text-slate-500">생성된 에이전트가 없습니다.</div>
         ) : (
           <CreateListTable
             rows={activeAgents}
@@ -325,7 +325,7 @@ export function CreateAgentsTab() {
             columns={[
               {
                 id: "name",
-                label: "비서",
+                label: "에이전트",
                 width: "minmax(0, 2.15fr)",
                 cellClassName: "text-left",
                 render: (agent) => <div className="truncate text-sm font-semibold text-slate-900">{agent.name}</div>,
@@ -338,7 +338,7 @@ export function CreateAgentsTab() {
               },
               {
                 id: "kb",
-                label: "지식",
+                label: "Knowledge Base",
                 width: "minmax(0, 1.75fr)",
                 render: (agent) => {
                   const linkedKb = agent.kb_id ? kbById.get(agent.kb_id) ?? null : null;
@@ -347,9 +347,9 @@ export function CreateAgentsTab() {
               },
               {
                 id: "mcp",
-                label: "도구",
+                label: "MCP",
                 width: "minmax(0, 0.55fr)",
-                render: (agent: AgentItem) => String(Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0),
+                render: (agent) => String(Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0),
               },
               {
                 id: "version",
@@ -368,7 +368,8 @@ export function CreateAgentsTab() {
                 label: "상태",
                 width: "minmax(0, 0.95fr)",
                 render: (agent) => {
-                  const hasIssue = !agent.llm || !agent.kb_id;
+                  const mcpCount = Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0;
+                  const hasIssue = !agent.llm || !agent.kb_id || mcpCount === 0;
                   return hasIssue ? (
                     <span className="inline-flex max-w-full items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap text-amber-600">
                       <AlertTriangle className="h-3.5 w-3.5" />
@@ -383,13 +384,13 @@ export function CreateAgentsTab() {
           />
         )
       }
-      detailTitle={isCreating ? "새 비서" : selectedAgent?.name || "비서를 선택하세요"}
+      detailTitle={isCreating ? "새 에이전트" : selectedAgent?.name || "에이전트를 선택하세요"}
       detailDescription={
         isCreating
-          ? "이름, LLM, 지식, 도구 연결을 입력해 새 비서를 생성합니다."
+          ? "이름, LLM, KB, MCP 연결을 입력해 새 에이전트를 생성합니다."
           : selectedAgent
             ? `현재 버전 ${selectedAgent.version || "-"}`
-            : "좌측 목록에서 비서를 선택하면 상세 편집이 열립니다."
+            : "좌측 목록에서 에이전트를 선택하면 상세 편집이 열립니다."
       }
       detailActions={
         !isCreating && selectedAgent ? (
@@ -409,7 +410,7 @@ export function CreateAgentsTab() {
           {isCreating || selectedAgent ? (
             <>
               <label className="block">
-                <div className="mb-1 text-xs text-slate-600">비서 이름</div>
+                <div className="mb-1 text-xs text-slate-600">에이전트 이름</div>
                 <Input value={name} onChange={(event) => setName(event.target.value)} className="h-10" />
               </label>
 
@@ -428,12 +429,12 @@ export function CreateAgentsTab() {
                   />
                 </label>
                 <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">지식</div>
+                  <div className="mb-1 text-xs text-slate-600">Knowledge Base</div>
                   <SelectPopover
                     value={kbId}
                     onChange={setKbId}
                     options={kbOptions}
-                    placeholder="지식 선택"
+                    placeholder="KB 선택"
                     className="w-full"
                     buttonClassName="h-10"
                   />
@@ -441,12 +442,12 @@ export function CreateAgentsTab() {
               </div>
 
               <label className="block">
-                <div className="mb-1 text-xs text-slate-600">도구</div>
+                <div className="mb-1 text-xs text-slate-600">MCP 도구</div>
                 <MultiSelectPopover
                   values={mcpToolIds}
                   onChange={setMcpToolIds}
                   options={mcpOptions}
-                  placeholder="도구 선택"
+                  placeholder="MCP 도구 선택"
                   className="w-full"
                   buttonClassName="min-h-10"
                 />
@@ -468,7 +469,7 @@ export function CreateAgentsTab() {
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
                 <div className="text-xs text-slate-500">
-                  {isCreating ? "새 비서를 생성합니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
+                  {isCreating ? "새 에이전트를 생성합니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
                 </div>
                 <div className="flex items-center gap-2">
                   {isCreating ? (
@@ -490,14 +491,14 @@ export function CreateAgentsTab() {
                     disabled={saving || (!isCreating && !isDirty)}
                     className="rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
                   >
-                    {saving ? "저장 중..." : isCreating ? "비서 생성" : "저장"}
+                    {saving ? "저장 중..." : isCreating ? "에이전트 생성" : "저장"}
                   </Button>
                 </div>
               </div>
             </>
           ) : (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-              좌측 목록에서 비서를 선택하거나 새 비서를 생성해 주세요.
+              좌측 목록에서 에이전트를 선택하거나 새 에이전트를 생성해 주세요.
             </div>
           )}
         </div>

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { CreateListTable, CreateResourceShell } from "@/components/create/CreateResourceShell";
 import { apiFetch } from "@/lib/apiClient";
 import { formatKstDateTime } from "@/lib/kst";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 type AgentItem = {
@@ -85,7 +86,7 @@ function getActiveAgents(items: AgentItem[]) {
   return Array.from(map.values()).sort(compareAgentVersions);
 }
 
-export function CreateAgentsTab() {
+export function CreateAgentsTab({ isAdmin }: { isAdmin: boolean }) {
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [kbItems, setKbItems] = useState<KbItem[]>([]);
   const [mcpTools, setMcpTools] = useState<McpTool[]>([]);
@@ -100,6 +101,7 @@ export function CreateAgentsTab() {
   const [llm, setLlm] = useState("chatgpt");
   const [kbId, setKbId] = useState("");
   const [mcpToolIds, setMcpToolIds] = useState<string[]>([]);
+  const [mcpPopoverOpen, setMcpPopoverOpen] = useState(false);
   const [website, setWebsite] = useState("");
   const [goal, setGoal] = useState("");
 
@@ -110,7 +112,7 @@ export function CreateAgentsTab() {
       const [agentRes, kbRes, toolRes] = await Promise.all([
         apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200"),
         apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
-        apiFetch<{ items: McpTool[] }>("/api/mcp/tools").catch(() => ({ items: [] })),
+        isAdmin ? apiFetch<{ items: McpTool[] }>("/api/mcp/tools").catch(() => ({ items: [] })) : Promise.resolve({ items: [] as McpTool[] }),
       ]);
       const nextAgents = agentRes.items || [];
       const active = getActiveAgents(nextAgents);
@@ -141,7 +143,7 @@ export function CreateAgentsTab() {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [isAdmin]);
 
   const activeAgents = useMemo(() => getActiveAgents(agents), [agents]);
   const selectedAgent = useMemo(
@@ -294,7 +296,7 @@ export function CreateAgentsTab() {
 
   const banner = error ? (
     <StateBanner tone="danger" title="비서 로딩 실패" description={error} />
-  ) : mcpTools.length === 0 ? (
+  ) : isAdmin && mcpTools.length === 0 ? (
     <StateBanner
       tone="warning"
       title="도구 없음"
@@ -304,7 +306,7 @@ export function CreateAgentsTab() {
 
   return (
     <CreateResourceShell
-      description="좌측에서 비서를 고르고, 우측에서 LLM · 지식 · 도구 연결과 기본 정보를 한 번에 수정합니다."
+      description={isAdmin ? "좌측에서 비서를 고르고, 우측에서 LLM · 지식 · 도구 연결과 기본 정보를 한 번에 수정합니다." : "좌측에서 비서를 고르고, 우측에서 LLM · 지식 연결과 기본 정보를 한 번에 수정합니다."}
       helperText="새 항목을 누르면 빈 폼으로 전환되고, 저장 후 활성 버전이 목록에 반영됩니다."
       banner={banner}
       listTitle="비서 목록"
@@ -345,12 +347,16 @@ export function CreateAgentsTab() {
                   return linkedKb?.title || "-";
                 },
               },
-              {
-                id: "mcp",
-                label: "도구",
-                width: "minmax(0, 0.55fr)",
-                render: (agent: AgentItem) => String(Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0),
-              },
+              ...(isAdmin
+                ? [
+                    {
+                      id: "mcp",
+                      label: "도구",
+                      width: "minmax(0, 0.55fr)",
+                      render: (agent: AgentItem) => String(Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0),
+                    },
+                  ]
+                : []),
               {
                 id: "version",
                 label: "버전",
@@ -368,7 +374,8 @@ export function CreateAgentsTab() {
                 label: "상태",
                 width: "minmax(0, 0.95fr)",
                 render: (agent) => {
-                  const hasIssue = !agent.llm || !agent.kb_id;
+                  const mcpCount = Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0;
+                  const hasIssue = !agent.llm || !agent.kb_id || (isAdmin && mcpCount === 0);
                   return hasIssue ? (
                     <span className="inline-flex max-w-full items-center gap-1 overflow-hidden text-ellipsis whitespace-nowrap text-amber-600">
                       <AlertTriangle className="h-3.5 w-3.5" />
@@ -386,7 +393,9 @@ export function CreateAgentsTab() {
       detailTitle={isCreating ? "새 비서" : selectedAgent?.name || "비서를 선택하세요"}
       detailDescription={
         isCreating
-          ? "이름, LLM, 지식, 도구 연결을 입력해 새 비서를 생성합니다."
+          ? isAdmin
+            ? "이름, LLM, 지식, 도구 연결을 입력해 새 비서를 생성합니다."
+            : "이름과 LLM, 지식을 입력해 새 비서를 생성합니다."
           : selectedAgent
             ? `현재 버전 ${selectedAgent.version || "-"}`
             : "좌측 목록에서 비서를 선택하면 상세 편집이 열립니다."
@@ -440,17 +449,41 @@ export function CreateAgentsTab() {
                 </label>
               </div>
 
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">도구</div>
-                <MultiSelectPopover
-                  values={mcpToolIds}
-                  onChange={setMcpToolIds}
-                  options={mcpOptions}
-                  placeholder="도구 선택"
-                  className="w-full"
-                  buttonClassName="min-h-10"
-                />
-              </label>
+              {isAdmin ? (
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">도구</div>
+                  <MultiSelectPopover
+                    values={mcpToolIds}
+                    onChange={setMcpToolIds}
+                    options={mcpOptions}
+                    placeholder="도구 선택"
+                    className="w-full"
+                    buttonClassName={cn(
+                      "min-h-10",
+                      mcpPopoverOpen || mcpToolIds.length > 0 ? "!border-amber-300 !bg-amber-100" : ""
+                    )}
+                    open={mcpPopoverOpen}
+                    onOpenChange={setMcpPopoverOpen}
+                    renderOption={(option, active) => (
+                      <div
+                        className={cn(
+                          "mx-[-12px] flex h-8 w-[calc(100%+24px)] items-center rounded-xl px-3",
+                          active ? "border border-amber-300 bg-amber-100" : ""
+                        )}
+                      >
+                        <div className="min-w-0 text-left">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-slate-900">{option.label}</span>
+                            {option.description ? (
+                              <span className="whitespace-nowrap text-[10px] text-slate-500">{option.description}</span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  />
+                </label>
+              ) : null}
 
               <label className="block">
                 <div className="mb-1 text-xs text-slate-600">웹사이트</div>
@@ -478,6 +511,7 @@ export function CreateAgentsTab() {
                       onClick={() => {
                         setIsCreating(false);
                         setSelectedId(activeAgents[0]?.id || null);
+                        setMcpPopoverOpen(false);
                       }}
                       className="rounded-xl border-slate-200 bg-white px-3 text-xs text-slate-700 hover:bg-slate-50"
                     >

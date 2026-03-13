@@ -136,7 +136,7 @@
 ## 5.1 라우트
 
 - 기본 경로: `/app/create`
-- 탭 쿼리: `/app/create?tab=template|agents|kb|mcp`
+- 탭 쿼리: `/app/create?tab=agents|kb|mcp|widget`
 - 기본 탭: `agents`
 
 탭 상태는 URL query string 과 동기화한다.  
@@ -392,7 +392,7 @@
 
 목적:
 
-- 템플릿 생성/수정/삭제
+- 위젯 템플릿 생성/수정/삭제
 - 연결 Agent 지정
 - 테마와 greeting 설정
 - 인스턴스 키/설치 스크립트 확인
@@ -701,7 +701,7 @@ C:\dev\1227\mejai3\mejai\docs\diff\20260313-154500__src_components_AppSidebar.ts
 - [x] `?tab=agents` deep link 확인
 - [x] `?tab=kb` deep link 확인
 - [x] `?tab=mcp` deep link 확인
-- [x] `?tab=template` deep link 확인
+- [x] `?tab=widget` deep link 확인
 - [ ] Agent 생성/수정/삭제 확인
 - [ ] KB 생성/수정/삭제 확인
 - [ ] MCP 생성/수정/삭제 확인
@@ -738,19 +738,17 @@ C:\dev\1227\mejai3\mejai\docs\diff\20260313-154500__src_components_AppSidebar.ts
   - `?tab=agents` 에서 에이전트 목록과 우측 편집 패널이 함께 렌더링되는 것을 확인
   - `?tab=kb` 에서 KB 목록, `RAG Storage` 표시, 우측 편집 패널이 함께 렌더링되는 것을 확인
   - `?tab=mcp` 에서 provider 필터, MCP 목록, 공통 계약 편집 필드가 렌더링되는 것을 확인
-  - `?tab=template` 에서 템플릿 목록, 설치 키, 설치 스크립트, 우측 편집 패널이 렌더링되는 것을 확인
+  - `?tab=widget` 에서 위젯 목록, 설치 키, 설치 스크립트, 우측 편집 패널이 렌더링되는 것을 확인
   - Agents / KB / MCP / Widget 목록이 모두 좌측 정렬 헤더 + 테이블형 리스트 구조로 렌더링되어 열 단위 비교가 가능한 것을 확인
   - Agents / KB / MCP / Widget 목록이 모두 가로 스크롤 없이 렌더링되고, 목록 컨테이너 기준 `scrollWidth === clientWidth` 상태임을 확인
   - Agents / KB / MCP / Widget 목록 셀에 `text-overflow: ellipsis`, `white-space: nowrap` 이 적용되어 긴 값이 `...` 으로 생략되는 것을 확인
   - Agents / KB / MCP / Widget 공통 상세 패널 본문 wrapper 에서 `max-height` 제한이 제거되어 XPath `/html/body/main/div/div/main/div/div/div[3]/div[2]/div[2]/div[2]` 기준 `maxHeight: none` 으로 확인됨
   - 모바일 뷰포트 `390x844` 에서 목록 뒤에 편집 패널이 이어지는 단일 컬럼 스택 구조로 렌더링되는 것을 확인
-  - `/app/create?tab=agents` 에서 상단 탭 순서가 `템플릿 > 비서 > 지식 > 도구` 로 렌더링되는 것을 확인
-  - `/app/create?tab=agents` 에서 목록 헤더와 상세 편집 라벨이 `템플릿, 비서, 지식, 도구` 명칭으로 통일된 것을 확인
+  - `/app/create?tab=agents` 에서 상단 탭 순서가 `대화창 > 비서 > 지식 > 도구` 로 렌더링되는 것을 확인
+  - `/app/create?tab=agents` 에서 목록 헤더와 상세 편집 라벨이 `대화창, 비서, 지식, 도구` 명칭으로 통일된 것을 확인
   - `/app/create?tab=agents` 에서 비서 편집의 `도구` 선택 필드가 관리자 여부와 무관하게 노출되는 코드 경로로 복원되었고, 현재 관리자 세션 기준 computed style 이 `border-slate-200`, `bg-white` 인 것을 확인
   - `/app/create?tab=mcp` 에서 상단 nav `도구` 탭 활성 상태의 computed style 이 `border-amber-300`, `bg-amber-100` 으로 적용되는 것을 확인
   - `/app/create` 상단 nav 의 `도구` 탭은 `CreateWorkspacePage` 에서 `isAdmin` 일 때만 렌더링되도록 조정했으며, 현재 세션은 관리자 상태로 확인되어 비관리자 실세션 렌더링은 코드 경로 기준으로 검토함
-  - `/app/create` 상단 nav 의 `템플릿` 탭은 `CreateWorkspacePage` 에서 `isAdmin` 일 때만 렌더링되도록 조정했고, `?tab=widget` 기존 쿼리는 관리자 세션에서 `?tab=template` 로 정규화되도록 확인
-  - `/app/create?tab=template` 에서 상단 nav `템플릿` 탭 활성 상태의 computed style 이 `border-amber-300`, `bg-amber-100` 으로 적용되는 것을 확인
   - `supabase` MCP `list_tables` 재확인으로 `A_iam_user_access_maps` 테이블이 유지되고 있어 `/api/user-profile.is_admin` 기반 관리자 분기 전제가 유효함을 확인
 
 - 2026-03-13 `npm run build`

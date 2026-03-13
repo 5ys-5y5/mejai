@@ -116,7 +116,7 @@ export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
         setSelectedId(nextTools[0]?.id || null);
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "도구 목록을 불러오지 못했습니다.");
+      setError(loadError instanceof Error ? loadError.message : "MCP 도구 목록을 불러오지 못했습니다.");
       setTools([]);
       setProviders([]);
     } finally {
@@ -258,11 +258,11 @@ export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
 
   const handleSave = async () => {
     if (!isAdmin) {
-      toast.error("도구 편집은 관리자만 가능합니다.");
+      toast.error("MCP 편집은 관리자만 가능합니다.");
       return;
     }
     if (!name.trim()) {
-      toast.error("도구 이름을 입력해 주세요.");
+      toast.error("MCP 도구 이름을 입력해 주세요.");
       return;
     }
     setSaving(true);
@@ -292,7 +292,7 @@ export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        toast.success("도구가 생성되었습니다.");
+        toast.success("MCP 도구가 생성되었습니다.");
         await loadData(created.item.id);
         setSelectedId(created.item.id);
         setIsCreating(false);
@@ -302,11 +302,11 @@ export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         });
-        toast.success("도구가 저장되었습니다.");
+        toast.success("MCP 도구가 저장되었습니다.");
         await loadData(saved.item.id);
       }
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : "도구 저장에 실패했습니다.");
+      toast.error(saveError instanceof Error ? saveError.message : "MCP 도구 저장에 실패했습니다.");
     } finally {
       setSaving(false);
     }
@@ -314,15 +314,15 @@ export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
 
   const handleDelete = async () => {
     if (!selectedTool) return;
-    if (!window.confirm("선택한 도구를 삭제할까요?")) return;
+    if (!window.confirm("선택한 MCP 도구를 삭제할까요?")) return;
     try {
       await apiFetch(`/api/mcp/tools/${selectedTool.id}`, { method: "DELETE" });
-      toast.success("도구가 삭제되었습니다.");
+      toast.success("MCP 도구가 삭제되었습니다.");
       setSelectedId(null);
       setIsCreating(false);
       await loadData();
     } catch (deleteError) {
-      toast.error(deleteError instanceof Error ? deleteError.message : "도구 삭제에 실패했습니다.");
+      toast.error(deleteError instanceof Error ? deleteError.message : "MCP 도구 삭제에 실패했습니다.");
     }
   };
 
@@ -330,20 +330,20 @@ export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
     <StateBanner
       tone="warning"
       title="관리자 전용 탭"
-      description="도구의 생성, 수정, 삭제는 관리자만 수행할 수 있습니다."
+      description="MCP 도구의 생성, 수정, 삭제는 관리자만 수행할 수 있습니다."
     />
   ) : error ? (
-    <StateBanner tone="danger" title="도구 로딩 실패" description={error} />
+    <StateBanner tone="danger" title="MCP 로딩 실패" description={error} />
   ) : null;
 
   return (
     <CreateResourceShell
-      description="Provider별 도구를 한 곳에서 관리합니다. 좌측에서 액션을 선택하면 우측에서 공통 계약 필드를 수정합니다."
-      helperText="삭제 시 비서에서 이미 참조 중인 도구는 공통 API 계약에서 차단됩니다."
+      description="Provider별 MCP 도구를 한 곳에서 관리합니다. 좌측에서 액션을 선택하면 우측에서 공통 계약 필드를 수정합니다."
+      helperText="삭제 시 에이전트에서 이미 참조 중인 도구는 공통 API 계약에서 차단됩니다."
       banner={banner}
-      listTitle="도구 목록"
+      listTitle="MCP 도구 목록"
       listCountLabel={`총 ${loading ? "-" : filteredTools.length}개`}
-      createLabel="새 도구"
+      createLabel="새 MCP"
       onCreate={handleCreate}
       onRefresh={() => void loadData(selectedId, isCreating)}
       refreshDisabled={loading}
@@ -361,54 +361,55 @@ export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
             />
           </div>
           {filteredTools.length === 0 && !loading ? (
-            <div className="p-4 text-sm text-slate-500">표시할 도구가 없습니다.</div>
+            <div className="p-4 text-sm text-slate-500">표시할 MCP 도구가 없습니다.</div>
           ) : (
             <CreateListTable
               rows={filteredTools}
               getRowId={(tool) => tool.id}
               selectedId={!isCreating ? selectedId : null}
               onSelect={(tool) => handleSelect(tool.id)}
+              minWidth={980}
               columns={[
                 {
                   id: "tool",
                   label: "도구",
-                  width: "minmax(0, 2.05fr)",
+                  width: "minmax(180px, 1.8fr)",
                   render: (tool) => <div className="truncate text-sm font-semibold text-slate-900">{tool.tool_key || tool.name}</div>,
                 },
                 {
                   id: "provider",
                   label: "Provider",
-                  width: "minmax(0, 0.85fr)",
+                  width: "minmax(100px, 0.9fr)",
                   render: (tool) => tool.provider_key || "-",
                 },
                 {
                   id: "method",
                   label: "Method",
-                  width: "minmax(0, 0.72fr)",
+                  width: "82px",
                   render: (tool) => tool.http_method || "-",
                 },
                 {
                   id: "endpoint",
                   label: "Endpoint",
-                  width: "minmax(0, 1.75fr)",
+                  width: "minmax(170px, 1.5fr)",
                   render: (tool) => tool.endpoint_path || "-",
                 },
                 {
                   id: "scope",
                   label: "Scope",
-                  width: "minmax(0, 1.3fr)",
+                  width: "minmax(130px, 1.2fr)",
                   render: (tool) => tool.scope_key || "-",
                 },
                 {
                   id: "version",
                   label: "버전",
-                  width: "minmax(0, 0.55fr)",
+                  width: "72px",
                   render: (tool) => tool.version || "-",
                 },
                 {
                   id: "usage",
                   label: "사용",
-                  width: "minmax(0, 0.6fr)",
+                  width: "72px",
                   render: (tool) => `${tool.usage_count}회`,
                 },
               ]}
@@ -416,13 +417,13 @@ export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
           )}
         </>
       }
-      detailTitle={isCreating ? "새 도구" : selectedTool?.tool_key || selectedTool?.name || "도구를 선택하세요"}
+      detailTitle={isCreating ? "새 MCP 도구" : selectedTool?.tool_key || selectedTool?.name || "MCP 도구를 선택하세요"}
       detailDescription={
         isCreating
-          ? "Provider, 액션 이름, 엔드포인트, schema 계약을 입력해 새 도구를 등록합니다."
+          ? "Provider, 액션 이름, 엔드포인트, schema 계약을 입력해 새 MCP 도구를 등록합니다."
           : selectedTool
             ? "공통 도구 계약을 수정합니다."
-            : "좌측 목록에서 도구를 선택하면 상세 편집이 열립니다."
+            : "좌측 목록에서 MCP 도구를 선택하면 상세 편집이 열립니다."
       }
       detailActions={
         !isCreating && selectedTool ? (
@@ -573,7 +574,7 @@ export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
                 <div className="text-xs text-slate-500">
-                  {isCreating ? "새 도구를 생성합니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
+                  {isCreating ? "새 MCP 도구를 생성합니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
                 </div>
                 <div className="flex items-center gap-2">
                   {isCreating ? (
@@ -595,14 +596,14 @@ export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
                     disabled={!isAdmin || saving || (!isCreating && !isDirty)}
                     className="rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
                   >
-                    {saving ? "저장 중..." : isCreating ? "도구 생성" : "저장"}
+                    {saving ? "저장 중..." : isCreating ? "MCP 생성" : "저장"}
                   </Button>
                 </div>
               </div>
             </>
           ) : (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-              좌측 목록에서 도구를 선택하거나 새 도구를 생성해 주세요.
+              좌측 목록에서 MCP 도구를 선택하거나 새 도구를 생성해 주세요.
             </div>
           )}
         </div>

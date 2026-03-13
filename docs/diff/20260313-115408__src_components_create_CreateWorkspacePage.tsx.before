@@ -1,0 +1,84 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { StateBanner, UnderlineTabs, type TabItem } from "@/components/design-system";
+import { CreateAgentsTab } from "@/components/create/CreateAgentsTab";
+import { CreateKbTab } from "@/components/create/CreateKbTab";
+import { CreateMcpTab } from "@/components/create/CreateMcpTab";
+import { CreateWidgetTab } from "@/components/create/CreateWidgetTab";
+import { apiFetch } from "@/lib/apiClient";
+
+type TabKey = "agents" | "kb" | "mcp" | "widget";
+
+const tabs: Array<TabItem<TabKey>> = [
+  { key: "widget", label: "대화창" },
+  { key: "agents", label: "비서" },
+  { key: "kb", label: "지식" },
+  { key: "mcp", label: "도구" },
+];
+
+export function CreateWorkspacePage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const rawTab = searchParams.get("tab");
+  const initialTab: TabKey = rawTab === "agents" || rawTab === "kb" || rawTab === "mcp" ? rawTab : "widget";
+
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
+    let mounted = true;
+    apiFetch<{ is_admin?: boolean }>("/api/user-profile")
+      .then((response) => {
+        if (!mounted) return;
+        setIsAdmin(Boolean(response.is_admin));
+      })
+      .catch((error) => {
+        if (!mounted) return;
+        setProfileError(error instanceof Error ? error.message : "사용자 권한 정보를 불러오지 못했습니다.");
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const selectTab = (key: TabKey) => {
+    setActiveTab(key);
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.set("tab", key);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  return (
+    <div className="px-5 py-6 md:px-8">
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">생성하기</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              하나의 작업 공간에서 대화창, 비서, 지식, 도구를 같은 패턴으로 생성하고 연결합니다.
+            </p>
+          </div>
+        </div>
+
+        {profileError ? (
+          <StateBanner tone="warning" title="권한 정보 확인 실패" description={profileError} />
+        ) : null}
+
+        <UnderlineTabs tabs={tabs} activeKey={activeTab} onSelect={selectTab} />
+
+        {activeTab === "widget" ? <CreateWidgetTab isAdmin={isAdmin} /> : null}
+        {activeTab === "agents" ? <CreateAgentsTab isAdmin={isAdmin} /> : null}
+        {activeTab === "kb" ? <CreateKbTab /> : null}
+        {activeTab === "mcp" ? <CreateMcpTab isAdmin={isAdmin} /> : null}
+      </div>
+    </div>
+  );
+}

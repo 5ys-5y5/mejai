@@ -145,7 +145,7 @@ export function CreateKbTab() {
         setSelectedId(active[0]?.id || null);
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "지식 목록을 불러오지 못했습니다.");
+      setError(loadError instanceof Error ? loadError.message : "KB 목록을 불러오지 못했습니다.");
       setKbItems([]);
       setMetricsById({});
     } finally {
@@ -223,11 +223,11 @@ export function CreateKbTab() {
 
   const handleSave = async () => {
     if (!title.trim()) {
-      toast.error("지식 제목을 입력해 주세요.");
+      toast.error("KB 제목을 입력해 주세요.");
       return;
     }
     if (!content.trim()) {
-      toast.error("지식 내용을 입력해 주세요.");
+      toast.error("KB 내용을 입력해 주세요.");
       return;
     }
     setSaving(true);
@@ -243,7 +243,7 @@ export function CreateKbTab() {
             is_active: true,
           }),
         });
-        toast.success("지식이 생성되었습니다.");
+        toast.success("KB가 생성되었습니다.");
         await loadData(created.id);
         setSelectedId(created.id);
         setIsCreating(false);
@@ -257,11 +257,11 @@ export function CreateKbTab() {
             content: content.trim(),
           }),
         });
-        toast.success("지식이 저장되었습니다.");
+        toast.success("KB가 저장되었습니다.");
         await loadData(saved.id);
       }
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : "지식 저장에 실패했습니다.");
+      toast.error(saveError instanceof Error ? saveError.message : "KB 저장에 실패했습니다.");
     } finally {
       setSaving(false);
     }
@@ -269,30 +269,30 @@ export function CreateKbTab() {
 
   const handleDelete = async () => {
     if (!selectedKb) return;
-    if (!window.confirm("선택한 지식을 삭제할까요?")) return;
+    if (!window.confirm("선택한 KB를 삭제할까요?")) return;
     try {
       await apiFetch(`/api/kb/${selectedKb.id}`, { method: "DELETE" });
-      toast.success("지식이 삭제되었습니다.");
+      toast.success("KB가 삭제되었습니다.");
       setSelectedId(null);
       setIsCreating(false);
       await loadData();
     } catch (deleteError) {
-      toast.error(deleteError instanceof Error ? deleteError.message : "지식 삭제에 실패했습니다.");
+      toast.error(deleteError instanceof Error ? deleteError.message : "KB 삭제에 실패했습니다.");
     }
   };
 
   const banner = error ? (
-    <StateBanner tone="danger" title="지식 로딩 실패" description={error} />
+    <StateBanner tone="danger" title="Knowledge Base 로딩 실패" description={error} />
   ) : null;
 
   return (
     <CreateResourceShell
-      description="좌측에서 지식을 선택하면 우측에서 제목, 카테고리, 본문을 바로 수정할 수 있습니다."
+      description="좌측에서 KB를 선택하면 우측에서 제목, 카테고리, 본문을 바로 수정할 수 있습니다."
       helperText="내용을 바꾸면 새 버전이 생성되고, 활성 버전이 목록에 자동 반영됩니다."
       banner={banner}
-      listTitle="지식 목록"
+      listTitle="KB 목록"
       listCountLabel={`총 ${loading ? "-" : activeKbItems.length}개`}
-      createLabel="새 지식"
+      createLabel="새 KB"
       onCreate={handleCreate}
       onRefresh={() => void loadData(selectedId, isCreating)}
       refreshDisabled={loading}
@@ -302,24 +302,25 @@ export function CreateKbTab() {
             <RagStorageBadge usedBytes={usedBytes} limitBytes={limitBytes} />
           </div>
           {activeKbItems.length === 0 && !loading ? (
-            <div className="p-4 text-sm text-slate-500">생성된 지식이 없습니다.</div>
+            <div className="p-4 text-sm text-slate-500">생성된 KB가 없습니다.</div>
           ) : (
             <CreateListTable
               rows={activeKbItems}
               getRowId={(item) => item.id}
               selectedId={!isCreating ? selectedId : null}
               onSelect={(item) => handleSelect(item.id)}
+              minWidth={980}
               columns={[
                 {
                   id: "title",
-                  label: "지식",
-                  width: "minmax(0, 2.15fr)",
+                  label: "제목",
+                  width: "minmax(150px, 1.8fr)",
                   render: (item) => <div className="truncate text-sm font-semibold text-slate-900">{item.title}</div>,
                 },
                 {
                   id: "kind",
                   label: "구분",
-                  width: "minmax(0, 1.05fr)",
+                  width: "minmax(100px, 1fr)",
                   render: (item) => {
                     const labels = [];
                     if (isAdminKbValue(item.is_admin)) labels.push("ADMIN");
@@ -331,37 +332,37 @@ export function CreateKbTab() {
                 {
                   id: "category",
                   label: "카테고리",
-                  width: "minmax(0, 1.25fr)",
+                  width: "minmax(110px, 1fr)",
                   render: (item) => item.category || "-",
                 },
                 {
                   id: "version",
                   label: "버전",
-                  width: "minmax(0, 0.62fr)",
+                  width: "72px",
                   render: (item) => item.version || "-",
                 },
                 {
                   id: "calls",
                   label: "Calls",
-                  width: "minmax(0, 0.55fr)",
+                  width: "72px",
                   render: (item) => String(metricsById[item.id]?.call_count ?? 0),
                 },
                 {
                   id: "satisfaction",
                   label: "만족도",
-                  width: "minmax(0, 0.72fr)",
+                  width: "72px",
                   render: (item) => formatSatisfaction(metricsById[item.id]?.satisfaction_avg),
                 },
                 {
                   id: "success",
                   label: "성공률",
-                  width: "minmax(0, 0.78fr)",
+                  width: "72px",
                   render: (item) => formatRate(metricsById[item.id]?.success_rate),
                 },
                 {
                   id: "created",
                   label: "생성일",
-                  width: "minmax(0, 1.08fr)",
+                  width: "minmax(120px, 1fr)",
                   render: (item) => formatKstDate(item.created_at),
                 },
               ]}
@@ -369,13 +370,13 @@ export function CreateKbTab() {
           )}
         </>
       }
-      detailTitle={isCreating ? "새 지식" : selectedKb?.title || "지식을 선택하세요"}
+      detailTitle={isCreating ? "새 KB" : selectedKb?.title || "Knowledge Base를 선택하세요"}
       detailDescription={
         isCreating
-          ? "새 지식을 생성합니다."
+          ? "새 문서를 생성합니다."
           : selectedKb
             ? `현재 버전 ${selectedKb.version || "-"}`
-            : "좌측 목록에서 지식을 선택하면 상세 편집이 열립니다."
+            : "좌측 목록에서 KB를 선택하면 상세 편집이 열립니다."
       }
       detailActions={
         !isCreating && selectedKb ? (
@@ -396,7 +397,7 @@ export function CreateKbTab() {
             <>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">지식 제목</div>
+                  <div className="mb-1 text-xs text-slate-600">KB 제목</div>
                   <Input value={title} onChange={(event) => setTitle(event.target.value)} className="h-10" />
                 </label>
                 <label className="block">
@@ -406,7 +407,7 @@ export function CreateKbTab() {
               </div>
 
               <label className="block">
-                <div className="mb-1 text-xs text-slate-600">지식 본문</div>
+                <div className="mb-1 text-xs text-slate-600">KB 본문</div>
                 <textarea
                   value={content}
                   onChange={(event) => setContent(event.target.value)}
@@ -423,7 +424,7 @@ export function CreateKbTab() {
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
                 <div className="text-xs text-slate-500">
-                  {isCreating ? "새 지식을 생성합니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
+                  {isCreating ? "새 KB를 생성합니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
                 </div>
                 <div className="flex items-center gap-2">
                   {isCreating ? (
@@ -445,14 +446,14 @@ export function CreateKbTab() {
                     disabled={saving || (!isCreating && !isDirty)}
                     className="rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
                   >
-                    {saving ? "저장 중..." : isCreating ? "지식 생성" : "저장"}
+                    {saving ? "저장 중..." : isCreating ? "KB 생성" : "저장"}
                   </Button>
                 </div>
               </div>
             </>
           ) : (
             <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-              좌측 목록에서 지식을 선택하거나 새 지식을 생성해 주세요.
+              좌측 목록에서 KB를 선택하거나 새 KB를 생성해 주세요.
             </div>
           )}
         </div>
