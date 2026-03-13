@@ -7,13 +7,7 @@ import {
   normalizeWidgetChatPolicyProvider,
   normalizeWidgetChatPolicyRecordFromProvider,
 } from "@/lib/widgetChatPolicyShape";
-import {
-  getPolicyWidgetSetupConfig,
-  getPolicyWidgetTheme,
-  setPolicyWidgetSetupConfig,
-  setPolicyWidgetTheme,
-  stripConversationPolicyTransientFields,
-} from "@/lib/widgetPolicyUtils";
+import { getPolicyWidgetSetupConfig, getPolicyWidgetTheme, setPolicyWidgetSetupConfig, setPolicyWidgetTheme } from "@/lib/widgetPolicyUtils";
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
   if ("error" in context) return { ok: false, status: 401, error: context.error };
@@ -125,7 +119,15 @@ export async function POST(req: NextRequest) {
   const chatPolicyShape = normalizeWidgetChatPolicyProvider(chatPolicy);
   const policyWithTheme = setPolicyWidgetTheme(chatPolicyShape, theme);
   const policyWithSetup = setPolicyWidgetSetupConfig(policyWithTheme, setupConfig);
-  const cleanedPolicy = stripConversationPolicyTransientFields(policyWithSetup);
+  const cleanedPolicy = policyWithSetup ? { ...(policyWithSetup as Record<string, unknown>) } : null;
+  if (cleanedPolicy) {
+    delete cleanedPolicy.pages;
+    delete cleanedPolicy.page_registry;
+    delete cleanedPolicy.debug;
+    delete cleanedPolicy.debug_copy;
+    delete cleanedPolicy.setup_ui;
+    delete cleanedPolicy.settings_ui;
+  }
 
   let supabaseAdmin;
   try {

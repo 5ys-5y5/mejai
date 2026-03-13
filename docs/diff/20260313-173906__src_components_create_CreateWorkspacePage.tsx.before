@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { StateBanner } from "@/components/design-system";
 import { CreateApiTab } from "@/components/create/CreateApiTab";
@@ -9,9 +9,7 @@ import { CreateChatTab } from "@/components/create/CreateChatTab";
 import { CreateKbTab } from "@/components/create/CreateKbTab";
 import { CreateMcpTab } from "@/components/create/CreateMcpTab";
 import { CreateWidgetTab } from "@/components/create/CreateWidgetTab";
-import { CreateWorkspacePreviewRail } from "@/components/create/CreateWorkspacePreviewRail";
 import { apiFetch } from "@/lib/apiClient";
-import { useWidgetTemplateSettingsController } from "@/lib/conversation/client/useWidgetTemplateSettingsController";
 import { cn } from "@/lib/utils";
 
 type TabKey = "template" | "chat" | "agents" | "kb" | "api" | "mcp";
@@ -46,17 +44,16 @@ export function CreateWorkspacePage() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const rawTab = searchParams.get("tab");
-  const rawTemplateId = searchParams.get("templateId");
+  const initialTab = resolveTab(rawTab, false);
 
+  const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [isAdmin, setIsAdmin] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
-  const [selectedTemplateId, setSelectedTemplateId] = useState(String(rawTemplateId || "").trim());
 
   useEffect(() => {
-    const normalized = String(rawTemplateId || "").trim();
-    setSelectedTemplateId((current) => (current === normalized ? current : normalized));
-  }, [rawTemplateId]);
+    setActiveTab(resolveTab(rawTab, isAdmin));
+  }, [isAdmin, rawTab]);
 
   useEffect(() => {
     let mounted = true;
@@ -76,46 +73,22 @@ export function CreateWorkspacePage() {
     };
   }, []);
 
-  const activeTab = resolveTab(rawTab, isAdmin);
-
-  const replaceQuery = useCallback(
-    (nextTab: TabKey, nextTemplateId: string) => {
-      const params = new URLSearchParams(searchParams?.toString() ?? "");
-      params.set("tab", nextTab);
-      if (nextTemplateId) {
-        params.set("templateId", nextTemplateId);
-      } else {
-        params.delete("templateId");
-      }
-      const nextQuery = params.toString();
-      const nextUrl = nextQuery ? `${pathname}?${nextQuery}` : pathname;
-      const currentQuery = searchParams?.toString() ?? "";
-      const currentUrl = currentQuery ? `${pathname}?${currentQuery}` : pathname;
-      if (nextUrl === currentUrl) return;
-      router.replace(nextUrl, { scroll: false });
-    },
-    [pathname, router, searchParams]
-  );
-
   useEffect(() => {
-    if (!profileLoaded) return;
-    replaceQuery(activeTab, selectedTemplateId);
-  }, [activeTab, profileLoaded, replaceQuery, selectedTemplateId]);
+    if (!profileLoaded || !rawTab) return;
+    const resolvedTab = resolveTab(rawTab, isAdmin);
+    if (resolvedTab === rawTab) return;
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.set("tab", resolvedTab);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [isAdmin, pathname, profileLoaded, rawTab, router, searchParams]);
 
-  const visibleTabs = useMemo(
-    () => tabs.filter((tab) => !tab.adminOnly || isAdmin),
-    [isAdmin]
-  );
-
-  const templateController = useWidgetTemplateSettingsController({
-    enabled: profileLoaded && isAdmin,
-    isAdmin,
-    selectedTemplateId,
-    onSelectedTemplateIdChange: setSelectedTemplateId,
-  });
+  const visibleTabs = tabs.filter((tab) => !tab.adminOnly || isAdmin);
 
   const selectTab = (key: TabKey) => {
-    replaceQuery(key, selectedTemplateId);
+    setActiveTab(key);
+    const params = new URLSearchParams(searchParams?.toString() ?? "");
+    params.set("tab", key);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
   return (
@@ -133,8 +106,6 @@ export function CreateWorkspacePage() {
         {profileError ? (
           <StateBanner tone="warning" title="권한 정보 확인 실패" description={profileError} />
         ) : null}
-
-        {profileLoaded && isAdmin ? <CreateWorkspacePreviewRail controller={templateController} /> : null}
 
         <div className="border-b border-slate-200 pb-2">
           <nav className="flex gap-2 overflow-x-auto">
@@ -161,7 +132,7 @@ export function CreateWorkspacePage() {
           </nav>
         </div>
 
-        {activeTab === "template" && isAdmin ? <CreateWidgetTab controller={templateController} /> : null}
+        {activeTab === "template" && isAdmin ? <CreateWidgetTab isAdmin={isAdmin} /> : null}
         {activeTab === "chat" ? <CreateChatTab /> : null}
         {activeTab === "agents" ? <CreateAgentsTab /> : null}
         {activeTab === "kb" ? <CreateKbTab /> : null}

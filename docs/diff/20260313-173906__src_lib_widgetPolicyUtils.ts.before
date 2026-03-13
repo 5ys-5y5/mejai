@@ -1,7 +1,6 @@
 import {
   WIDGET_PAGE_KEY,
   getDefaultConversationPageFeatures,
-  normalizeConversationFeatureProvider,
   type ConversationFeaturesProviderShape,
   type ConversationPageKey,
 } from "@/lib/conversation/pageFeaturePolicy";
@@ -133,18 +132,4 @@ export function mergeWidgetPolicies(
   };
 
   return mergeObjects(base as Record<string, unknown>, override as Record<string, unknown>) as ConversationFeaturesProviderShape;
-}
-
-export function stripConversationPolicyTransientFields(
-  policy: ConversationFeaturesProviderShape | null | undefined
-): ConversationFeaturesProviderShape | null {
-  const normalized = normalizeConversationFeatureProvider(policy);
-  if (!normalized) return null;
-  const cleaned = { ...(normalized as Record<string, unknown>) };
-  delete cleaned.pages;
-  delete cleaned.page_registry;
-  delete cleaned.debug;
-  delete cleaned.debug_copy;
-  delete cleaned.setup_ui;
-  return cleaned as ConversationFeaturesProviderShape;
 }

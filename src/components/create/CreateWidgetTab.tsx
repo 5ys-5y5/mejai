@@ -1,434 +1,106 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Copy, KeyRound, Trash2 } from "lucide-react";
-import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
+import { Trash2 } from "lucide-react";
 import { StateBanner } from "@/components/design-system";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { CreateListTable, CreateResourceShell } from "@/components/create/CreateResourceShell";
-import { apiFetch } from "@/lib/apiClient";
-import { toast } from "sonner";
+import { Button } from "@/components/ui/Button";
+import { WidgetTemplateSettingsEditor } from "@/components/widget-template/WidgetTemplateSettingsEditor";
+import type { WidgetTemplateSettingsController } from "@/lib/conversation/client/useWidgetTemplateSettingsController";
 
-type WidgetConfig = {
-  id?: string;
-  name?: string | null;
-  agent_id?: string | null;
-  template_public_key?: string | null;
-  instance_id?: string | null;
-  instance_public_key?: string | null;
-  theme?: Record<string, unknown> | null;
-  is_active?: boolean | null;
+type CreateWidgetTabProps = {
+  controller: WidgetTemplateSettingsController;
 };
 
-type AgentItem = {
-  id: string;
-  name?: string | null;
-  version?: string | null;
-  is_active?: boolean | null;
-};
+export function CreateWidgetTab({ controller }: CreateWidgetTabProps) {
+  const agentById = new Map(controller.editableAgents.map((agent) => [agent.id, agent]));
 
-export function CreateWidgetTab({ isAdmin }: { isAdmin: boolean }) {
-  const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
-  const [agents, setAgents] = useState<AgentItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
-
-  const [name, setName] = useState("웹 템플릿");
-  const [agentId, setAgentId] = useState("");
-  const [greeting, setGreeting] = useState("");
-  const [inputPlaceholder, setInputPlaceholder] = useState("");
-  const [launcherIconUrl, setLauncherIconUrl] = useState("");
-  const [isActive, setIsActive] = useState(true);
-
-  const loadData = async (nextSelectedId?: string | null, preserveCreateMode = false) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [widgetRes, agentRes] = await Promise.all([
-        apiFetch<{ items: WidgetConfig[] }>("/api/widgets"),
-        apiFetch<{ items: AgentItem[] }>("/api/agents?is_active=true&limit=200"),
-      ]);
-      const nextWidgets = widgetRes.items || [];
-      setWidgets(nextWidgets);
-      setAgents(agentRes.items || []);
-
-      if (preserveCreateMode) {
-        setSelectedId(null);
-        setIsCreating(true);
-      } else if (nextSelectedId && nextWidgets.some((item) => item.id === nextSelectedId)) {
-        setSelectedId(nextSelectedId);
-        setIsCreating(false);
-      } else if (!selectedId && nextWidgets.length > 0) {
-        setSelectedId(nextWidgets[0].id || null);
-      } else if (selectedId && !nextWidgets.some((item) => item.id === selectedId)) {
-        setSelectedId(nextWidgets[0]?.id || null);
-      }
-    } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : "템플릿 목록을 불러오지 못했습니다.");
-      setWidgets([]);
-      setAgents([]);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  const selectedWidget = useMemo(
-    () => widgets.find((item) => item.id === selectedId) || null,
-    [selectedId, widgets]
-  );
-
-  useEffect(() => {
-    if (isCreating) {
-      setName("웹 템플릿");
-      setAgentId("");
-      setGreeting("");
-      setInputPlaceholder("");
-      setLauncherIconUrl("");
-      setIsActive(true);
-      return;
-    }
-    if (!selectedWidget) return;
-    const theme = selectedWidget.theme || {};
-    setName(selectedWidget.name || "웹 템플릿");
-    setAgentId(String(selectedWidget.agent_id || ""));
-    setGreeting(String(theme.greeting || ""));
-    setInputPlaceholder(String(theme.input_placeholder || ""));
-    setLauncherIconUrl(String(theme.launcher_icon_url || ""));
-    setIsActive(selectedWidget.is_active !== false);
-  }, [isCreating, selectedWidget]);
-
-  useEffect(() => {
-    if (!isCreating && !selectedId && widgets.length > 0) {
-      setSelectedId(widgets[0].id || null);
-    }
-  }, [isCreating, selectedId, widgets]);
-
-  const agentOptions = useMemo<SelectOption[]>(
-    () =>
-      agents.map((agent) => ({
-        id: agent.id,
-        label: `${agent.name || agent.id}${agent.is_active ? "" : " (비활성)"}`,
-        description: agent.version ? `v${agent.version}` : undefined,
-      })),
-    [agents]
-  );
-
-  const agentById = useMemo(() => {
-    const map = new Map<string, AgentItem>();
-    agents.forEach((agent) => map.set(agent.id, agent));
-    return map;
-  }, [agents]);
-
-  const installSnippet = useMemo(() => {
-    const templateId = selectedWidget?.id || "";
-    const instanceId = selectedWidget?.instance_id || "";
-    const instancePublicKey = selectedWidget?.instance_public_key || "";
-    if (!templateId || !instanceId || !instancePublicKey) return "";
-    return `<script async src="https://mejai.help/widget.js" data-instance-id="${instanceId}" data-public-key="${instancePublicKey}" data-template-id="${templateId}"></script>`;
-  }, [selectedWidget]);
-
-  const isDirty = useMemo(() => {
-    if (isCreating) {
-      return Boolean(name.trim() || agentId || greeting.trim() || inputPlaceholder.trim() || launcherIconUrl.trim());
-    }
-    if (!selectedWidget) return false;
-    const theme = selectedWidget.theme || {};
-    return (
-      name.trim() !== (selectedWidget.name || "").trim() ||
-      agentId !== String(selectedWidget.agent_id || "") ||
-      greeting.trim() !== String(theme.greeting || "").trim() ||
-      inputPlaceholder.trim() !== String(theme.input_placeholder || "").trim() ||
-      launcherIconUrl.trim() !== String(theme.launcher_icon_url || "").trim() ||
-      isActive !== (selectedWidget.is_active !== false)
-    );
-  }, [agentId, greeting, inputPlaceholder, isActive, isCreating, launcherIconUrl, name, selectedWidget]);
-
-  const handleCreate = () => {
-    setSelectedId(null);
-    setIsCreating(true);
-  };
-
-  const handleSelect = (id: string) => {
-    setSelectedId(id);
-    setIsCreating(false);
-  };
-
-  const handleSave = async (rotateKey = false) => {
-    if (!isAdmin) {
-      toast.error("템플릿 편집은 관리자만 가능합니다.");
-      return;
-    }
-    setSaving(true);
-    try {
-      const response = await apiFetch<{ item: WidgetConfig }>("/api/widgets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          template_id: isCreating ? null : selectedWidget?.id || null,
-          name: name.trim() || "웹 템플릿",
-          agent_id: agentId || null,
-          theme: {
-            greeting: greeting.trim(),
-            input_placeholder: inputPlaceholder.trim(),
-            launcher_icon_url: launcherIconUrl.trim(),
-          },
-          is_active: isActive,
-          rotate_key: rotateKey,
-        }),
-      });
-      toast.success(rotateKey ? "템플릿 키가 재발급되었습니다." : "템플릿이 저장되었습니다.");
-      await loadData(response.item.id || null);
-      setSelectedId(response.item.id || null);
-      setIsCreating(false);
-    } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : "템플릿 저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!selectedWidget?.id) return;
-    if (!isAdmin) {
-      toast.error("템플릿 삭제는 관리자만 가능합니다.");
-      return;
-    }
-    if (!window.confirm("선택한 템플릿을 삭제할까요?")) return;
-    try {
-      await apiFetch(`/api/widget-templates/${selectedWidget.id}`, { method: "DELETE" });
-      toast.success("템플릿이 삭제되었습니다.");
-      setSelectedId(null);
-      setIsCreating(false);
-      await loadData();
-    } catch (deleteError) {
-      toast.error(deleteError instanceof Error ? deleteError.message : "템플릿 삭제에 실패했습니다.");
-    }
-  };
-
-  const banner = !isAdmin ? (
+  const banner = !controller.isAdmin ? (
     <StateBanner
       tone="warning"
       title="관리자 전용 편집"
-      description="템플릿 생성, 저장, 삭제, 키 재발급은 관리자 권한이 필요합니다. 현재 화면은 읽기 전용으로 동작합니다."
+      description="템플릿 생성, 저장, 삭제와 대화 정책 편집은 관리자 권한이 필요합니다."
     />
-  ) : error ? (
-    <StateBanner tone="danger" title="템플릿 로딩 실패" description={error} />
+  ) : controller.error ? (
+    <StateBanner tone="danger" title="템플릿 로딩 실패" description={controller.error} />
   ) : null;
 
   return (
     <CreateResourceShell
-      description="템플릿을 선택한 뒤 연결 비서와 테마를 수정하고, 설치 키와 스크립트를 바로 확인합니다."
-      helperText="생성 후 템플릿 키와 인스턴스 키가 즉시 발급되며, 필요할 때 인스턴스 키만 재발급할 수 있습니다."
+      description="템플릿 선택, 대화 정책 편집, 저장을 한 화면에서 처리합니다. conversation 페이지의 대화 정책은 이 탭으로 이관됩니다."
+      helperText="대화 정책, settings_ui 라벨/순서, 템플릿 theme 기본값을 같은 저장 흐름으로 유지합니다."
       banner={banner}
       listTitle="템플릿 목록"
-      listCountLabel={`총 ${loading ? "-" : widgets.length}개`}
+      listCountLabel={`총 ${controller.loading ? "-" : controller.templates.length}개`}
       createLabel="새 템플릿"
-      onCreate={handleCreate}
-      onRefresh={() => void loadData(selectedId, isCreating)}
-      refreshDisabled={loading}
-      createDisabled={!isAdmin}
+      onCreate={() => void controller.createTemplate()}
+      onRefresh={() => void controller.refresh()}
+      refreshDisabled={controller.loading}
+      createDisabled={!controller.isAdmin}
       listContent={
-        widgets.length === 0 && !loading ? (
-          <div className="p-4 text-sm text-slate-500">생성된 템플릿이 없습니다.</div>
-        ) : (
-          <CreateListTable
-            rows={widgets.filter((item): item is WidgetConfig & { id: string } => Boolean(item.id))}
-            getRowId={(item) => item.id}
-            selectedId={!isCreating ? selectedId : null}
-            onSelect={(item) => handleSelect(item.id)}
-            columns={[
-              {
-                id: "name",
-                label: "템플릿",
-                width: "minmax(0, 1.65fr)",
-                render: (item) => <div className="truncate text-sm font-semibold text-slate-900">{item.name || "웹 템플릿"}</div>,
+        <CreateListTable
+          rows={controller.templates}
+          getRowId={(item) => item.id}
+          selectedId={controller.selectedTemplateId || null}
+          onSelect={(item) => controller.selectTemplate(item.id)}
+          emptyState={
+            <div className="p-4 text-sm text-slate-500">
+              {controller.loading ? "템플릿을 불러오는 중..." : "생성된 템플릿이 없습니다."}
+            </div>
+          }
+          columns={[
+            {
+              id: "name",
+              label: "템플릿",
+              width: "minmax(0, 1.7fr)",
+              render: (item) => <div className="truncate text-sm font-semibold text-slate-900">{item.name || item.id}</div>,
+            },
+            {
+              id: "agent",
+              label: "연결 비서",
+              width: "minmax(0, 1.35fr)",
+              render: (item) => {
+                const linkedAgent = item.agent_id ? agentById.get(String(item.agent_id)) ?? null : null;
+                return linkedAgent?.name || item.agent_id || "-";
               },
-              {
-                id: "agent",
-                label: "비서",
-                width: "minmax(0, 1.8fr)",
-                render: (item) => {
-                  const linkedAgent = item.agent_id ? agentById.get(String(item.agent_id)) ?? null : null;
-                  return linkedAgent?.name || item.agent_id || "-";
-                },
-              },
-              {
-                id: "status",
-                label: "상태",
-                width: "minmax(0, 0.8fr)",
-                render: (item) => (item.is_active === false ? "Inactive" : "Active"),
-              },
-              {
-                id: "template",
-                label: "템플릿키",
-                width: "minmax(0, 0.9fr)",
-                render: (item) => (item.template_public_key ? "발급됨" : "-"),
-              },
-              {
-                id: "instance",
-                label: "발급키",
-                width: "minmax(0, 0.9fr)",
-                render: (item) => (item.instance_public_key ? "발급됨" : "-"),
-              },
-            ]}
-          />
-        )
+            },
+            {
+              id: "status",
+              label: "상태",
+              width: "minmax(0, 0.7fr)",
+              render: (item) => (item.is_active === false ? "Inactive" : "Active"),
+            },
+            {
+              id: "public_key",
+              label: "템플릿키",
+              width: "minmax(0, 1.2fr)",
+              render: (item) => (
+                <span className="truncate font-mono text-[11px] text-slate-500">{item.public_key || "-"}</span>
+              ),
+            },
+          ]}
+        />
       }
-      detailTitle={isCreating ? "새 템플릿" : selectedWidget?.name || "템플릿을 선택하세요"}
+      detailTitle={controller.draft?.name || "템플릿을 선택하세요"}
       detailDescription={
-        isCreating
-          ? "템플릿 이름, 비서, 테마를 입력해 새 템플릿을 생성합니다."
-          : selectedWidget
-            ? "연결 비서, 메시지, 설치 스크립트를 바로 조정할 수 있습니다."
-            : "좌측 목록에서 템플릿을 선택하면 상세 편집이 열립니다."
+        controller.draft
+          ? "대화 정책, 템플릿 상태, settings_ui 라벨/순서를 같은 편집기에서 수정합니다."
+          : "좌측 목록에서 템플릿을 선택하거나 새 템플릿을 생성해 주세요."
       }
       detailActions={
-        !isCreating && selectedWidget?.id ? (
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleSave(true)}
-              disabled={!isAdmin || saving}
-              className="rounded-xl border-slate-200 bg-white px-3 text-xs text-slate-700 hover:bg-slate-50"
-            >
-              <KeyRound className="mr-1 h-4 w-4" />
-              키 재발급
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleDelete}
-              disabled={!isAdmin}
-              className="rounded-xl border-rose-200 bg-rose-50 px-3 text-xs text-rose-600 hover:bg-rose-100"
-            >
-              <Trash2 className="mr-1 h-4 w-4" />
-              삭제
-            </Button>
-          </div>
+        controller.draft?.id ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void controller.deleteSelectedTemplate()}
+            disabled={!controller.isAdmin}
+            className="rounded-xl border-rose-200 bg-rose-50 px-3 text-xs text-rose-600 hover:bg-rose-100"
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            삭제
+          </Button>
         ) : null
       }
-      detailContent={
-        <div className="space-y-4">
-          {isCreating || selectedWidget ? (
-            <>
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">템플릿 이름</div>
-                <Input value={name} onChange={(event) => setName(event.target.value)} className="h-10" />
-              </label>
-
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">연결 비서</div>
-                <SelectPopover
-                  value={agentId}
-                  onChange={setAgentId}
-                  options={agentOptions}
-                  placeholder="비서 선택"
-                  className="w-full"
-                  buttonClassName="h-10"
-                />
-              </label>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">환영 메시지</div>
-                  <Input value={greeting} onChange={(event) => setGreeting(event.target.value)} className="h-10" />
-                </label>
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">입력 안내 문구</div>
-                  <Input value={inputPlaceholder} onChange={(event) => setInputPlaceholder(event.target.value)} className="h-10" />
-                </label>
-              </div>
-
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">런처 아이콘 URL</div>
-                <Input value={launcherIconUrl} onChange={(event) => setLauncherIconUrl(event.target.value)} className="h-10" />
-              </label>
-
-              <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={isActive}
-                  onChange={(event) => setIsActive(event.target.checked)}
-                  disabled={!isAdmin}
-                />
-                활성 상태로 유지
-              </label>
-
-              {!isCreating && selectedWidget ? (
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                  <div>Template key: <span className="font-mono text-slate-800">{selectedWidget.template_public_key || "-"}</span></div>
-                  <div className="mt-1">Instance key: <span className="font-mono text-slate-800">{selectedWidget.instance_public_key || "-"}</span></div>
-                </div>
-              ) : null}
-
-              {installSnippet ? (
-                <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-xs font-semibold text-slate-700">설치 코드</div>
-                  <div className="rounded-lg border border-slate-200 bg-white p-3 text-xs font-mono text-slate-700 whitespace-pre-wrap">
-                    {installSnippet}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(installSnippet);
-                      toast.success("설치 코드가 복사되었습니다.");
-                    }}
-                    className="rounded-xl border-slate-200 bg-white px-3 text-xs text-slate-700 hover:bg-slate-50"
-                  >
-                    <Copy className="mr-1 h-4 w-4" />
-                    설치 코드 복사
-                  </Button>
-                </div>
-              ) : null}
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-                <div className="text-xs text-slate-500">
-                  {isCreating ? "새 템플릿을 생성합니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
-                </div>
-                <div className="flex items-center gap-2">
-                  {isCreating ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setIsCreating(false);
-                        setSelectedId(widgets[0]?.id || null);
-                      }}
-                      className="rounded-xl border-slate-200 bg-white px-3 text-xs text-slate-700 hover:bg-slate-50"
-                    >
-                      취소
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    onClick={() => void handleSave(false)}
-                    disabled={!isAdmin || saving || (!isCreating && !isDirty)}
-                    className="rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
-                  >
-                    {saving ? "저장 중..." : isCreating ? "템플릿 생성" : "저장"}
-                  </Button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
-              좌측 목록에서 템플릿을 선택하거나 새 템플릿을 생성해 주세요.
-            </div>
-          )}
-        </div>
-      }
+      detailContent={<WidgetTemplateSettingsEditor controller={controller} />}
     />
   );
 }

@@ -45,7 +45,7 @@ export default function SettingsPage() {
       router.replace(`/app/admin?tab=${target}`);
     };
     const redirectToConversation = () => {
-      router.replace("/app/create?tab=template");
+      router.replace("/app/conversation");
     };
     if (rawTab === "widget" || rawTab === "quickstart") {
       redirectToInstall(rawTab);

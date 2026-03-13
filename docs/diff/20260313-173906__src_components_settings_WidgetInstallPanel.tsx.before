@@ -136,14 +136,14 @@ export function WidgetInstallPanel() {
       </Card>
 
       <Card className="p-4 space-y-3">
-        <div className="text-sm font-semibold text-slate-900">Overrides (JSON, /app/create?tab=template 전체 설정)</div>
+        <div className="text-sm font-semibold text-slate-900">Overrides (JSON, /app/conversation 전체 설정)</div>
         <textarea
           value={overridesText}
           onChange={(e) => setOverridesText(e.target.value)}
           className="w-full min-h-[140px] rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700"
           placeholder='{"chat_policy":{...},"theme":{...},"setup_config":{...}}'
         />
-        <div className="text-[11px] text-slate-500">/app/create?tab=template에서 설정 가능한 전체 항목을 덮어쓸 수 있습니다.</div>
+        <div className="text-[11px] text-slate-500">/app/conversation에서 설정 가능한 전체 항목을 덮어쓸 수 있습니다.</div>
       </Card>
 
       <Card className="p-4 space-y-3">

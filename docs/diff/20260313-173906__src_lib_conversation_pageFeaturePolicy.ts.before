@@ -420,42 +420,6 @@ export function resolveConversationSetupUi(
   };
 }
 
-export function applyConversationSetupUiToProvider(
-  providerValue: ConversationFeaturesProviderShape | null | undefined,
-  page: ConversationPageKey,
-  setupUi: ConversationSetupUi
-): ConversationFeaturesProviderShape {
-  const normalized = normalizeConversationFeatureProvider(providerValue) || {};
-  const resolvedPage = resolveRegisteredPageKey(page, normalized);
-  const nextProvider: ConversationFeaturesProviderShape = {
-    ...normalized,
-    settings_ui: {
-      ...(normalized.settings_ui || {}),
-      setup_fields: {
-        ...(normalized.settings_ui?.setup_fields || {}),
-        [resolvedPage]: {
-          order: normalizeSetupOrder(setupUi.order),
-          labels: {
-            ...DEFAULT_SETUP_UI.labels,
-            ...(setupUi.labels || {}),
-          },
-          existing_order: normalizeExistingSetupOrder(setupUi.existingOrder),
-          existing_labels: {
-            ...DEFAULT_SETUP_UI.existingLabels,
-            ...(setupUi.existingLabels || {}),
-          },
-        },
-      },
-      feature_labels: {
-        ...(normalized.settings_ui?.feature_labels || {}),
-        [resolvedPage]: normalizeFeatureLabels(setupUi.featureLabels),
-      },
-    },
-  };
-  delete (nextProvider as { setup_ui?: ConversationSetupUiOverride }).setup_ui;
-  return nextProvider;
-}
-
 function inAllowlist(id: string, allowlist?: string[]) {
   if (!allowlist || allowlist.length === 0) return true;
   return allowlist.includes(id);

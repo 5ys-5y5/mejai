@@ -380,156 +380,6 @@
 
 ## 9. 저장 계약 설계
 
-### 9.0 누락 방지용 정책 매핑 규칙
-
-`/app/conversation`의 대화 정책 UI를 `template` 탭으로 옮길 때 누락을 방지하는 canonical rule은 아래와 같다.
-
-1. `ToggleRow` 또는 `ToggleRowGroup`의 `checked` 값은 해당 logical field의 실제 정책 path에 저장한다.
-2. 같은 row의 `visibility` 값은 동일 logical field path를 `chat_policy.features.visibility` 아래에 대응시켜 저장한다.
-3. `editableLabel`로 수정하는 일반 라벨은 `chat_policy.settings_ui.feature_labels["/embed"][label]`에 저장한다.
-4. `Setup Mode` 하위의 순서와 표시 라벨은 일반 `feature_labels`가 아니라 아래 두 전용 필드에 저장한다.
-   - 신규 모델 영역: `chat_policy.settings_ui.setup_fields["/embed"].order`, `labels`
-   - 기존 모델 영역: `chat_policy.settings_ui.setup_fields["/embed"].existing_order`, `existing_labels`
-5. `runtime.selfUpdate.enabled`는 값 자체를 `B_chat_widgets.chat_policy`에 저장하지 않는다.
-   - on/off, visibility: `/api/runtime/governance/config`
-   - 라벨: `chat_policy.settings_ui.feature_labels["/embed"]["runtime.selfUpdate.enabled"]`
-6. `B_chat_widgets.name`, `B_chat_widgets.is_active`는 `chat_policy`가 아니라 테이블 컬럼이다.
-7. 위 1~6 규칙으로 표현되지 않는 임시 필드나 별도 우회 저장은 금지한다.
-
-### 9.0.1 정책 항목 매핑표
-
-아래 표는 현재 `ChatSettingsPanel` 구현 기준으로 `conversation` 화면 위계와 실제 저장 경로를 고정한 것이다.
-
-#### A. 템플릿 메타 및 widget 루트
-
-| UI 위계 | conversation label | 저장 대상 | 입력 방식 | 비고 |
-| --- | --- | --- | --- | --- |
-| 루트 토글 | `B_chat_widgets.is_active` | `B_chat_widgets.is_active` | on/off | visibility 라벨은 `chat_policy.features.visibility.widget.launcher`를 사용 |
-| widget.base | `B_chat_widgets.name` | `B_chat_widgets.name` | text input | chat_policy가 아닌 컬럼 |
-| widget.base | `widget.agent_id` | `chat_policy.widget.agent_id` | select | 현재 template 탭에서는 숨김 |
-| widget.base | `widget.entry_mode` | `chat_policy.widget.entry_mode` | select | `launcher` / `embed` |
-| widget.base | `widget.embed_view` | `chat_policy.widget.embed_view` | select | `chat` / `setup` / `both` / `list` |
-| widget.setup_config | `setup_config.kb.mode` | `chat_policy.widget.setup_config.kb.mode` | select | hidden 가능 |
-| widget.setup_config | `setup_config.kb.kb_id` | `chat_policy.widget.setup_config.kb.kb_id` | text input | hidden 가능 |
-| widget.setup_config | `setup_config.kb.admin_kb_ids` | `chat_policy.widget.setup_config.kb.admin_kb_ids` | textarea lines | hidden 가능 |
-| widget.setup_config | `setup_config.mcp.provider_keys` | `chat_policy.widget.setup_config.mcp.provider_keys` | textarea lines | hidden 가능 |
-| widget.setup_config | `setup_config.mcp.tool_ids` | `chat_policy.widget.setup_config.mcp.tool_ids` | textarea lines | hidden 가능 |
-| widget.setup_config | `setup_config.llm.default` | `chat_policy.widget.setup_config.llm.default` | text input | hidden 가능 |
-
-#### B. 런처/iframe/theme
-
-| UI 위계 | conversation label | 저장 대상 | 입력 방식 |
-| --- | --- | --- | --- |
-| widget.launcher | `cfg.launcherLabel` | `chat_policy.widget.cfg.launcherLabel` | text input |
-| widget.launcher | `cfg.position` | `chat_policy.widget.cfg.position` | select |
-| widget.launcher | `theme.launcher_logo_id` | `chat_policy.widget.theme.launcher_logo_id` | text input |
-| widget.launcher | `theme.primary_color` | `chat_policy.widget.theme.primary_color` | color + text input |
-| widget.launcher | `theme.launcher_bg` | `chat_policy.widget.theme.launcher_bg` | text input |
-| widget.launcher | `launcher.container.bottom` | `chat_policy.widget.launcher.container.bottom` | text input |
-| widget.launcher | `launcher.container.left` | `chat_policy.widget.launcher.container.left` | text input |
-| widget.launcher | `launcher.container.right` | `chat_policy.widget.launcher.container.right` | text input |
-| widget.launcher | `launcher.container.gap` | `chat_policy.widget.launcher.container.gap` | text input |
-| widget.launcher | `launcher.container.zIndex` | `chat_policy.widget.launcher.container.zIndex` | numeric text input |
-| widget.launcher | `launcher.size` | `chat_policy.widget.launcher.size` | numeric text input |
-| widget.iframe | `iframe.width` | `chat_policy.widget.iframe.width` | text input |
-| widget.iframe | `iframe.height` | `chat_policy.widget.iframe.height` | text input |
-| widget.iframe | `iframe.borderRadius` | `chat_policy.widget.iframe.borderRadius` | text input |
-| widget.iframe | `iframe.boxShadow` | `chat_policy.widget.iframe.boxShadow` | text input |
-| widget.iframe | `iframe.background` | `chat_policy.widget.iframe.background` | text input |
-| widget.iframe | `iframe.layout` | `chat_policy.widget.iframe.layout` | select |
-| widget.iframe | `iframe.bottomOffset` | `chat_policy.widget.iframe.bottomOffset` | text input |
-| widget.iframe | `iframe.sideOffset` | `chat_policy.widget.iframe.sideOffset` | text input |
-| template 확장 필드 | `theme.greeting` | `chat_policy.widget.theme.greeting` | text input |
-| template 확장 필드 | `theme.input_placeholder` | `chat_policy.widget.theme.input_placeholder` | text input |
-| template 확장 필드 | `theme.launcher_icon_url` | `chat_policy.widget.theme.launcher_icon_url` | text input |
-
-#### C. Widget Header / Tab / Admin / Interaction / MCP
-
-| UI 위계 | conversation label | 값 저장 경로 | visibility 저장 경로 | 입력 방식 |
-| --- | --- | --- | --- | --- |
-| widget.header | `widget.header.enabled` | `chat_policy.features.widget.header.enabled` | `chat_policy.features.visibility.widget.header.enabled` | on/off |
-| widget.header | `widget.header.logo` | `chat_policy.features.widget.header.logo` | `chat_policy.features.visibility.widget.header.logo` | on/off |
-| widget.header | `widget.header.status` | `chat_policy.features.widget.header.status` | `chat_policy.features.visibility.widget.header.status` | on/off |
-| widget.header | `widget.header.agentAction` | `chat_policy.features.widget.header.agentAction` | `chat_policy.features.visibility.widget.header.agentAction` | on/off |
-| widget.header | `widget.header.newConversation` | `chat_policy.features.widget.header.newConversation` | `chat_policy.features.visibility.widget.header.newConversation` | on/off |
-| widget.header | `widget.header.close` | `chat_policy.features.widget.header.close` | `chat_policy.features.visibility.widget.header.close` | on/off |
-| widget.tabBar | `widget.tabBar.enabled` | `chat_policy.features.widget.tabBar.enabled` | `chat_policy.features.visibility.widget.tabBar.enabled` | on/off |
-| widget.tabBar | `widget.defaultTab` | `chat_policy.features.widget.defaultTab` | - | select |
-| widget.tabBar | `widget.tabBar.chat` | `chat_policy.features.widget.tabBar.chat` | `chat_policy.features.visibility.widget.tabBar.chat` | on/off |
-| widget.tabBar | `widget.chatPanel` | `chat_policy.features.widget.chatPanel` | `chat_policy.features.visibility.widget.chatPanel` | on/off |
-| widget.tabBar | `widget.tabBar.list` | `chat_policy.features.widget.tabBar.list` | `chat_policy.features.visibility.widget.tabBar.list` | on/off |
-| widget.tabBar | `widget.historyPanel` | `chat_policy.features.widget.historyPanel` | `chat_policy.features.visibility.widget.historyPanel` | on/off |
-| widget.tabBar | `widget.tabBar.login` | `chat_policy.features.widget.tabBar.login` | `chat_policy.features.visibility.widget.tabBar.login` | on/off |
-| widget.tabBar | `widget.tabBar.policy` | `chat_policy.features.widget.tabBar.policy` | `chat_policy.features.visibility.widget.tabBar.policy` | on/off |
-| widget.tabBar | `widget.setupPanel` | `chat_policy.features.widget.setupPanel` | `chat_policy.features.visibility.widget.setupPanel` | on/off |
-| adminPanel | `adminPanel.enabled` | `chat_policy.features.adminPanel.enabled` | `chat_policy.features.visibility.adminPanel.enabled` | on/off |
-| adminPanel | `adminPanel.logsToggle` | `chat_policy.features.adminPanel.logsToggle` | `chat_policy.features.visibility.adminPanel.logsToggle` | on/off |
-| adminPanel | `adminPanel.copyConversation` | `chat_policy.features.adminPanel.copyConversation` | `chat_policy.features.visibility.adminPanel.copyConversation` | on/off |
-| interaction | `interaction.quickReplies` | `chat_policy.features.interaction.quickReplies` | `chat_policy.features.visibility.interaction.quickReplies` | on/off |
-| interaction | `interaction.productCards` | `chat_policy.features.interaction.productCards` | `chat_policy.features.visibility.interaction.productCards` | on/off |
-| interaction | `interaction.inputSubmit` | `chat_policy.features.interaction.inputSubmit` | `chat_policy.features.visibility.interaction.inputSubmit` | on/off |
-| interaction | `interaction.prefill` | `chat_policy.features.interaction.prefill` | `chat_policy.features.visibility.interaction.prefill` | on/off |
-| interaction | `interaction.threePhasePrompt` | `chat_policy.features.interaction.threePhasePrompt` | `chat_policy.features.visibility.interaction.threePhasePrompt` | on/off |
-| interaction | `interaction.threePhasePromptShowConfirmed` | `chat_policy.features.interaction.threePhasePromptShowConfirmed` | `chat_policy.features.visibility.interaction.threePhasePromptShowConfirmed` | on/off |
-| interaction | `interaction.threePhasePromptShowConfirming` | `chat_policy.features.interaction.threePhasePromptShowConfirming` | `chat_policy.features.visibility.interaction.threePhasePromptShowConfirming` | on/off |
-| interaction | `interaction.threePhasePromptShowNext` | `chat_policy.features.interaction.threePhasePromptShowNext` | `chat_policy.features.visibility.interaction.threePhasePromptShowNext` | on/off |
-| interaction | `interaction.threePhasePromptHideLabels` | `chat_policy.features.interaction.threePhasePromptHideLabels` | `chat_policy.features.visibility.interaction.threePhasePromptHideLabels` | on/off |
-| interaction | `interaction.inputPlaceholder` | `chat_policy.features.interaction.inputPlaceholder` | - | text input |
-| interaction | `interaction.prefillMessages` | `chat_policy.features.interaction.prefillMessages` | - | textarea lines |
-| interaction | `interaction.widgetHeaderAgentAction` | `chat_policy.features.interaction.widgetHeaderAgentAction` | `chat_policy.features.visibility.interaction.widgetHeaderAgentAction` | on/off |
-| interaction | `interaction.widgetHeaderNewConversation` | `chat_policy.features.interaction.widgetHeaderNewConversation` | `chat_policy.features.visibility.interaction.widgetHeaderNewConversation` | on/off |
-| interaction | `interaction.widgetHeaderClose` | `chat_policy.features.interaction.widgetHeaderClose` | `chat_policy.features.visibility.interaction.widgetHeaderClose` | on/off |
-| MCP | `mcp.providerSelector` | `chat_policy.features.mcp.providerSelector` | `chat_policy.features.visibility.mcp.providerSelector` | on/off |
-| MCP | `mcp.actionSelector` | `chat_policy.features.mcp.actionSelector` | `chat_policy.features.visibility.mcp.actionSelector` | on/off |
-
-#### D. Setup Mode / Setup
-
-| UI 위계 | conversation label | 값 저장 경로 | visibility 저장 경로 | 입력 방식 |
-| --- | --- | --- | --- | --- |
-| setup.mode | `setup.modelSelector` | `chat_policy.features.setup.modelSelector` | `chat_policy.features.visibility.setup.modelSelector` | on/off |
-| setup.modeExisting | `setup.modeExisting` | `chat_policy.features.setup.modeExisting` | `chat_policy.features.visibility.setup.modeExisting` | on/off |
-| setup.modeExisting | `setup.agentSelector` | `chat_policy.features.setup.agentSelector` | `chat_policy.features.visibility.setup.agentSelector` | on/off |
-| setup.modeExisting | `setup.versionSelector` | `chat_policy.features.setup.versionSelector` | `chat_policy.features.visibility.setup.versionSelector` | on/off |
-| setup.modeExisting | `setup.sessionSelector` | `chat_policy.features.setup.sessionSelector` | `chat_policy.features.visibility.setup.sessionSelector` | on/off |
-| setup.modeExisting | `setup.conversationMode` | `chat_policy.features.setup.conversationMode` | `chat_policy.features.visibility.setup.conversationMode` | on/off |
-| setup.modeExisting | `setup.sessionIdSearch` | `chat_policy.features.setup.sessionIdSearch` | `chat_policy.features.visibility.setup.sessionIdSearch` | on/off |
-| setup.modeNew | `setup.modeNew` | `chat_policy.features.setup.modeNew` | `chat_policy.features.visibility.setup.modeNew` | on/off |
-| setup.modeNew | `setup.inlineUserKbInput` | `chat_policy.features.setup.inlineUserKbInput` | `chat_policy.features.visibility.setup.inlineUserKbInput` | on/off + drag order |
-| setup.modeNew | `setup.llmSelector` | `chat_policy.features.setup.llmSelector` | `chat_policy.features.visibility.setup.llmSelector` | on/off + drag order |
-| setup.modeNew | `setup.kbSelector` | `chat_policy.features.setup.kbSelector` | `chat_policy.features.visibility.setup.kbSelector` | on/off + drag order |
-| setup.modeNew | `setup.adminKbSelector` | `chat_policy.features.setup.adminKbSelector` | `chat_policy.features.visibility.setup.adminKbSelector` | on/off + drag order |
-| setup.modeNew | `setup.routeSelector` | `chat_policy.features.setup.routeSelector` | `chat_policy.features.visibility.setup.routeSelector` | on/off + drag order |
-| setup.modeNew | `setup.mcpProviderSelector` | `chat_policy.features.setup.mcpProviderSelector` | `chat_policy.features.visibility.setup.mcpProviderSelector` | on/off + drag order |
-| setup.modeNew | `setup.mcpActionSelector` | `chat_policy.features.setup.mcpActionSelector` | `chat_policy.features.visibility.setup.mcpActionSelector` | on/off + drag order |
-| setup | `setup.agent_id` | `chat_policy.widget.setup_config.agent_id` | - | select |
-| setup | `setup.defaultLlm` | `chat_policy.features.setup.defaultLlm` | - | select |
-| setup | `setup.defaultKbId` | `chat_policy.features.setup.defaultKbId` | - | select |
-| setup | `setup.defaultAdminKbIds` | `chat_policy.features.setup.defaultAdminKbIds` | - | multi-select |
-| setup | `setup.defaultRoute` | `chat_policy.features.setup.defaultRoute` | - | select |
-| setup | `setup.defaultMcpProviderKeys` | `chat_policy.features.setup.defaultMcpProviderKeys` | - | multi-select |
-| setup | `setup.defaultMcpToolIds` | `chat_policy.features.setup.defaultMcpToolIds` | - | multi-select |
-| setup | `setup.mcpProviderKeys` | `chat_policy.features.setup.mcpProviderKeys.enabled`, `allowlist` | - | gate toggle + multi-select |
-| setup | `setup.mcpToolIds` | `chat_policy.features.setup.mcpToolIds.enabled`, `allowlist` | - | gate toggle + multi-select |
-| setup | `setup.kbMode` | `chat_policy.features.setup.kbSelector`, `chat_policy.features.setup.inlineUserKbInput` | - | select, 파생 저장 |
-| setup | `setup.inlineUserKbPrefill` | `chat_policy.features.setup.inlineUserKbPrefill` | - | textarea |
-| setup | `setup.inlineUserKb` | `chat_policy.features.setup.inlineUserKb.enabled`, `allowlist` | - | gate toggle + multi-select |
-| setup | `setup.defaultInlineUserKb` | `chat_policy.features.setup.defaultInlineUserKb` | - | select |
-| setup | `setup.llms` | `chat_policy.features.setup.llms.allowlist` | - | multi-select |
-| setup | `setup.kbIds` | `chat_policy.features.setup.kbIds.allowlist` | - | multi-select |
-| setup | `setup.adminKbIds` | `chat_policy.features.setup.adminKbIds.allowlist` | - | multi-select |
-| setup | `setup.routes` | `chat_policy.features.setup.routes.allowlist` | - | multi-select |
-| runtime | `runtime.selfUpdate.enabled` | `/api/runtime/governance/config` | `/api/runtime/governance/config.visibility_mode` | on/off + public/user/admin |
-
-#### E. 라벨 편집 및 순서 저장
-
-| 수정 위치 | 저장 경로 | 적용 대상 |
-| --- | --- | --- |
-| 일반 `editableLabel` | `chat_policy.settings_ui.feature_labels["/embed"][label]` | `B_chat_widgets.is_active`, `widget.header.enabled`, `interaction.quickReplies`, `runtime.selfUpdate.enabled` 등 일반 row 전부 |
-| 신규 모델 순서 | `chat_policy.settings_ui.setup_fields["/embed"].order` | `inlineUserKbInput`, `llmSelector`, `kbSelector`, `adminKbSelector`, `routeSelector`, `mcpProviderSelector`, `mcpActionSelector` |
-| 신규 모델 표시 라벨 | `chat_policy.settings_ui.setup_fields["/embed"].labels` | 위 7개 field |
-| 기존 모델 순서 | `chat_policy.settings_ui.setup_fields["/embed"].existing_order` | `agentSelector`, `versionSelector`, `conversationMode`, `sessionSelector`, `sessionIdSearch` |
-| 기존 모델 표시 라벨 | `chat_policy.settings_ui.setup_fields["/embed"].existing_labels` | `modeExisting`, `modeNew`, `agentSelector`, `versionSelector`, `sessionSelector`, `sessionIdSearch`, `conversationMode` |
-
 ### 9.1 템플릿 조회/선택
 
 공통 controller는 아래를 사용한다.
@@ -711,7 +561,6 @@ C:\dev\1227\mejai3\mejai\docs\diff\20260313-171438__docs_temSettings.md.before
 
 ```text
 C:\dev\1227\mejai3\mejai\docs\diff\20260313-171438__docs_temSettings.md.before
-C:\dev\1227\mejai3\mejai\docs\diff\20260313-181514__docs_temSettings.md.before
 ```
 
 ## 14. 실행 정책
@@ -776,16 +625,12 @@ C:\dev\1227\mejai3\mejai\docs\diff\20260313-181514__docs_temSettings.md.before
 ### 17.1 `chrome-devtools`
 
 - [x] 현재 `/html/body/main/div/div/main/div/div/div[2]`가 탭 내비게이션 블록임을 확인
-- [x] 전역 프리뷰 블록이 해당 탭 내비게이션 블록 바로 위에 배치되었는지 확인
-- [x] `template` 탭에서 `대화 정책` 전체 섹션이 보이는지 확인
+- [ ] 전역 프리뷰 블록이 해당 탭 내비게이션 블록 바로 위에 배치되었는지 확인
+- [ ] `template` 탭에서 `대화 정책` 전체 섹션이 보이는지 확인
 - [ ] `chat`, `agents`, `kb`, `api`, `mcp` 탭에서도 프리뷰가 계속 보이는지 확인
 - [ ] 탭 이동 전후에 프리뷰 대상 템플릿이 유지되는지 확인
-- [x] `conversation`에 들어가지 않고도 `create?tab=template` 내에서 프리뷰/정책 렌더링이 가능한지 확인
-- [x] 최종 build route 목록에서 `/app/conversation`이 제거되었는지 확인
-
-미완료 사유:
-
-- `chrome-devtools` MCP transport가 탭 전환 재검증 중 종료되어, 다중 탭 유지 테스트는 이번 실행에서 완료하지 못했다.
+- [ ] `conversation`에 들어가지 않고도 프리뷰/정책/저장이 가능한지 확인
+- [ ] `/app/conversation` 삭제 후 404 또는 미참조 상태를 확인하고, 대체 워크플로가 `create`로 완전히 이동했는지 확인
 
 ### 17.2 `supabase`
 
@@ -833,17 +678,11 @@ limit 20;
 
 확인 결과:
 
-1. 구현 후 `http://localhost:3000/app/create?tab=template&templateId=861270ce-f2b3-43cb-a2cd-b617d48b9f58`
-   - `전역 프리뷰` 블록이 탭 내비게이션보다 먼저 렌더링됨을 확인
-   - 설치 코드, preview meta, 런처 프리뷰, `chat/list/policy/login` 프리뷰 iframe이 모두 렌더링됨을 확인
-2. 같은 페이지의 `template` detail 영역
-   - `템플릿 테마 기본값`
-   - `대화 정책 일괄 설정`
-   - `ChatSettingsPanel` 기반 정책 row
-   가 함께 렌더링됨을 확인
-3. 구현 중 URL이 `?templateId=<uuid>`를 유지하는 상태까지 확인
-4. 탭 이동 지속성 검증은 `chrome-devtools` MCP transport 종료로 이번 실행에서 끝까지 수행하지 못함
-5. 최종 `npm run build` route 목록에서 `/app/conversation` 경로가 제거된 것을 확인
+1. `http://localhost:3000/app/conversation`
+   - 템플릿 목록, 대화 정책, 설치 코드, preview meta, 런처 프리뷰, tab 프리뷰가 존재함을 확인
+2. `http://localhost:3000/app/create?tab=template`
+   - 현재는 단순 템플릿 폼만 존재하며, `conversation` 수준의 대화 정책과 프리뷰 기능이 없음
+3. 현재 XPath `/html/body/main/div/div/main/div/div/div[2]`는 탭 내비게이션 블록 `<div class="border-b border-slate-200 pb-2">`를 가리킴을 확인
 
 ### 18.2 `supabase`
 
@@ -851,38 +690,23 @@ limit 20;
 
 확인 결과:
 
-1. 읽기 SQL로 `public.B_chat_widgets` 최근 row를 조회했고, `chat_policy`, `public_key` 컬럼이 계속 존재함을 확인
-2. 읽기 SQL로 기존 `chat_policy` payload shape를 확인했고, 이번 구현은 스키마 변경 없이 API/직렬화 계층 수정만으로 처리 가능함을 재확인
-3. 이번 실행에서는 DB 변경을 일으키는 저장 테스트를 수행하지 않았으므로, `settings_ui`가 실제로 새로 저장되는지는 사용자가 UI에서 한 번 저장한 뒤 아래 SQL로 재확인해야 한다
-
-재확인 SQL:
-
-```sql
-select
-  id,
-  name,
-  chat_policy
-from public."B_chat_widgets"
-where id = '861270ce-f2b3-43cb-a2cd-b617d48b9f58';
-```
+1. `public.B_chat_widgets`
+   - `chat_policy`, `public_key` 컬럼 존재
+2. `public.B_chat_widget_instances`
+   - `template_id`, `public_key`, `chat_policy` 컬럼 존재
+3. 현재 요구사항은 신규 스키마 추가 없이 해결 가능
 
 ## 19. 이번 실행의 코드 분석 결론
 
-1. `CreateWidgetTab`은 이제 `/api/widget-templates` 기반 공통 controller를 사용하며 `conversation`의 대화 정책 편집기를 이관받았다.
-2. `CreateWorkspacePage`가 `templateId` query sync와 전역 프리뷰 레일을 상위에서 소유하도록 바뀌었다.
-3. `ChatSettingsPanel`은 이제 `draft.setupUi`를 `settings_ui`로 직렬화해서 `onChange` payload에 보존한다.
-4. `widget-templates` 생성/PATCH/chat-policy API는 `settings_ui`를 삭제하지 않고 canonical provider를 그대로 저장한다.
-5. `src/app/app/settings/page.tsx`, `src/components/settings/WidgetInstallPanel.tsx` 정리 후 `src/app/app/conversation/page.tsx`를 삭제했고, 최종 build가 통과했다.
+1. `CreateWidgetTab`은 `conversation` 대체 화면이 아니며, `/api/widgets`를 사용한다.
+2. 전역 프리뷰를 구현하려면 `CreateWorkspacePage`가 template context와 preview state를 상위에서 소유해야 한다.
+3. `ChatSettingsPanel`은 현재 `settings_ui`를 저장 payload에 보존하지 않는다.
+4. `/app/conversation` 삭제 시 `src/app/app/settings/page.tsx`와 `src/components/settings/WidgetInstallPanel.tsx`도 함께 정리해야 한다.
+5. 따라서 이번 작업은 단일 탭 수정이 아니라 `create` 워크스페이스 구조 개편 + 공통 정책 계약 수정 + 삭제 전환 순서 설계가 함께 필요하다.
 
 ## 20. 최종 결론
 
-이 작업의 핵심은 `conversation` 페이지의 기능을 `template` 탭에 조금 붙이는 것이 아니었다.
-
-실제 구현은 아래 세 가지를 동시에 끝내야 했다.
-
-1. `create` 워크스페이스 상위에 전역 프리뷰를 올려 모든 탭에서 같은 템플릿을 유지하도록 만드는 것
-2. `ChatSettingsPanel`과 `widget-templates` API의 공통 저장 계약을 수정해 `settings_ui` 누락을 막는 것
-3. 독립 동작을 확인한 뒤 `/app/conversation` route 자체를 제거하는 것
+이 작업의 핵심은 `conversation` 페이지의 기능을 `template` 탭에 조금 붙이는 것이 아니다.
 
 정답은 아래 세 가지를 동시에 만족하는 구조다.
 
