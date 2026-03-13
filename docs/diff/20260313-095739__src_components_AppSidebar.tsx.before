@@ -10,7 +10,6 @@ import {
   HomeIcon,
   Inbox,
   PhoneCall,
-  PlusSquare,
   Route as RouteIcon,
   Shield,
   Settings,
@@ -249,13 +248,6 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
         </SidebarGroup>
 
         <SidebarGroup header="온보딩" collapsed={collapsed}>
-          <SidebarLink
-            to="/app/create"
-            icon={PlusSquare}
-            label="생성하기"
-            collapsed={collapsed}
-            onClick={onNavigate}
-          />
           <SidebarLink
             to="/app/install"
             icon={ClipboardCheck}

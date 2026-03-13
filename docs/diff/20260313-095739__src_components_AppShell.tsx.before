@@ -33,7 +33,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (p.startsWith("/app/eval")) return "평가/관리";
     if (p.startsWith("/app/kb")) return "지식 베이스";
     if (p.startsWith("/app/rules")) return "규칙";
-    if (p.startsWith("/app/create")) return "생성하기";
     if (p.startsWith("/app/settings")) return "설정";
     if (p.startsWith("/app/admin")) return "어드민";
     if (p.startsWith("/app/install")) return "설치하기";

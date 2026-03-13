@@ -1,0 +1,613 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
+import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
+import { StateBanner } from "@/components/design-system";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { CreateListTable, CreateResourceShell } from "@/components/create/CreateResourceShell";
+import { apiFetch } from "@/lib/apiClient";
+import { toast } from "sonner";
+
+type McpToolItem = {
+  id: string;
+  name: string;
+  scope_key?: string | null;
+  endpoint_path?: string | null;
+  http_method?: string | null;
+  usage_count: number;
+  provider_key: string;
+  tool_key: string;
+  description: string | null;
+  schema?: Record<string, unknown> | null;
+  version: string | null;
+  is_public?: boolean | null;
+  policy?: {
+    rate_limit_per_min?: number | null;
+    masking_rules?: unknown;
+    conditions?: unknown;
+  } | null;
+  meta: {
+    destructive: boolean;
+  };
+};
+
+type ProviderItem = {
+  key: string;
+  title: string;
+  description?: string;
+  action_count?: number;
+};
+
+function formatJson(value: unknown) {
+  if (value === null || value === undefined) return "";
+  return JSON.stringify(value, null, 2);
+}
+
+function parseJson(value: string, fallback: unknown) {
+  const trimmed = value.trim();
+  if (!trimmed) return fallback;
+  return JSON.parse(trimmed) as unknown;
+}
+
+function parseIdList(value: string) {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+export function CreateMcpTab({ isAdmin }: { isAdmin: boolean }) {
+  const [tools, setTools] = useState<McpToolItem[]>([]);
+  const [providers, setProviders] = useState<ProviderItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [providerFilter, setProviderFilter] = useState("all");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const [providerKey, setProviderKey] = useState("unknown");
+  const [name, setName] = useState("");
+  const [scopeKey, setScopeKey] = useState("");
+  const [endpointPath, setEndpointPath] = useState("");
+  const [httpMethod, setHttpMethod] = useState("POST");
+  const [description, setDescription] = useState("");
+  const [version, setVersion] = useState("1.0");
+  const [rateLimit, setRateLimit] = useState("");
+  const [schemaJsonText, setSchemaJsonText] = useState("{}");
+  const [maskingRulesText, setMaskingRulesText] = useState("");
+  const [conditionsText, setConditionsText] = useState("");
+  const [editableIdsText, setEditableIdsText] = useState("");
+  const [usableIdsText, setUsableIdsText] = useState("");
+  const [isActive, setIsActive] = useState(true);
+  const [isPublic, setIsPublic] = useState(true);
+  const [isDestructive, setIsDestructive] = useState(false);
+
+  const loadData = async (nextSelectedId?: string | null, preserveCreateMode = false) => {
+    if (!isAdmin) {
+      setLoading(false);
+      setTools([]);
+      setProviders([]);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const [toolRes, providerRes] = await Promise.all([
+        apiFetch<{ items: McpToolItem[] }>("/api/mcp/tools"),
+        apiFetch<{ items: ProviderItem[] }>("/api/mcp/providers").catch(() => ({ items: [] })),
+      ]);
+      const nextTools = toolRes.items || [];
+      setTools(nextTools);
+      setProviders(providerRes.items || []);
+
+      if (preserveCreateMode) {
+        setSelectedId(null);
+        setIsCreating(true);
+      } else if (nextSelectedId && nextTools.some((item) => item.id === nextSelectedId)) {
+        setSelectedId(nextSelectedId);
+        setIsCreating(false);
+      } else if (!selectedId && nextTools.length > 0) {
+        setSelectedId(nextTools[0].id);
+      } else if (selectedId && !nextTools.some((item) => item.id === selectedId)) {
+        setSelectedId(nextTools[0]?.id || null);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "MCP 도구 목록을 불러오지 못했습니다.");
+      setTools([]);
+      setProviders([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, [isAdmin]);
+
+  const filteredTools = useMemo(
+    () => tools.filter((item) => providerFilter === "all" || item.provider_key === providerFilter),
+    [providerFilter, tools]
+  );
+
+  const selectedTool = useMemo(
+    () => filteredTools.find((item) => item.id === selectedId) || tools.find((item) => item.id === selectedId) || null,
+    [filteredTools, selectedId, tools]
+  );
+
+  useEffect(() => {
+    if (isCreating) {
+      setProviderKey("unknown");
+      setName("");
+      setScopeKey("");
+      setEndpointPath("");
+      setHttpMethod("POST");
+      setDescription("");
+      setVersion("1.0");
+      setRateLimit("");
+      setSchemaJsonText("{}");
+      setMaskingRulesText("");
+      setConditionsText("");
+      setEditableIdsText("");
+      setUsableIdsText("");
+      setIsActive(true);
+      setIsPublic(true);
+      setIsDestructive(false);
+      return;
+    }
+    if (!selectedTool) return;
+    setProviderKey(selectedTool.provider_key || "unknown");
+    setName(selectedTool.name || "");
+    setScopeKey(selectedTool.scope_key || "");
+    setEndpointPath(selectedTool.endpoint_path || "");
+    setHttpMethod(selectedTool.http_method || "POST");
+    setDescription(selectedTool.description || "");
+    setVersion(selectedTool.version || "1.0");
+    setRateLimit(selectedTool.policy?.rate_limit_per_min ? String(selectedTool.policy.rate_limit_per_min) : "");
+    setSchemaJsonText(formatJson(selectedTool.schema || {}));
+    setMaskingRulesText(formatJson(selectedTool.policy?.masking_rules));
+    setConditionsText(formatJson(selectedTool.policy?.conditions));
+    setEditableIdsText("");
+    setUsableIdsText("");
+    setIsActive(true);
+    setIsPublic(selectedTool.is_public !== false);
+    setIsDestructive(Boolean(selectedTool.meta?.destructive));
+  }, [isCreating, selectedTool]);
+
+  useEffect(() => {
+    if (!isCreating && !selectedId && filteredTools.length > 0) {
+      setSelectedId(filteredTools[0].id);
+    }
+  }, [filteredTools, isCreating, selectedId]);
+
+  const providerOptions = useMemo<SelectOption[]>(() => {
+    const baseOptions: SelectOption[] = [
+      { id: "all", label: "전체 Provider" },
+      ...providers.map((item) => ({
+        id: item.key,
+        label: item.title,
+        description: item.action_count ? `${item.action_count}개 액션` : item.description,
+      })),
+    ];
+    if (!baseOptions.some((item) => item.id === "unknown")) {
+      baseOptions.push({ id: "unknown", label: "Unknown" });
+    }
+    return baseOptions;
+  }, [providers]);
+
+  const editorProviderOptions = useMemo<SelectOption[]>(
+    () => providerOptions.filter((item) => item.id !== "all"),
+    [providerOptions]
+  );
+
+  const methodOptions = useMemo<SelectOption[]>(
+    () => ["GET", "POST", "PUT", "PATCH", "DELETE"].map((item) => ({ id: item, label: item })),
+    []
+  );
+
+  const isDirty = useMemo(() => {
+    if (isCreating) {
+      return Boolean(name.trim() || endpointPath.trim() || description.trim());
+    }
+    if (!selectedTool) return false;
+    return (
+      providerKey !== (selectedTool.provider_key || "unknown") ||
+      name.trim() !== (selectedTool.name || "").trim() ||
+      scopeKey.trim() !== (selectedTool.scope_key || "").trim() ||
+      endpointPath.trim() !== (selectedTool.endpoint_path || "").trim() ||
+      httpMethod !== (selectedTool.http_method || "POST") ||
+      description.trim() !== (selectedTool.description || "").trim() ||
+      version.trim() !== (selectedTool.version || "1.0").trim() ||
+      rateLimit.trim() !== String(selectedTool.policy?.rate_limit_per_min || "").trim() ||
+      schemaJsonText.trim() !== formatJson(selectedTool.schema || {}).trim() ||
+      maskingRulesText.trim() !== formatJson(selectedTool.policy?.masking_rules).trim() ||
+      conditionsText.trim() !== formatJson(selectedTool.policy?.conditions).trim() ||
+      isPublic !== (selectedTool.is_public !== false) ||
+      isDestructive !== Boolean(selectedTool.meta?.destructive)
+    );
+  }, [
+    conditionsText,
+    description,
+    endpointPath,
+    httpMethod,
+    isCreating,
+    isDestructive,
+    isPublic,
+    maskingRulesText,
+    name,
+    providerKey,
+    rateLimit,
+    schemaJsonText,
+    scopeKey,
+    selectedTool,
+    version,
+  ]);
+
+  const handleCreate = () => {
+    setSelectedId(null);
+    setIsCreating(true);
+  };
+
+  const handleSelect = (id: string) => {
+    setSelectedId(id);
+    setIsCreating(false);
+  };
+
+  const handleSave = async () => {
+    if (!isAdmin) {
+      toast.error("MCP 편집은 관리자만 가능합니다.");
+      return;
+    }
+    if (!name.trim()) {
+      toast.error("MCP 도구 이름을 입력해 주세요.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        provider_key: providerKey,
+        name: name.trim(),
+        scope_key: scopeKey.trim() || null,
+        endpoint_path: endpointPath.trim() || null,
+        http_method: httpMethod.trim() || null,
+        description: description.trim() || null,
+        version: version.trim() || "1.0",
+        rate_limit_per_min: rateLimit.trim() ? Number(rateLimit) : null,
+        schema_json: parseJson(schemaJsonText, {}),
+        masking_rules: parseJson(maskingRulesText, null),
+        conditions: parseJson(conditionsText, null),
+        editable_id: parseIdList(editableIdsText),
+        usable_id: parseIdList(usableIdsText),
+        is_active: isActive,
+        is_public: isPublic,
+        is_destructive: isDestructive,
+      };
+
+      if (isCreating) {
+        const created = await apiFetch<{ item: { id: string } }>("/api/mcp/tools", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast.success("MCP 도구가 생성되었습니다.");
+        await loadData(created.item.id);
+        setSelectedId(created.item.id);
+        setIsCreating(false);
+      } else if (selectedTool) {
+        const saved = await apiFetch<{ item: { id: string } }>(`/api/mcp/tools/${selectedTool.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        toast.success("MCP 도구가 저장되었습니다.");
+        await loadData(saved.item.id);
+      }
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : "MCP 도구 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedTool) return;
+    if (!window.confirm("선택한 MCP 도구를 삭제할까요?")) return;
+    try {
+      await apiFetch(`/api/mcp/tools/${selectedTool.id}`, { method: "DELETE" });
+      toast.success("MCP 도구가 삭제되었습니다.");
+      setSelectedId(null);
+      setIsCreating(false);
+      await loadData();
+    } catch (deleteError) {
+      toast.error(deleteError instanceof Error ? deleteError.message : "MCP 도구 삭제에 실패했습니다.");
+    }
+  };
+
+  const banner = !isAdmin ? (
+    <StateBanner
+      tone="warning"
+      title="관리자 전용 탭"
+      description="MCP 도구의 생성, 수정, 삭제는 관리자만 수행할 수 있습니다."
+    />
+  ) : error ? (
+    <StateBanner tone="danger" title="MCP 로딩 실패" description={error} />
+  ) : null;
+
+  return (
+    <CreateResourceShell
+      description="Provider별 MCP 도구를 한 곳에서 관리합니다. 좌측에서 액션을 선택하면 우측에서 공통 계약 필드를 수정합니다."
+      helperText="삭제 시 에이전트에서 이미 참조 중인 도구는 공통 API 계약에서 차단됩니다."
+      banner={banner}
+      listTitle="MCP 도구 목록"
+      listCountLabel={`총 ${loading ? "-" : filteredTools.length}개`}
+      createLabel="새 MCP"
+      onCreate={handleCreate}
+      onRefresh={() => void loadData(selectedId, isCreating)}
+      refreshDisabled={loading}
+      createDisabled={!isAdmin}
+      listContent={
+        <>
+          <div className="border-b border-slate-200 px-4 py-3">
+            <div className="mb-1 text-xs text-slate-600">Provider 필터</div>
+            <SelectPopover
+              value={providerFilter}
+              onChange={setProviderFilter}
+              options={providerOptions}
+              className="w-full"
+              buttonClassName="h-10"
+            />
+          </div>
+          {filteredTools.length === 0 && !loading ? (
+            <div className="p-4 text-sm text-slate-500">표시할 MCP 도구가 없습니다.</div>
+          ) : (
+            <CreateListTable
+              rows={filteredTools}
+              getRowId={(tool) => tool.id}
+              selectedId={!isCreating ? selectedId : null}
+              onSelect={(tool) => handleSelect(tool.id)}
+              minWidth={980}
+              columns={[
+                {
+                  id: "tool",
+                  label: "도구",
+                  width: "minmax(180px, 1.8fr)",
+                  render: (tool) => <div className="truncate text-sm font-semibold text-slate-900">{tool.tool_key || tool.name}</div>,
+                },
+                {
+                  id: "provider",
+                  label: "Provider",
+                  width: "minmax(100px, 0.9fr)",
+                  render: (tool) => tool.provider_key || "-",
+                },
+                {
+                  id: "method",
+                  label: "Method",
+                  width: "82px",
+                  render: (tool) => tool.http_method || "-",
+                },
+                {
+                  id: "endpoint",
+                  label: "Endpoint",
+                  width: "minmax(170px, 1.5fr)",
+                  render: (tool) => tool.endpoint_path || "-",
+                },
+                {
+                  id: "scope",
+                  label: "Scope",
+                  width: "minmax(130px, 1.2fr)",
+                  render: (tool) => tool.scope_key || "-",
+                },
+                {
+                  id: "version",
+                  label: "버전",
+                  width: "72px",
+                  render: (tool) => tool.version || "-",
+                },
+                {
+                  id: "usage",
+                  label: "사용",
+                  width: "72px",
+                  render: (tool) => `${tool.usage_count}회`,
+                },
+              ]}
+            />
+          )}
+        </>
+      }
+      detailTitle={isCreating ? "새 MCP 도구" : selectedTool?.tool_key || selectedTool?.name || "MCP 도구를 선택하세요"}
+      detailDescription={
+        isCreating
+          ? "Provider, 액션 이름, 엔드포인트, schema 계약을 입력해 새 MCP 도구를 등록합니다."
+          : selectedTool
+            ? "공통 도구 계약을 수정합니다."
+            : "좌측 목록에서 MCP 도구를 선택하면 상세 편집이 열립니다."
+      }
+      detailActions={
+        !isCreating && selectedTool ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleDelete}
+            disabled={!isAdmin}
+            className="rounded-xl border-rose-200 bg-rose-50 px-3 text-xs text-rose-600 hover:bg-rose-100"
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            삭제
+          </Button>
+        ) : null
+      }
+      detailContent={
+        <div className="space-y-4">
+          {isCreating || selectedTool ? (
+            <>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">Provider</div>
+                  <SelectPopover
+                    value={providerKey}
+                    onChange={setProviderKey}
+                    options={editorProviderOptions}
+                    className="w-full"
+                    buttonClassName="h-10"
+                  />
+                </label>
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">HTTP Method</div>
+                  <SelectPopover
+                    value={httpMethod}
+                    onChange={setHttpMethod}
+                    options={methodOptions}
+                    className="w-full"
+                    buttonClassName="h-10"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">도구 이름</div>
+                  <Input value={name} onChange={(event) => setName(event.target.value)} className="h-10" />
+                </label>
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">Scope Key</div>
+                  <Input value={scopeKey} onChange={(event) => setScopeKey(event.target.value)} className="h-10" />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <label className="block md:col-span-2">
+                  <div className="mb-1 text-xs text-slate-600">Endpoint Path</div>
+                  <Input value={endpointPath} onChange={(event) => setEndpointPath(event.target.value)} className="h-10" />
+                </label>
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">Version</div>
+                  <Input value={version} onChange={(event) => setVersion(event.target.value)} className="h-10" />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">설명</div>
+                  <textarea
+                    value={description}
+                    onChange={(event) => setDescription(event.target.value)}
+                    className="min-h-[96px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                  />
+                </label>
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">Rate Limit / min</div>
+                  <Input value={rateLimit} onChange={(event) => setRateLimit(event.target.value)} className="h-10" />
+                </label>
+              </div>
+
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">Schema JSON</div>
+                <textarea
+                  value={schemaJsonText}
+                  onChange={(event) => setSchemaJsonText(event.target.value)}
+                  className="min-h-[180px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-900"
+                />
+              </label>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">Masking Rules JSON</div>
+                  <textarea
+                    value={maskingRulesText}
+                    onChange={(event) => setMaskingRulesText(event.target.value)}
+                    className="min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-900"
+                  />
+                </label>
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">Conditions JSON</div>
+                  <textarea
+                    value={conditionsText}
+                    onChange={(event) => setConditionsText(event.target.value)}
+                    className="min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-mono text-slate-900"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">Editable IDs</div>
+                  <textarea
+                    value={editableIdsText}
+                    onChange={(event) => setEditableIdsText(event.target.value)}
+                    className="min-h-[96px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900"
+                    placeholder="uuid를 쉼표 또는 줄바꿈으로 구분"
+                  />
+                </label>
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">Usable IDs</div>
+                  <textarea
+                    value={usableIdsText}
+                    onChange={(event) => setUsableIdsText(event.target.value)}
+                    className="min-h-[96px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900"
+                    placeholder="uuid를 쉼표 또는 줄바꿈으로 구분"
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} disabled={!isAdmin} />
+                  Active
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={isPublic} onChange={(event) => setIsPublic(event.target.checked)} disabled={!isAdmin} />
+                  Public
+                </label>
+                <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={isDestructive}
+                    onChange={(event) => setIsDestructive(event.target.checked)}
+                    disabled={!isAdmin}
+                  />
+                  Destructive
+                </label>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <div className="text-xs text-slate-500">
+                  {isCreating ? "새 MCP 도구를 생성합니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
+                </div>
+                <div className="flex items-center gap-2">
+                  {isCreating ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setIsCreating(false);
+                        setSelectedId(filteredTools[0]?.id || tools[0]?.id || null);
+                      }}
+                      className="rounded-xl border-slate-200 bg-white px-3 text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      취소
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={!isAdmin || saving || (!isCreating && !isDirty)}
+                    className="rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                    {saving ? "저장 중..." : isCreating ? "MCP 생성" : "저장"}
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              좌측 목록에서 MCP 도구를 선택하거나 새 도구를 생성해 주세요.
+            </div>
+          )}
+        </div>
+      }
+    />
+  );
+}

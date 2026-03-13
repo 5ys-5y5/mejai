@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
-import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import { loadMcpToolsForOrg } from "@/lib/mcpToolsService";
+import { getServerContext } from "@/lib/serverAuth";
+
+type RouteContext = {
+  params: Promise<{ id: string }>;
+};
 
 function normalizeProviderKey(value: unknown) {
   const normalized = String(value || "").trim().toLowerCase();
@@ -40,16 +42,8 @@ function normalizeUuidList(value: unknown) {
 }
 
 async function ensureAdmin(req: NextRequest) {
-  const url = new URL(req.url);
-  const rawAuthHeader = req.headers.get("authorization") || "";
+  const authHeader = req.headers.get("authorization") || "";
   const cookieHeader = req.headers.get("cookie") || "";
-  let authHeader = rawAuthHeader;
-  if (!authHeader) {
-    const tokenParam = url.searchParams.get("token") || url.searchParams.get("access_token");
-    if (tokenParam) {
-      authHeader = `Bearer ${tokenParam}`;
-    }
-  }
   const context = await getServerContext(authHeader, cookieHeader);
   if ("error" in context) {
     return { ok: false as const, status: 401, body: { error: context.error } };
@@ -72,24 +66,8 @@ async function ensureAdmin(req: NextRequest) {
   return { ok: true as const, context };
 }
 
-export async function GET(req: NextRequest) {
-  const admin = await ensureAdmin(req);
-  if (!admin.ok) {
-    return NextResponse.json(admin.body, { status: admin.status });
-  }
-
-  try {
-    const items = await loadMcpToolsForOrg(admin.context.supabase, admin.context.orgId);
-    return NextResponse.json({ items });
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "MCP_TOOLS_LOAD_FAILED" },
-      { status: 400 }
-    );
-  }
-}
-
-export async function POST(req: NextRequest) {
+export async function PATCH(req: NextRequest, { params }: RouteContext) {
+  const resolvedParams = await params;
   const admin = await ensureAdmin(req);
   if (!admin.ok) {
     return NextResponse.json(admin.body, { status: admin.status });
@@ -117,9 +95,73 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "INVALID_PAYLOAD" }, { status: 400 });
   }
 
+  let supabaseAdmin;
+  try {
+    supabaseAdmin = createAdminSupabaseClient();
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "ADMIN_SUPABASE_INIT_FAILED" },
+      { status: 500 }
+    );
+  }
+
+  const { data: existing, error: existingError } = await supabaseAdmin
+    .from("C_mcp_tools")
+    .select("id, editable_id, usable_id")
+    .eq("id", resolvedParams.id)
+    .maybeSingle();
+
+  if (existingError) {
+    return NextResponse.json({ error: existingError.message }, { status: 400 });
+  }
+
+  if (!existing) {
+    return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  }
+
   const schemaJson = typeof body.schema_json === "object" && body.schema_json !== null ? body.schema_json : {};
   const maskingRules = body.masking_rules ?? null;
   const conditions = body.conditions ?? null;
+
+  const { data, error } = await supabaseAdmin
+    .from("C_mcp_tools")
+    .update({
+      provider_key: normalizeProviderKey(body.provider_key),
+      scope_key: scopeKey,
+      name,
+      description,
+      schema_json: schemaJson,
+      endpoint_path: endpointPath,
+      http_method: httpMethod,
+      version,
+      rate_limit_per_min: rateLimit,
+      is_active: normalizeBoolean(body.is_active, true),
+      masking_rules: maskingRules,
+      conditions,
+      visibility: "public",
+      access: "open_world",
+      is_destructive: normalizeBoolean(body.is_destructive, false),
+      is_public: normalizeBoolean(body.is_public, true),
+      editable_id: editableIds ?? existing.editable_id ?? [admin.context.user.id],
+      usable_id: usableIds ?? existing.usable_id ?? [],
+    })
+    .eq("id", resolvedParams.id)
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    return NextResponse.json({ error: error?.message || "MCP_TOOL_UPDATE_FAILED" }, { status: 400 });
+  }
+
+  return NextResponse.json({ item: data });
+}
+
+export async function DELETE(req: NextRequest, { params }: RouteContext) {
+  const resolvedParams = await params;
+  const admin = await ensureAdmin(req);
+  if (!admin.ok) {
+    return NextResponse.json(admin.body, { status: admin.status });
+  }
 
   let supabaseAdmin;
   try {
@@ -131,40 +173,33 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const payload = {
-    id: crypto.randomUUID(),
-    provider_key: normalizeProviderKey(body.provider_key),
-    scope_key: scopeKey,
-    name,
-    description,
-    schema_json: schemaJson,
-    endpoint_path: endpointPath,
-    http_method: httpMethod,
-    usage_count: 0,
-    version,
-    rate_limit_per_min: rateLimit,
-    is_active: normalizeBoolean(body.is_active, true),
-    masking_rules: maskingRules,
-    conditions,
-    created_at: new Date().toISOString(),
-    visibility: "public",
-    access: "open_world",
-    is_destructive: normalizeBoolean(body.is_destructive, false),
-    is_public: normalizeBoolean(body.is_public, true),
-    created_by: admin.context.user.id,
-    editable_id: editableIds ?? [admin.context.user.id],
-    usable_id: usableIds ?? [],
-  };
+  const { data: agents, error: agentError } = await supabaseAdmin
+    .from("B_bot_agents")
+    .select("id, name, mcp_tool_ids")
+    .or(`org_id.eq.${admin.context.orgId},org_id.is.null`);
 
-  const { data, error } = await supabaseAdmin
-    .from("C_mcp_tools")
-    .insert(payload)
-    .select("id")
-    .single();
-
-  if (error || !data) {
-    return NextResponse.json({ error: error?.message || "MCP_TOOL_CREATE_FAILED" }, { status: 400 });
+  if (agentError) {
+    return NextResponse.json({ error: agentError.message }, { status: 400 });
   }
 
-  return NextResponse.json({ item: data });
+  const linkedAgents = (agents || []).filter((agent) =>
+    Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.includes(resolvedParams.id) : false
+  );
+
+  if (linkedAgents.length > 0) {
+    return NextResponse.json(
+      {
+        error: "MCP_TOOL_IN_USE",
+        items: linkedAgents.map((agent) => ({ id: agent.id, name: agent.name })),
+      },
+      { status: 409 }
+    );
+  }
+
+  const { error } = await supabaseAdmin.from("C_mcp_tools").delete().eq("id", resolvedParams.id);
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  return NextResponse.json({ ok: true });
 }

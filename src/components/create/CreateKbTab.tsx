@@ -1,0 +1,463 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { Trash2 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import RagStorageBadge from "@/components/RagStorageBadge";
+import { StateBanner } from "@/components/design-system";
+import { CreateListTable, CreateResourceShell } from "@/components/create/CreateResourceShell";
+import { apiFetch } from "@/lib/apiClient";
+import { isAdminKbValue, isSampleKbRow } from "@/lib/kbType";
+import { formatKstDate } from "@/lib/kst";
+import { calcRagUsageBytes, DEFAULT_RAG_LIMIT_BYTES, getRagLimitBytes } from "@/lib/ragStorage";
+import { toast } from "sonner";
+
+type KbItem = {
+  id: string;
+  parent_id?: string | null;
+  title: string;
+  version: string | null;
+  category: string | null;
+  is_active: boolean | null;
+  is_admin?: boolean | string | null;
+  is_sample?: boolean | null;
+  created_at?: string | null;
+  content?: string | null;
+};
+
+type KbMetric = {
+  kb_id: string;
+  call_count: number;
+  call_duration_sec: number;
+  satisfaction_avg: number;
+  success_rate: number;
+  escalation_rate: number;
+  updated_at: string | null;
+};
+
+function parseVersionParts(value?: string | null) {
+  if (!value) return null;
+  const raw = value.trim();
+  const match = raw.match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$/i);
+  if (!match) return null;
+  return [Number(match[1] || 0), Number(match[2] || 0), Number(match[3] || 0)];
+}
+
+function compareKbVersions(a: KbItem, b: KbItem) {
+  const aParts = parseVersionParts(a.version);
+  const bParts = parseVersionParts(b.version);
+  if (aParts && bParts) {
+    for (let index = 0; index < 3; index += 1) {
+      if (aParts[index] !== bParts[index]) return bParts[index] - aParts[index];
+    }
+  } else if (aParts && !bParts) {
+    return -1;
+  } else if (!aParts && bParts) {
+    return 1;
+  }
+  const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+  return bTime - aTime;
+}
+
+function getActiveKbItems(items: KbItem[]) {
+  const map = new Map<string, KbItem>();
+  items.forEach((item) => {
+    const key = item.parent_id ?? item.id;
+    if (item.is_active) {
+      map.set(key, item);
+      return;
+    }
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, item);
+      return;
+    }
+    if (!existing.is_active && compareKbVersions(item, existing) < 0) {
+      map.set(key, item);
+    }
+  });
+  return Array.from(map.values()).filter((item) => item.is_active);
+}
+
+function formatDuration(seconds?: number | null) {
+  const safe = Number(seconds || 0);
+  if (!Number.isFinite(safe) || safe <= 0) return "0m";
+  const minutes = Math.round(safe / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours}h ${rest}m` : `${hours}h`;
+}
+
+function formatRate(value?: number | null) {
+  const safe = Number(value || 0);
+  if (!Number.isFinite(safe) || safe <= 0) return "0%";
+  return `${Math.round(safe * 100)}%`;
+}
+
+function formatSatisfaction(value?: number | null) {
+  const safe = Number(value || 0);
+  if (!Number.isFinite(safe) || safe <= 0) return "0.0";
+  return safe.toFixed(1);
+}
+
+export function CreateKbTab() {
+  const [kbItems, setKbItems] = useState<KbItem[]>([]);
+  const [metricsById, setMetricsById] = useState<Record<string, KbMetric>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [usedBytes, setUsedBytes] = useState(0);
+  const [limitBytes, setLimitBytes] = useState(DEFAULT_RAG_LIMIT_BYTES);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+  const [content, setContent] = useState("");
+
+  const loadData = async (nextSelectedId?: string | null, preserveCreateMode = false) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [kbRes, profileRes] = await Promise.all([
+        apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
+        apiFetch<{ plan?: string }>("/api/user-profile").catch(() => null),
+      ]);
+      const nextItems = kbRes.items || [];
+      const active = getActiveKbItems(nextItems);
+      setKbItems(nextItems);
+      setUsedBytes(calcRagUsageBytes(nextItems));
+      if (profileRes?.plan) setLimitBytes(getRagLimitBytes(profileRes.plan));
+
+      if (preserveCreateMode) {
+        setSelectedId(null);
+        setIsCreating(true);
+      } else if (nextSelectedId && active.some((item) => item.id === nextSelectedId)) {
+        setSelectedId(nextSelectedId);
+        setIsCreating(false);
+      } else if (!selectedId && active.length > 0) {
+        setSelectedId(active[0].id);
+      } else if (selectedId && !active.some((item) => item.id === selectedId)) {
+        setSelectedId(active[0]?.id || null);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "KB 목록을 불러오지 못했습니다.");
+      setKbItems([]);
+      setMetricsById({});
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const activeKbItems = useMemo(() => getActiveKbItems(kbItems), [kbItems]);
+  const selectedKb = useMemo(
+    () => activeKbItems.find((item) => item.id === selectedId) || null,
+    [activeKbItems, selectedId]
+  );
+
+  useEffect(() => {
+    if (isCreating) {
+      setTitle("");
+      setCategory("");
+      setContent("");
+      return;
+    }
+    if (!selectedKb) return;
+    setTitle(selectedKb.title || "");
+    setCategory(selectedKb.category || "");
+    setContent(selectedKb.content || "");
+  }, [isCreating, selectedKb]);
+
+  useEffect(() => {
+    if (!isCreating && !selectedId && activeKbItems.length > 0) {
+      setSelectedId(activeKbItems[0].id);
+    }
+  }, [activeKbItems, isCreating, selectedId]);
+
+  useEffect(() => {
+    if (activeKbItems.length === 0) {
+      setMetricsById({});
+      return;
+    }
+    const ids = activeKbItems.map((item) => item.id).join(",");
+    apiFetch<{ items: KbMetric[] }>(`/api/kb/metrics?ids=${encodeURIComponent(ids)}`)
+      .then((response) => {
+        const next: Record<string, KbMetric> = {};
+        (response.items || []).forEach((item) => {
+          next[item.kb_id] = item;
+        });
+        setMetricsById(next);
+      })
+      .catch(() => {
+        setMetricsById({});
+      });
+  }, [activeKbItems]);
+
+  const isDirty = useMemo(() => {
+    if (isCreating) return Boolean(title.trim() || category.trim() || content.trim());
+    if (!selectedKb) return false;
+    return (
+      title.trim() !== (selectedKb.title || "").trim() ||
+      category.trim() !== (selectedKb.category || "").trim() ||
+      content.trim() !== (selectedKb.content || "").trim()
+    );
+  }, [category, content, isCreating, selectedKb, title]);
+
+  const handleCreate = () => {
+    setSelectedId(null);
+    setIsCreating(true);
+  };
+
+  const handleSelect = (id: string) => {
+    setSelectedId(id);
+    setIsCreating(false);
+  };
+
+  const handleSave = async () => {
+    if (!title.trim()) {
+      toast.error("KB 제목을 입력해 주세요.");
+      return;
+    }
+    if (!content.trim()) {
+      toast.error("KB 내용을 입력해 주세요.");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (isCreating) {
+        const created = await apiFetch<KbItem>("/api/kb", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim(),
+            category: category.trim() || null,
+            content: content.trim(),
+            is_active: true,
+          }),
+        });
+        toast.success("KB가 생성되었습니다.");
+        await loadData(created.id);
+        setSelectedId(created.id);
+        setIsCreating(false);
+      } else if (selectedKb) {
+        const saved = await apiFetch<KbItem>(`/api/kb/${selectedKb.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: title.trim(),
+            category: category.trim() || null,
+            content: content.trim(),
+          }),
+        });
+        toast.success("KB가 저장되었습니다.");
+        await loadData(saved.id);
+      }
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : "KB 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedKb) return;
+    if (!window.confirm("선택한 KB를 삭제할까요?")) return;
+    try {
+      await apiFetch(`/api/kb/${selectedKb.id}`, { method: "DELETE" });
+      toast.success("KB가 삭제되었습니다.");
+      setSelectedId(null);
+      setIsCreating(false);
+      await loadData();
+    } catch (deleteError) {
+      toast.error(deleteError instanceof Error ? deleteError.message : "KB 삭제에 실패했습니다.");
+    }
+  };
+
+  const banner = error ? (
+    <StateBanner tone="danger" title="Knowledge Base 로딩 실패" description={error} />
+  ) : null;
+
+  return (
+    <CreateResourceShell
+      description="좌측에서 KB를 선택하면 우측에서 제목, 카테고리, 본문을 바로 수정할 수 있습니다."
+      helperText="내용을 바꾸면 새 버전이 생성되고, 활성 버전이 목록에 자동 반영됩니다."
+      banner={banner}
+      listTitle="KB 목록"
+      listCountLabel={`총 ${loading ? "-" : activeKbItems.length}개`}
+      createLabel="새 KB"
+      onCreate={handleCreate}
+      onRefresh={() => void loadData(selectedId, isCreating)}
+      refreshDisabled={loading}
+      listContent={
+        <>
+          <div className="border-b border-slate-200 px-4 py-3">
+            <RagStorageBadge usedBytes={usedBytes} limitBytes={limitBytes} />
+          </div>
+          {activeKbItems.length === 0 && !loading ? (
+            <div className="p-4 text-sm text-slate-500">생성된 KB가 없습니다.</div>
+          ) : (
+            <CreateListTable
+              rows={activeKbItems}
+              getRowId={(item) => item.id}
+              selectedId={!isCreating ? selectedId : null}
+              onSelect={(item) => handleSelect(item.id)}
+              minWidth={980}
+              columns={[
+                {
+                  id: "title",
+                  label: "제목",
+                  width: "minmax(150px, 1.8fr)",
+                  render: (item) => <div className="truncate text-sm font-semibold text-slate-900">{item.title}</div>,
+                },
+                {
+                  id: "kind",
+                  label: "구분",
+                  width: "minmax(100px, 1fr)",
+                  render: (item) => {
+                    const labels = [];
+                    if (isAdminKbValue(item.is_admin)) labels.push("ADMIN");
+                    if (isSampleKbRow(item)) labels.push("SAMPLE");
+                    if (labels.length === 0) labels.push("일반");
+                    return labels.join(" / ");
+                  },
+                },
+                {
+                  id: "category",
+                  label: "카테고리",
+                  width: "minmax(110px, 1fr)",
+                  render: (item) => item.category || "-",
+                },
+                {
+                  id: "version",
+                  label: "버전",
+                  width: "72px",
+                  render: (item) => item.version || "-",
+                },
+                {
+                  id: "calls",
+                  label: "Calls",
+                  width: "72px",
+                  render: (item) => String(metricsById[item.id]?.call_count ?? 0),
+                },
+                {
+                  id: "satisfaction",
+                  label: "만족도",
+                  width: "72px",
+                  render: (item) => formatSatisfaction(metricsById[item.id]?.satisfaction_avg),
+                },
+                {
+                  id: "success",
+                  label: "성공률",
+                  width: "72px",
+                  render: (item) => formatRate(metricsById[item.id]?.success_rate),
+                },
+                {
+                  id: "created",
+                  label: "생성일",
+                  width: "minmax(120px, 1fr)",
+                  render: (item) => formatKstDate(item.created_at),
+                },
+              ]}
+            />
+          )}
+        </>
+      }
+      detailTitle={isCreating ? "새 KB" : selectedKb?.title || "Knowledge Base를 선택하세요"}
+      detailDescription={
+        isCreating
+          ? "새 문서를 생성합니다."
+          : selectedKb
+            ? `현재 버전 ${selectedKb.version || "-"}`
+            : "좌측 목록에서 KB를 선택하면 상세 편집이 열립니다."
+      }
+      detailActions={
+        !isCreating && selectedKb ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleDelete}
+            className="rounded-xl border-rose-200 bg-rose-50 px-3 text-xs text-rose-600 hover:bg-rose-100"
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            삭제
+          </Button>
+        ) : null
+      }
+      detailContent={
+        <div className="space-y-4">
+          {isCreating || selectedKb ? (
+            <>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">KB 제목</div>
+                  <Input value={title} onChange={(event) => setTitle(event.target.value)} className="h-10" />
+                </label>
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">카테고리</div>
+                  <Input value={category} onChange={(event) => setCategory(event.target.value)} className="h-10" />
+                </label>
+              </div>
+
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">KB 본문</div>
+                <textarea
+                  value={content}
+                  onChange={(event) => setContent(event.target.value)}
+                  className="min-h-[340px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                />
+              </label>
+
+              {!isCreating && selectedKb ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  상태 {selectedKb.is_active ? "Active" : "Inactive"} · 성공률 {formatRate(metricsById[selectedKb.id]?.success_rate)} ·
+                  이관률 {formatRate(metricsById[selectedKb.id]?.escalation_rate)}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <div className="text-xs text-slate-500">
+                  {isCreating ? "새 KB를 생성합니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
+                </div>
+                <div className="flex items-center gap-2">
+                  {isCreating ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setIsCreating(false);
+                        setSelectedId(activeKbItems[0]?.id || null);
+                      }}
+                      className="rounded-xl border-slate-200 bg-white px-3 text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      취소
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={saving || (!isCreating && !isDirty)}
+                    className="rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                    {saving ? "저장 중..." : isCreating ? "KB 생성" : "저장"}
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              좌측 목록에서 KB를 선택하거나 새 KB를 생성해 주세요.
+            </div>
+          )}
+        </div>
+      }
+    />
+  );
+}

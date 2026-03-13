@@ -739,8 +739,6 @@ C:\dev\1227\mejai3\mejai\docs\diff\20260313-154500__src_components_AppSidebar.ts
   - `?tab=kb` 에서 KB 목록, `RAG Storage` 표시, 우측 편집 패널이 함께 렌더링되는 것을 확인
   - `?tab=mcp` 에서 provider 필터, MCP 목록, 공통 계약 편집 필드가 렌더링되는 것을 확인
   - `?tab=widget` 에서 위젯 목록, 설치 키, 설치 스크립트, 우측 편집 패널이 렌더링되는 것을 확인
-  - Agents / KB / MCP / Widget 목록이 모두 좌측 정렬 헤더 + 테이블형 리스트 구조로 렌더링되어 열 단위 비교가 가능한 것을 확인
-  - Agents / KB / MCP / Widget 공통 상세 패널 본문 wrapper 에서 `max-height` 제한이 제거되어 XPath `/html/body/main/div/div/main/div/div/div[3]/div[2]/div[2]/div[2]` 기준 `maxHeight: none` 으로 확인됨
   - 모바일 뷰포트 `390x844` 에서 목록 뒤에 편집 패널이 이어지는 단일 컬럼 스택 구조로 렌더링되는 것을 확인
 
 - 2026-03-13 `npm run build`

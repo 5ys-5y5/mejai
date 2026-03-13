@@ -696,23 +696,18 @@ C:\dev\1227\mejai3\mejai\docs\diff\20260313-154500__src_components_AppSidebar.ts
 
 - [x] `chrome-devtools` 로 현재 `/app` 사이드바 구조 확인
 - [x] `supabase` MCP 로 관련 테이블 존재 확인
-- [x] `/app/create` 라우트가 열리는지 확인
-- [x] 사이드바 `온보딩 > 생성하기` 링크 동작 확인
-- [x] `?tab=agents` deep link 확인
-- [x] `?tab=kb` deep link 확인
-- [x] `?tab=mcp` deep link 확인
-- [x] `?tab=widget` deep link 확인
+- [ ] `/app/create` 라우트가 열리는지 확인
+- [ ] 사이드바 `온보딩 > 생성하기` 링크 동작 확인
+- [ ] `?tab=agents` deep link 확인
+- [ ] `?tab=kb` deep link 확인
+- [ ] `?tab=mcp` deep link 확인
+- [ ] `?tab=widget` deep link 확인
 - [ ] Agent 생성/수정/삭제 확인
 - [ ] KB 생성/수정/삭제 확인
 - [ ] MCP 생성/수정/삭제 확인
 - [ ] Widget 생성/수정/키 재발급/삭제 확인
-- [x] 모바일 뷰에서 목록/편집 스택 동작 확인
-- [x] `npm run build` 통과 확인
-
-미체크 항목 정책 메모:
-
-- 생성/수정/삭제/키 재발급 테스트는 실제 DB 변경을 발생시키므로 이번 실행에서는 수행하지 않았다.
-- 해당 항목은 사용자 승인 하에 UI에서 직접 실행한 뒤, 아래 SQL 조회로 결과를 검증하는 방식으로 진행한다.
+- [ ] 모바일 뷰에서 목록/편집 스택 동작 확인
+- [ ] `npm run build` 통과 확인
 
 ## 16. 테스트 기록
 
@@ -730,63 +725,12 @@ C:\dev\1227\mejai3\mejai\docs\diff\20260313-154500__src_components_AppSidebar.ts
     - `B_chat_widgets`
     - `B_chat_widget_instances`
   - 기본 설계 기준 신규 DB 스키마 추가가 필요 없음을 확인
-  - `C_mcp_tools` 와 `B_bot_agents` 컬럼 메타데이터를 조회해 MCP CRUD 계약과 참조 차단 조건 구현 기준을 확인
 
 - 2026-03-13 구현 테스트
-  - `http://localhost:3000/app/create` 라우트가 정상 렌더링되는 것을 확인
-  - 사이드바 `온보딩` 그룹에 `생성하기` 링크가 추가되어 있고 `/app/create` 로 연결되는 것을 확인
-  - `?tab=agents` 에서 에이전트 목록과 우측 편집 패널이 함께 렌더링되는 것을 확인
-  - `?tab=kb` 에서 KB 목록, `RAG Storage` 표시, 우측 편집 패널이 함께 렌더링되는 것을 확인
-  - `?tab=mcp` 에서 provider 필터, MCP 목록, 공통 계약 편집 필드가 렌더링되는 것을 확인
-  - `?tab=widget` 에서 위젯 목록, 설치 키, 설치 스크립트, 우측 편집 패널이 렌더링되는 것을 확인
-  - Agents / KB / MCP / Widget 목록이 모두 좌측 정렬 헤더 + 테이블형 리스트 구조로 렌더링되어 열 단위 비교가 가능한 것을 확인
-  - Agents / KB / MCP / Widget 공통 상세 패널 본문 wrapper 에서 `max-height` 제한이 제거되어 XPath `/html/body/main/div/div/main/div/div/div[3]/div[2]/div[2]/div[2]` 기준 `maxHeight: none` 으로 확인됨
-  - 모바일 뷰포트 `390x844` 에서 목록 뒤에 편집 패널이 이어지는 단일 컬럼 스택 구조로 렌더링되는 것을 확인
-
-- 2026-03-13 `npm run build`
-  - production build 성공
-  - 신규 라우트 `/app/create` 확인
-  - 신규 API `/api/mcp/tools/[id]` 확인
-
-- 2026-03-13 수동 CRUD 검증용 SQL
-  - Agent 확인
-    ```sql
-    select id, name, current_version, is_active, updated_at
-    from public."B_bot_agents"
-    order by updated_at desc nulls last
-    limit 20;
-    ```
-  - KB 확인
-    ```sql
-    select id, title, version, status, updated_at
-    from public."B_bot_knowledge_bases"
-    order by updated_at desc nulls last
-    limit 20;
-    ```
-  - MCP 확인
-    ```sql
-    select id, provider, action_name, method, is_active, updated_at
-    from public."C_mcp_tools"
-    order by updated_at desc nulls last
-    limit 20;
-    ```
-  - Widget 템플릿 확인
-    ```sql
-    select id, name, agent_id, is_active, created_at
-    from public."B_chat_widgets"
-    order by created_at desc nulls last
-    limit 20;
-    ```
-  - Widget 인스턴스 확인
-    ```sql
-    select id, template_id, public_key, is_active, created_at
-    from public."B_chat_widget_instances"
-    order by created_at desc nulls last
-    limit 20;
-    ```
+  - 아직 구현 전이므로 미실행
 
 ## 17. 최종 결론
 
-`/app/create` 는 새 라우트와 공통 master-detail 탭 작업 공간으로 구현되었고, 기존 `/app` 레이아웃의 시각 규칙을 유지하도록 구성했다.  
-Agent/KB/Widget 은 기존 계약을 재사용하면서 새 탭 UI에 맞게 정리했고, MCP 는 공통 CRUD API를 확장해 같은 작업 공간 안에서 관리할 수 있게 했다.  
-이번 구현은 이해확정 절차, 화이트리스트 범위, `docs/diff` 백업 정책, `supabase`/`chrome-devtools` MCP 테스트 의무를 충족한 상태로 마무리한다.
+`/app/create` 는 새 라우트를 추가하는 방식으로 구현하고, 기존 `/app` 레이아웃과 동일한 시각 규칙을 따르는 공통 master-detail 탭 작업 공간으로 설계한다.  
+Agent/KB/Widget 은 기존 계약 재사용이 가능하며, MCP 는 공통 CRUD 계약을 먼저 추가해야 한다.  
+실제 구현은 본 문서의 이해확정 절차, 화이트리스트, `docs/diff` 백업 정책, MCP 테스트 의무를 모두 충족한 뒤에만 시작한다.

@@ -1,0 +1,509 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, Trash2 } from "lucide-react";
+import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
+import { StateBanner } from "@/components/design-system";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { CreateListTable, CreateResourceShell } from "@/components/create/CreateResourceShell";
+import { apiFetch } from "@/lib/apiClient";
+import { formatKstDateTime } from "@/lib/kst";
+import { toast } from "sonner";
+
+type AgentItem = {
+  id: string;
+  parent_id?: string | null;
+  name: string;
+  llm: string | null;
+  kb_id: string | null;
+  mcp_tool_ids?: string[] | null;
+  version: string | null;
+  is_active: boolean | null;
+  created_at?: string | null;
+  website?: string | null;
+  goal?: string | null;
+};
+
+type KbItem = {
+  id: string;
+  title: string;
+  version: string | null;
+  is_active: boolean | null;
+};
+
+type McpTool = {
+  id: string;
+  name: string;
+  tool_key?: string;
+  provider_key?: string;
+  description?: string | null;
+};
+
+function parseVersionParts(value?: string | null) {
+  if (!value) return null;
+  const raw = value.trim();
+  const match = raw.match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$/i);
+  if (!match) return null;
+  return [Number(match[1] || 0), Number(match[2] || 0), Number(match[3] || 0)];
+}
+
+function compareAgentVersions(a: AgentItem, b: AgentItem) {
+  const aParts = parseVersionParts(a.version);
+  const bParts = parseVersionParts(b.version);
+  if (aParts && bParts) {
+    for (let index = 0; index < 3; index += 1) {
+      if (aParts[index] !== bParts[index]) return bParts[index] - aParts[index];
+    }
+  } else if (aParts && !bParts) {
+    return -1;
+  } else if (!aParts && bParts) {
+    return 1;
+  }
+  const aTime = a.created_at ? new Date(a.created_at).getTime() : 0;
+  const bTime = b.created_at ? new Date(b.created_at).getTime() : 0;
+  return bTime - aTime;
+}
+
+function getActiveAgents(items: AgentItem[]) {
+  const map = new Map<string, AgentItem>();
+  items.forEach((item) => {
+    const key = item.parent_id ?? item.id;
+    if (item.is_active) {
+      map.set(key, item);
+      return;
+    }
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, item);
+      return;
+    }
+    if (!existing.is_active && compareAgentVersions(item, existing) < 0) {
+      map.set(key, item);
+    }
+  });
+  return Array.from(map.values()).sort(compareAgentVersions);
+}
+
+export function CreateAgentsTab() {
+  const [agents, setAgents] = useState<AgentItem[]>([]);
+  const [kbItems, setKbItems] = useState<KbItem[]>([]);
+  const [mcpTools, setMcpTools] = useState<McpTool[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+
+  const [name, setName] = useState("");
+  const [llm, setLlm] = useState("chatgpt");
+  const [kbId, setKbId] = useState("");
+  const [mcpToolIds, setMcpToolIds] = useState<string[]>([]);
+  const [website, setWebsite] = useState("");
+  const [goal, setGoal] = useState("");
+
+  const loadData = async (nextSelectedId?: string | null, preserveCreateMode = false) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [agentRes, kbRes, toolRes] = await Promise.all([
+        apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200"),
+        apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
+        apiFetch<{ items: McpTool[] }>("/api/mcp/tools").catch(() => ({ items: [] })),
+      ]);
+      const nextAgents = agentRes.items || [];
+      const active = getActiveAgents(nextAgents);
+      setAgents(nextAgents);
+      setKbItems(kbRes.items || []);
+      setMcpTools(toolRes.items || []);
+
+      if (preserveCreateMode) {
+        setSelectedId(null);
+        setIsCreating(true);
+      } else if (nextSelectedId && active.some((item) => item.id === nextSelectedId)) {
+        setSelectedId(nextSelectedId);
+        setIsCreating(false);
+      } else if (!selectedId && active.length > 0) {
+        setSelectedId(active[0].id);
+      } else if (selectedId && !active.some((item) => item.id === selectedId)) {
+        setSelectedId(active[0]?.id || null);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "에이전트 목록을 불러오지 못했습니다.");
+      setAgents([]);
+      setKbItems([]);
+      setMcpTools([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+  }, []);
+
+  const activeAgents = useMemo(() => getActiveAgents(agents), [agents]);
+  const selectedAgent = useMemo(
+    () => activeAgents.find((item) => item.id === selectedId) || null,
+    [activeAgents, selectedId]
+  );
+
+  useEffect(() => {
+    if (isCreating) {
+      setName("");
+      setLlm("chatgpt");
+      setKbId("");
+      setMcpToolIds([]);
+      setWebsite("");
+      setGoal("");
+      return;
+    }
+    if (!selectedAgent) return;
+    setName(selectedAgent.name || "");
+    setLlm(selectedAgent.llm === "gemini" ? "gemini" : "chatgpt");
+    setKbId(selectedAgent.kb_id || "");
+    setMcpToolIds(selectedAgent.mcp_tool_ids ?? []);
+    setWebsite(selectedAgent.website || "");
+    setGoal(selectedAgent.goal || "");
+  }, [isCreating, selectedAgent]);
+
+  useEffect(() => {
+    if (!isCreating && !selectedId && activeAgents.length > 0) {
+      setSelectedId(activeAgents[0].id);
+    }
+  }, [activeAgents, isCreating, selectedId]);
+
+  const kbById = useMemo(() => {
+    const map = new Map<string, KbItem>();
+    kbItems.forEach((item) => map.set(item.id, item));
+    return map;
+  }, [kbItems]);
+
+  const kbOptions = useMemo<SelectOption[]>(
+    () =>
+      kbItems.map((item) => ({
+        id: item.id,
+        label: `${item.title}${item.version ? ` (${item.version})` : ""}`,
+        description: item.is_active ? "배포" : "비활성",
+      })),
+    [kbItems]
+  );
+
+  const mcpOptions = useMemo<SelectOption[]>(
+    () =>
+      mcpTools.map((tool) => ({
+        id: tool.id,
+        label: tool.tool_key || tool.name,
+        description: tool.description || undefined,
+        group: tool.provider_key || "기타",
+      })),
+    [mcpTools]
+  );
+
+  const isDirty = useMemo(() => {
+    if (isCreating) {
+      return Boolean(name.trim() || kbId || website.trim() || goal.trim() || mcpToolIds.length > 0);
+    }
+    if (!selectedAgent) return false;
+    return (
+      name.trim() !== (selectedAgent.name || "").trim() ||
+      llm !== (selectedAgent.llm === "gemini" ? "gemini" : "chatgpt") ||
+      kbId !== (selectedAgent.kb_id || "") ||
+      JSON.stringify([...mcpToolIds].sort()) !== JSON.stringify([...(selectedAgent.mcp_tool_ids ?? [])].sort()) ||
+      website.trim() !== (selectedAgent.website || "").trim() ||
+      goal.trim() !== (selectedAgent.goal || "").trim()
+    );
+  }, [goal, isCreating, kbId, llm, mcpToolIds, name, selectedAgent, website]);
+
+  const handleCreate = () => {
+    setSelectedId(null);
+    setIsCreating(true);
+  };
+
+  const handleSelect = (id: string) => {
+    setSelectedId(id);
+    setIsCreating(false);
+  };
+
+  const handleSave = async () => {
+    if (!name.trim()) {
+      toast.error("에이전트 이름을 입력해 주세요.");
+      return;
+    }
+    if (!kbId) {
+      toast.error("연결할 KB를 선택해 주세요.");
+      return;
+    }
+    setSaving(true);
+    try {
+      if (isCreating) {
+        const created = await apiFetch<AgentItem>("/api/agents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            llm,
+            kb_id: kbId,
+            mcp_tool_ids: mcpToolIds,
+            website: website.trim() || null,
+            goal: goal.trim() || null,
+            is_active: true,
+          }),
+        });
+        toast.success("에이전트가 생성되었습니다.");
+        await loadData(created.id);
+        setSelectedId(created.id);
+        setIsCreating(false);
+      } else if (selectedAgent) {
+        const saved = await apiFetch<AgentItem>(`/api/agents/${selectedAgent.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            llm,
+            kb_id: kbId,
+            mcp_tool_ids: mcpToolIds,
+            website: website.trim() || null,
+            goal: goal.trim() || null,
+          }),
+        });
+        toast.success("에이전트가 저장되었습니다.");
+        await loadData(saved.id);
+      }
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : "에이전트 저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedAgent) return;
+    if (!window.confirm("선택한 에이전트를 삭제할까요?")) return;
+    try {
+      await apiFetch(`/api/agents/${selectedAgent.id}`, { method: "DELETE" });
+      toast.success("에이전트가 삭제되었습니다.");
+      setSelectedId(null);
+      setIsCreating(false);
+      await loadData();
+    } catch (deleteError) {
+      toast.error(deleteError instanceof Error ? deleteError.message : "에이전트 삭제에 실패했습니다.");
+    }
+  };
+
+  const banner = error ? (
+    <StateBanner tone="danger" title="Agents 로딩 실패" description={error} />
+  ) : mcpTools.length === 0 ? (
+    <StateBanner
+      tone="warning"
+      title="MCP 도구 없음"
+      description="관리자 권한이 없거나 연결된 MCP 도구가 없습니다. 에이전트는 MCP 없이도 저장할 수 있습니다."
+    />
+  ) : null;
+
+  return (
+    <CreateResourceShell
+      description="좌측에서 에이전트를 고르고, 우측에서 LLM · KB · MCP 연결과 기본 정보를 한 번에 수정합니다."
+      helperText="새 항목을 누르면 빈 폼으로 전환되고, 저장 후 활성 버전이 목록에 반영됩니다."
+      banner={banner}
+      listTitle="에이전트 목록"
+      listCountLabel={`총 ${loading ? "-" : activeAgents.length}개`}
+      createLabel="새 에이전트"
+      onCreate={handleCreate}
+      onRefresh={() => void loadData(selectedId, isCreating)}
+      refreshDisabled={loading}
+      listContent={
+        activeAgents.length === 0 && !loading ? (
+          <div className="p-4 text-sm text-slate-500">생성된 에이전트가 없습니다.</div>
+        ) : (
+          <CreateListTable
+            rows={activeAgents}
+            getRowId={(agent) => agent.id}
+            selectedId={!isCreating ? selectedId : null}
+            onSelect={(agent) => handleSelect(agent.id)}
+            minWidth={860}
+            columns={[
+              {
+                id: "name",
+                label: "에이전트",
+                width: "minmax(150px, 1.6fr)",
+                cellClassName: "text-left",
+                render: (agent) => <div className="truncate text-sm font-semibold text-slate-900">{agent.name}</div>,
+              },
+              {
+                id: "llm",
+                label: "LLM",
+                width: "minmax(90px, 0.8fr)",
+                render: (agent) => agent.llm || "-",
+              },
+              {
+                id: "kb",
+                label: "Knowledge Base",
+                width: "minmax(140px, 1.2fr)",
+                render: (agent) => {
+                  const linkedKb = agent.kb_id ? kbById.get(agent.kb_id) ?? null : null;
+                  return linkedKb?.title || "-";
+                },
+              },
+              {
+                id: "mcp",
+                label: "MCP",
+                width: "72px",
+                render: (agent) => String(Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0),
+              },
+              {
+                id: "version",
+                label: "버전",
+                width: "72px",
+                render: (agent) => agent.version || "-",
+              },
+              {
+                id: "created",
+                label: "생성일",
+                width: "minmax(140px, 1fr)",
+                render: (agent) => formatKstDateTime(agent.created_at),
+              },
+              {
+                id: "status",
+                label: "상태",
+                width: "minmax(96px, 0.9fr)",
+                render: (agent) => {
+                  const mcpCount = Array.isArray(agent.mcp_tool_ids) ? agent.mcp_tool_ids.length : 0;
+                  const hasIssue = !agent.llm || !agent.kb_id || mcpCount === 0;
+                  return hasIssue ? (
+                    <span className="inline-flex items-center gap-1 text-amber-600">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      확인 필요
+                    </span>
+                  ) : (
+                    <span className="text-emerald-600">정상</span>
+                  );
+                },
+              },
+            ]}
+          />
+        )
+      }
+      detailTitle={isCreating ? "새 에이전트" : selectedAgent?.name || "에이전트를 선택하세요"}
+      detailDescription={
+        isCreating
+          ? "이름, LLM, KB, MCP 연결을 입력해 새 에이전트를 생성합니다."
+          : selectedAgent
+            ? `현재 버전 ${selectedAgent.version || "-"}`
+            : "좌측 목록에서 에이전트를 선택하면 상세 편집이 열립니다."
+      }
+      detailActions={
+        !isCreating && selectedAgent ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleDelete}
+            className="rounded-xl border-rose-200 bg-rose-50 px-3 text-xs text-rose-600 hover:bg-rose-100"
+          >
+            <Trash2 className="mr-1 h-4 w-4" />
+            삭제
+          </Button>
+        ) : null
+      }
+      detailContent={
+        <div className="space-y-4">
+          {isCreating || selectedAgent ? (
+            <>
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">에이전트 이름</div>
+                <Input value={name} onChange={(event) => setName(event.target.value)} className="h-10" />
+              </label>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">LLM</div>
+                  <SelectPopover
+                    value={llm}
+                    onChange={setLlm}
+                    options={[
+                      { id: "chatgpt", label: "chatGPT" },
+                      { id: "gemini", label: "GEMINI" },
+                    ]}
+                    className="w-full"
+                    buttonClassName="h-10"
+                  />
+                </label>
+                <label className="block">
+                  <div className="mb-1 text-xs text-slate-600">Knowledge Base</div>
+                  <SelectPopover
+                    value={kbId}
+                    onChange={setKbId}
+                    options={kbOptions}
+                    placeholder="KB 선택"
+                    className="w-full"
+                    buttonClassName="h-10"
+                  />
+                </label>
+              </div>
+
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">MCP 도구</div>
+                <MultiSelectPopover
+                  values={mcpToolIds}
+                  onChange={setMcpToolIds}
+                  options={mcpOptions}
+                  placeholder="MCP 도구 선택"
+                  className="w-full"
+                  buttonClassName="min-h-10"
+                />
+              </label>
+
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">웹사이트</div>
+                <Input value={website} onChange={(event) => setWebsite(event.target.value)} className="h-10" />
+              </label>
+
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">목표</div>
+                <textarea
+                  value={goal}
+                  onChange={(event) => setGoal(event.target.value)}
+                  className="min-h-[120px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
+                />
+              </label>
+
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                <div className="text-xs text-slate-500">
+                  {isCreating ? "새 에이전트를 생성합니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
+                </div>
+                <div className="flex items-center gap-2">
+                  {isCreating ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setIsCreating(false);
+                        setSelectedId(activeAgents[0]?.id || null);
+                      }}
+                      className="rounded-xl border-slate-200 bg-white px-3 text-xs text-slate-700 hover:bg-slate-50"
+                    >
+                      취소
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={saving || (!isCreating && !isDirty)}
+                    className="rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+                  >
+                    {saving ? "저장 중..." : isCreating ? "에이전트 생성" : "저장"}
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              좌측 목록에서 에이전트를 선택하거나 새 에이전트를 생성해 주세요.
+            </div>
+          )}
+        </div>
+      }
+    />
+  );
+}
