@@ -1,0 +1,490 @@
+# `/app/create` 대화창/API 탭 확장 설계서
+
+작성일: 2026-03-13  
+대상 경로: `http://localhost:3000/app/create`
+
+## 1. 목표
+
+`/app/create` 를 현재의 통합 생성 페이지에서 한 단계 확장해, 아래 순서의 탭 구조를 갖는 운영 작업 공간으로 만든다.
+
+- `템플릿(admin) | 대화창 | 비서 | 지식 | api | 도구(admin)`
+
+각 탭의 역할은 아래와 같다.
+
+- `템플릿(admin)`: `B_chat_widgets` 관리. 현재 구현 유지.
+- `대화창`: `B_chat_widget_instances` 관리. `/app/install?tab=widget`, `/app/install?tab=quickstart` 의 핵심 기능을 흡수하되, `/app/install` 과 독립적으로 동작.
+- `비서`: 현재 구현 유지.
+- `지식`: 현재 구현 유지.
+- `api`: `/app/install?tab=env` 기능 중 `"서버 환경 변수"` 영역을 제외한 `A_iam_auth_settings` 관리.
+- `도구(admin)`: `C_mcp_tools` 관리. 현재 구현 유지.
+
+## 2. 현재 상태 확인
+
+2026-03-13 기준으로 확인한 현재 상태는 아래와 같다.
+
+- `/app/create` 는 현재 `template | agents | kb | mcp` 구조이며, `템플릿(admin)` 과 `도구(admin)` 는 `is_admin` 일 때만 노출된다.
+- `템플릿` 탭은 `B_chat_widgets` 를 대상으로 동작하고, 구현 컴포넌트는 `src/components/create/CreateWidgetTab.tsx` 이다.
+- `/app/install?tab=widget`, `/app/install?tab=quickstart` 는 모두 `WidgetInstallPanel` 을 렌더링하며, 실질적으로 다음 기능만 제공한다.
+  - 템플릿 선택
+  - 선택된 템플릿 기준 인스턴스 자동 발급
+  - overrides JSON 입력
+  - 설치 코드/Preview URL 표시
+  - 설치 코드 복사
+- 현재 `/api/widget-instances` 는 `POST` 만 제공하며, 신규 인스턴스 생성 시 관리자만 허용한다.
+- 현재 `/api/widget-instances/[id]` 계약은 존재하지 않는다.
+- `/app/install?tab=env` 는 `EnvSettingsPanel` 을 통해 다음 두 영역을 함께 관리한다.
+  - 안내/서버 환경 변수 설명
+  - `A_iam_auth_settings.providers` 기반 가변 provider 설정
+- 현재 `/api/auth-settings/providers` 는 `GET`, `POST` 로 `A_iam_auth_settings.providers` 를 읽고 저장한다.
+- Supabase MCP 기준 실존 테이블은 아래와 같다.
+  - `public.B_chat_widgets`
+  - `public.B_chat_widget_instances`
+  - `public.A_iam_auth_settings`
+  - `public.A_iam_user_access_maps`
+
+## 3. 수정 전 이해확정 절차
+
+후속 구현 시 아래 절차를 반드시 그대로 따른다.
+
+1. 수정 시작 전에 이번 요청의 이해 내용을 번호 목록으로 다시 작성한다.
+2. 반드시 아래 항목을 포함한다.
+   - 탭 순서
+   - 각 탭의 권한 정책
+   - `대화창` 탭의 데이터 소스가 `B_chat_widget_instances` 임
+   - `api` 탭의 데이터 소스가 `A_iam_auth_settings` 임
+   - `/app/install` 과 독립적으로 동작해야 한다는 점
+   - `"서버 환경 변수"` 는 `api` 탭 범위에서 제외된다는 점
+3. 작성된 이해 내용을 사용자에게 보여주고, 실행 의도가 일치하는지 명시적 확정을 받는다.
+4. 사용자의 확정 없이 코드 수정, 파일 생성, API 계약 변경, UI 변경을 시작하지 않는다.
+5. 범위가 늘어나면 중간에라도 다시 이해확정 절차를 반복한다.
+
+이번 문서 작성 턴에서는 위 절차를 수행했고, 사용자로부터 `확정` 응답을 받은 뒤 문서를 작성한다.
+
+## 4. 실행 정책 (필수 준수)
+
+후속 구현 및 수정에서 아래 정책을 100% 준수한다.
+
+### 4.1 범위 통제
+
+- 본 문서에서 확정한 탭 순서, 역할 분리, 권한 규칙을 벗어난 임의 변경을 금지한다.
+- `/app/install` 제거, `/app/install` 강제 리다이렉트, `/app/create` 에서 `/app/install` 컴포넌트를 직접 import 해서 그대로 붙여 넣는 방식은 금지한다.
+- `템플릿(admin), 비서, 지식, 도구(admin)` 는 현재 계약을 유지한다. 새 요구가 없으면 동작 계약을 바꾸지 않는다.
+- `대화창` 탭은 `B_chat_widget_instances` 관리 화면이어야 하며, 템플릿 관리 기능과 혼합하지 않는다.
+- `api` 탭은 `A_iam_auth_settings.providers` 기반 화면이어야 하며, `"서버 환경 변수"` 카드/목록/입력 폼은 포함하지 않는다.
+
+### 4.2 독립 실행 원칙
+
+- `/app/create` 의 `대화창` 탭은 `/app/install?tab=widget|quickstart` 와 독립적으로 동작해야 한다.
+- 독립적으로 동작한다는 뜻은 다음을 모두 만족해야 한다.
+  - `/app/create` 가 `WidgetInstallPanel` 을 직접 렌더링하지 않는다.
+  - `/app/create` 가 `/app/install` 라우트 상태, 쿼리, 내부 컴포넌트 생명주기에 의존하지 않는다.
+  - 필요한 데이터는 `/app/create` 전용 탭 컴포넌트에서 직접 로드한다.
+  - 설치 코드/Preview URL 계산도 `/app/create` 탭 내부에서 수행한다.
+- `/app/create` 의 `api` 탭도 `/app/install?tab=env` 를 직접 재사용하지 않고, `/app/create` 공통 shell 안에서 새로 구성한다.
+- 다만 중복을 피하기 위한 데이터 helper 추출은 허용한다. 추출 시에는 `/app/install` 과 `/app/create` 둘 다 그 helper 를 소비하는 구조로 정리한다.
+
+### 4.3 계약 수준 수정 원칙
+
+- 현재 `/api/widget-instances` 의 관리자 전용 단일 `POST` 계약은 `대화창` 탭 요구를 만족하지 못한다.
+- 따라서 후속 구현에서는 case-by-case UI 우회가 아니라, 인스턴스 관리 계약 자체를 확장해야 한다.
+- 구체적으로 다음 계약 수준 보강이 필요하다.
+  - 인스턴스 목록 조회 계약
+  - 인스턴스 상세 수정 계약
+  - 인스턴스 삭제 계약
+  - 인스턴스 권한 모델 계약
+- `api` 탭도 기존 `EnvSettingsPanel` 를 단순 복사하지 않고, `providers` 저장 계약을 유지한 채 `/app/create` 에 맞는 공통 master-detail 구조로 재배치한다.
+
+### 4.4 디자인 재사용 원칙
+
+- UI는 반드시 현재 `/app/create` 와 같은 스타일 언어를 따른다.
+- `src/components` 내부의 기존 디자인 요소를 우선 사용한다.
+- 최소 재사용 대상은 아래와 같다.
+  - `CreateResourceShell`
+  - `CreateListTable`
+  - `StateBanner`
+  - `SelectPopover`, `MultiSelectPopover`
+  - `Button`, `Input`, `Card`
+- `/app/install` 고유 레이아웃을 그대로 옮기지 않는다.
+- 새 탭도 기존 `템플릿/비서/지식/도구` 탭처럼 좌측 목록, 우측 상세 편집 구조를 유지한다.
+
+## 5. 탭 구조 및 권한 정책
+
+| 순서 | 탭 라벨 | 쿼리 키 제안 | 관리자 전용 노출 | 활성 색상 | 데이터 소스 | 비고 |
+|---|---|---|---|---|---|---|
+| 1 | 템플릿 | `template` | 예 | amber | `B_chat_widgets` | 기존 유지 |
+| 2 | 대화창 | `chat` | 아니오 | slate | `B_chat_widget_instances` | 신규 |
+| 3 | 비서 | `agents` | 아니오 | slate | `B_bot_agents` | 기존 유지 |
+| 4 | 지식 | `kb` | 아니오 | slate | `B_bot_knowledge_bases` | 기존 유지 |
+| 5 | api | `api` | 아니오 | slate | `A_iam_auth_settings.providers` | 신규 |
+| 6 | 도구 | `mcp` | 예 | amber | `C_mcp_tools` | 기존 유지 |
+
+추가 규칙:
+
+- 기존 `?tab=widget` alias 는 계속 `template` 로 정규화한다.
+- 새 `대화창` 탭은 `?tab=chat` 을 사용한다.
+- `템플릿(admin)` 과 `도구(admin)` 는 `is_admin === true` 인 경우만 nav 에 노출한다.
+- `대화창`, `비서`, `지식`, `api` 는 일반 사용자도 nav 에서 볼 수 있다.
+- 관리자 전용 탭은 현재 구현처럼 amber 활성 스타일을 사용한다.
+
+## 6. `대화창` 탭 설계
+
+### 6.1 역할
+
+`대화창` 탭은 `B_chat_widget_instances` 를 기준으로 인스턴스를 생성, 조회, 수정, 삭제하는 운영 화면이다.
+
+이 탭은 현재 `/app/install?tab=widget|quickstart` 가 담당하던 아래 기능을 흡수한다.
+
+- 템플릿 기반 인스턴스 생성
+- 설치 코드 생성
+- Preview URL 생성
+- overrides 입력
+
+단, 새 탭에서는 위 기능을 `인스턴스 CRUD` 문맥에 맞게 재정의한다.
+
+### 6.2 주요 사용자 흐름
+
+1. 좌측 목록에서 기존 인스턴스를 선택한다.
+2. 우측 상세 패널에서 아래 필드를 수정한다.
+   - 대화창 이름
+   - 연결 템플릿
+   - 공개 여부
+   - 활성 여부
+   - 편집 권한 목록(`editable_id`)
+   - 사용 가능 대상 목록(`usable_id`)
+   - 인스턴스별 `chat_policy` overrides
+3. 저장하면 `B_chat_widget_instances` 가 갱신된다.
+4. 상세 하단에서 설치 코드/Preview URL 을 즉시 확인하고 복사한다.
+5. 삭제는 물리 삭제가 아니라 기본적으로 soft delete(`is_active=false`) 를 우선 설계한다.
+
+### 6.3 목록 UI
+
+좌측 목록은 기존 create 페이지와 동일한 테이블형 리스트를 사용한다.
+
+권장 컬럼:
+
+- `대화창`
+- `템플릿`
+- `공개`
+- `권한`
+- `발급키`
+- `수정일`
+- `상태`
+
+세부 규칙:
+
+- 모든 셀은 한 줄 + ellipsis.
+- 가로 스크롤 없이 보이도록 컬럼 폭을 조정한다.
+- `권한` 컬럼은 `editable_id` 개수 또는 공개 여부 요약으로 표기한다.
+- `상태` 는 `is_active` 기준으로 렌더링한다.
+
+### 6.4 상세 패널 UI
+
+우측 상세 패널은 아래 섹션으로 구성한다.
+
+1. 기본 정보
+   - 대화창 이름
+   - 연결 템플릿
+   - 활성 상태
+   - 공개 상태
+2. 접근 제어
+   - `editable_id`
+   - `usable_id`
+3. 인스턴스 overrides
+   - `chat_policy` JSON 또는 구조화된 기본 필드
+4. 배포/설치
+   - instance public key
+   - Preview URL
+   - 설치 코드
+   - 키 재발급 버튼
+5. 저장/삭제 footer
+
+### 6.5 백엔드 계약 제안
+
+현재 `/api/widget-instances` 는 `POST` 만 있고 관리자 전용이다. 후속 구현에서는 아래 계약으로 확장한다.
+
+- `GET /api/widget-instances`
+  - 목적: 목록 조회
+  - 응답: `items[]`
+  - 기본 정렬: `updated_at desc`
+  - 옵션: `template_id`, `is_active`
+- `POST /api/widget-instances`
+  - 목적: 신규 생성
+  - 입력: `template_id`, `name`, `is_public`, `editable_id`, `usable_id`, `chat_policy`
+- `PATCH /api/widget-instances/[id]`
+  - 목적: 상세 수정
+  - 입력: 위 필드의 부분 수정
+  - 옵션: `rotate_key`
+- `DELETE /api/widget-instances/[id]`
+  - 목적: 삭제
+  - 권장 동작: `is_active=false` soft delete
+
+### 6.6 권한 계약 제안
+
+`대화창` 탭은 관리자 전용 탭이 아니므로, 단순 admin-only 계약은 요구사항과 맞지 않는다. 따라서 인스턴스 권한을 row contract 로 정의한다.
+
+- 목록 조회
+  - 관리자: 전체 조회
+  - 일반 사용자: `created_by=user.id` 또는 `editable_id` 포함 또는 `usable_id` 포함 행 조회
+- 생성
+  - 인증 사용자 허용
+  - 기본 `editable_id=[currentUserId]`
+- 수정
+  - 관리자 또는 `editable_id` 포함 사용자
+- 삭제
+  - 관리자 또는 `editable_id` 포함 사용자
+
+이 규칙은 `대화창` 탭만을 위한 예외가 아니라, 인스턴스 관리 계약 전체에 적용되는 공통 정책으로 구현해야 한다.
+
+## 7. `api` 탭 설계
+
+### 7.1 역할
+
+`api` 탭은 `/app/install?tab=env` 의 `"서버 환경 변수"` 카드 영역을 제외한 provider 설정 편집을 `/app/create` 안으로 옮긴다.
+
+저장 대상은 `A_iam_auth_settings.providers` 이다.
+
+초기 범위:
+
+- `providers.cafe24`
+- `providers.shopify`
+
+### 7.2 포함 / 제외
+
+포함:
+
+- 환경 변수 관리 안내
+- Provider 선택/목록
+- 저장된 값 요약
+- Cafe24 mall/shop/board 설정
+- Shopify 연결 정보 표시 및 수정
+
+제외:
+
+- `"서버 환경 변수"` 카드
+- Railway 등 배포 환경 비밀값 목록
+- `.env` 자체 편집 기능
+
+### 7.3 목록 UI
+
+좌측 목록은 provider 단위 2개 행으로 단순화한다.
+
+권장 컬럼:
+
+- `API`
+- `저장 대상`
+- `상태`
+- `최근 수정`
+- `권한`
+
+행 예시:
+
+- `Cafe24`
+- `Shopify`
+
+### 7.4 상세 패널 UI
+
+우측 상세는 provider 별로 다른 폼을 렌더링한다.
+
+- `Cafe24`
+  - mall_id
+  - shop_no / mall_domain
+  - board_no / board_name
+  - 단계형 편집 흐름 유지 가능
+- `Shopify`
+  - shop_domain
+  - scopes
+  - client_id
+  - access_token
+
+### 7.5 저장 계약
+
+기존 `/api/auth-settings/providers` 를 우선 재사용한다.
+
+- `GET /api/auth-settings/providers?provider=cafe24`
+- `GET /api/auth-settings/providers?provider=shopify`
+- `POST /api/auth-settings/providers`
+
+다만 `/app/create` 좌측 목록에 `최근 수정`, 저장 여부, 읽기 전용 상태를 보여주려면 응답 메타가 부족할 수 있다. 이 경우 아래 중 하나를 선택한다.
+
+- 기존 API에 `include_meta=1` 같은 옵션 추가
+- `/app/create` 전용 summary API 추가
+
+우선 순위는 기존 API의 비파괴적 확장이다.
+
+### 7.6 권한 정책
+
+`api` 탭은 nav 에서는 일반 사용자에게도 노출한다.  
+하지만 저장 권한은 기존 `EnvSettingsPanel` 계약을 유지해 관리자만 허용하는 것을 기본안으로 한다.
+
+즉,
+
+- 읽기: 인증 사용자 허용
+- 저장: 관리자만 허용
+- 비관리자: 우측 폼은 read-only
+
+이렇게 하면 사용자가 요청한 탭 순서를 지키면서도 현재 저장 API의 보안 계약을 깨지 않는다.
+
+## 8. `/app/install` 과의 분리 원칙
+
+후속 구현 시 아래를 명시적으로 지킨다.
+
+- `/app/install` 는 그대로 유지한다.
+- `/app/create` 신규 탭이 안정화되어도 `/app/install` 의 기존 주소와 동작을 즉시 제거하지 않는다.
+- `CreateChatTab` 이 `WidgetInstallPanel` 을 import 해서 렌더링하는 방식은 금지한다.
+- `CreateApiTab` 이 `EnvSettingsPanel` 을 import 해서 렌더링하는 방식도 금지한다.
+- 공통 로직이 필요하면 아래처럼 분리한다.
+  - 데이터 fetch/normalize helper: `src/lib`
+  - `/app/create` 전용 UI: `src/components/create`
+  - `/app/install` 는 기존 패널 유지
+
+## 9. 수정 허용 화이트리스트 (제안)
+
+아래 파일만 후속 구현에서 수정 대상으로 허용한다.  
+목록 외 파일 수정이 필요하면 즉시 중단하고 사용자 승인을 다시 받아야 한다.
+
+| 파일 | 작업 유형 | 허용 사유 및 범위 |
+|---|---|---|
+| `C:\dev\1227\mejai3\mejai\docs\chat.md` | 신규 생성 | 본 설계 문서 |
+| `C:\dev\1227\mejai3\mejai\src\components\create\CreateWorkspacePage.tsx` | 수정 | 탭 순서/쿼리 키/권한 라우팅 추가 |
+| `C:\dev\1227\mejai3\mejai\src\components\create\CreateWidgetTab.tsx` | 수정 가능 후보 | 기존 템플릿 탭 유지에 필요한 최소 조정만 허용 |
+| `C:\dev\1227\mejai3\mejai\src\components\create\CreateChatTab.tsx` | 신규 생성 | `대화창` 탭 전용 인스턴스 CRUD UI |
+| `C:\dev\1227\mejai3\mejai\src\components\create\CreateApiTab.tsx` | 신규 생성 | `api` 탭 전용 provider 설정 UI |
+| `C:\dev\1227\mejai3\mejai\src\app\api\widget-instances\route.ts` | 수정 | 인스턴스 목록/생성 계약 확장 |
+| `C:\dev\1227\mejai3\mejai\src\app\api\widget-instances\[id]\route.ts` | 신규 생성 | 인스턴스 수정/삭제 계약 추가 |
+| `C:\dev\1227\mejai3\mejai\src\app\api\auth-settings\providers\route.ts` | 수정 가능 후보 | provider summary/meta 또는 비파괴적 응답 보강만 허용 |
+| `C:\dev\1227\mejai3\mejai\src\lib\widgetSharedInstance.ts` | 수정 가능 후보 | 인스턴스 계약 공통화가 필요할 때만 제한적으로 허용 |
+| `C:\dev\1227\mejai3\mejai\src\lib\widgetOverrides.ts` | 수정 가능 후보 | 설치 코드/preview URL 공통 helper 정리 필요 시에만 허용 |
+
+의도적으로 제외하는 파일:
+
+- `C:\dev\1227\mejai3\mejai\src\app\app\install\page.tsx`
+- `C:\dev\1227\mejai3\mejai\src\components\settings\WidgetInstallPanel.tsx`
+- `C:\dev\1227\mejai3\mejai\src\components\settings\EnvSettingsPanel.tsx`
+
+위 파일들은 레퍼런스 확인만 허용하며, `/app/create` 독립 구현을 위해 직접 수정하지 않는 것을 기본 원칙으로 한다.
+
+## 10. 변경 기록 및 롤백 보장
+
+후속 구현 시 아래를 반드시 수행한다.
+
+1. 수정 파일이 생기면 수정 직전 파일 전체를 `C:\dev\1227\mejai3\mejai\docs\diff` 에 백업한다.
+2. 파일명에는 날짜/시간과 원본 경로를 식별 가능하게 포함한다.
+3. 신규 파일은 백업 대상이 아니지만, 생성 직후 경로를 기록한다.
+4. 백업 누락 상태에서는 어떤 코드 수정도 진행하지 않는다.
+5. 문서, API, 컴포넌트, route 파일 모두 동일 규칙을 적용한다.
+
+## 11. 단계별 구현 계획
+
+1. 이해확정 절차 수행
+2. 수정 예정 파일 백업
+3. `CreateWorkspacePage` 탭 계약 추가
+4. `대화창` 탭 UI 구현
+5. 인스턴스 API(`GET/POST/PATCH/DELETE`) 구현
+6. `api` 탭 UI 구현
+7. auth settings 응답 메타 보강이 필요하면 최소 범위에서 route 확장
+8. `npm run build`
+9. Chrome DevTools 로 `/app/create` 새 탭 렌더링/상태 전환 확인
+10. Supabase MCP 로 관련 테이블 존재 및 컬럼 전제 재확인
+11. 테스트 기록/체크리스트 문서 반영
+
+## 12. 테스트 체크리스트
+
+- [ ] `/app/create?tab=template` 동작 유지
+- [ ] `/app/create?tab=chat` 신규 탭 렌더링
+- [ ] `/app/create?tab=api` 신규 탭 렌더링
+- [ ] `템플릿(admin)` 과 `도구(admin)` 가 비관리자에서 숨김 처리되는지 확인
+- [ ] `대화창` 목록이 `B_chat_widget_instances` 기반으로 표시되는지 확인
+- [ ] `대화창` 생성 후 설치 코드/Preview URL 이 즉시 계산되는지 확인
+- [ ] `대화창` 수정 시 `chat_policy`, `editable_id`, `usable_id`, `is_public`, `is_active` 반영 확인
+- [ ] `대화창` 삭제 시 soft delete 계약이 의도대로 동작하는지 확인
+- [ ] `api` 탭에서 `Cafe24`, `Shopify` provider 요약/편집이 동작하는지 확인
+- [ ] `api` 탭에서 `"서버 환경 변수"` UI 가 노출되지 않는지 확인
+- [ ] `npm run build` 성공
+
+## 13. 수동 검증용 SQL
+
+DB 직접 수정은 수행하지 않는다. 필요 시 아래 SQL을 사용자가 직접 실행해 결과를 확인한다.
+
+### 13.1 템플릿 확인
+
+```sql
+select id, name, is_active, is_public, created_by, updated_at
+from public."B_chat_widgets"
+order by updated_at desc nulls last
+limit 50;
+```
+
+### 13.2 대화창 인스턴스 확인
+
+```sql
+select id, template_id, name, public_key, is_active, is_public, editable_id, usable_id, created_by, updated_at
+from public."B_chat_widget_instances"
+order by updated_at desc nulls last, created_at desc nulls last
+limit 100;
+```
+
+### 13.3 API 설정 확인
+
+```sql
+select id, org_id, user_id, providers, updated_at
+from public."A_iam_auth_settings"
+order by updated_at desc nulls last
+limit 50;
+```
+
+## 14. MCP 테스트 기록
+
+### 2026-03-13 설계 검토 실행
+
+- `supabase` MCP
+  - `public.B_chat_widgets` 존재 확인
+  - `public.B_chat_widget_instances` 존재 확인
+  - `public.A_iam_auth_settings` 존재 확인
+  - `public.A_iam_user_access_maps` 존재 확인
+- `chrome-devtools` MCP
+  - `http://localhost:3000/app/install?tab=widget` 에서 `템플릿 선택`, `Overrides`, `설치 코드`, `Preview URL` UI 확인
+  - `http://localhost:3000/app/install?tab=env` 에서 `환경 변수 관리 안내`, `"서버 환경 변수"`, provider 설정 UI 확인
+  - 현재 `/app/create?tab=template` 상단 nav 구조 확인
+- 로컬 코드 확인
+  - `src/app/app/install/page.tsx` 에서 `widget|quickstart|env` 탭 계약 확인
+  - `src/components/settings/WidgetInstallPanel.tsx` 에서 현재 인스턴스 발급/설치 코드 생성 흐름 확인
+  - `src/app/api/widget-instances/route.ts` 에서 현재 `POST` 관리자 전용 계약 확인
+  - `src/app/api/auth-settings/providers/route.ts` 에서 `A_iam_auth_settings.providers` 저장 계약 확인
+
+### 2026-03-13 구현 실행
+
+- 실제 수정 파일
+  - `src/components/create/CreateWorkspacePage.tsx`
+  - `src/components/create/CreateChatTab.tsx`
+  - `src/components/create/CreateApiTab.tsx`
+  - `src/app/api/widget-instances/route.ts`
+  - `src/app/api/widget-instances/[id]/route.ts`
+  - `docs/chat.md`
+- 변경 전 백업
+  - `docs/diff/20260313-132820__src_components_create_CreateWorkspacePage.tsx.before`
+  - `docs/diff/20260313-132821__src_app_api_widget-instances_route.ts.before`
+  - `docs/diff/20260313-132820__docs_chat.md.before`
+- `chrome-devtools` MCP
+  - `http://localhost:3000/app/create` 에서 탭 순서가 `템플릿 | 대화창 | 비서 | 지식 | api | 도구` 로 렌더링되는 것 확인
+  - `http://localhost:3000/app/create?tab=chat` 에서 `대화창 목록` 테이블, 상세 편집 패널, 설치 코드/Preview URL 영역 렌더링 확인
+  - `http://localhost:3000/app/create?tab=api` 에서 `API 목록` 테이블과 `Cafe24 / Shopify` 상세 편집 폼, `"서버 환경 변수"` 제외 문구 확인
+  - 네트워크 탭에서 `GET /api/widget-instances`, `GET /api/widget-templates`, `GET /api/auth-settings/providers?provider=cafe24|shopify` 가 모두 `200` 응답으로 호출된 것 확인
+- `supabase` MCP
+  - `list_tables(public)` 재실행 시 `Auth required` 로 실패
+  - 따라서 이번 실행에서는 테이블 재검증을 MCP로 완료하지 못했고, 설계 단계에서 확인했던 테이블 전제를 유지한 상태로 구현 및 브라우저 검증만 수행
+- 로컬 빌드
+  - `npm run build` 성공
+- 쓰기 동작 검증 범위
+  - 실제 DB 변경을 수반하는 `POST /api/widget-instances`, `PATCH /api/widget-instances/[id]`, `DELETE /api/widget-instances/[id]`, `POST /api/auth-settings/providers` 는 이번 실행에서 호출하지 않음
+  - 실데이터 변경이 필요하면 사용자가 직접 실행하거나 별도 승인 범위에서 수행
+- 구현 메모
+  - `widget-instances` 라우트는 `template_shared` 내부 인스턴스를 목록/수정 대상에서 제외
+  - `DELETE /api/widget-instances/[id]` 는 soft delete(`is_active=false`)로 동작
+  - `api` 탭 저장은 기존 보안 계약을 유지해 관리자만 가능하며, 비관리자는 읽기 전용
+
+## 15. 결론
+
+후속 구현의 핵심은 새 UI를 추가하는 것이 아니라, `/app/create` 를 기준으로 템플릿(`B_chat_widgets`)과 대화창 인스턴스(`B_chat_widget_instances`)를 명확히 분리하고, `api` 탭을 통해 `A_iam_auth_settings.providers` 를 독립적으로 다루는 운영 계약을 세우는 것이다.
+
+`대화창` 탭은 `/app/install` 의 설치 중심 흐름을 인스턴스 CRUD 중심 흐름으로 승격해야 하며, `api` 탭은 `/app/install?tab=env` 의 provider 관리만 추출해 `/app/create` 공통 shell 아래로 재배치해야 한다.  
+이 문서의 화이트리스트, 권한 계약, 백업 절차, MCP 테스트 절차를 그대로 구현 기준으로 사용한다.

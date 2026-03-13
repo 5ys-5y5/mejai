@@ -75,37 +75,22 @@ function isTemplateSharedInstance(row: { chat_policy?: Record<string, unknown> |
   return readInstanceKind(row.chat_policy) === "template_shared";
 }
 
-function matchesBooleanFilter(value: boolean | null | undefined, filter: string | null) {
-  if (!filter) return true;
-  if (filter !== "true" && filter !== "false") return true;
-  return Boolean(value) === (filter === "true");
-}
-
 function canEditInstance(row: WidgetInstanceRow, userId: string, access: AccessInfo) {
   if (access.isAdmin) return true;
   const editableIds = normalizeIdList(row.editable_id);
   return row.created_by === userId || editableIds.includes(userId);
 }
 
-function canReadInstance(row: WidgetInstanceRow, userId: string, access: AccessInfo) {
-  if (canEditInstance(row, userId, access)) return true;
-  const usableIds = normalizeIdList(row.usable_id);
-  return usableIds.includes(userId);
-}
-
-function mergeEditableIds(userId: string, access: AccessInfo, value: unknown) {
-  const normalized = normalizeIdList(value);
+function mergeEditableIds(userId: string, access: AccessInfo, value: unknown, fallback: unknown) {
+  const source = value === undefined ? fallback : value;
+  const normalized = normalizeIdList(source);
   if (access.isAdmin) {
     return normalized.length > 0 ? normalized : [userId];
   }
   return Array.from(new Set([userId, ...normalized]));
 }
 
-function mapInstanceRow(
-  row: WidgetInstanceRow,
-  templateMap: Map<string, WidgetTemplateRow>,
-  permissions?: { canEdit?: boolean; canDelete?: boolean }
-) {
+function mapInstanceRow(row: WidgetInstanceRow, templateMap: Map<string, WidgetTemplateRow>) {
   const template = templateMap.get(row.template_id);
   return {
     ...row,
@@ -117,8 +102,6 @@ function mapInstanceRow(
     template_name: template?.name || row.template_id,
     template_is_active: template?.is_active ?? true,
     template_is_public: template?.is_public ?? false,
-    can_edit: permissions?.canEdit ?? true,
-    can_delete: permissions?.canDelete ?? permissions?.canEdit ?? true,
   };
 }
 
@@ -169,74 +152,126 @@ async function loadActiveTemplate(
   return data as WidgetTemplateRow;
 }
 
-export async function GET(req: NextRequest) {
-  const contextResult = await requireContext(req);
-  if (!contextResult.ok) return contextResult.response;
-
-  const access = await getAccessInfo(contextResult.context);
-
-  let supabaseAdmin;
-  try {
-    supabaseAdmin = getAdminSupabase();
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "ADMIN_SUPABASE_INIT_FAILED" },
-      { status: 500 }
-    );
-  }
-
-  const url = new URL(req.url);
-  const templateFilter = String(url.searchParams.get("template_id") || "").trim();
-  const activeFilter = url.searchParams.get("is_active");
-
+async function loadInstance(
+  supabaseAdmin: ReturnType<typeof createAdminSupabaseClient>,
+  id: string
+) {
   const { data, error } = await supabaseAdmin
     .from("B_chat_widget_instances")
     .select(INSTANCE_SELECT)
-    .order("updated_at", { ascending: false })
-    .limit(200);
+    .eq("id", id)
+    .maybeSingle();
 
   if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+    return { item: null as WidgetInstanceRow | null, response: NextResponse.json({ error: error.message }, { status: 400 }) };
   }
-
-  const visibleItems = ((data || []) as WidgetInstanceRow[])
-    .filter((row) => !isTemplateSharedInstance(row))
-    .filter((row) => (access.isAdmin ? true : canReadInstance(row, contextResult.context.user.id, access)))
-    .filter((row) => (templateFilter ? row.template_id === templateFilter : true))
-    .filter((row) => matchesBooleanFilter(row.is_active, activeFilter));
-
-  const templateMap = await loadTemplateMap(
-    supabaseAdmin,
-    visibleItems.map((item) => item.template_id)
-  );
-
-  return NextResponse.json({
-    items: visibleItems.map((item) => {
-      const canEdit = canEditInstance(item, contextResult.context.user.id, access);
-      return mapInstanceRow(item, templateMap, { canEdit, canDelete: canEdit });
-    }),
-  });
+  if (!data) {
+    return { item: null as WidgetInstanceRow | null, response: NextResponse.json({ error: "NOT_FOUND" }, { status: 404 }) };
+  }
+  return { item: data as WidgetInstanceRow, response: null as NextResponse | null };
 }
 
-export async function POST(req: NextRequest) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const contextResult = await requireContext(req);
   if (!contextResult.ok) return contextResult.response;
 
+  const resolvedParams = await params;
   const access = await getAccessInfo(contextResult.context);
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) {
     return NextResponse.json({ error: "INVALID_BODY" }, { status: 400 });
   }
 
-  const templateId = String(body.template_id || "").trim();
-  if (!templateId) {
+  let supabaseAdmin;
+  try {
+    supabaseAdmin = getAdminSupabase();
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "ADMIN_SUPABASE_INIT_FAILED" },
+      { status: 500 }
+    );
+  }
+
+  const existingResult = await loadInstance(supabaseAdmin, resolvedParams.id);
+  if (existingResult.response) return existingResult.response;
+  const existing = existingResult.item;
+  if (!existing) {
+    return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  }
+  if (isTemplateSharedInstance(existing)) {
+    return NextResponse.json({ error: "TEMPLATE_SHARED_INSTANCE_LOCKED" }, { status: 403 });
+  }
+  if (!canEditInstance(existing, contextResult.context.user.id, access)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+  }
+
+  const nextTemplateId = hasOwn(body, "template_id")
+    ? String(body.template_id || "").trim()
+    : String(existing.template_id || "").trim();
+  if (!nextTemplateId) {
     return NextResponse.json({ error: "TEMPLATE_REQUIRED" }, { status: 400 });
   }
 
-  const chatPolicy = hasOwn(body, "chat_policy") ? normalizeChatPolicy(body.chat_policy) : null;
-  if (readInstanceKind(chatPolicy) === "template_shared") {
+  const template = await loadActiveTemplate(supabaseAdmin, nextTemplateId);
+  if (!template) {
+    return NextResponse.json({ error: "TEMPLATE_NOT_FOUND" }, { status: 404 });
+  }
+
+  const nextChatPolicy = hasOwn(body, "chat_policy")
+    ? normalizeChatPolicy(body.chat_policy)
+    : normalizeChatPolicy(existing.chat_policy);
+  if (readInstanceKind(nextChatPolicy) === "template_shared") {
     return NextResponse.json({ error: "RESERVED_INSTANCE_KIND" }, { status: 400 });
   }
+
+  const nowIso = new Date().toISOString();
+  const name = hasOwn(body, "name")
+    ? String(body.name || "").trim() || template.name || existing.name || "Chat Instance"
+    : existing.name || template.name || "Chat Instance";
+  const editableIds = mergeEditableIds(
+    contextResult.context.user.id,
+    access,
+    hasOwn(body, "editable_id") ? body.editable_id : undefined,
+    existing.editable_id
+  );
+  const usableIds = hasOwn(body, "usable_id") ? normalizeIdList(body.usable_id) : normalizeIdList(existing.usable_id);
+
+  const updates: Record<string, unknown> = {
+    template_id: nextTemplateId,
+    name,
+    is_public: hasOwn(body, "is_public") ? Boolean(body.is_public) : existing.is_public !== false,
+    is_active: hasOwn(body, "is_active") ? Boolean(body.is_active) : existing.is_active !== false,
+    editable_id: editableIds,
+    usable_id: usableIds,
+    chat_policy: nextChatPolicy,
+    updated_at: nowIso,
+  };
+
+  if (body.rotate_key === true) {
+    updates.public_key = makePublicKey();
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("B_chat_widget_instances")
+    .update(updates)
+    .eq("id", resolvedParams.id)
+    .select(INSTANCE_SELECT)
+    .single();
+
+  if (error || !data) {
+    return NextResponse.json({ error: error?.message || "INSTANCE_UPDATE_FAILED" }, { status: 400 });
+  }
+
+  const templateMap = new Map<string, WidgetTemplateRow>([[template.id, template]]);
+  return NextResponse.json({ item: mapInstanceRow(data as WidgetInstanceRow, templateMap) });
+}
+
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const contextResult = await requireContext(req);
+  if (!contextResult.ok) return contextResult.response;
+
+  const resolvedParams = await params;
+  const access = await getAccessInfo(contextResult.context);
 
   let supabaseAdmin;
   try {
@@ -248,42 +283,34 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const template = await loadActiveTemplate(supabaseAdmin, templateId);
-  if (!template) {
-    return NextResponse.json({ error: "TEMPLATE_NOT_FOUND" }, { status: 404 });
+  const existingResult = await loadInstance(supabaseAdmin, resolvedParams.id);
+  if (existingResult.response) return existingResult.response;
+  const existing = existingResult.item;
+  if (!existing) {
+    return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  }
+  if (isTemplateSharedInstance(existing)) {
+    return NextResponse.json({ error: "TEMPLATE_SHARED_INSTANCE_LOCKED" }, { status: 403 });
+  }
+  if (!canEditInstance(existing, contextResult.context.user.id, access)) {
+    return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
 
   const nowIso = new Date().toISOString();
-  const name = String(body.name || template.name || "Chat Instance").trim() || template.name || "Chat Instance";
-  const isPublic = typeof body.is_public === "boolean" ? body.is_public : true;
-  const isActive = typeof body.is_active === "boolean" ? body.is_active : true;
-  const editableIds = mergeEditableIds(contextResult.context.user.id, access, body.editable_id);
-  const usableIds = normalizeIdList(body.usable_id);
-
   const { data, error } = await supabaseAdmin
     .from("B_chat_widget_instances")
-    .insert({
-      template_id: templateId,
-      public_key: makePublicKey(),
-      name,
-      is_active: isActive,
-      is_public: isPublic,
-      editable_id: editableIds,
-      usable_id: usableIds,
-      chat_policy: chatPolicy,
-      created_by: contextResult.context.user.id,
-      created_at: nowIso,
+    .update({
+      is_active: false,
       updated_at: nowIso,
     })
+    .eq("id", resolvedParams.id)
     .select(INSTANCE_SELECT)
     .single();
 
   if (error || !data) {
-    return NextResponse.json({ error: error?.message || "INSTANCE_CREATE_FAILED" }, { status: 400 });
+    return NextResponse.json({ error: error?.message || "INSTANCE_DELETE_FAILED" }, { status: 400 });
   }
 
-  const templateMap = new Map<string, WidgetTemplateRow>([[template.id, template]]);
-  return NextResponse.json({
-    item: mapInstanceRow(data as WidgetInstanceRow, templateMap, { canEdit: true, canDelete: true }),
-  });
+  const templateMap = await loadTemplateMap(supabaseAdmin, [String(data.template_id || "")]);
+  return NextResponse.json({ item: mapInstanceRow(data as WidgetInstanceRow, templateMap), ok: true });
 }

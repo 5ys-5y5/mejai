@@ -1,0 +1,834 @@
+# `/app/create?tab=template` 전체 설정 확장 설계서
+
+작성일: 2026-03-13  
+대상 경로: `http://localhost:3000/app/create?tab=template`  
+기준 비교 화면: `http://localhost:3000/app/conversation`
+
+## 1. 문서 목적
+
+이 문서는 `template` 탭이 `conversation` 페이지에서 현재 설정 가능한 항목을 모두 설정할 수 있도록 만들기 위한 실행 설계 문서다.
+
+이번 문서의 목표는 단순 아이디어 정리가 아니라 다음을 실제 구현 가능한 수준으로 고정하는 것이다.
+
+1. 현재 코드 기준의 실제 차이점
+2. 공통 계약 기준의 수정 방향
+3. 수정 허용 화이트리스트
+4. 저장/조회/API 흐름
+5. 테스트 절차와 이번 실행의 테스트 기록
+
+이 작업의 핵심 원칙은 다음과 같다.
+
+- `template` 탭 전용 임시 폼을 따로 늘리지 않는다.
+- `conversation` 페이지가 이미 사용하는 `chat_policy` 계약을 공통 소스로 사용한다.
+- `ChatSettingsPanel`을 복제하지 않고 공통 컴포넌트 계약을 수정해서 재사용한다.
+- 템플릿 설정과 인스턴스 설치 설정을 섞지 않는다.
+
+## 2. 현재 요청에 대한 이해
+
+후속 구현 전에 사용자와 반드시 합의해야 하는 이해 항목은 아래와 같다.
+
+1. 목표는 `template` 탭에서 `conversation` 페이지가 현재 실질적으로 설정하는 항목을 모두 설정 가능하게 만드는 것이다.
+2. 목표는 “원시 내부 필드 전부를 중복 노출”하는 것이 아니라, `conversation` 페이지의 실제 동작 기준으로 동일한 설정 범위를 제공하는 것이다.
+3. 구현은 템플릿 정책의 공통 소스인 `B_chat_widgets.chat_policy` 기준으로 이뤄져야 한다.
+4. `template` 탭에서 새로 만드는 UI는 `conversation` 페이지의 기존 설정 UI를 복붙하지 말고 공통 컴포넌트로 추출해서 재사용해야 한다.
+5. `runtime.selfUpdate.enabled`는 템플릿 개별 설정이 아니라 조직 공통 설정이므로, 템플릿 저장과 별도 스코프로 다뤄야 한다.
+6. 현재 `template` 탭이 사용 중인 `/api/widgets` 경로는 템플릿 전체 설정 화면의 기준 API로 쓰지 않는다.
+7. 인스턴스 키 발급/회전 같은 인스턴스 전용 동작은 `chat` 탭 또는 인스턴스 전용 화면 책임으로 유지하고, `template` 탭은 템플릿 설정 중심으로 정리한다.
+8. 구현 중 필요한 파일 수정은 본 문서의 화이트리스트에 한정한다.
+
+## 3. 수정 전 이해확정 절차
+
+후속 코드 수정 전에는 아래 절차를 반드시 따른다.
+
+1. 아래 이해 항목을 사용자에게 그대로 제시한다.
+2. 각 항목이 맞는지 사용자에게 명시적으로 확인받는다.
+3. 사용자가 “이 범위로 진행”을 명시하기 전에는 코드 수정에 착수하지 않는다.
+4. 사용자가 범위를 바꾸면, 화이트리스트와 구현 순서를 다시 작성한 뒤 재확정받는다.
+
+사용자에게 제시할 이해확정 항목은 아래 문구를 그대로 사용한다.
+
+1. `template` 탭은 `conversation` 페이지의 템플릿 설정 기능을 공통 계약 기준으로 흡수한다.
+2. `CreateWidgetTab`의 단순 폼 상태는 폐기하거나 최소화하고, `chat_policy` 기반 상태 모델로 통합한다.
+3. `ChatSettingsPanel`은 복제하지 않고, 공통 prop 계약을 확장해 `conversation` 페이지와 `template` 탭이 함께 사용한다.
+4. 템플릿 저장은 `B_chat_widgets.name`, `B_chat_widgets.is_active`, `B_chat_widgets.chat_policy`를 기준으로 동작한다.
+5. `settings_ui`와 feature label/order 저장 누락 문제를 공통 계약 수준에서 함께 수정한다.
+6. 인스턴스 키 회전과 인스턴스 설치 스니펫은 템플릿 탭의 핵심 범위에서 분리하고, 템플릿 탭은 템플릿 public key 기준의 미리보기/설치 흐름으로 맞춘다.
+7. 조직 공통 `runtime.selfUpdate.enabled`는 템플릿 저장과 분리된 글로벌 설정임을 UI와 저장 흐름에서 명확히 표시한다.
+8. 화이트리스트 외 파일 수정이 필요하면 즉시 중단하고 추가 승인을 받는다.
+
+사용자 확정 예시 문구:
+
+```text
+위 8개 이해 항목이 맞습니다. 이 범위로 진행하세요.
+```
+
+## 4. 현재 상태 진단
+
+### 4.1 현재 `template` 탭 구현
+
+현재 `src/components/create/CreateWidgetTab.tsx`는 아래만 다룬다.
+
+- 템플릿 이름
+- 연결 비서
+- `theme.greeting`
+- `theme.input_placeholder`
+- `theme.launcher_icon_url`
+- 활성 여부
+- 템플릿 키/인스턴스 키 노출
+- 인스턴스 키 재발급
+- 인스턴스 설치 스니펫
+
+즉, 현재 `template` 탭은 템플릿 전체 정책 편집기가 아니라, “간단한 템플릿 메타 + 공유 인스턴스 설치 도우미”에 가깝다.
+
+### 4.2 현재 `conversation` 페이지 구현
+
+현재 `src/app/app/conversation/page.tsx`는 아래를 수행한다.
+
+- 템플릿 목록 로딩: `/api/widget-templates`
+- 템플릿 정책 로딩: `/api/widget-templates/[id]/chat-policy`
+- `ChatSettingsPanel` 기반의 전체 정책 편집
+- 정책 전체 on/off 일괄 변경
+- 정책 visibility 일괄 변경
+- 설치 코드 생성
+- preview URL 생성
+- 런처 위치 프리뷰
+- chat/list/policy/login 3분할 프리뷰
+- 저장 시 템플릿 메타와 정책을 분리 저장
+
+현재 `conversation` 페이지는 `hiddenLabels`로 아래 중복 필드를 숨기고 있다.
+
+- `widget.name`
+- `widget.agent_id`
+- `widget.setup_config`
+- `setup_config.kb.mode`
+- `setup_config.kb.kb_id`
+- `setup_config.kb.admin_kb_ids`
+- `setup_config.mcp.provider_keys`
+- `setup_config.mcp.tool_ids`
+- `setup_config.llm.default`
+
+이 의미는 “모든 내부 raw field를 다 보여주는 것”이 목표가 아니라, 중복 없이 실제 설정 행위를 제공하는 것이 목표라는 뜻이다.
+
+### 4.3 현재 구조에서 확인된 핵심 문제
+
+#### 문제 1. 데이터 소스가 다르다
+
+- `conversation` 페이지는 `/api/widget-templates`를 사용한다.
+- `template` 탭은 `/api/widgets`를 사용한다.
+- `/api/widgets`는 `created_by = context.user.id` 조건으로 필터링한다.
+
+즉, 템플릿 전체 관리 화면이 서로 다른 API를 기준으로 움직이고 있다.
+
+#### 문제 2. 상태 모델이 다르다
+
+`conversation` 페이지는 아래 두 축으로 상태를 나눈다.
+
+- 템플릿 메타: `name`, `is_active`, `public_key`
+- 정책 본문: `ConversationFeaturesProviderShape`
+
+반면 `template` 탭은 `greeting`, `inputPlaceholder`, `launcherIconUrl` 같은 개별 local state를 따로 관리한다.
+
+이 구조는 정책 항목이 늘어날수록 같은 데이터를 중복 상태로 쪼개는 방향이라 재사용이 어렵다.
+
+#### 문제 3. 템플릿 설정과 인스턴스 설정이 섞여 있다
+
+현재 `template` 탭은 인스턴스 public key와 인스턴스 설치 스니펫을 주요 기능으로 노출한다.
+
+그러나 `conversation` 페이지의 템플릿 설정은 템플릿 `public_key`와 `widget_id` 기준으로 동작한다.
+
+또한 현재 `/app/create?tab=chat` 탭은 이미 인스턴스 중심 설치 흐름을 따로 관리한다.
+
+따라서 `template` 탭은 템플릿 정책 편집기로 정리하고, 인스턴스 전용 흐름과 역할을 분리해야 한다.
+
+#### 문제 4. `runtime.selfUpdate.enabled`는 글로벌 설정인데 UI 안에서 템플릿 설정처럼 보인다
+
+`ChatSettingsPanel`의 Runtime 섹션은 `/api/runtime/governance/config`로 직접 저장한다.
+
+즉, 이 설정은 `B_chat_widgets.chat_policy`에 저장되는 템플릿 전용 값이 아니라 조직 공통 설정이다.
+
+따라서 `template` 탭으로 옮길 때는 아래 두 가지를 분리해서 설계해야 한다.
+
+- 템플릿 저장
+- 글로벌 Runtime 저장
+
+#### 문제 5. `settings_ui` 저장이 현재도 누락될 가능성이 높다
+
+현재 `ChatSettingsPanel`은 `setupUi` 상태를 별도로 들고 있지만, 저장 시 `nextDraft.setupUi`를 provider로 다시 넣지 않는다.
+
+또한 저장 직전과 API 저장 단계에서 모두 아래 필드를 제거한다.
+
+- `setup_ui`
+- `settings_ui`
+
+이 구조에서는 아래 설정이 화면에서 바뀌어도 실제 저장되지 않을 가능성이 높다.
+
+- setup mode 라벨 변경
+- setup field order 변경
+- feature label 변경
+
+즉, 이번 작업은 단순히 `template` 탭에 `ChatSettingsPanel`을 붙이는 일이 아니라, 공통 정책 저장 계약 자체를 바로잡는 작업이어야 한다.
+
+## 5. `conversation` 페이지 기준 설정 범위
+
+`template` 탭이 지원해야 하는 설정 범위는 아래와 같다.
+
+### 5.1 템플릿 메타
+
+- `B_chat_widgets.name`
+- `B_chat_widgets.is_active`
+- `B_chat_widgets.public_key` 기반 설치/프리뷰
+
+### 5.2 정책 일괄 제어
+
+- 전체 on/off 일괄 적용
+- 전체 visibility 일괄 적용
+- 현재 enabled 수량/visibility 분포 요약
+
+### 5.3 위젯 기본 설정
+
+- `widget.entry_mode`
+- `widget.embed_view`
+
+주의:
+
+- `widget.agent_id`와 `widget.setup_config.*` raw 그룹은 `conversation` 페이지에서도 숨기고 있으므로 그대로 중복 노출하지 않는다.
+- 실제 설정은 아래 `setup` 그룹과 `widget.theme`/`widget.launcher`/`widget.iframe` 기반으로 유지한다.
+
+### 5.4 런처 디자인
+
+- `cfg.launcherLabel`
+- `cfg.position`
+- `theme.launcher_logo_id`
+- `theme.primary_color`
+- `theme.launcher_bg`
+- `launcher.container.bottom`
+- `launcher.container.left`
+- `launcher.container.right`
+- `launcher.container.gap`
+- `launcher.container.zIndex`
+- `launcher.size`
+
+### 5.5 위젯 프레임 디자인
+
+- `iframe.width`
+- `iframe.height`
+- `iframe.borderRadius`
+- `iframe.boxShadow`
+- `iframe.background`
+- `iframe.layout`
+- `iframe.bottomOffset`
+- `iframe.sideOffset`
+
+### 5.6 헤더 설정
+
+- `widget.header.enabled`
+- `widget.header.logo`
+- `widget.header.status`
+- `widget.header.agentAction`
+- `widget.header.newConversation`
+- `widget.header.close`
+
+### 5.7 탭 바와 패널 설정
+
+- `widget.tabBar.enabled`
+- `widget.defaultTab`
+- `widget.tabBar.chat`
+- `widget.chatPanel`
+- `widget.tabBar.list`
+- `widget.historyPanel`
+- `widget.tabBar.login`
+- `widget.tabBar.policy`
+- `widget.setupPanel`
+
+### 5.8 관리자 패널 설정
+
+- `adminPanel.enabled`
+- `adminPanel.logsToggle`
+- `adminPanel.copyConversation`
+
+### 5.9 Interaction 설정
+
+- `interaction.quickReplies`
+- `interaction.productCards`
+- `interaction.inputSubmit`
+- `interaction.prefill`
+- `interaction.threePhasePrompt`
+- `interaction.threePhasePromptShowConfirmed`
+- `interaction.threePhasePromptShowConfirming`
+- `interaction.threePhasePromptShowNext`
+- `interaction.threePhasePromptHideLabels`
+- `interaction.threePhasePromptLabels.confirmed`
+- `interaction.threePhasePromptLabels.confirming`
+- `interaction.threePhasePromptLabels.next`
+- `interaction.inputPlaceholder`
+- `interaction.prefillMessages`
+- `interaction.widgetHeaderAgentAction`
+- `interaction.widgetHeaderNewConversation`
+- `interaction.widgetHeaderClose`
+
+### 5.10 MCP 정책
+
+- `mcp.providerSelector`
+- `mcp.actionSelector`
+- `mcp.providers.allowlist`
+- `mcp.providers.denylist`
+- `mcp.tools.allowlist`
+- `mcp.tools.denylist`
+
+### 5.11 Setup Mode / Setup UI 설정
+
+- `setup.modelSelector`
+- `setup.modeExisting`
+- `setup.modeNew`
+- `setup.agentSelector`
+- `setup.versionSelector`
+- `setup.sessionSelector`
+- `setup.conversationMode`
+- `setup.sessionIdSearch`
+- `setup.inlineUserKbInput`
+- `setup.llmSelector`
+- `setup.kbSelector`
+- `setup.adminKbSelector`
+- `setup.routeSelector`
+- `setup.mcpProviderSelector`
+- `setup.mcpActionSelector`
+- setup field 표시 순서
+- setup field 표시 라벨
+- existing setup field 표시 순서
+- existing setup field 표시 라벨
+- feature label 커스터마이징
+
+### 5.12 Setup 기본값 및 허용 범위
+
+- `setup.agent_id`
+- `setup.defaultLlm`
+- `setup.defaultKbId`
+- `setup.defaultAdminKbIds`
+- `setup.defaultRoute`
+- `setup.defaultMcpProviderKeys`
+- `setup.defaultMcpToolIds`
+- `setup.mcpProviderKeys.enabled`
+- `setup.mcpProviderKeys.allowlist`
+- `setup.mcpToolIds.enabled`
+- `setup.mcpToolIds.allowlist`
+- `setup.kbMode`
+- `setup.inlineUserKbPrefill`
+- `setup.inlineUserKb.enabled`
+- `setup.inlineUserKb.allowlist`
+- `setup.defaultInlineUserKb`
+- `setup.llms.allowlist`
+- `setup.kbIds.allowlist`
+- `setup.adminKbIds.allowlist`
+- `setup.routes.allowlist`
+
+### 5.13 Runtime 설정
+
+- `runtime.selfUpdate.enabled`
+- `runtime.selfUpdate.visibility`
+
+주의:
+
+- 이 값은 템플릿 개별 값이 아니라 조직 공통 값이다.
+- 템플릿 저장 payload에 넣으면 안 된다.
+
+### 5.14 설치/프리뷰 설정
+
+- Overrides JSON
+- template public key 기반 설치 코드
+- preview URL
+- preview meta: `origin`, `page_url`, `referrer`
+- 런처 위치 프리뷰
+- chat/list/policy/login 프리뷰
+
+## 6. 구현 원칙
+
+후속 구현은 아래 원칙을 지켜야 한다.
+
+1. 템플릿 설정의 공통 소스는 `B_chat_widgets.chat_policy`다.
+2. `template` 탭은 `conversation` 페이지와 같은 정책 모델을 사용해야 한다.
+3. `conversation` 페이지에서 이미 존재하는 UI를 `template` 탭 안에 다시 선언하지 않는다.
+4. 설정 저장은 템플릿 메타 저장과 정책 저장을 분리하되, 둘을 하나의 저장 액션에서 일관되게 처리한다.
+5. `settings_ui`와 feature label/order는 정책 계약의 일부로 보존한다.
+6. Runtime self-update는 템플릿 정책 저장과 분리된 글로벌 설정임을 UI에서 명확히 표시한다.
+7. 인스턴스 설치/회전은 `template` 탭의 1차 책임으로 두지 않는다.
+8. DB 스키마 추가 없이 기존 테이블과 API 계약만으로 해결한다.
+
+## 7. 타겟 구조
+
+### 7.1 공통 상태 컨트롤러를 신설한다
+
+신규 파일 제안:
+
+- `src/lib/conversation/client/useWidgetTemplateSettingsController.ts`
+
+이 컨트롤러가 담당할 상태는 아래와 같다.
+
+- 템플릿 목록
+- 선택된 템플릿 ID
+- 템플릿 메타 draft
+- `policyValue`
+- policy/template fingerprint
+- dirty state
+- bulk selection state
+- preview meta
+- install overrides
+- dependency option 목록
+- governance config
+
+이 컨트롤러는 아래 API를 공통으로 사용한다.
+
+- `GET /api/widget-templates`
+- `GET /api/widget-templates/[id]/chat-policy`
+- `PATCH /api/widget-templates/[id]`
+- `POST /api/widget-templates/[id]/chat-policy`
+- `POST /api/widget-templates`
+- `DELETE /api/widget-templates/[id]`
+- `GET /api/agents?limit=200`
+- `GET /api/kb?limit=200`
+- `GET /api/kb/samples`
+- `GET /api/mcp/tools`
+- `GET /api/runtime/governance/config`
+
+### 7.2 공통 편집 UI를 신설한다
+
+신규 파일 제안:
+
+- `src/components/widget-template/WidgetTemplateSettingsEditor.tsx`
+
+이 컴포넌트는 아래 UI를 공통으로 렌더링한다.
+
+- 정책 일괄 제어 바
+- `ChatSettingsPanel`
+- 설치 코드 영역
+- preview meta 입력 영역
+- 런처 프리뷰
+- chat/list/policy/login 프리뷰
+- dirty/save 상태 표시
+
+이 컴포넌트는 `conversation` 페이지와 `CreateWidgetTab` 양쪽에서 재사용한다.
+
+### 7.3 `ChatSettingsPanel`을 공통 계약 기준으로 확장한다
+
+수정 방향:
+
+1. `setupUi` 변경이 provider payload로 다시 투영되도록 수정한다.
+2. `settings_ui`를 저장 가능한 canonical field로 유지한다.
+3. Runtime 섹션은 내부 fetch/post를 직접 수행하지 말고 외부 adapter를 받을 수 있게 바꾼다.
+4. 기본값은 기존 동작을 유지하되, 외부 adapter를 넘기면 상위 컨트롤러가 관리하게 한다.
+
+권장 prop 형태:
+
+```ts
+type GovernanceAdapter = {
+  mode: "internal" | "external" | "hidden";
+  value?: {
+    enabled: boolean;
+    visibility_mode: "user" | "admin";
+    source: string;
+    updated_at: string | null;
+    updated_by: string | null;
+  } | null;
+  saving?: boolean;
+  onChange?: (next: { enabled: boolean; visibility_mode: "user" | "admin" }) => Promise<void> | void;
+};
+```
+
+이 수정은 `template` 탭만 위한 예외 처리 패치가 아니라, Runtime 섹션의 저장 스코프를 공통 계약 수준에서 명시하는 수정이다.
+
+### 7.4 `CreateWidgetTab`은 단순 폼이 아니라 공통 편집기를 사용한다
+
+`CreateWidgetTab`은 아래 변경이 필요하다.
+
+- `/api/widgets` 사용 중단
+- 로컬 `greeting`, `inputPlaceholder`, `launcherIconUrl` state 제거
+- 공통 컨트롤러와 공통 편집기 사용
+- 템플릿 public key 기반 설치/프리뷰로 정렬
+- 인스턴스 키 회전 버튼 제거 또는 `chat` 탭으로 이동 안내
+
+### 7.5 `conversation` 페이지도 같은 공통 편집기를 사용한다
+
+`src/app/app/conversation/page.tsx`는 다음만 유지한다.
+
+- 페이지 헤더
+- 템플릿 목록 선택 UI
+- 관리자 권한 보호
+
+그 외 아래 detail 영역은 공통 편집기로 옮긴다.
+
+- bulk controls
+- `ChatSettingsPanel` 설정 블록
+- 설치 코드
+- preview meta
+- launcher preview
+- tab preview
+
+이렇게 해야 `template` 탭이 `conversation` 페이지와 동일한 설정 범위를 제공하면서도 UI 정의가 한 곳으로 모인다.
+
+## 8. 저장 계약 설계
+
+### 8.1 조회
+
+초기 진입 시:
+
+1. `GET /api/widget-templates`
+2. 첫 템플릿 또는 URL 선택 템플릿 결정
+3. `GET /api/widget-templates/[id]/chat-policy`
+4. dependency 목록 로딩
+5. governance config 로딩
+
+### 8.2 생성
+
+새 템플릿 생성 시:
+
+1. `POST /api/widget-templates` with `{ name: "New Widget Template" }`
+2. 응답으로 템플릿 ID 확보
+3. 즉시 `GET /api/widget-templates/[id]/chat-policy`
+4. 기본 policy draft 생성
+
+원칙:
+
+- 새 템플릿 생성은 `/api/widgets`로 우회하지 않는다.
+- 템플릿 생성 계약은 `widget-templates` 하나로 통일한다.
+
+### 8.3 저장
+
+저장은 아래 순서로 고정한다.
+
+1. 템플릿 메타 변경이 있으면 `PATCH /api/widget-templates/[id]`
+2. 정책 변경이 있으면 `POST /api/widget-templates/[id]/chat-policy`
+3. 저장 완료 후 `GET /api/widget-templates/[id]/chat-policy` 재조회
+4. 필요 시 템플릿 목록도 재조회
+
+템플릿 메타 PATCH 대상:
+
+- `name`
+- `is_active`
+
+정책 POST 대상 canonical shape:
+
+- `widget`
+- `features`
+- `settings_ui`
+
+정책 저장 시 제거해야 하는 파생 필드:
+
+- `pages`
+- `page_registry`
+- `debug_copy`
+- legacy `setup_ui`
+
+정책 저장 시 제거하면 안 되는 필드:
+
+- `settings_ui`
+
+즉, 이번 구현에서는 “정책을 저장할 때 `settings_ui`를 버리지 않는 것”이 필수다.
+
+### 8.4 삭제
+
+삭제는 기존과 동일하게 `DELETE /api/widget-templates/[id]`를 사용한다.
+
+삭제 후 처리:
+
+1. 목록 재조회
+2. 선택 상태 재정렬
+3. preview/install state 초기화
+
+### 8.5 Runtime 저장
+
+Runtime는 아래 규칙으로 저장한다.
+
+1. `ChatSettingsPanel` 내부 템플릿 저장 흐름에 넣지 않는다.
+2. `/api/runtime/governance/config`로 별도 저장한다.
+3. UI에는 “조직 공통 설정” 배지를 붙인다.
+4. `template` 탭과 `conversation` 페이지 모두 같은 governance adapter를 사용한다.
+
+## 9. 공통 계약 수정 포인트
+
+### 9.1 `ChatSettingsPanel` 저장 계약 수정
+
+현재 문제:
+
+- `draft.setupUi` 변경이 `provider`로 반영되지 않는다.
+- 저장 전에 `settings_ui`를 제거한다.
+
+필수 수정:
+
+1. `DraftState.setupUi`를 `ConversationFeaturesProviderShape.settings_ui`로 직렬화하는 helper 추가
+2. `featureLabels`, `order`, `existingOrder`, `existingLabels`가 모두 저장 payload에 포함되도록 수정
+3. `onChange`로 내보낼 값에 `settings_ui` 포함
+
+### 9.2 `widget-template` API 저장 계약 수정
+
+필수 수정:
+
+1. `src/app/api/widget-templates/[id]/chat-policy/route.ts`
+   - `settings_ui` 제거 금지
+2. `src/app/api/widget-templates/[id]/route.ts`
+   - `chat_policy` 저장 시 `settings_ui` 제거 금지
+3. `src/app/api/widget-templates/route.ts`
+   - 생성 시 전달된 `chat_policy`에 `settings_ui`가 있으면 보존
+
+이 수정은 template 탭만 위한 것이 아니라, 현재 conversation 페이지에서도 잠재적으로 저장되지 않는 설정을 공통적으로 바로잡는 수정이다.
+
+## 10. `template` 탭 상세 구현 방향
+
+### 10.1 목록 영역
+
+`CreateResourceShell`의 목록 영역은 유지한다.
+
+표시 컬럼 권장:
+
+- 템플릿명
+- 연결 에이전트 또는 기본 setup agent
+- 상태
+- default tab
+- public key 발급 여부
+
+주의:
+
+- 인스턴스 public key를 핵심 컬럼으로 두지 않는다.
+- 인스턴스 수준 설치는 `chat` 탭 책임이다.
+
+### 10.2 상세 영역
+
+상세 영역은 공통 편집기를 삽입한다.
+
+상세 영역 구성 순서:
+
+1. 저장 대상 요약
+2. bulk control
+3. `ChatSettingsPanel`
+4. 설치 코드
+5. preview meta
+6. launcher preview
+7. tab preview
+8. 저장 footer
+
+### 10.3 저장 UX
+
+`conversation` 페이지처럼 dirty 상태를 계산하되, `CreateResourceShell` 내부에서는 전역 하단 고정보다 detail card 하단 sticky save bar를 우선 사용한다.
+
+저장 버튼 활성 조건:
+
+- 템플릿 메타 변경 또는 정책 변경이 있는 경우
+- 저장 중이 아닌 경우
+
+## 11. 수정 허용 화이트리스트
+
+후속 실제 구현 시 수정 가능한 파일은 아래로 제한한다.
+
+1. `C:\dev\1227\mejai3\mejai\docs\temSettings.md`
+   - 본 설계 문서 유지/보완
+2. `C:\dev\1227\mejai3\mejai\src\components\create\CreateWidgetTab.tsx`
+   - `template` 탭의 기존 단순 폼을 공통 설정 편집기로 교체
+3. `C:\dev\1227\mejai3\mejai\src\app\app\conversation\page.tsx`
+   - 공통 편집기 재사용을 위한 inline 설정 블록 정리
+4. `C:\dev\1227\mejai3\mejai\src\components\conversation\ChatSettingsPanel.tsx`
+   - `settings_ui` 저장 계약, governance adapter, 공통 prop 계약 수정
+5. `C:\dev\1227\mejai3\mejai\src\components\widget-template\WidgetTemplateSettingsEditor.tsx`
+   - 신규 공통 템플릿 설정 편집기
+6. `C:\dev\1227\mejai3\mejai\src\lib\conversation\client\useWidgetTemplateSettingsController.ts`
+   - 신규 공통 상태 컨트롤러
+7. `C:\dev\1227\mejai3\mejai\src\lib\conversation\pageFeaturePolicy.ts`
+   - 필요 시 `settings_ui` 직렬화/역직렬화 보강, 공통 타입 보강
+8. `C:\dev\1227\mejai3\mejai\src\lib\widgetPolicyUtils.ts`
+   - 템플릿 메타/정책 동기화 helper 보강
+9. `C:\dev\1227\mejai3\mejai\src\app\api\widget-templates\route.ts`
+   - 생성 시 정책 canonical shape 보존
+10. `C:\dev\1227\mejai3\mejai\src\app\api\widget-templates\[id]\route.ts`
+   - PATCH 저장 시 `settings_ui` 보존
+11. `C:\dev\1227\mejai3\mejai\src\app\api\widget-templates\[id]\chat-policy\route.ts`
+   - 정책 저장 시 `settings_ui` 보존
+
+## 12. 수정 비허용 항목
+
+아래는 이번 작업에서 금지한다.
+
+1. `src/components/create` 아래에 `ChatSettingsPanel` 복제본 만들기
+2. `template` 탭 전용 임시 `greeting`, `inputPlaceholder` 상태를 계속 확장하기
+3. `/api/widgets`를 억지로 확장해서 `/api/widget-templates`와 병렬 계약을 만드는 것
+4. `runtime.selfUpdate.enabled`를 템플릿 `chat_policy`에 저장하는 것
+5. `settings_ui`를 로컬 스토리지나 별도 필드에 우회 저장하는 것
+6. 인스턴스 키 회전을 템플릿 저장 흐름에 계속 붙여 두는 것
+
+## 13. 변경 기록 및 롤백 보장
+
+후속 코드 수정 시 반드시 아래 절차를 따른다.
+
+1. 수정 전 `C:\dev\1227\mejai3\mejai\docs\diff`에 원본을 백업한다.
+2. 파일명 규칙은 아래를 사용한다.
+
+```text
+C:\dev\1227\mejai3\mejai\docs\diff\YYYYMMDD-HHMMSS__상대경로를_언더스코어로변환.before
+```
+
+예시:
+
+```text
+C:\dev\1227\mejai3\mejai\docs\diff\20260313-170500__src_components_conversation_ChatSettingsPanel.tsx.before
+```
+
+3. 신규 파일은 최초 생성 시 백업 대상이 아니지만, 생성 후 재수정부터는 동일 규칙으로 백업한다.
+4. 파일 일부만 백업하지 말고, 롤백 가능한 전체 내용 기준으로 백업한다.
+5. 백업 없는 수정은 금지한다.
+
+이번 실행에서는 `docs/temSettings.md`가 신규 생성 파일이므로 사전 백업 파일은 생성하지 않았다.
+
+## 14. 실행 정책
+
+### 14.1 범위 외 수정 금지
+
+- 화이트리스트 밖 파일 수정 금지
+- 템플릿 설정과 직접 무관한 탭 UI 변경 금지
+- 기존 `chat`, `agents`, `kb`, `api`, `mcp` 탭의 목적 외 변경 금지
+
+### 14.2 빌드 의무
+
+후속 구현 시 아래를 반드시 수행한다.
+
+1. 공통 계약 수정 후 즉시 `npm run build`
+2. `ChatSettingsPanel` 수정 후 다시 `npm run build`
+3. API route 수정 후 다시 `npm run build`
+4. 최종 정리 후 다시 `npm run build`
+
+### 14.3 DB 변경 정책
+
+현재 설계 기준으로는 DB 스키마 변경이 필요 없다.
+
+만약 구현 중 DB 변경이 필요해지면 아래 절차를 따른다.
+
+1. 즉시 중단
+2. 필요한 이유 설명
+3. SQL만 문서 또는 응답으로 제공
+4. 실제 DB 수정은 사용자가 직접 수행
+
+## 15. 구현 순서
+
+1. 사용자 이해확정 받기
+2. 백업 파일 생성하기
+3. 공통 controller와 공통 editor의 인터페이스부터 정의하기
+4. `ChatSettingsPanel`의 `settings_ui` 저장 계약 수정하기
+5. `widget-templates` API 저장 시 `settings_ui` 보존하도록 수정하기
+6. `conversation` 페이지에서 공통 editor를 사용하도록 정리하기
+7. `CreateWidgetTab`을 공통 editor/controller 기반으로 전환하기
+8. 인스턴스 전용 설치/회전 기능을 `template` 탭 책임에서 분리하기
+9. `npm run build`
+10. `chrome-devtools`와 `supabase` MCP로 비교 테스트
+
+## 16. 완료 기준
+
+아래를 모두 만족해야 완료다.
+
+1. `template` 탭에서 `conversation` 페이지가 현재 설정하는 항목을 모두 설정 가능하다.
+2. `template` 탭은 `/api/widget-templates` 계열 계약만 사용한다.
+3. `settings_ui`의 라벨/순서 변경이 저장 후 재진입 시 유지된다.
+4. `conversation` 페이지와 `template` 탭이 같은 공통 편집기를 사용한다.
+5. Runtime self-update는 글로벌 설정으로 분리되어 보이고 저장된다.
+6. `chat` 탭의 인스턴스 역할과 `template` 탭의 템플릿 역할이 충돌하지 않는다.
+7. `npm run build`가 통과한다.
+
+## 17. 검증 계획
+
+### 17.1 Chrome DevTools 검증
+
+구현 후 아래를 확인한다.
+
+1. `/app/conversation`과 `/app/create?tab=template`에 같은 설정 섹션이 보이는지 확인
+2. `template` 탭에서 아래 섹션이 모두 노출되는지 확인
+   - bulk controls
+   - launcher/iframe/header/tabBar/adminPanel/interaction/mcp/setup/runtime
+   - install code
+   - preview meta
+   - launcher preview
+   - tab preview
+3. `template` 탭에서 저장 후 새로고침해도 값이 유지되는지 확인
+4. `setup` 라벨 변경과 순서 변경이 유지되는지 확인
+5. Runtime self-update를 `template` 탭에서 바꾸면 `conversation` 페이지에도 같은 값이 보이는지 확인
+
+### 17.2 Supabase 검증
+
+DB 수정은 하지 않지만, 저장 결과 확인용 read-only SQL은 아래를 사용한다.
+
+템플릿 정책 확인:
+
+```sql
+select
+  id,
+  name,
+  is_active,
+  public_key,
+  chat_policy
+from public."B_chat_widgets"
+order by updated_at desc
+limit 20;
+```
+
+공유 인스턴스 확인:
+
+```sql
+select
+  id,
+  template_id,
+  public_key,
+  is_active,
+  chat_policy
+from public."B_chat_widget_instances"
+order by updated_at desc
+limit 20;
+```
+
+검증 포인트:
+
+- `B_chat_widgets.chat_policy` 안에 `settings_ui`가 실제로 남는지
+- 저장한 `widget`, `features`, `settings_ui`가 재조회 시 유지되는지
+- 템플릿 public key 기반 프리뷰가 정상 동작하는지
+
+## 18. 이번 실행의 MCP 테스트 기록
+
+### 18.1 `chrome-devtools`
+
+실행일: 2026-03-13
+
+확인 결과:
+
+1. `http://localhost:3000/app/conversation`
+   - 템플릿 목록, bulk control, 설치 코드, preview meta, launcher preview, tab preview가 존재함을 확인
+2. `http://localhost:3000/app/create?tab=template`
+   - 현재는 `CreateResourceShell` 기반의 단순 템플릿 탭만 보이며, `conversation` 페이지 수준의 정책 편집기와 프리뷰 UI가 없음을 확인
+3. 사이드바에는 `온보딩 > 생성하기` 링크가 존재함을 확인
+
+### 18.2 `supabase`
+
+실행일: 2026-03-13
+
+확인 결과:
+
+1. `public.B_chat_widgets`
+   - `chat_policy`, `public_key` 컬럼 존재
+   - rows 존재
+2. `public.B_chat_widget_instances`
+   - `template_id`, `public_key`, `chat_policy` 컬럼 존재
+   - rows 존재
+3. 신규 스키마 추가 없이 현재 요구사항을 해결할 수 있음을 확인
+
+## 19. 이번 실행의 코드 분석 결과
+
+이번 설계에 직접 반영된 코드 분석 결론은 아래와 같다.
+
+1. `CreateWidgetTab`은 `/api/widgets`를 사용하며, 템플릿 전체 정책 편집 기준 계약이 아니다.
+2. `/api/widgets` GET은 `created_by = context.user.id` 필터를 사용하므로 관리자 전체 템플릿 관리 기준으로 부적합하다.
+3. `conversation` 페이지는 `/api/widget-templates`와 `/api/widget-templates/[id]/chat-policy`를 기준으로 이미 전체 정책 편집을 수행한다.
+4. `ChatSettingsPanel`은 `setupUi` 상태를 저장 payload에 다시 반영하지 않으며, 저장 직전 `settings_ui`를 제거한다.
+5. 따라서 이번 작업은 `template` 탭 확장과 동시에 공통 정책 저장 누락 문제를 함께 수정해야 한다.
+
+## 20. 최종 결론
+
+이 작업의 정답은 `template` 탭에 필드를 하나씩 덧붙이는 것이 아니다.
+
+정답은 아래 세 가지를 동시에 만족하는 구조다.
+
+1. 템플릿 설정의 공통 소스를 `widget-templates` + `chat_policy` 계약으로 통일한다.
+2. `conversation` 페이지와 `template` 탭이 같은 공통 편집기와 같은 상태 컨트롤러를 사용한다.
+3. `settings_ui` 저장 누락과 Runtime 글로벌 스코프 문제를 공통 계약 수준에서 정리한다.
+
+이 기준으로 구현하면 `template` 탭은 `conversation` 페이지가 현재 설정하는 항목을 모두 다룰 수 있고, 이후 동일한 설정 범위가 필요한 다른 화면에도 그대로 재사용할 수 있다.

@@ -3,16 +3,14 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { StateBanner } from "@/components/design-system";
-import { CreateApiTab } from "@/components/create/CreateApiTab";
 import { CreateAgentsTab } from "@/components/create/CreateAgentsTab";
-import { CreateChatTab } from "@/components/create/CreateChatTab";
 import { CreateKbTab } from "@/components/create/CreateKbTab";
 import { CreateMcpTab } from "@/components/create/CreateMcpTab";
 import { CreateWidgetTab } from "@/components/create/CreateWidgetTab";
 import { apiFetch } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 
-type TabKey = "template" | "chat" | "agents" | "kb" | "api" | "mcp";
+type TabKey = "agents" | "kb" | "mcp" | "template";
 
 type WorkspaceTab = {
   key: TabKey;
@@ -22,21 +20,16 @@ type WorkspaceTab = {
 
 const tabs: WorkspaceTab[] = [
   { key: "template", label: "템플릿", adminOnly: true },
-  { key: "chat", label: "대화창" },
   { key: "agents", label: "비서" },
   { key: "kb", label: "지식" },
-  { key: "api", label: "api" },
   { key: "mcp", label: "도구", adminOnly: true },
 ];
 
 function resolveTab(value: string | null, isAdmin: boolean): TabKey {
-  if (value === "chat" || value === "agents" || value === "kb" || value === "api") return value;
+  if (value === "agents" || value === "kb") return value;
   if ((value === "template" || value === "widget") && isAdmin) return "template";
-  if ((value === "quickstart" || value === "install") && !isAdmin) return "chat";
-  if (value === "env") return "api";
-  if ((value === "quickstart" || value === "install") && isAdmin) return "chat";
   if (value === "mcp" && isAdmin) return "mcp";
-  return isAdmin ? "template" : "chat";
+  return isAdmin ? "template" : "agents";
 }
 
 export function CreateWorkspacePage() {
@@ -98,7 +91,7 @@ export function CreateWorkspacePage() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">생성하기</h1>
             <p className="mt-1 text-sm text-slate-600">
-              하나의 작업 공간에서 템플릿, 대화창, 비서, 지식, api, 도구를 같은 패턴으로 구성하고 연결합니다.
+              하나의 작업 공간에서 템플릿, 비서, 지식, 도구를 같은 패턴으로 생성하고 연결합니다.
             </p>
           </div>
         </div>
@@ -133,10 +126,8 @@ export function CreateWorkspacePage() {
         </div>
 
         {activeTab === "template" && isAdmin ? <CreateWidgetTab isAdmin={isAdmin} /> : null}
-        {activeTab === "chat" ? <CreateChatTab /> : null}
         {activeTab === "agents" ? <CreateAgentsTab /> : null}
         {activeTab === "kb" ? <CreateKbTab /> : null}
-        {activeTab === "api" ? <CreateApiTab isAdmin={isAdmin} /> : null}
         {activeTab === "mcp" && isAdmin ? <CreateMcpTab isAdmin={isAdmin} /> : null}
       </div>
     </div>
