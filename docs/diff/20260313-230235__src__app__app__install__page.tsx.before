@@ -5,7 +5,6 @@ import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { WidgetInstallPanel } from "@/components/settings/WidgetInstallPanel";
 import { EnvSettingsPanel } from "@/components/settings/EnvSettingsPanel";
-import { WidgetQuickstartPanel } from "@/components/settings/WidgetQuickstartPanel";
 
 type TabKey = "widget" | "quickstart" | "env";
 
@@ -48,7 +47,7 @@ export default function InstallPage() {
 
         <div className="mt-6">
           {tab === "widget" ? <WidgetInstallPanel /> : null}
-          {tab === "quickstart" ? <WidgetQuickstartPanel /> : null}
+          {tab === "quickstart" ? <WidgetInstallPanel /> : null}
           {tab === "env" ? <EnvSettingsPanel /> : null}
         </div>
       </div>

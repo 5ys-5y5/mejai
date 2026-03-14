@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { SelectPopover } from "@/components/SelectPopover";
@@ -13,46 +13,70 @@ type WidgetConfig = {
   template_public_key?: string | null;
   instance_id?: string | null;
   instance_public_key?: string | null;
+  shared_instance_status?: "ready" | "missing";
   is_active?: boolean | null;
 };
+
+function readErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "WIDGET_LOAD_FAILED";
+}
 
 export function WidgetQuickstartPanel() {
   const [loading, setLoading] = useState(true);
   const [widgets, setWidgets] = useState<WidgetConfig[]>([]);
-  const [selectedId, setSelectedId] = useState<string>("");
+  const [selectedId, setSelectedId] = useState("");
+  const [requestError, setRequestError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function load() {
+      setLoading(true);
+      setRequestError("");
+      try {
+        const res = await apiFetch<{ items: WidgetConfig[] }>("/api/widgets");
+        if (!mounted) return;
+        const list = res.items || [];
+        setWidgets(list);
+        setSelectedId((prev) => {
+          if (prev && list.some((item) => item.id === prev)) {
+            return prev;
+          }
+          return list[0]?.id || "";
+        });
+      } catch (error) {
+        if (!mounted) return;
+        setWidgets([]);
+        setSelectedId("");
+        setRequestError(readErrorMessage(error));
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const selectedWidget = useMemo(
     () => widgets.find((item) => item.id === selectedId) || widgets[0] || null,
     [widgets, selectedId]
   );
 
-  const loadWidget = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await apiFetch<{ items: WidgetConfig[] }>("/api/widgets");
-      const list = res.items || [];
-      setWidgets(list);
-      const fallbackId = list[0]?.id || "";
-      setSelectedId((prev) => (prev && list.some((item) => item.id === prev) ? prev : fallbackId));
-    } catch (error) {
-      setWidgets([]);
-      setSelectedId("");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const templateId = String(selectedWidget?.id || "").trim();
+  const instanceId = String(selectedWidget?.instance_id || "").trim();
+  const instancePublicKey = String(selectedWidget?.instance_public_key || "").trim();
+  const templatePublicKey = String(selectedWidget?.template_public_key || "").trim();
+  const sharedReady =
+    selectedWidget?.shared_instance_status === "ready" && Boolean(templateId && instanceId && instancePublicKey);
 
-  useEffect(() => {
-    void loadWidget();
-  }, [loadWidget]);
-
-  const templateId = (selectedWidget?.id || "").trim();
-  const instanceId = (selectedWidget?.instance_id || "").trim();
-  const instancePublicKey = (selectedWidget?.instance_public_key || "").trim();
-  const templatePublicKey = (selectedWidget?.template_public_key || "").trim();
   const snippet = useMemo(() => {
-    if (!instanceId || !instancePublicKey || !templateId) return "";
-    return `<script async src=\"https://mejai.help/widget.js\" data-instance-id=\"${instanceId}\" data-public-key=\"${instancePublicKey}\" data-template-id=\"${templateId}\"></script>`;
-  }, [instanceId, instancePublicKey, templateId]);
+    if (!sharedReady) return "";
+    const base = typeof window !== "undefined" ? window.location.origin : "https://mejai.help";
+    return `<script async src="${base}/widget.js" data-instance-id="${instanceId}" data-public-key="${instancePublicKey}" data-template-id="${templateId}"></script>`;
+  }, [instanceId, instancePublicKey, sharedReady, templateId]);
 
   return (
     <div className="space-y-4">
@@ -60,11 +84,14 @@ export function WidgetQuickstartPanel() {
         <div className="mb-3">
           <div className="mb-1 text-xs text-slate-600">템플릿 선택</div>
           <SelectPopover
-            value={selectedId}
+            value={selectedWidget?.id || ""}
             options={widgets.map((item) => ({
               id: String(item.id || ""),
               label: String(item.name || item.id || "템플릿"),
-              description: item.template_public_key ? `템플릿 키: ${item.template_public_key}` : undefined,
+              description:
+                item.shared_instance_status === "ready"
+                  ? "공유 인스턴스 준비 완료"
+                  : "공유 인스턴스 없음",
             }))}
             onChange={(value) => setSelectedId(value)}
             className="w-full"
@@ -73,53 +100,41 @@ export function WidgetQuickstartPanel() {
         </div>
         <div className="text-sm font-semibold text-slate-900">시작 안내</div>
         <div className="mt-2 text-xs text-slate-600">
-          아래 단계는 비개발자도 따라할 수 있도록 작성되었습니다. 순서대로 진행하세요.
+          quickstart 탭은 `/api/widgets` pure read 결과만 보여줍니다. 여기서는 shared provisioning 을 수행하지 않습니다.
         </div>
         <div className="mt-3 space-y-2 text-xs text-slate-700">
-          <div>1. 이 페이지는 자동으로 `/api/widgets`를 호출하여 위젯 키를 불러옵니다.</div>
-          <div>
-            2. 위젯 키가 보이면 설치 코드를 복사합니다. 위젯 키가 보이지 않으면 “채팅 위젯” 탭에서
-            먼저 저장하세요.
-          </div>
-          <div>
-            3. 고객사 홈페이지의 HTML에서 `<code>body</code>` 태그 끝에 설치 코드를 붙여넣습니다.
-          </div>
-          <div>
-            4. 고객사 홈페이지를 새로고침하면 우측 하단에 채팅 아이콘(런처)이 표시됩니다.
-          </div>
-          <div>
-            5. 아이콘을 클릭하면 위젯이 열리고, 이때 서버에서 자동으로 토큰이 발급됩니다.
-          </div>
-          <div>
-            6. 메시지를 입력해 정상 응답이 나오면 설치 완료입니다.
-          </div>
+          <div>1. 이 페이지는 `/api/widgets` 응답으로 템플릿과 shared 상태를 읽기만 합니다.</div>
+          <div>2. 상태가 `ready` 이면 아래 설치 코드를 복사해 고객사 페이지의 `body` 끝에 넣습니다.</div>
+          <div>3. 상태가 `missing` 이면 `Widget` 탭으로 이동해 명시적으로 공유 인스턴스를 생성합니다.</div>
+          <div>4. 고객사 페이지를 새로고침하면 런처가 나타나고, 클릭 시 `/api/widget/init` 이 기존 shared 를 사용합니다.</div>
         </div>
       </Card>
 
       <Card className="p-4">
         <div className="text-sm font-semibold text-slate-900">/api/widgets 호출 확인</div>
         <div className="mt-2 text-xs text-slate-600">
-          이 섹션은 `/api/widgets` 응답을 기반으로 키와 상태를 표시합니다.
+          이 섹션은 서버 read 결과만 보여주며 DB write side effect 를 일으키지 않습니다.
         </div>
         <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
           {loading
             ? "불러오는 중..."
-            : selectedWidget
-              ? "정상 (위젯 데이터 수신 완료)"
-              : "실패 (위젯 데이터 없음)"}
-        </div>
-        <div className="mt-2 text-[11px] text-slate-500">
-          위젯 데이터가 없으면 “채팅 위젯” 탭에서 설정을 저장해야 합니다.
+            : requestError
+              ? `실패 (${requestError})`
+              : selectedWidget
+                ? selectedWidget.shared_instance_status === "ready"
+                  ? "정상 (shared ready)"
+                  : "확인됨 (shared missing)"
+                : "템플릿 없음"}
         </div>
       </Card>
 
       <Card className="p-4">
         <div className="text-sm font-semibold text-slate-900">설치 코드</div>
         <div className="mt-2 text-xs text-slate-600">
-          고객사 페이지의 <code>body</code> 태그 끝에 1줄만 삽입하면 됩니다.
+          shared 상태가 `ready` 일 때만 실제 설치 코드를 제공합니다.
         </div>
-        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs font-mono text-slate-700 whitespace-pre-wrap">
-          {snippet || "위젯 키가 아직 생성되지 않았습니다."}
+        <div className="mt-3 whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-xs text-slate-700">
+          {snippet || "공유 인스턴스가 아직 준비되지 않았습니다."}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button
@@ -144,15 +159,16 @@ export function WidgetQuickstartPanel() {
       </Card>
 
       <Card className="p-4">
-        <div className="text-sm font-semibold text-slate-900">설치 상태</div>
+        <div className="text-sm font-semibold text-slate-900">현재 상태</div>
         <div className="mt-2 text-xs text-slate-600">
-          런처 클릭 시 위젯이 열리고, `/api/widget/init`가 호출되어 토큰이 발급됩니다.
+          template-key read 경로는 shared 가 없으면 더 이상 자동 생성하지 않고 missing 상태를 그대로 드러냅니다.
         </div>
         <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-700">
-          {selectedWidget?.is_active ? "미확인 (최근 신호 없음)" : "비활성 상태"}
-        </div>
-        <div className="mt-2 text-[11px] text-slate-500">
-          토큰은 자동으로 발급되며 관리자 화면에 노출되지 않습니다. 위젯이 열리고 채팅이 가능하면 정상입니다.
+          {selectedWidget
+            ? selectedWidget.shared_instance_status === "ready"
+              ? "shared ready"
+              : "shared missing"
+            : "선택된 템플릿 없음"}
         </div>
       </Card>
     </div>

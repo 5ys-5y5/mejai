@@ -27,7 +27,7 @@ export function CreateWidgetTab({ controller }: CreateWidgetTabProps) {
   return (
     <CreateResourceShell
       description="템플릿 선택, 대화 정책 편집, 저장을 한 화면에서 처리합니다. conversation 페이지의 대화 정책은 이 탭으로 이관됩니다."
-      helperText="대화 정책, settings_ui 라벨/순서, 관리자 전용 설치 코드/프리뷰 메타를 같은 작업 흐름으로 유지합니다."
+      helperText="대화 정책, settings_ui 라벨/순서, 템플릿 theme 기본값을 같은 저장 흐름으로 유지합니다."
       banner={banner}
       listTitle="템플릿 목록"
       listCountLabel={`총 ${controller.loading ? "-" : controller.templates.length}개`}

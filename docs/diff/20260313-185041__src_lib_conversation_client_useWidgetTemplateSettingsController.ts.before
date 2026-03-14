@@ -12,6 +12,7 @@ import { getSupabaseClient } from "@/lib/supabaseClient";
 import type { WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 import {
   getPolicyWidgetTheme,
+  setPolicyWidgetTheme,
   stripConversationPolicyTransientFields,
   withNullFeatureDefaults,
 } from "@/lib/widgetPolicyUtils";
@@ -67,8 +68,6 @@ type PreviewMeta = {
   referrer: string;
 };
 
-export type WidgetTemplatePreviewTab = "chat" | "list" | "policy" | "login";
-
 export type WidgetTemplateSettingsController = {
   isAdmin: boolean;
   loading: boolean;
@@ -99,18 +98,15 @@ export type WidgetTemplateSettingsController = {
   routeOptions: SelectOption[];
   mcpProviderOptions: SelectOption[];
   mcpToolOptions: SelectOption[];
+  theme: Record<string, unknown>;
+  setThemeField: (key: string, value: string) => void;
   previewMeta: PreviewMeta;
   updatePreviewMeta: (key: keyof PreviewMeta, value: string) => void;
   installOverridesText: string;
   setInstallOverridesText: (next: string) => void;
   installOverrides: Record<string, unknown>;
-  previewOverrides: Record<string, unknown>;
   previewOverridesParam: string;
   previewInitNonce: number;
-  selectedPreviewTab: WidgetTemplatePreviewTab;
-  selectPreviewTab: (next: WidgetTemplatePreviewTab) => void;
-  previewExpanded: boolean;
-  setPreviewExpanded: (next: boolean) => void;
   applyPreview: () => void;
   installScript: string;
   installUrl: string;
@@ -198,8 +194,6 @@ export function useWidgetTemplateSettingsController({
     referrer: "",
   });
   const [previewInitNonce, setPreviewInitNonce] = useState(0);
-  const [selectedPreviewTab, setSelectedPreviewTab] = useState<WidgetTemplatePreviewTab>("chat");
-  const [previewExpanded, setPreviewExpanded] = useState(false);
   const selectedIdRef = useRef(selectedIdState);
 
   useEffect(() => {
@@ -469,6 +463,18 @@ export function useWidgetTemplateSettingsController({
     setDraft((current) => (current ? { ...current, is_active: next } : current));
   }, []);
 
+  const theme = useMemo(() => getPolicyWidgetTheme(policyValue), [policyValue]);
+
+  const setThemeField = useCallback((key: string, value: string) => {
+    setPolicyValue((current) => {
+      const nextTheme = {
+        ...getPolicyWidgetTheme(current),
+        [key]: value,
+      };
+      return setPolicyWidgetTheme(current, nextTheme);
+    });
+  }, []);
+
   const templateFingerprint = useMemo(() => buildTemplateFingerprint(selectedTemplate), [selectedTemplate]);
   const draftFingerprint = useMemo(() => buildTemplateFingerprint(draft), [draft]);
   const templateDirty = useMemo(() => {
@@ -583,18 +589,10 @@ export function useWidgetTemplateSettingsController({
     setPreviewMeta((current) => ({ ...current, [key]: value }));
   }, []);
 
-  const previewOverrides = useMemo(() => {
-    const next = { ...installOverrides };
-    if (policyValue) {
-      next.chat_policy = policyValue;
-    }
-    return next;
-  }, [installOverrides, policyValue]);
-
   const previewOverridesParam = useMemo(() => {
-    if (Object.keys(previewOverrides).length === 0) return "";
-    return encodeWidgetOverrides(previewOverrides);
-  }, [previewOverrides]);
+    if (Object.keys(installOverrides).length === 0) return "";
+    return encodeWidgetOverrides(installOverrides);
+  }, [installOverrides]);
 
   const installOverridesJson = useMemo(() => {
     if (Object.keys(installOverrides).length === 0) return "";
@@ -625,12 +623,15 @@ export function useWidgetTemplateSettingsController({
     if (!draft?.id || !draft?.public_key) return "";
     const base = typeof window !== "undefined" ? window.location.origin : "";
     if (!base) return "";
+    const overrides = policyValue ? { chat_policy: policyValue } : {};
+    const overridesParam =
+      Object.keys(overrides).length > 0 ? encodeWidgetOverrides(overrides as Record<string, unknown>) : "";
     const url = new URL(`${base}/embed/widget_id=${draft.id}`);
     url.searchParams.set("public_key", draft.public_key);
     url.searchParams.set("preview", "1");
-    if (previewOverridesParam) url.searchParams.set("ovr", previewOverridesParam);
+    if (overridesParam) url.searchParams.set("ovr", overridesParam);
     return url.toString();
-  }, [draft?.id, draft?.public_key, previewOverridesParam]);
+  }, [draft?.id, draft?.public_key, policyValue]);
 
   const applyPreview = useCallback(() => {
     setPreviewInitNonce((current) => current + 1);
@@ -666,18 +667,15 @@ export function useWidgetTemplateSettingsController({
     routeOptions,
     mcpProviderOptions,
     mcpToolOptions,
+    theme,
+    setThemeField,
     previewMeta,
     updatePreviewMeta,
     installOverridesText,
     setInstallOverridesText,
     installOverrides,
-    previewOverrides,
     previewOverridesParam,
     previewInitNonce,
-    selectedPreviewTab,
-    selectPreviewTab: setSelectedPreviewTab,
-    previewExpanded,
-    setPreviewExpanded,
     applyPreview,
     installScript,
     installUrl,

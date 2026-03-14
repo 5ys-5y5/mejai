@@ -2,17 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import {
-  isTemplateSharedInstance,
-  provisionTemplateSharedInstance,
-  readInstanceKind,
-  syncTemplateSharedInstance,
-  type TemplateRow as SharedTemplateRow,
-} from "@/lib/widgetSharedInstance";
 
 const INSTANCE_SELECT =
   "id, template_id, public_key, name, is_active, is_public, editable_id, usable_id, chat_policy, created_by, created_at, updated_at";
-const TEMPLATE_SELECT = "id, name, is_active, is_public, created_by, chat_policy";
+const TEMPLATE_SELECT = "id, name, is_active, is_public, created_by";
 
 type ServerContext = Awaited<ReturnType<typeof getServerContext>>;
 
@@ -41,7 +34,6 @@ type WidgetTemplateRow = {
   is_active?: boolean | null;
   is_public?: boolean | null;
   created_by?: string | null;
-  chat_policy?: Record<string, unknown> | null;
 };
 
 function makePublicKey() {
@@ -72,15 +64,15 @@ function normalizeChatPolicy(value: unknown) {
   return isPlainObject(value) ? value : null;
 }
 
-function readRequestedInstanceKind(value: unknown) {
-  const normalized = String(value || "").trim();
-  if (!normalized) {
-    return { kind: "dedicated" as const, valid: true };
-  }
-  if (normalized === "dedicated" || normalized === "template_shared") {
-    return { kind: normalized, valid: true };
-  }
-  return { kind: "dedicated" as const, valid: false };
+function readInstanceKind(chatPolicy: Record<string, unknown> | null | undefined) {
+  if (!isPlainObject(chatPolicy)) return "";
+  const widget = chatPolicy.widget;
+  if (!isPlainObject(widget)) return "";
+  return typeof widget.instance_kind === "string" ? widget.instance_kind.trim() : "";
+}
+
+function isTemplateSharedInstance(row: { chat_policy?: Record<string, unknown> | null }) {
+  return readInstanceKind(row.chat_policy) === "template_shared";
 }
 
 function matchesBooleanFilter(value: boolean | null | undefined, filter: string | null) {
@@ -241,13 +233,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "TEMPLATE_REQUIRED" }, { status: 400 });
   }
 
-  const requestedKind = readRequestedInstanceKind(body.instance_kind);
-  if (!requestedKind.valid) {
-    return NextResponse.json({ error: "INVALID_INSTANCE_KIND" }, { status: 400 });
-  }
-
   const chatPolicy = hasOwn(body, "chat_policy") ? normalizeChatPolicy(body.chat_policy) : null;
-  if (requestedKind.kind === "dedicated" && readInstanceKind(chatPolicy) === "template_shared") {
+  if (readInstanceKind(chatPolicy) === "template_shared") {
     return NextResponse.json({ error: "RESERVED_INSTANCE_KIND" }, { status: 400 });
   }
 
@@ -267,35 +254,6 @@ export async function POST(req: NextRequest) {
   }
 
   const nowIso = new Date().toISOString();
-
-  if (requestedKind.kind === "template_shared") {
-    if (!access.isAdmin) {
-      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
-    }
-
-    try {
-      const provisioned = await provisionTemplateSharedInstance(
-        supabaseAdmin,
-        template as SharedTemplateRow,
-        nowIso
-      );
-      const synced =
-        (await syncTemplateSharedInstance(supabaseAdmin, template as SharedTemplateRow, nowIso)) || provisioned;
-      const templateMap = new Map<string, WidgetTemplateRow>([[template.id, template]]);
-      return NextResponse.json({
-        item: mapInstanceRow(synced as WidgetInstanceRow, templateMap, {
-          canEdit: false,
-          canDelete: false,
-        }),
-      });
-    } catch (error) {
-      return NextResponse.json(
-        { error: error instanceof Error ? error.message : "INSTANCE_CREATE_FAILED" },
-        { status: 400 }
-      );
-    }
-  }
-
   const name = String(body.name || template.name || "Chat Instance").trim() || template.name || "Chat Instance";
   const isPublic = typeof body.is_public === "boolean" ? body.is_public : true;
   const isActive = typeof body.is_active === "boolean" ? body.is_active : true;

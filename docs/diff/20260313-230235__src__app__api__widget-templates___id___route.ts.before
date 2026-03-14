@@ -13,11 +13,7 @@ import {
   setPolicyWidgetTheme,
   stripConversationPolicyTransientFields,
 } from "@/lib/widgetPolicyUtils";
-import {
-  provisionTemplateSharedInstance,
-  syncTemplateSharedInstance,
-  type TemplateRow as SharedTemplateRow,
-} from "@/lib/widgetSharedInstance";
+import { syncTemplateInstances } from "@/lib/widgetSharedInstance";
 
 async function ensureAdmin(context: Awaited<ReturnType<typeof getServerContext>>) {
   if ("error" in context) return { ok: false, status: 401, error: context.error };
@@ -161,9 +157,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   try {
-    const syncTemplate = data as SharedTemplateRow;
-    await provisionTemplateSharedInstance(supabaseAdmin, syncTemplate, nowIso);
-    await syncTemplateSharedInstance(supabaseAdmin, syncTemplate, nowIso);
+    await syncTemplateInstances(
+      supabaseAdmin,
+      {
+        template_id: resolvedParams.id,
+        chat_policy: cleanedPolicy,
+        is_active: isActive,
+        is_public: isPublic,
+      },
+      nowIso
+    );
   } catch (syncError) {
     return NextResponse.json(
       { error: syncError instanceof Error ? syncError.message : "INSTANCE_SYNC_FAILED" },

@@ -29,79 +29,6 @@ if (globalScope && typeof globalScope.process === "undefined") {
 export type WidgetLauncherPosition = "bottom-right" | "bottom-left";
 export type WidgetConversationTab = "chat" | "list" | "policy" | "login";
 export type WidgetLauncherEntryMode = "launcher" | "embed";
-export type WidgetLauncherPlacement = {
-  position?: WidgetLauncherPosition;
-  bottom?: string;
-  left?: string;
-  right?: string;
-  zIndex?: number;
-  bottomOffset?: string;
-  sideOffset?: string;
-};
-
-type WidgetLauncherPlacementInput = {
-  cfg?: unknown;
-  launcher?: unknown;
-  iframe?: unknown;
-  position?: unknown;
-  bottom?: unknown;
-  left?: unknown;
-  right?: unknown;
-  zIndex?: unknown;
-  bottomOffset?: unknown;
-  sideOffset?: unknown;
-};
-
-function isRecordLike(value: unknown): value is Record<string, any> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function normalizeCssOffsetValue(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return `${value}px`;
-  if (typeof value === "string" && value.trim()) return value.trim();
-  return undefined;
-}
-
-function normalizeZIndexValue(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value.trim());
-    if (Number.isFinite(parsed)) return Math.trunc(parsed);
-  }
-  return undefined;
-}
-
-function normalizeLauncherPositionValue(value: unknown): WidgetLauncherPosition | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) return undefined;
-  if (normalized.includes("left")) return "bottom-left";
-  if (normalized.includes("right")) return "bottom-right";
-  return undefined;
-}
-
-export function resolveWidgetLauncherPlacement(input?: WidgetLauncherPlacementInput | null): WidgetLauncherPlacement {
-  const cfg = isRecordLike(input?.cfg) ? input.cfg : null;
-  const launcher = isRecordLike(input?.launcher) ? input.launcher : null;
-  const launcherContainer = isRecordLike(launcher?.container) ? launcher.container : null;
-  const iframe = isRecordLike(input?.iframe) ? input.iframe : null;
-
-  const left = normalizeCssOffsetValue(input?.left ?? launcherContainer?.left);
-  const right = normalizeCssOffsetValue(input?.right ?? launcherContainer?.right);
-  const position =
-    normalizeLauncherPositionValue(input?.position ?? cfg?.position) ||
-    (left && !right ? "bottom-left" : right && !left ? "bottom-right" : undefined);
-
-  return {
-    position,
-    bottom: normalizeCssOffsetValue(input?.bottom ?? launcherContainer?.bottom),
-    left,
-    right,
-    zIndex: normalizeZIndexValue(input?.zIndex ?? launcherContainer?.zIndex),
-    bottomOffset: normalizeCssOffsetValue(input?.bottomOffset ?? iframe?.bottomOffset),
-    sideOffset: normalizeCssOffsetValue(input?.sideOffset ?? iframe?.sideOffset),
-  };
-}
 
 export type WidgetLauncherContainerProps = {
   children?: ReactNode;
@@ -184,11 +111,6 @@ export function WidgetLauncherContainer({
       mountTo.className = className;
     }
     if (applyMountStyles) {
-      const managedStyleKeys = ["position", "zIndex", "bottom", "left", "right", "top", "display", "flexDirection", "alignItems", "gap"];
-      managedStyleKeys.forEach((key) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (mountTo.style as any)[key] = "";
-      });
       Object.entries(resolvedStyle).forEach(([key, value]) => {
         if (value === undefined || value === null) return;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -450,7 +372,7 @@ export type WidgetLauncherRuntimeConfig = {
   visitorId: string;
   sessionId: string;
   sessionStorageKey: string;
-  position?: WidgetLauncherPosition;
+  position: WidgetLauncherPosition;
   brandName: string;
   launcherLabel: string;
   mountNode: HTMLElement;
@@ -468,8 +390,6 @@ export type WidgetLauncherRuntimeConfig = {
   left?: string;
   right?: string;
   zIndex?: number;
-  bottomOffset?: string;
-  sideOffset?: string;
   initNonce?: number;
   disableToggle?: boolean;
   onLauncherClick?: () => void;
@@ -498,8 +418,8 @@ function normalizeIconUrl(value: string, baseUrl: string) {
 
 function resolveLauncherIcon(cfg: Record<string, any>, themeConfig: Record<string, any>, baseUrl: string) {
   const raw =
-    readThemeValue(cfg, ["launcherIconUrl", "launcherIcon", "launcher_icon_url", "launcher_logo_id", "icon", "icon_url"]) ||
-    readThemeValue(themeConfig, ["launcher_icon_url", "launcher_logo_id", "launcherIconUrl", "icon_url", "iconUrl", "icon"]);
+    readThemeValue(cfg, ["launcherIconUrl", "launcherIcon", "launcher_icon_url", "icon", "icon_url"]) ||
+    readThemeValue(themeConfig, ["launcher_icon_url", "launcherIconUrl", "icon_url", "iconUrl", "icon"]);
   return normalizeIconUrl(raw, baseUrl) || `${baseUrl}/brand/logo.png`;
 }
 
@@ -599,8 +519,6 @@ export function WidgetLauncherRuntime({
   left,
   right,
   zIndex,
-  bottomOffset,
-  sideOffset,
   initNonce,
   disableToggle = false,
   onLauncherClick,
@@ -613,7 +531,6 @@ export function WidgetLauncherRuntime({
   const [isMobile, setIsMobile] = useState(false);
   const [themeConfig, setThemeConfig] = useState<Record<string, any>>({});
   const [resolvedName, setResolvedName] = useState(brandName);
-  const [remotePlacement, setRemotePlacement] = useState<WidgetLauncherPlacement>({});
   const viewportRafRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -621,52 +538,22 @@ export function WidgetLauncherRuntime({
   }, [cfg]);
 
   const resolvedIconUrl = useMemo(
-    () => resolveLauncherIcon(cfg, themeConfig, baseUrl),
-    [cfg, themeConfig, baseUrl]
+    () => resolveLauncherIcon(cfgRef.current, themeConfig, baseUrl),
+    [themeConfig, baseUrl]
   );
   const resolvedColor = useMemo(() => {
-    return resolveLauncherColor(cfg, themeConfig) || "#0f172a";
-  }, [cfg, themeConfig]);
+    return resolveLauncherColor(cfgRef.current, themeConfig) || "#0f172a";
+  }, [themeConfig]);
   const resolvedLabel = useMemo(() => {
-    const cfgLabel = cfg.launcherLabel;
+    const cfgLabel = cfgRef.current.launcherLabel;
     if (typeof cfgLabel === "string" && cfgLabel.trim()) return cfgLabel.trim();
     return launcherLabel || "💬";
-  }, [cfg, launcherLabel]);
+  }, [launcherLabel]);
 
   const overridesParam = useMemo(() => {
-    if (!cfg?.overrides || typeof cfg.overrides !== "object") return "";
-    return encodeWidgetOverrides(cfg.overrides as Record<string, unknown>);
-  }, [cfg]);
-
-  const explicitPlacement = useMemo(
-    () =>
-      resolveWidgetLauncherPlacement({
-        position,
-        bottom,
-        left,
-        right,
-        zIndex,
-        bottomOffset,
-        sideOffset,
-      }),
-    [position, bottom, left, right, zIndex, bottomOffset, sideOffset]
-  );
-
-  const resolvedPlacement = useMemo(() => {
-    const merged: WidgetLauncherPlacement = {
-      position: explicitPlacement.position ?? remotePlacement.position,
-      bottom: explicitPlacement.bottom ?? remotePlacement.bottom,
-      left: explicitPlacement.left ?? remotePlacement.left,
-      right: explicitPlacement.right ?? remotePlacement.right,
-      zIndex: explicitPlacement.zIndex ?? remotePlacement.zIndex,
-      bottomOffset: explicitPlacement.bottomOffset ?? remotePlacement.bottomOffset,
-      sideOffset: explicitPlacement.sideOffset ?? remotePlacement.sideOffset,
-    };
-    if (!merged.position) {
-      merged.position = merged.left && !merged.right ? "bottom-left" : "bottom-right";
-    }
-    return merged;
-  }, [explicitPlacement, remotePlacement]);
+    if (!cfgRef.current?.overrides || typeof cfgRef.current.overrides !== "object") return "";
+    return encodeWidgetOverrides(cfgRef.current.overrides as Record<string, unknown>);
+  }, []);
 
   const embedTarget = useMemo<WidgetEmbedTarget>(() => {
     if (instanceId && instancePublicKey && templateId) {
@@ -868,7 +755,6 @@ export function WidgetLauncherRuntime({
 
   useEffect(() => {
     try {
-      setRemotePlacement({});
       const params = new URLSearchParams();
       if (instanceId && instancePublicKey && templateId) {
         params.set("instance_id", instanceId);
@@ -895,8 +781,6 @@ export function WidgetLauncherRuntime({
           if (typeof data.widget.name === "string" && data.widget.name.trim()) {
             setResolvedName(data.widget.name.trim());
           }
-          const remoteWidget = isRecordLike(data.widget.chat_policy?.widget) ? data.widget.chat_policy.widget : null;
-          setRemotePlacement(resolveWidgetLauncherPlacement(remoteWidget));
         })
         .catch(() => {
           // ignore
@@ -930,13 +814,13 @@ export function WidgetLauncherRuntime({
   return (
     <WidgetLauncherContainer
       mountTo={mountNode}
-      position={resolvedPlacement.position}
+      position={position}
       layout={isEmbedMode ? "absolute" : layout}
       stack={showLauncher}
-      bottom={isEmbedMode ? "0" : resolvedPlacement.bottom || launcherBottom}
-      right={isEmbedMode ? "0" : resolvedPlacement.right || launcherRight}
-      left={isEmbedMode ? "0" : resolvedPlacement.left || launcherLeft}
-      zIndex={resolvedPlacement.zIndex}
+      bottom={isEmbedMode ? "0" : bottom || launcherBottom}
+      right={isEmbedMode ? "0" : right || launcherRight}
+      left={isEmbedMode ? "0" : left || launcherLeft}
+      zIndex={zIndex}
       containerId={isEmbedMode ? "" : undefined}
       applyMountStyles={!isEmbedMode}
       applyMountClassName={!isEmbedMode}
@@ -951,10 +835,10 @@ export function WidgetLauncherRuntime({
         />
       ) : null}
       <WidgetLauncherIframe
-        position={isEmbedMode ? "bottom-left" : resolvedPlacement.position}
+        position={isEmbedMode ? "bottom-left" : position}
         layout={iframeLayout}
-        bottomOffset={isEmbedMode ? "0" : isMobile ? "0" : resolvedPlacement.bottomOffset}
-        sideOffset={isEmbedMode ? "0" : isMobile ? "0" : resolvedPlacement.sideOffset}
+        bottomOffset={isEmbedMode ? "0" : isMobile ? "0" : undefined}
+        sideOffset={isEmbedMode ? "0" : isMobile ? "0" : undefined}
         width={isEmbedMode ? iframeWidth : isMobile ? "100vw" : undefined}
         height={isEmbedMode ? iframeHeight : isMobile ? "var(--mejai-vh, 100vh)" : undefined}
         borderRadius={isEmbedMode ? iframeBorderRadius : isMobile ? "0" : undefined}
@@ -1135,18 +1019,9 @@ export function mountWidgetLauncher() {
       } catch {
         sessionId = "";
       }
-      const placement = resolveWidgetLauncherPlacement({
-        cfg: readObjectValue(cfgView, ["cfg"]),
-        launcher: readObjectValue(cfgView, ["launcher"]),
-        iframe: readObjectValue(cfgView, ["iframe"]),
-        position: readStringValue(cfgView, ["position"]),
-        bottom: readStringValue(cfgView, ["bottom"]),
-        left: readStringValue(cfgView, ["left"]),
-        right: readStringValue(cfgView, ["right"]),
-        zIndex: cfgView.zIndex,
-        bottomOffset: readStringValue(cfgView, ["bottomOffset", "bottom_offset"]),
-        sideOffset: readStringValue(cfgView, ["sideOffset", "side_offset"]),
-      });
+
+      const positionValue = readStringValue(cfgView, ["position"]) || "bottom-right";
+      const position: WidgetLauncherPosition = positionValue.includes("left") ? "bottom-left" : "bottom-right";
 
       const brandName = readStringValue(cfgView, ["brandName", "brand_name"]) || "Mejai";
       const launcherLabel = readStringValue(cfgView, ["launcherLabel", "launcher_label"]) || "💬";
@@ -1189,7 +1064,7 @@ export function mountWidgetLauncher() {
           visitorId={visitorId}
           sessionId={sessionId}
           sessionStorageKey={sessionStorageKey}
-          position={placement.position}
+          position={position}
           brandName={brandName}
           launcherLabel={launcherLabel}
           mountNode={mountNode}
@@ -1197,12 +1072,6 @@ export function mountWidgetLauncher() {
           tab={tab}
           previewMode={previewMode}
           previewMeta={previewMeta}
-          bottom={placement.bottom}
-          left={placement.left}
-          right={placement.right}
-          zIndex={placement.zIndex}
-          bottomOffset={placement.bottomOffset}
-          sideOffset={placement.sideOffset}
         />
       );
     });

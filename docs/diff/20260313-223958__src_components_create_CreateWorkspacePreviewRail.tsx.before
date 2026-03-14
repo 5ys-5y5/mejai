@@ -142,23 +142,49 @@ export function CreateWorkspacePreviewRail({ controller }: CreateWorkspacePrevie
     <div className="space-y-4">
       <Card className="border-slate-200 bg-white p-4">
         <div className="space-y-3">
-          <div className="flex min-w-0 items-center justify-between gap-3">
-            <div className="text-sm font-semibold text-slate-900">전역 프리뷰</div>
-            <Button type="button" onClick={togglePreviewExpanded} disabled={!controller.draft} className="shrink-0">
-              {controller.previewExpanded ? "미리보기 접기" : "미리보기"}
-            </Button>
+          <div className="overflow-x-auto pb-1">
+            <div className="flex min-w-max items-center justify-between gap-4">
+              <div className="text-sm font-semibold text-slate-900">전역 프리뷰</div>
+              <Button type="button" onClick={togglePreviewExpanded} disabled={!controller.draft} className="shrink-0">
+                {controller.previewExpanded ? "미리보기 접기" : "미리보기"}
+              </Button>
+            </div>
           </div>
 
-          <div className="min-w-0">
-            <div className="mb-1 text-[11px] font-semibold text-slate-500">프리뷰 대상 템플릿</div>
-            <SelectPopover
-              value={controller.selectedTemplateId}
-              onChange={controller.selectTemplate}
-              options={controller.templateOptions}
-              placeholder="템플릿 선택"
-              className="w-full"
-              buttonClassName="h-10"
-            />
+          <div className="overflow-x-auto pb-1">
+            <div className="flex min-w-max items-end gap-3">
+              <div className="min-w-[280px] shrink-0">
+                <div className="mb-1 text-[11px] font-semibold text-slate-500">프리뷰 대상 템플릿</div>
+                <SelectPopover
+                  value={controller.selectedTemplateId}
+                  onChange={controller.selectTemplate}
+                  options={controller.templateOptions}
+                  placeholder="템플릿 선택"
+                  className="w-full"
+                  buttonClassName="h-10"
+                />
+              </div>
+
+              <div className="min-w-[360px] shrink-0">
+                <div className="mb-1 text-[11px] font-semibold text-slate-500">위젯 UI 미리보기 탭</div>
+                <div className="flex flex-nowrap gap-2">
+                  {previewPanels.map((panel) => (
+                    <button
+                      key={panel.tab}
+                      type="button"
+                      onClick={() => controller.selectPreviewTab(panel.tab)}
+                      className={`rounded-full border px-3 py-1.5 text-[11px] font-semibold transition ${
+                        controller.selectedPreviewTab === panel.tab
+                          ? "border-slate-900 bg-slate-900 text-white"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
+                      }`}
+                    >
+                      {panel.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </Card>
@@ -243,26 +269,12 @@ export function CreateWorkspacePreviewRail({ controller }: CreateWorkspacePrevie
           </Card>
 
           <Card className="space-y-3 border-slate-200 bg-white p-4">
-            <div className="grid w-full grid-cols-4 gap-2">
-              {previewPanels.map((panel) => (
-                <button
-                  key={panel.tab}
-                  type="button"
-                  onClick={() => controller.selectPreviewTab(panel.tab)}
-                  className={`w-full rounded-full border px-3 py-1.5 text-center text-[11px] font-semibold transition ${
-                    controller.selectedPreviewTab === panel.tab
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900"
-                  }`}
-                >
-                  {panel.label}
-                </button>
-              ))}
-            </div>
-
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="text-xs font-semibold text-slate-700">위젯 UI 프리뷰</div>
-              <div className="flex flex-wrap items-center justify-end gap-2 text-[10px] font-semibold">
+              <div className="flex items-center gap-2 text-[10px] font-semibold">
+                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
+                  tab {selectedPreviewPanel.label}
+                </span>
                 <span
                   className={`rounded-full border px-2 py-0.5 ${
                     selectedPreviewPanel.status.enabled

@@ -5,12 +5,7 @@ import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { normalizeWidgetChatPolicyProvider, normalizeWidgetChatPolicyRecordFromProvider } from "@/lib/widgetChatPolicyShape";
 import { type WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 import { getPolicyWidgetSetupConfig, getPolicyWidgetTheme, setPolicyWidgetSetupConfig, setPolicyWidgetTheme } from "@/lib/widgetPolicyUtils";
-import {
-  findTemplateSharedInstance,
-  provisionTemplateSharedInstance,
-  syncTemplateSharedInstance,
-  type InstanceRow,
-} from "@/lib/widgetSharedInstance";
+import { ensureTemplateSharedInstance } from "@/lib/widgetSharedInstance";
 
 type TemplateRow = {
   id: string;
@@ -22,17 +17,17 @@ type TemplateRow = {
   public_key?: string | null;
 };
 
-type SharedInstanceStatus = "ready" | "missing";
+type InstanceRow = {
+  id: string;
+  public_key: string;
+  template_id: string;
+};
 
 function makePublicKey() {
   return `mw_pk_${crypto.randomBytes(16).toString("hex")}`;
 }
 
-function mapTemplateToWidgetConfig(
-  template: TemplateRow,
-  instance?: InstanceRow | null,
-  sharedInstanceStatus: SharedInstanceStatus = "missing"
-) {
+function mapTemplateToWidgetConfig(template: TemplateRow, instance?: InstanceRow | null) {
   const policy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
   const theme = getPolicyWidgetTheme(policy);
   const setupConfig = getPolicyWidgetSetupConfig(policy);
@@ -45,7 +40,6 @@ function mapTemplateToWidgetConfig(
     template_public_key: template.public_key || null,
     instance_id: instance?.id || null,
     instance_public_key: instance?.public_key || null,
-    shared_instance_status: sharedInstanceStatus,
   };
 }
 
@@ -86,40 +80,33 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ items: [], item: null });
   }
 
-  let supabaseAdmin;
+  let supabaseAdmin: ReturnType<typeof createAdminSupabaseClient> | null = null;
   try {
     supabaseAdmin = createAdminSupabaseClient();
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "ADMIN_SUPABASE_INIT_FAILED" },
-      { status: 500 }
-    );
+  } catch {
+    supabaseAdmin = null;
   }
 
   const instanceMap = new Map<string, InstanceRow>();
-  const statusMap = new Map<string, SharedInstanceStatus>();
   await Promise.all(
     templates.map(async (template) => {
+      const policy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
+      if (!supabaseAdmin) return;
       try {
-        const shared = await findTemplateSharedInstance(supabaseAdmin, template.id);
-        if (shared) {
-          instanceMap.set(template.id, shared);
-          statusMap.set(template.id, "ready");
-          return;
-        }
+        const shared = await ensureTemplateSharedInstance(supabaseAdmin, template);
+        instanceMap.set(template.id, {
+          id: shared.id,
+          public_key: shared.public_key,
+          template_id: shared.template_id,
+        });
       } catch {
-        // ignore per-template shared instance read errors
+        // ignore shared instance errors
       }
-      statusMap.set(template.id, "missing");
     })
   );
 
   const items = templates.map((template) =>
-    mapTemplateToWidgetConfig(
-      template,
-      instanceMap.get(template.id) || null,
-      statusMap.get(template.id) || "missing"
-    )
+    mapTemplateToWidgetConfig(template, instanceMap.get(template.id) || null)
   );
 
   return NextResponse.json({ items, item: items[0] || null });
@@ -228,8 +215,8 @@ export async function POST(req: NextRequest) {
 
   let instance: InstanceRow | null = null;
   try {
-    instance = await provisionTemplateSharedInstance(supabaseAdmin, templateRow, nowIso);
-    instance = (await syncTemplateSharedInstance(supabaseAdmin, templateRow, nowIso)) || instance;
+    const shared = await ensureTemplateSharedInstance(supabaseAdmin, templateRow, nowIso);
+    instance = { id: shared.id, public_key: shared.public_key, template_id: shared.template_id };
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "INSTANCE_CREATE_FAILED" },
@@ -253,5 +240,5 @@ export async function POST(req: NextRequest) {
     instance = rotated as InstanceRow;
   }
 
-  return NextResponse.json({ item: mapTemplateToWidgetConfig(templateRow, instance, "ready") });
+  return NextResponse.json({ item: mapTemplateToWidgetConfig(templateRow, instance) });
 }

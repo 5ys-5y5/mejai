@@ -11,7 +11,7 @@ import {
   type WidgetInstanceRow,
   type WidgetTemplateRow,
 } from "@/lib/widgetRuntimeConfig";
-import { findTemplateSharedInstance, SHARED_INSTANCE_MISSING_ERROR } from "@/lib/widgetSharedInstance";
+import { ensureTemplateSharedInstance } from "@/lib/widgetSharedInstance";
 
 type TemplateRow = WidgetTemplateRow & {
   public_key?: string | null;
@@ -136,14 +136,10 @@ export async function POST(req: NextRequest) {
     }
     template = data as TemplateRow;
     try {
-      const shared = await findTemplateSharedInstance(supabaseAdmin, template.id);
-      if (!shared) {
-        return NextResponse.json({ error: SHARED_INSTANCE_MISSING_ERROR }, { status: 409 });
-      }
-      instance = shared as InstanceRow;
+      instance = (await ensureTemplateSharedInstance(supabaseAdmin, template)) as InstanceRow;
     } catch (error) {
       return NextResponse.json(
-        { error: error instanceof Error ? error.message : SHARED_INSTANCE_MISSING_ERROR },
+        { error: error instanceof Error ? error.message : "INSTANCE_CREATE_FAILED" },
         { status: 400 }
       );
     }
