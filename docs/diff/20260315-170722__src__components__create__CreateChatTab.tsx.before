@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Copy, KeyRound, Trash2 } from "lucide-react";
 import { SelectPopover, type SelectOption } from "@/components/SelectPopover";
-import { CreateChatInstallGuide } from "@/components/create/CreateChatInstallGuide";
 import { StateBanner } from "@/components/design-system";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -340,7 +339,7 @@ export function CreateChatTab() {
   return (
     <CreateResourceShell
       description="대화창 인스턴스를 목록에서 선택하고, 우측에서 템플릿 연결·접근 권한·설치 코드를 함께 관리합니다."
-      helperText="템플릿 선택, 인스턴스 생성, 발급키 확인, 설치 코드 복사를 이 탭에서 순서대로 마칠 수 있습니다."
+      helperText="`/app/install` 과 독립적으로 동작하며, 설치 코드와 Preview URL도 이 탭에서 바로 확인할 수 있습니다."
       banner={banner}
       listTitle="대화창 목록"
       listCountLabel={`총 ${loading ? "-" : instances.length}개`}
@@ -441,16 +440,6 @@ export function CreateChatTab() {
       }
       detailContent={
         <div className="space-y-4">
-          <CreateChatInstallGuide
-            hasTemplates={templates.length > 0}
-            isCreating={isCreating}
-            instanceName={selectedInstance?.name || null}
-            templateName={selectedTemplate?.name || selectedInstance?.template_name || null}
-            publicKey={selectedInstance?.public_key || null}
-            installScript={installScript}
-            installUrl={installUrl}
-          />
-
           {isCreating || selectedInstance ? (
             <>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -580,7 +569,11 @@ export function CreateChatTab() {
                 </div>
               </div>
             </>
-          ) : null}
+          ) : (
+            <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+              좌측 목록에서 대화창을 선택하거나 새 대화창을 생성해 주세요.
+            </div>
+          )}
         </div>
       }
     />

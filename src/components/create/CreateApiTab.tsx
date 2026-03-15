@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CreateCafe24ConnectionFlow, type Cafe24ProviderDraft } from "@/components/create/CreateCafe24ConnectionFlow";
 import { StateBanner } from "@/components/design-system";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -9,16 +10,6 @@ import { apiFetch } from "@/lib/apiClient";
 import { toast } from "sonner";
 
 type ProviderKey = "cafe24" | "shopify";
-
-type Cafe24Draft = {
-  mall_id: string;
-  mall_domain: string;
-  shop_no: string;
-  board_no: string;
-  access_token: string;
-  refresh_token: string;
-  expires_at: string;
-};
 
 type ShopifyDraft = {
   shop_domain: string;
@@ -37,7 +28,7 @@ type ProviderRow = {
   permission: string;
 };
 
-const emptyCafe24: Cafe24Draft = {
+const emptyCafe24: Cafe24ProviderDraft = {
   mall_id: "",
   mall_domain: "",
   shop_no: "",
@@ -59,7 +50,7 @@ function toText(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
-function normalizeCafe24Provider(value: unknown): Cafe24Draft {
+function normalizeCafe24Provider(value: unknown): Cafe24ProviderDraft {
   const provider = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   return {
     mall_id: toText(provider.mall_id),
@@ -99,9 +90,9 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<ProviderKey>("cafe24");
 
-  const [cafe24Stored, setCafe24Stored] = useState<Cafe24Draft>(emptyCafe24);
+  const [cafe24Stored, setCafe24Stored] = useState<Cafe24ProviderDraft>(emptyCafe24);
   const [shopifyStored, setShopifyStored] = useState<ShopifyDraft>(emptyShopify);
-  const [cafe24Draft, setCafe24Draft] = useState<Cafe24Draft>(emptyCafe24);
+  const [cafe24Draft, setCafe24Draft] = useState<Cafe24ProviderDraft>(emptyCafe24);
   const [shopifyDraft, setShopifyDraft] = useState<ShopifyDraft>(emptyShopify);
 
   const loadData = async (nextSelectedKey?: ProviderKey) => {
@@ -154,36 +145,50 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
     [cafe24Stored, isAdmin, shopifyStored]
   );
 
-  const currentStored = selectedKey === "cafe24" ? cafe24Stored : shopifyStored;
-  const currentDraft = selectedKey === "cafe24" ? cafe24Draft : shopifyDraft;
-  const isDirty = JSON.stringify(currentStored) !== JSON.stringify(currentDraft);
+  const shopifyDirty = useMemo(
+    () => JSON.stringify(shopifyStored) !== JSON.stringify(shopifyDraft),
+    [shopifyDraft, shopifyStored]
+  );
 
-  const handleSave = async () => {
-    if (!isAdmin) {
-      toast.error("api 설정 저장은 관리자만 가능합니다.");
-      return;
-    }
+  const saveProvider = useCallback(
+    async (provider: ProviderKey, values: Record<string, unknown>) => {
+      if (!isAdmin) {
+        throw new Error("관리자만 저장할 수 있습니다.");
+      }
+      setSaving(true);
+      try {
+        await apiFetch("/api/auth-settings/providers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider,
+            values,
+            commit: true,
+          }),
+        });
+        await loadData(provider);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [isAdmin]
+  );
 
-    setSaving(true);
+  const handleShopifySave = async () => {
     try {
-      const values = selectedKey === "cafe24" ? cafe24Draft : shopifyDraft;
-      await apiFetch("/api/auth-settings/providers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: selectedKey,
-          values,
-          commit: true,
-        }),
-      });
-      toast.success("api 설정이 저장되었습니다.");
-      await loadData(selectedKey);
+      await saveProvider("shopify", shopifyDraft);
+      toast.success("Shopify 설정이 저장되었습니다.");
     } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : "api 설정 저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
+      toast.error(saveError instanceof Error ? saveError.message : "Shopify 설정 저장에 실패했습니다.");
     }
   };
+
+  const handleCafe24Save = useCallback(
+    async (nextValues: Cafe24ProviderDraft) => {
+      await saveProvider("cafe24", nextValues);
+    },
+    [saveProvider]
+  );
 
   const banner = (
     <>
@@ -200,10 +205,10 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <CreateResourceShell
-      description="provider별 가변 설정값을 한 곳에서 관리합니다. 서버 환경 변수는 이 탭에서 다루지 않습니다."
-      helperText="저장 대상은 `A_iam_auth_settings.providers` 이며, `cafe24`와 `shopify` 값을 현재 사용자 기준으로 읽고 저장합니다."
+      description="provider별 환경 변수와 연결값을 한 곳에서 관리합니다. Cafe24는 연결 플로우로, Shopify는 직접 입력으로 관리합니다."
+      helperText="저장 대상은 `A_iam_auth_settings.providers` 이며, create 화면만으로 Cafe24 연결과 Shopify 저장값을 관리합니다."
       banner={banner}
-      listTitle="API 목록"
+      listTitle="연결 목록"
       listCountLabel={`총 ${rows.length}개`}
       onRefresh={() => void loadData(selectedKey)}
       refreshDisabled={loading}
@@ -216,7 +221,7 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
           columns={[
             {
               id: "label",
-              label: "API",
+              label: "Provider",
               width: "minmax(0, 1.1fr)",
               render: (item) => <div className="truncate text-sm font-semibold text-slate-900">{item.label}</div>,
             },
@@ -248,182 +253,105 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
         />
       }
       detailTitle={selectedKey === "cafe24" ? "Cafe24" : "Shopify"}
-      detailDescription="서버 환경 변수 카드는 제외하고, provider별 DB 저장값만 이 화면에서 관리합니다."
+      detailDescription={
+        selectedKey === "cafe24"
+          ? "mall_id 입력부터 OAuth 연결, shop_no/board_no 선택, 저장까지 create 화면 안에서 처리합니다."
+          : "Shopify 저장값은 현재 사용자 기준 provider 레코드에 직접 저장합니다."
+      }
       detailContent={
-        <div className="space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            <div className="font-semibold text-slate-800">범위 제외</div>
-            <div className="mt-1">`/app/install?tab=env` 의 "서버 환경 변수" 영역은 이 탭에서 제외됩니다.</div>
-          </div>
-
-          {selectedKey === "cafe24" ? (
-            <>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">mall_id</div>
-                  <Input
-                    value={cafe24Draft.mall_id}
-                    onChange={(event) => setCafe24Draft((prev) => ({ ...prev, mall_id: event.target.value }))}
-                    className="h-10"
-                    disabled={!isAdmin}
-                  />
-                </label>
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">mall_domain</div>
-                  <Input
-                    value={cafe24Draft.mall_domain}
-                    onChange={(event) => setCafe24Draft((prev) => ({ ...prev, mall_domain: event.target.value }))}
-                    className="h-10"
-                    disabled={!isAdmin}
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">shop_no</div>
-                  <Input
-                    value={cafe24Draft.shop_no}
-                    onChange={(event) => setCafe24Draft((prev) => ({ ...prev, shop_no: event.target.value }))}
-                    className="h-10"
-                    disabled={!isAdmin}
-                  />
-                </label>
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">board_no</div>
-                  <Input
-                    value={cafe24Draft.board_no}
-                    onChange={(event) => setCafe24Draft((prev) => ({ ...prev, board_no: event.target.value }))}
-                    className="h-10"
-                    disabled={!isAdmin}
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                <label className="block md:col-span-2">
-                  <div className="mb-1 text-xs text-slate-600">access_token</div>
-                  <Input
-                    value={cafe24Draft.access_token}
-                    onChange={(event) => setCafe24Draft((prev) => ({ ...prev, access_token: event.target.value }))}
-                    className="h-10"
-                    disabled={!isAdmin}
-                  />
-                </label>
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">expires_at</div>
-                  <Input
-                    value={cafe24Draft.expires_at}
-                    onChange={(event) => setCafe24Draft((prev) => ({ ...prev, expires_at: event.target.value }))}
-                    className="h-10"
-                    disabled={!isAdmin}
-                  />
-                </label>
-              </div>
-
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">refresh_token</div>
-                <Input
-                  value={cafe24Draft.refresh_token}
-                  onChange={(event) => setCafe24Draft((prev) => ({ ...prev, refresh_token: event.target.value }))}
-                  className="h-10"
-                  disabled={!isAdmin}
-                />
-              </label>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                <div className="font-semibold text-slate-800">현재 저장 요약</div>
-                <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <div>mall_id: {cafe24Stored.mall_id || "-"}</div>
-                  <div>mall_domain: {cafe24Stored.mall_domain || "-"}</div>
-                  <div>shop_no: {cafe24Stored.shop_no || "-"}</div>
-                  <div>board_no: {cafe24Stored.board_no || "-"}</div>
-                  <div>access_token: {maskValue(cafe24Stored.access_token)}</div>
-                  <div>refresh_token: {maskValue(cafe24Stored.refresh_token)}</div>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">shop_domain</div>
-                  <Input
-                    value={shopifyDraft.shop_domain}
-                    onChange={(event) => setShopifyDraft((prev) => ({ ...prev, shop_domain: event.target.value }))}
-                    className="h-10"
-                    disabled={!isAdmin}
-                  />
-                </label>
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">scopes</div>
-                  <Input
-                    value={shopifyDraft.scopes}
-                    onChange={(event) => setShopifyDraft((prev) => ({ ...prev, scopes: event.target.value }))}
-                    className="h-10"
-                    disabled={!isAdmin}
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">client_id</div>
-                  <Input
-                    value={shopifyDraft.client_id}
-                    onChange={(event) => setShopifyDraft((prev) => ({ ...prev, client_id: event.target.value }))}
-                    className="h-10"
-                    disabled={!isAdmin}
-                  />
-                </label>
-                <label className="block">
-                  <div className="mb-1 text-xs text-slate-600">client_secret</div>
-                  <Input
-                    value={shopifyDraft.client_secret}
-                    onChange={(event) => setShopifyDraft((prev) => ({ ...prev, client_secret: event.target.value }))}
-                    className="h-10"
-                    disabled={!isAdmin}
-                  />
-                </label>
-              </div>
-
-              <label className="block">
-                <div className="mb-1 text-xs text-slate-600">access_token</div>
-                <Input
-                  value={shopifyDraft.access_token}
-                  onChange={(event) => setShopifyDraft((prev) => ({ ...prev, access_token: event.target.value }))}
-                  className="h-10"
-                  disabled={!isAdmin}
-                />
-              </label>
-
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-                <div className="font-semibold text-slate-800">현재 저장 요약</div>
-                <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
-                  <div>shop_domain: {shopifyStored.shop_domain || "-"}</div>
-                  <div>scopes: {shopifyStored.scopes || "-"}</div>
-                  <div>client_id: {maskValue(shopifyStored.client_id)}</div>
-                  <div>client_secret: {maskValue(shopifyStored.client_secret)}</div>
-                  <div>access_token: {maskValue(shopifyStored.access_token)}</div>
-                </div>
-              </div>
-            </>
-          )}
-
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
-            <div className="text-xs text-slate-500">
-              {!isAdmin ? "관리자만 저장할 수 있습니다." : isDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
+        selectedKey === "cafe24" ? (
+          <CreateCafe24ConnectionFlow
+            isAdmin={isAdmin}
+            stored={cafe24Stored}
+            draft={cafe24Draft}
+            setDraft={setCafe24Draft}
+            saving={saving}
+            onSave={handleCafe24Save}
+          />
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              Shopify는 현재 사용자 기준 provider 저장값을 직접 편집합니다.
             </div>
-            <Button
-              type="button"
-              onClick={() => void handleSave()}
-              disabled={!isAdmin || saving || !isDirty}
-              className="rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
-            >
-              {saving ? "저장 중..." : "저장"}
-            </Button>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">shop_domain</div>
+                <Input
+                  value={shopifyDraft.shop_domain}
+                  onChange={(event) => setShopifyDraft((prev) => ({ ...prev, shop_domain: event.target.value }))}
+                  className="h-10"
+                  disabled={!isAdmin}
+                />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">scopes</div>
+                <Input
+                  value={shopifyDraft.scopes}
+                  onChange={(event) => setShopifyDraft((prev) => ({ ...prev, scopes: event.target.value }))}
+                  className="h-10"
+                  disabled={!isAdmin}
+                />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">client_id</div>
+                <Input
+                  value={shopifyDraft.client_id}
+                  onChange={(event) => setShopifyDraft((prev) => ({ ...prev, client_id: event.target.value }))}
+                  className="h-10"
+                  disabled={!isAdmin}
+                />
+              </label>
+              <label className="block">
+                <div className="mb-1 text-xs text-slate-600">client_secret</div>
+                <Input
+                  value={shopifyDraft.client_secret}
+                  onChange={(event) => setShopifyDraft((prev) => ({ ...prev, client_secret: event.target.value }))}
+                  className="h-10"
+                  disabled={!isAdmin}
+                />
+              </label>
+            </div>
+
+            <label className="block">
+              <div className="mb-1 text-xs text-slate-600">access_token</div>
+              <Input
+                value={shopifyDraft.access_token}
+                onChange={(event) => setShopifyDraft((prev) => ({ ...prev, access_token: event.target.value }))}
+                className="h-10"
+                disabled={!isAdmin}
+              />
+            </label>
+
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+              <div className="font-semibold text-slate-800">현재 저장 요약</div>
+              <div className="mt-2 grid grid-cols-1 gap-2 md:grid-cols-2">
+                <div>shop_domain: {shopifyStored.shop_domain || "-"}</div>
+                <div>scopes: {shopifyStored.scopes || "-"}</div>
+                <div>client_id: {maskValue(shopifyStored.client_id)}</div>
+                <div>client_secret: {maskValue(shopifyStored.client_secret)}</div>
+                <div>access_token: {maskValue(shopifyStored.access_token)}</div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4">
+              <div className="text-xs text-slate-500">
+                {!isAdmin ? "관리자만 저장할 수 있습니다." : shopifyDirty ? "저장되지 않은 변경 사항이 있습니다." : "변경 사항이 없습니다."}
+              </div>
+              <Button
+                type="button"
+                onClick={() => void handleShopifySave()}
+                disabled={!isAdmin || saving || !shopifyDirty}
+                className="rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
+              >
+                {saving ? "저장 중..." : "저장"}
+              </Button>
+            </div>
           </div>
-        </div>
+        )
       }
     />
   );
