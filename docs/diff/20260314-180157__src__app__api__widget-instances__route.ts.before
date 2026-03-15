@@ -2,14 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
+import {
+  isTemplateSharedInstance,
+  provisionTemplateSharedInstance,
+  readInstanceKind,
+  syncTemplateSharedInstance,
+  type TemplateRow as SharedTemplateRow,
+} from "@/lib/widgetSharedInstance";
 
 const INSTANCE_SELECT =
-  "id, template_id, public_key, name, is_active, is_public, editable_id, usable_id, created_by, created_at, updated_at, creation_path";
-const TEMPLATE_SELECT = "id, name, is_active, is_public, created_by";
-const CREATION_PATH_VALUES = ["app_create_chat", "api_widget_instances", "legacy_unknown"] as const;
+  "id, template_id, public_key, name, is_active, is_public, editable_id, usable_id, chat_policy, created_by, created_at, updated_at";
+const TEMPLATE_SELECT = "id, name, is_active, is_public, created_by, chat_policy";
 
 type ServerContext = Awaited<ReturnType<typeof getServerContext>>;
-type CreationPath = (typeof CREATION_PATH_VALUES)[number];
 
 type AccessInfo = {
   isAdmin: boolean;
@@ -24,10 +29,10 @@ type WidgetInstanceRow = {
   is_public?: boolean | null;
   editable_id?: string[] | null;
   usable_id?: string[] | null;
+  chat_policy?: Record<string, unknown> | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
-  creation_path?: string | null;
 };
 
 type WidgetTemplateRow = {
@@ -36,10 +41,19 @@ type WidgetTemplateRow = {
   is_active?: boolean | null;
   is_public?: boolean | null;
   created_by?: string | null;
+  chat_policy?: Record<string, unknown> | null;
 };
 
 function makePublicKey() {
   return `mw_pk_${crypto.randomBytes(16).toString("hex")}`;
+}
+
+function hasOwn(value: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 function normalizeIdList(value: unknown) {
@@ -53,20 +67,20 @@ function normalizeIdList(value: unknown) {
   );
 }
 
-function normalizeCreationPath(value: unknown) {
-  const normalized = String(value || "").trim();
-  if (!normalized) return "";
-  return (CREATION_PATH_VALUES as readonly string[]).includes(normalized) ? (normalized as CreationPath) : "";
+function normalizeChatPolicy(value: unknown) {
+  if (value === null) return null;
+  return isPlainObject(value) ? value : null;
 }
 
-function inferCreationPath(req: NextRequest, explicitValue: unknown): CreationPath {
-  const explicit = normalizeCreationPath(explicitValue);
-  if (explicit) return explicit;
-  const referrer = `${req.headers.get("referer") || ""} ${req.headers.get("origin") || ""}`;
-  if (referrer.includes("/app/create") && referrer.includes("tab=chat")) {
-    return "app_create_chat";
+function readRequestedInstanceKind(value: unknown) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return { kind: "dedicated" as const, valid: true };
   }
-  return "api_widget_instances";
+  if (normalized === "dedicated" || normalized === "template_shared") {
+    return { kind: normalized, valid: true };
+  }
+  return { kind: "dedicated" as const, valid: false };
 }
 
 function matchesBooleanFilter(value: boolean | null | undefined, filter: string | null) {
@@ -107,8 +121,7 @@ function mapInstanceRow(
     public_key: row.public_key || null,
     editable_id: normalizeIdList(row.editable_id),
     usable_id: normalizeIdList(row.usable_id),
-    chat_policy: null,
-    creation_path: row.creation_path || null,
+    chat_policy: normalizeChatPolicy(row.chat_policy),
     template_name: template?.name || row.template_id,
     template_is_active: template?.is_active ?? true,
     template_is_public: template?.is_public ?? false,
@@ -195,6 +208,7 @@ export async function GET(req: NextRequest) {
   }
 
   const visibleItems = ((data || []) as WidgetInstanceRow[])
+    .filter((row) => !isTemplateSharedInstance(row))
     .filter((row) => (access.isAdmin ? true : canReadInstance(row, contextResult.context.user.id, access)))
     .filter((row) => (templateFilter ? row.template_id === templateFilter : true))
     .filter((row) => matchesBooleanFilter(row.is_active, activeFilter));
@@ -227,6 +241,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "TEMPLATE_REQUIRED" }, { status: 400 });
   }
 
+  const requestedKind = readRequestedInstanceKind(body.instance_kind);
+  if (!requestedKind.valid) {
+    return NextResponse.json({ error: "INVALID_INSTANCE_KIND" }, { status: 400 });
+  }
+
+  const chatPolicy = hasOwn(body, "chat_policy") ? normalizeChatPolicy(body.chat_policy) : null;
+  if (requestedKind.kind === "dedicated" && readInstanceKind(chatPolicy) === "template_shared") {
+    return NextResponse.json({ error: "RESERVED_INSTANCE_KIND" }, { status: 400 });
+  }
+
   let supabaseAdmin;
   try {
     supabaseAdmin = getAdminSupabase();
@@ -243,12 +267,40 @@ export async function POST(req: NextRequest) {
   }
 
   const nowIso = new Date().toISOString();
+
+  if (requestedKind.kind === "template_shared") {
+    if (!access.isAdmin) {
+      return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
+    }
+
+    try {
+      const provisioned = await provisionTemplateSharedInstance(
+        supabaseAdmin,
+        template as SharedTemplateRow,
+        nowIso
+      );
+      const synced =
+        (await syncTemplateSharedInstance(supabaseAdmin, template as SharedTemplateRow, nowIso)) || provisioned;
+      const templateMap = new Map<string, WidgetTemplateRow>([[template.id, template]]);
+      return NextResponse.json({
+        item: mapInstanceRow(synced as WidgetInstanceRow, templateMap, {
+          canEdit: false,
+          canDelete: false,
+        }),
+      });
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : "INSTANCE_CREATE_FAILED" },
+        { status: 400 }
+      );
+    }
+  }
+
   const name = String(body.name || template.name || "Chat Instance").trim() || template.name || "Chat Instance";
   const isPublic = typeof body.is_public === "boolean" ? body.is_public : true;
   const isActive = typeof body.is_active === "boolean" ? body.is_active : true;
   const editableIds = mergeEditableIds(contextResult.context.user.id, access, body.editable_id);
   const usableIds = normalizeIdList(body.usable_id);
-  const creationPath = inferCreationPath(req, body.creation_path);
 
   const { data, error } = await supabaseAdmin
     .from("B_chat_widget_instances")
@@ -260,10 +312,10 @@ export async function POST(req: NextRequest) {
       is_public: isPublic,
       editable_id: editableIds,
       usable_id: usableIds,
+      chat_policy: chatPolicy,
       created_by: contextResult.context.user.id,
       created_at: nowIso,
       updated_at: nowIso,
-      creation_path: creationPath,
     })
     .select(INSTANCE_SELECT)
     .single();

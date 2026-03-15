@@ -5,6 +5,12 @@ import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { normalizeWidgetChatPolicyProvider, normalizeWidgetChatPolicyRecordFromProvider } from "@/lib/widgetChatPolicyShape";
 import { type WidgetSetupConfig } from "@/lib/widgetTemplateMeta";
 import { getPolicyWidgetSetupConfig, getPolicyWidgetTheme, setPolicyWidgetSetupConfig, setPolicyWidgetTheme } from "@/lib/widgetPolicyUtils";
+import {
+  findTemplateSharedInstance,
+  provisionTemplateSharedInstance,
+  syncTemplateSharedInstance,
+  type InstanceRow,
+} from "@/lib/widgetSharedInstance";
 
 type TemplateRow = {
   id: string;
@@ -16,11 +22,17 @@ type TemplateRow = {
   public_key?: string | null;
 };
 
+type SharedInstanceStatus = "ready" | "missing";
+
 function makePublicKey() {
   return `mw_pk_${crypto.randomBytes(16).toString("hex")}`;
 }
 
-function mapTemplateToWidgetConfig(template: TemplateRow) {
+function mapTemplateToWidgetConfig(
+  template: TemplateRow,
+  instance?: InstanceRow | null,
+  sharedInstanceStatus: SharedInstanceStatus = "missing"
+) {
   const policy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
   const theme = getPolicyWidgetTheme(policy);
   const setupConfig = getPolicyWidgetSetupConfig(policy);
@@ -31,9 +43,9 @@ function mapTemplateToWidgetConfig(template: TemplateRow) {
     theme,
     is_active: template.is_active ?? true,
     template_public_key: template.public_key || null,
-    instance_id: null,
-    instance_public_key: null,
-    shared_instance_status: "missing" as const,
+    instance_id: instance?.id || null,
+    instance_public_key: instance?.public_key || null,
+    shared_instance_status: sharedInstanceStatus,
   };
 }
 
@@ -58,18 +70,58 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: context.error }, { status: 401 });
   }
 
-  const { data, error } = await context.supabase
+  let query = context.supabase
     .from("B_chat_widgets")
     .select("*")
     .eq("created_by", context.user.id)
     .order("created_at", { ascending: false });
+  const { data, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
   const templates = (data || []) as TemplateRow[];
-  const items = templates.map((template) => mapTemplateToWidgetConfig(template));
+  if (templates.length === 0) {
+    return NextResponse.json({ items: [], item: null });
+  }
+
+  let supabaseAdmin;
+  try {
+    supabaseAdmin = createAdminSupabaseClient();
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "ADMIN_SUPABASE_INIT_FAILED" },
+      { status: 500 }
+    );
+  }
+
+  const instanceMap = new Map<string, InstanceRow>();
+  const statusMap = new Map<string, SharedInstanceStatus>();
+  await Promise.all(
+    templates.map(async (template) => {
+      try {
+        const shared = await findTemplateSharedInstance(supabaseAdmin, template.id);
+        if (shared) {
+          instanceMap.set(template.id, shared);
+          statusMap.set(template.id, "ready");
+          return;
+        }
+      } catch {
+        // ignore per-template shared instance read errors
+      }
+      statusMap.set(template.id, "missing");
+    })
+  );
+
+  const items = templates.map((template) =>
+    mapTemplateToWidgetConfig(
+      template,
+      instanceMap.get(template.id) || null,
+      statusMap.get(template.id) || "missing"
+    )
+  );
+
   return NextResponse.json({ items, item: items[0] || null });
 }
 
@@ -133,11 +185,7 @@ export async function POST(req: NextRequest) {
   const policyWithTheme = setPolicyWidgetTheme(chatPolicyShape, theme);
   const policyWithSetup = setPolicyWidgetSetupConfig(policyWithTheme, nextSetupConfig);
   const resolvedTemplatePublicKey =
-    rotateKey
-      ? templatePublicKey
-      : existingTemplate && existingTemplate.public_key
-        ? String(existingTemplate.public_key)
-        : templatePublicKey;
+    existingTemplate && existingTemplate.public_key ? String(existingTemplate.public_key) : templatePublicKey;
 
   let templateRow: TemplateRow;
   if (existingTemplate?.id) {
@@ -147,7 +195,7 @@ export async function POST(req: NextRequest) {
         name,
         chat_policy: policyWithSetup,
         is_active: isActive,
-        public_key: resolvedTemplatePublicKey,
+        ...(existingTemplate.public_key ? {} : { public_key: resolvedTemplatePublicKey }),
         updated_at: nowIso,
       })
       .eq("id", existingTemplate.id)
@@ -178,5 +226,32 @@ export async function POST(req: NextRequest) {
     templateRow = data as TemplateRow;
   }
 
-  return NextResponse.json({ item: mapTemplateToWidgetConfig(templateRow) });
+  let instance: InstanceRow | null = null;
+  try {
+    instance = await provisionTemplateSharedInstance(supabaseAdmin, templateRow, nowIso);
+    instance = (await syncTemplateSharedInstance(supabaseAdmin, templateRow, nowIso)) || instance;
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "INSTANCE_CREATE_FAILED" },
+      { status: 400 }
+    );
+  }
+
+  if (rotateKey && instance) {
+    const { data: rotated, error } = await supabaseAdmin
+      .from("B_chat_widget_instances")
+      .update({
+        public_key: makePublicKey(),
+        updated_at: nowIso,
+      })
+      .eq("id", instance.id)
+      .select("id, public_key, template_id")
+      .single();
+    if (error || !rotated) {
+      return NextResponse.json({ error: error?.message || "INSTANCE_ROTATE_FAILED" }, { status: 400 });
+    }
+    instance = rotated as InstanceRow;
+  }
+
+  return NextResponse.json({ item: mapTemplateToWidgetConfig(templateRow, instance, "ready") });
 }

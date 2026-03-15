@@ -12,6 +12,7 @@ import {
   setPolicyWidgetTheme,
   stripConversationPolicyTransientFields,
 } from "@/lib/widgetPolicyUtils";
+import { provisionTemplateSharedInstance, syncTemplateSharedInstance } from "@/lib/widgetSharedInstance";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
@@ -161,6 +162,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
+  try {
+    const syncTemplate = {
+      ...existing,
+      chat_policy: safeProvider,
+    };
+    await provisionTemplateSharedInstance(supabaseAdmin, syncTemplate, nowIso);
+    await syncTemplateSharedInstance(supabaseAdmin, syncTemplate, nowIso);
+  } catch (syncError) {
+    return NextResponse.json(
+      { error: syncError instanceof Error ? syncError.message : "INSTANCE_SYNC_FAILED" },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({ ok: true });

@@ -320,7 +320,7 @@ async function handleStream(
           headers: {
             "Content-Type": "application/json",
             "x-widget-secret": secret,
-            "x-widget-org-id": runtimeTemplate.created_by ? String(runtimeTemplate.created_by) : "",
+            "x-widget-org-id": template.created_by ? String(template.created_by) : "",
           },
           body: JSON.stringify({
             message,

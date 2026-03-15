@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { getServerContext } from "@/lib/serverAuth";
-import { readWidgetTokenInstanceId, readWidgetTokenTemplateId, verifyWidgetToken } from "@/lib/widgetToken";
+import { verifyWidgetToken } from "@/lib/widgetToken";
 import { resolveRuntimeFlags } from "@/lib/runtimeFlags";
 import {
   applyConversationFeatureVisibility,
@@ -14,17 +14,7 @@ import {
   type ConversationFeaturesProviderShape,
 } from "@/lib/conversation/pageFeaturePolicy";
 import { normalizeWidgetOverrides } from "@/lib/widgetTemplateMeta";
-import {
-  filterWidgetOverridesByPolicy,
-  resolveWidgetBasePolicy,
-  resolveWidgetRuntimeConfig,
-  type WidgetInstanceRow,
-  type WidgetTemplateRow,
-} from "@/lib/widgetRuntimeConfig";
-
-type RuntimeTemplateRow = WidgetTemplateRow & {
-  public_key?: string | null;
-};
+import { filterWidgetOverridesByPolicy, resolveWidgetBasePolicy, resolveWidgetRuntimeConfig } from "@/lib/widgetRuntimeConfig";
 
 const WIDGET_CHAT_ERROR_EVENT = "WIDGET_CHAT_ERROR";
 
@@ -211,40 +201,30 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const tokenInstanceId = readWidgetTokenInstanceId(payload);
-  const tokenTemplateId = readWidgetTokenTemplateId(payload);
-
-  let instance: WidgetInstanceRow | null = null;
-
-  if (tokenInstanceId) {
-    const { data } = await supabaseAdmin
-      .from("B_chat_widget_instances")
-      .select("id, template_id, public_key, name, is_active, is_public, editable_id, usable_id, created_by")
-      .eq("id", tokenInstanceId)
-      .maybeSingle();
-    if (!data || !data.is_active) {
-      return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
-    }
-    instance = data as WidgetInstanceRow;
-  }
-
-  const resolvedTemplateId = tokenTemplateId || String(instance?.template_id || "").trim();
-  const { data: template } = await supabaseAdmin
-    .from("B_chat_widgets")
-    .select("id, name, is_active, chat_policy, is_public, created_by, public_key")
-    .eq("id", resolvedTemplateId)
+  const { data: instance } = await supabaseAdmin
+    .from("B_chat_widget_instances")
+    .select("id, template_id, public_key, name, is_active, chat_policy, is_public, editable_id, usable_id, created_by")
+    .eq("id", payload.widget_id)
     .maybeSingle();
-  const runtimeTemplate = template as RuntimeTemplateRow | null;
-  if (!runtimeTemplate || !runtimeTemplate.is_active) {
+  if (!instance || !instance.is_active) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
-  if ((!runtimeTemplate.is_public || (instance && !instance.is_public)) && !previewAllowed) {
+
+  const { data: template } = await supabaseAdmin
+    .from("B_chat_widgets")
+    .select("id, name, is_active, chat_policy, is_public, created_by")
+    .eq("id", instance.template_id)
+    .maybeSingle();
+  if (!template || !template.is_active) {
+    return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
+  }
+  if ((!template.is_public || !instance.is_public) && !previewAllowed) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
 
   let orgId = "";
-  if (runtimeTemplate.created_by) {
-    const createdBy = String(runtimeTemplate.created_by);
+  if (template.created_by) {
+    const createdBy = String(template.created_by);
     const { data: accessRow } = await supabaseAdmin
       .from("A_iam_user_access_maps")
       .select("org_id")
@@ -253,12 +233,9 @@ export async function POST(req: NextRequest) {
     orgId = accessRow?.org_id ? String(accessRow.org_id) : createdBy;
   }
 
-  const basePolicy = resolveWidgetBasePolicy(runtimeTemplate);
+  const basePolicy = resolveWidgetBasePolicy(template, instance);
   const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
-  const resolved = resolveWidgetRuntimeConfig(runtimeTemplate, instance, filteredOverrides);
-  const runtimeWidgetId = String(instance?.id || runtimeTemplate.id || "").trim();
-  const runtimeWidgetName = String(resolved.name || runtimeTemplate.name || instance?.name || "").trim();
-  const runtimePublicKey = String(instance?.public_key || runtimeTemplate.public_key || "").trim();
+  const resolved = resolveWidgetRuntimeConfig(template, instance, filteredOverrides);
 
   const providerValue: ConversationFeaturesProviderShape | null = resolved.chat_policy || null;
   const featureFlags = applyConversationFeatureVisibility(
@@ -266,10 +243,10 @@ export async function POST(req: NextRequest) {
     false
   );
   const visitorUserId = readVisitorUserId(visitor);
-  const editableIds = Array.isArray(instance?.editable_id)
+  const editableIds = Array.isArray(instance.editable_id)
     ? instance.editable_id.map((value) => String(value || "").trim())
     : [];
-  const canEditInstance = Boolean(instance && visitorUserId && editableIds.includes(visitorUserId));
+  const canEditInstance = Boolean(visitorUserId && editableIds.includes(visitorUserId));
   const allowAgentOverride = Boolean(featureFlags.setup.agentSelector || featureFlags.setup.modelSelector);
   const baseAgentId =
     typeof resolved.setup_config?.agent_id === "string" ? resolved.setup_config.agent_id : null;
@@ -381,7 +358,7 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: runtimeWidgetId,
+      widgetId: instance.id,
       orgId,
       agentId: null,
       eventType: WIDGET_CHAT_ERROR_EVENT,
@@ -461,7 +438,7 @@ export async function POST(req: NextRequest) {
   await logWidgetProxyEvent({
     supabase: supabaseAdmin,
     sessionId,
-    widgetId: runtimeWidgetId,
+    widgetId: String(instance.id),
     orgId: orgId || null,
     agentId: effectiveAgentId,
     eventType: "WIDGET_RUNTIME_PROXY_START",
@@ -479,9 +456,9 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
         "x-widget-secret": secret,
         "x-widget-org-id": orgId,
-        "x-widget-id": runtimeWidgetId,
-        "x-widget-name": encodeHeaderValue(runtimeWidgetName),
-        "x-widget-public-key": runtimePublicKey,
+        "x-widget-id": String(instance.id || ""),
+        "x-widget-name": encodeHeaderValue(String(resolved.name || template.name || instance.name || "")),
+        "x-widget-public-key": String(instance.public_key || ""),
         "x-widget-agent-id": effectiveAgentId ? encodeHeaderValue(effectiveAgentId) : "",
       },
       body: JSON.stringify({
@@ -505,7 +482,7 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: runtimeWidgetId,
+      widgetId: String(instance.id),
       orgId: orgId || null,
       agentId: effectiveAgentId,
       eventType: "WIDGET_RUNTIME_PROXY_FETCH_FAILED",
@@ -517,7 +494,7 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: runtimeWidgetId,
+      widgetId: String(instance.id),
       orgId: orgId || null,
       agentId: effectiveAgentId,
       eventType: "WIDGET_RUNTIME_PROXY_END",
@@ -545,7 +522,7 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: runtimeWidgetId,
+      widgetId: String(instance.id),
       orgId: orgId || null,
       agentId: effectiveAgentId,
       eventType: "WIDGET_RUNTIME_PROXY_INVALID_JSON",
@@ -558,7 +535,7 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: runtimeWidgetId,
+      widgetId: String(instance.id),
       orgId: orgId || null,
       agentId: effectiveAgentId,
       eventType: "WIDGET_RUNTIME_PROXY_END",
@@ -582,7 +559,7 @@ export async function POST(req: NextRequest) {
     await logWidgetProxyEvent({
       supabase: supabaseAdmin,
       sessionId,
-      widgetId: runtimeWidgetId,
+      widgetId: String(instance.id),
       orgId: orgId || null,
       agentId: effectiveAgentId,
       eventType: "WIDGET_RUNTIME_PROXY_ERROR",
@@ -603,7 +580,7 @@ export async function POST(req: NextRequest) {
   await logWidgetProxyEvent({
     supabase: supabaseAdmin,
     sessionId,
-    widgetId: runtimeWidgetId,
+    widgetId: String(instance.id),
     orgId: orgId || null,
     agentId: effectiveAgentId,
     eventType: "WIDGET_RUNTIME_PROXY_END",

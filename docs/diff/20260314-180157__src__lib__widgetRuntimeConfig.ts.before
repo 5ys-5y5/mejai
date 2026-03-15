@@ -33,6 +33,7 @@ export type WidgetInstanceRow = {
   public_key: string;
   name?: string | null;
   is_active?: boolean | null;
+  chat_policy?: WidgetChatPolicyInput | null;
   is_public?: boolean | null;
   editable_id?: string[] | null;
   usable_id?: string[] | null;
@@ -41,7 +42,7 @@ export type WidgetInstanceRow = {
 
 export type ResolvedWidgetConfig = {
   template: WidgetTemplateRow;
-  instance: WidgetInstanceRow | null;
+  instance: WidgetInstanceRow;
   name: string;
   theme: Record<string, unknown>;
   setup_config: WidgetSetupConfig | null;
@@ -63,8 +64,13 @@ function mergeSetupConfig(base?: WidgetSetupConfig | null, override?: WidgetSetu
   } satisfies WidgetSetupConfig;
 }
 
-export function resolveWidgetBasePolicy(template: WidgetTemplateRow): ConversationFeaturesProviderShape | null {
-  return normalizeWidgetChatPolicyProvider(template.chat_policy || null);
+export function resolveWidgetBasePolicy(
+  template: WidgetTemplateRow,
+  instance: WidgetInstanceRow
+): ConversationFeaturesProviderShape | null {
+  const templatePolicy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
+  const instancePolicy = normalizeWidgetChatPolicyProvider(instance.chat_policy || null);
+  return mergeWidgetPolicies(templatePolicy, instancePolicy);
 }
 
 export function filterWidgetOverridesByPolicy(
@@ -99,10 +105,12 @@ export function filterWidgetOverridesByPolicy(
 
 export function resolveWidgetRuntimeConfig(
   template: WidgetTemplateRow,
-  instance?: WidgetInstanceRow | null,
+  instance: WidgetInstanceRow,
   overrides?: WidgetOverrides | null
 ): ResolvedWidgetConfig {
-  const basePolicy = resolveWidgetBasePolicy(template);
+  const templatePolicy = normalizeWidgetChatPolicyProvider(template.chat_policy || null);
+  const instancePolicy = normalizeWidgetChatPolicyProvider(instance.chat_policy || null);
+  const basePolicy = mergeWidgetPolicies(templatePolicy, instancePolicy);
   const overridePolicy = normalizeWidgetChatPolicyProvider(overrides?.chat_policy || null);
   const resolvedPolicy = mergeWidgetPolicies(basePolicy, overridePolicy);
 
@@ -123,7 +131,7 @@ export function resolveWidgetRuntimeConfig(
 
   return {
     template,
-    instance: instance || null,
+    instance,
     name: resolvedName,
     theme: overrideTheme,
     setup_config: mergedSetup,

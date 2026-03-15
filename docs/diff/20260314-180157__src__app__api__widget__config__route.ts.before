@@ -9,6 +9,7 @@ import {
   type WidgetInstanceRow,
   type WidgetTemplateRow,
 } from "@/lib/widgetRuntimeConfig";
+import { findTemplateSharedInstance, SHARED_INSTANCE_MISSING_ERROR } from "@/lib/widgetSharedInstance";
 
 type TemplateRow = WidgetTemplateRow & {
   public_key?: string | null;
@@ -40,7 +41,7 @@ export async function GET(req: NextRequest) {
   const instanceId = String(url.searchParams.get("instance_id") || "").trim();
   const templateIdParam = String(url.searchParams.get("template_id") || "").trim();
   const widgetIdParam = String(url.searchParams.get("widget_id") || "").trim();
-  const requestedWidgetId = widgetIdParam || (!instanceId ? templateIdParam : "");
+  const widgetId = widgetIdParam || (!instanceId ? templateIdParam : "");
   const overridesParam = String(url.searchParams.get("ovr") || "").trim();
   const originHeader = req.headers.get("origin");
 
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest) {
     if (!publicKey || !templateIdParam) {
       return withCors(NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 400 }), originHeader);
     }
-  } else if (!requestedWidgetId || !publicKey) {
+  } else if (!widgetId || !publicKey) {
     return withCors(NextResponse.json({ error: "AUTH_REQUIRED" }, { status: 400 }), originHeader);
   }
   const overrides = normalizeWidgetOverrides(decodeWidgetOverrides(overridesParam));
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
   if (instanceId) {
     const { data, error } = await supabaseAdmin
       .from("B_chat_widget_instances")
-      .select("id, template_id, public_key, name, is_active, is_public")
+      .select("id, template_id, public_key, name, is_active, chat_policy, is_public")
       .eq("id", instanceId)
       .maybeSingle();
     if (error) {
@@ -88,11 +89,11 @@ export async function GET(req: NextRequest) {
       return withCors(NextResponse.json({ error: "TEMPLATE_MISMATCH" }, { status: 400 }), originHeader);
     }
     instance = data as InstanceRow;
-  } else if (requestedWidgetId) {
+  } else if (widgetId) {
     const { data, error } = await supabaseAdmin
       .from("B_chat_widgets")
       .select("id, name, is_active, chat_policy, is_public, created_by, public_key")
-      .eq("id", requestedWidgetId)
+      .eq("id", widgetId)
       .maybeSingle();
     if (error) {
       return withCors(NextResponse.json({ error: error.message }, { status: 400 }), originHeader);
@@ -104,12 +105,36 @@ export async function GET(req: NextRequest) {
       return withCors(NextResponse.json({ error: "AUTH_FAILED" }, { status: 403 }), originHeader);
     }
     template = data as TemplateRow;
+    try {
+      const shared = await findTemplateSharedInstance(supabaseAdmin, template.id);
+      if (!shared) {
+        return withCors(NextResponse.json({ error: SHARED_INSTANCE_MISSING_ERROR }, { status: 409 }), originHeader);
+      }
+      instance = {
+        id: shared.id,
+        template_id: shared.template_id,
+        public_key: shared.public_key,
+        name: shared.name || template.name || "Widget Template",
+        is_active: shared.is_active ?? true,
+        is_public: shared.is_public ?? true,
+        chat_policy: shared.chat_policy || null,
+      } satisfies InstanceRow;
+    } catch (error) {
+      return withCors(
+        NextResponse.json(
+          { error: error instanceof Error ? error.message : SHARED_INSTANCE_MISSING_ERROR },
+          { status: 400 }
+        ),
+        originHeader
+      );
+    }
+  }
+
+  if (!instance) {
+    return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
   }
 
   if (!template) {
-    if (!instance) {
-      return withCors(NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 }), originHeader);
-    }
     const { data, error } = await supabaseAdmin
       .from("B_chat_widgets")
       .select("id, name, is_active, chat_policy, is_public, created_by, public_key")
@@ -124,19 +149,17 @@ export async function GET(req: NextRequest) {
     template = data as TemplateRow;
   }
 
-  const basePolicy = resolveWidgetBasePolicy(template);
+  const basePolicy = resolveWidgetBasePolicy(template, instance);
   const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
   const resolved = resolveWidgetRuntimeConfig(template, instance, filteredOverrides);
-  const widgetId = instance?.id || template.id;
-  const widgetPublicKey = instance?.public_key || template.public_key || null;
 
   return withCors(
     NextResponse.json({
       widget: {
-        id: widgetId,
+        id: instance.id,
         name: resolved.name,
         theme: resolved.theme || {},
-        public_key: widgetPublicKey,
+        public_key: instance.public_key,
         chat_policy: resolved.chat_policy,
         setup_config: resolved.setup_config,
       },

@@ -4,7 +4,7 @@ import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 
 const INSTANCE_SELECT =
-  "id, template_id, public_key, name, is_active, is_public, editable_id, usable_id, created_by, created_at, updated_at, creation_path";
+  "id, template_id, public_key, name, is_active, is_public, editable_id, usable_id, chat_policy, created_by, created_at, updated_at";
 const TEMPLATE_SELECT = "id, name, is_active, is_public, created_by";
 
 type ServerContext = Awaited<ReturnType<typeof getServerContext>>;
@@ -22,10 +22,10 @@ type WidgetInstanceRow = {
   is_public?: boolean | null;
   editable_id?: string[] | null;
   usable_id?: string[] | null;
+  chat_policy?: Record<string, unknown> | null;
   created_by?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
-  creation_path?: string | null;
 };
 
 type WidgetTemplateRow = {
@@ -44,6 +44,10 @@ function hasOwn(value: Record<string, unknown>, key: string) {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
 function normalizeIdList(value: unknown) {
   if (!Array.isArray(value)) return [];
   return Array.from(
@@ -53,6 +57,22 @@ function normalizeIdList(value: unknown) {
         .filter(Boolean)
     )
   );
+}
+
+function normalizeChatPolicy(value: unknown) {
+  if (value === null) return null;
+  return isPlainObject(value) ? value : null;
+}
+
+function readInstanceKind(chatPolicy: Record<string, unknown> | null | undefined) {
+  if (!isPlainObject(chatPolicy)) return "";
+  const widget = chatPolicy.widget;
+  if (!isPlainObject(widget)) return "";
+  return typeof widget.instance_kind === "string" ? widget.instance_kind.trim() : "";
+}
+
+function isTemplateSharedInstance(row: { chat_policy?: Record<string, unknown> | null }) {
+  return readInstanceKind(row.chat_policy) === "template_shared";
 }
 
 function canEditInstance(row: WidgetInstanceRow, userId: string, access: AccessInfo) {
@@ -78,8 +98,7 @@ function mapInstanceRow(row: WidgetInstanceRow, templateMap: Map<string, WidgetT
     public_key: row.public_key || null,
     editable_id: normalizeIdList(row.editable_id),
     usable_id: normalizeIdList(row.usable_id),
-    chat_policy: null,
-    creation_path: row.creation_path || null,
+    chat_policy: normalizeChatPolicy(row.chat_policy),
     template_name: template?.name || row.template_id,
     template_is_active: template?.is_active ?? true,
     template_is_public: template?.is_public ?? false,
@@ -179,6 +198,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!existing) {
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
   }
+  if (isTemplateSharedInstance(existing)) {
+    return NextResponse.json({ error: "TEMPLATE_SHARED_INSTANCE_LOCKED" }, { status: 403 });
+  }
   if (!canEditInstance(existing, contextResult.context.user.id, access)) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
   }
@@ -193,6 +215,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const template = await loadActiveTemplate(supabaseAdmin, nextTemplateId);
   if (!template) {
     return NextResponse.json({ error: "TEMPLATE_NOT_FOUND" }, { status: 404 });
+  }
+
+  const nextChatPolicy = hasOwn(body, "chat_policy")
+    ? normalizeChatPolicy(body.chat_policy)
+    : normalizeChatPolicy(existing.chat_policy);
+  if (readInstanceKind(nextChatPolicy) === "template_shared") {
+    return NextResponse.json({ error: "RESERVED_INSTANCE_KIND" }, { status: 400 });
   }
 
   const nowIso = new Date().toISOString();
@@ -214,6 +243,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     is_active: hasOwn(body, "is_active") ? Boolean(body.is_active) : existing.is_active !== false,
     editable_id: editableIds,
     usable_id: usableIds,
+    chat_policy: nextChatPolicy,
     updated_at: nowIso,
   };
 
@@ -258,6 +288,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   const existing = existingResult.item;
   if (!existing) {
     return NextResponse.json({ error: "NOT_FOUND" }, { status: 404 });
+  }
+  if (isTemplateSharedInstance(existing)) {
+    return NextResponse.json({ error: "TEMPLATE_SHARED_INSTANCE_LOCKED" }, { status: 403 });
   }
   if (!canEditInstance(existing, contextResult.context.user.id, access)) {
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });

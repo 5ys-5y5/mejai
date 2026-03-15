@@ -1,0 +1,621 @@
+# `instance_kind` 제거 및 템플릿/인스턴스 계약 정렬 설계서
+
+작성일: 2026-03-14  
+대상 범위: widget template/runtime/install flow, `B_chat_widgets`, `B_chat_widget_instances`
+
+## 1. 문서 목적
+
+이 문서는 현재 서비스에 잘못 도입된 `instance_kind`, `template_shared`, shared provisioning 개념을 제거하고, 실제 의도와 일치하는 계약으로 재정렬하기 위한 설계 문서다.
+
+이 문서가 전제로 삼는 사용자 의도는 아래와 같다.
+
+1. 위젯은 템플릿만으로 동작할 수 있다.
+2. 템플릿은 `B_chat_widgets` 테이블에서 관리한다.
+3. 인스턴스는 템플릿을 복제해서 사용자별 설정을 가지는 별도 운영 대상이다.
+4. 인스턴스는 `B_chat_widget_instances` 테이블에서 관리한다.
+5. 따라서 `instance_kind`, `template_shared`, shared instance 자동 생성/동기화 개념은 서비스 의도와 맞지 않는다.
+
+이 문서는 단순 설명서가 아니라, 후속 구현에서 그대로 따라야 하는 실행 설계 문서다.  
+따라서 아래 항목을 반드시 포함한다.
+
+- 현재 코드와 의도의 불일치 지점
+- 목표 계약
+- 런타임/토큰/세션 계약 변경안
+- UI/API 변경안
+- 레거시 데이터 정리 방안
+- 수정 전 이해확정 절차
+- 실행 정책
+- 수정 허용 화이트리스트
+- 구현 순서
+- MCP 테스트 체크리스트 및 기록 규칙
+
+## 2. 현재 의도와 코드의 불일치
+
+현재 코드는 “템플릿만으로 동작하는 위젯” 대신, 템플릿 아래에 시스템용 shared 인스턴스를 하나 더 강제로 만들고 그 row 를 실제 공개 위젯의 본체처럼 사용한다.
+
+이 구조는 사용자 의도와 다르다.
+
+- 의도:
+  - 템플릿 공개키만으로 템플릿 위젯이 동작해야 한다.
+  - 인스턴스는 사용자가 명시적으로 만들었을 때만 존재해야 한다.
+- 현재 구현:
+  - `/api/widget/config`, `/api/widget/init` 이 템플릿 공개키 요청을 받으면 `findTemplateSharedInstance()` 로 shared row 를 찾는다.
+  - shared row 를 찾지 못하면 `SHARED_INSTANCE_MISSING` 으로 실패한다.
+  - `/app/install` 에서 `instance_kind: "template_shared"` 로 shared row 를 생성한다.
+  - template 저장 API 들도 shared row 를 자동 생성/동기화한다.
+
+근거 코드:
+
+- `src/lib/widgetSharedInstance.ts:4-145`
+- `src/app/api/widget/config/route.ts:94-127`
+- `src/app/api/widget/init/route.ts:127-148`
+- `src/app/api/widget-instances/route.ts:244-296`
+- `src/components/settings/WidgetInstallPanel.tsx:108-147`
+- `src/app/api/widget-templates/[id]/route.ts:165-166`
+- `src/app/api/widget-templates/[id]/chat-policy/route.ts:172-173`
+
+비개발자 설명:
+
+- 현재는 “상품 설명서”인 템플릿만 있으면 충분한데, 시스템이 중간에 “숨겨진 가짜 상품 1개”를 더 만들어야만 실제 위젯이 작동하게 구현되어 있다.
+- 이 숨겨진 가짜 상품을 구분하려고 `instance_kind` 를 넣었고, 이 때문에 실제 구조가 복잡해졌다.
+- 사용자가 원하는 구조는 그 반대다. 템플릿은 템플릿대로 바로 쓰고, 인스턴스는 사용자가 필요할 때만 만드는 구조여야 한다.
+
+## 3. 목표 계약
+
+## 3.1 템플릿 계약
+
+템플릿은 단독으로 동작 가능해야 한다.
+
+- 템플릿 본체는 `B_chat_widgets` row 하나다.
+- 템플릿 공개 경로는 템플릿의 `public_key` 로 인증한다.
+- 템플릿 공개 경로는 `B_chat_widget_instances` 에 어떤 row 가 없어도 정상 동작해야 한다.
+- 템플릿 공개 경로는 shared row 를 찾거나 만들지 않는다.
+- 템플릿 공개 경로의 설정 소스는 `B_chat_widgets` 자체다.
+
+즉, 아래 흐름이 정식 계약이다.
+
+1. 사용자 또는 관리자 화면에서 템플릿 생성
+2. `B_chat_widgets` 에 저장
+3. 템플릿 install snippet 에 `widget_id` 와 template `public_key` 사용
+4. `/api/widget/config`, `/api/widget/init` 이 템플릿 row 만으로 동작
+
+## 3.2 인스턴스 계약
+
+인스턴스는 템플릿과 별개이며, 오직 사용자가 명시적으로 생성했을 때만 존재한다.
+
+- 인스턴스는 `B_chat_widget_instances` row 하나다.
+- 인스턴스는 항상 부모 `template_id` 를 가진다.
+- 인스턴스는 사용자별 공개 설정, 접근 제어, override 를 가질 수 있다.
+- 인스턴스 설치 경로는 인스턴스의 `id`, `public_key`, `template_id` 를 사용한다.
+- 인스턴스는 템플릿 공개 경로를 대신하는 시스템용 row 가 아니다.
+
+즉, 인스턴스는 “템플릿의 한 종류”가 아니라 “템플릿을 기반으로 사용자가 만든 별도 배포본”이다.
+
+## 3.3 `instance_kind` 제거 원칙
+
+이 설계에서는 `instance_kind` 개념을 사용하지 않는다.
+
+- API request body 에서 `instance_kind` 를 받지 않는다.
+- `chat_policy.widget.instance_kind` 를 저장하지 않는다.
+- `template_shared`, `dedicated` 와 같은 문자열 계약을 새 코드에서 참조하지 않는다.
+- shared instance helper, shared status, shared provisioning UI 를 유지하지 않는다.
+
+단, 레거시 데이터 정리를 위해 과거 값(`chat_policy.widget.instance_kind`)을 읽어 제거하는 마이그레이션 단계는 허용한다.  
+이 읽기는 “새 계약의 일부”가 아니라 “과거 오구현 제거용 일회성 정리”다.
+
+## 4. 런타임 계약 변경
+
+## 4.1 공통 원칙
+
+현재 런타임은 “토큰 안의 `widget_id` 는 항상 인스턴스 id” 라는 가정을 많이 가지고 있다.  
+이 가정 자체가 `instance_kind` 오구현과 결합되어 있다.
+
+따라서 개별 라우트 핫픽스가 아니라, 토큰/세션/런타임 해석 계약을 공통으로 바꿔야 한다.
+
+## 4.2 토큰 계약
+
+현재:
+
+- `src/lib/widgetToken.ts` 의 payload 는 `widget_id` 하나만 가진다.
+- downstream route 는 이 값을 인스턴스 id 로 해석한다.
+
+목표:
+
+```ts
+type WidgetTokenPayload = {
+  org_id: string | null;
+  template_id: string;
+  instance_id: string | null;
+  session_id: string;
+  visitor_id: string | null;
+  origin: string | null;
+  exp: number;
+};
+```
+
+설계 원칙:
+
+- 템플릿 모드:
+  - `template_id` 는 필수
+  - `instance_id` 는 `null`
+- 인스턴스 모드:
+  - `template_id` 는 필수
+  - `instance_id` 는 해당 인스턴스 id
+
+이 구조를 쓰면 “종류를 뜻하는 문자열”이 없어도, 템플릿 모드와 인스턴스 모드를 데이터 구조만으로 구분할 수 있다.
+
+## 4.3 세션 메타데이터 계약
+
+현재 `src/app/api/widget/init/route.ts` 는 세션 metadata 에 `widget_instance_id` 를 항상 넣는다.
+
+목표:
+
+```json
+{
+  "template_id": "필수",
+  "widget_instance_id": "선택",
+  "origin": "...",
+  "page_url": "...",
+  "referrer": "...",
+  "visitor_id": "...",
+  "visitor": { "...": "..." }
+}
+```
+
+설계 원칙:
+
+- 템플릿 모드 세션:
+  - `template_id` 만 필수
+  - `widget_instance_id` 는 없거나 `null`
+- 인스턴스 모드 세션:
+  - `template_id` 와 `widget_instance_id` 둘 다 기록
+
+이렇게 해야 이후 `/api/widget/history`, `/api/widget/logs`, `/api/widget/sessions` 가 템플릿 모드 세션도 정상적으로 식별할 수 있다.
+
+## 4.4 런타임 설정 해석 계약
+
+현재 `src/lib/widgetRuntimeConfig.ts` 는 `template` 과 `instance` 둘 다 반드시 있다고 가정한다.
+
+목표:
+
+- 공통 설정 해석기는 `instance` 가 없어도 동작해야 한다.
+- 템플릿 모드에서는 template policy 만 사용한다.
+- 인스턴스 모드에서는 template policy + instance override 를 합친다.
+
+목표 함수 시그니처 예시:
+
+```ts
+resolveWidgetBasePolicy(template, instance?: WidgetInstanceRow | null)
+resolveWidgetRuntimeConfig(template, instance?: WidgetInstanceRow | null, overrides?)
+```
+
+이 변경은 `config`, `init`, `chat`, `stream` 전체에 한 번에 적용되는 계약 변경이다.  
+따라서 AGENTS 지침의 “공통 계약/intent 레벨 수정”에 부합한다.
+
+## 5. API 설계
+
+## 5.1 `GET /api/widget/config`
+
+목표 동작:
+
+- `instance_id` 가 있으면 인스턴스 모드
+- `widget_id` 만 있으면 템플릿 모드
+- 템플릿 모드에서는 `findTemplateSharedInstance()` 를 호출하지 않는다
+- `SHARED_INSTANCE_MISSING` 오류를 제거한다
+
+템플릿 모드 반환 규칙:
+
+- `widget.id` 는 템플릿 id 를 사용한다
+- `public_key` 는 템플릿 공개키를 사용한다
+- 정책/테마/설정은 템플릿 기준으로 계산한다
+
+인스턴스 모드 반환 규칙:
+
+- 현재 dedicated 인스턴스 흐름을 유지한다
+
+## 5.2 `POST /api/widget/init`
+
+목표 동작:
+
+- 템플릿 모드:
+  - 템플릿 row 만 조회
+  - 세션 metadata 에 `template_id` 기록
+  - `widget_instance_id` 는 `null`
+  - 토큰에 `template_id`, `instance_id: null` 기록
+- 인스턴스 모드:
+  - 현재 dedicated 흐름 유지
+  - 다만 토큰/metadata 구조는 새 계약으로 변경
+
+제거 대상:
+
+- `findTemplateSharedInstance()`
+- `SHARED_INSTANCE_MISSING`
+- shared row fallback
+
+## 5.3 `POST /api/widget-instances`
+
+목표 동작:
+
+- 오직 “사용자용 인스턴스 생성”만 수행
+- `template_id` 는 필수
+- `instance_kind` 는 계약에서 제거
+- shared provisioning branch 를 제거
+
+롤아웃 권장안:
+
+1. 1차 배포:
+   - `instance_kind` 를 읽더라도 동작 분기에 사용하지 않고 무시
+   - 기존 캐시된 브라우저 JS 로 인한 장애를 막기 위한 호환 단계
+2. 2차 정리:
+   - stale caller 가 정리된 뒤 `instance_kind` 포함 요청은 `400 UNSUPPORTED_FIELD`
+
+## 5.4 `PATCH/DELETE /api/widget-instances/[id]`
+
+목표 동작:
+
+- `TEMPLATE_SHARED_INSTANCE_LOCKED` 제거
+- `RESERVED_INSTANCE_KIND` 제거
+- 인스턴스는 모두 같은 규칙으로 수정/삭제 가능
+- 권한은 기존 `editable_id`, `created_by`, admin 여부만 사용
+
+주의:
+
+- 레거시 synthetic shared row 를 정리하지 않으면, 이전에 숨겨져 있던 row 가 일반 목록에 보일 수 있다.
+- 따라서 코드 배포와 함께 레거시 데이터 정리 절차를 반드시 수행해야 한다.
+
+## 5.5 `GET/POST /api/widgets`
+
+목표 동작:
+
+- 이 route 는 “템플릿 설치 정보”를 읽는 API 로 축소한다.
+- shared status(`ready` / `missing`) 를 반환하지 않는다.
+- instance id / instance public key 를 template install 정보에 포함하지 않는다.
+- `POST` 에서 template 저장 시 shared row 를 만들지 않는다.
+
+반환 예시:
+
+```json
+{
+  "items": [
+    {
+      "id": "template-id",
+      "name": "Widget Template",
+      "template_public_key": "mw_pk_...",
+      "is_active": true
+    }
+  ]
+}
+```
+
+## 5.6 template 저장 API
+
+대상:
+
+- `src/app/api/widget-templates/[id]/route.ts`
+- `src/app/api/widget-templates/[id]/chat-policy/route.ts`
+
+목표 동작:
+
+- 템플릿 저장은 `B_chat_widgets` 만 수정한다.
+- 저장 후 shared instance 자동 생성/동기화를 수행하지 않는다.
+- 템플릿 저장과 인스턴스 관리는 완전히 분리한다.
+
+## 5.7 widget runtime API
+
+대상:
+
+- `src/app/api/widget/chat/route.ts`
+- `src/app/api/widget/stream/route.ts`
+- `src/app/api/widget/sessions/route.ts`
+- `src/app/api/widget/history/route.ts`
+- `src/app/api/widget/logs/route.ts`
+- `src/app/api/widget/event/route.ts`
+
+목표 동작:
+
+- 토큰 payload 의 `instance_id` 존재 여부로 모드를 판단한다.
+- 템플릿 모드면 template row 기반으로 동작한다.
+- 인스턴스 모드면 instance row + template row 기반으로 동작한다.
+- 더 이상 “토큰의 widget_id 는 무조건 인스턴스 id” 라고 가정하지 않는다.
+
+추가 설계:
+
+- `event` 저장 시 DB 컬럼명이 `widget_id` 라면, 하위 호환을 위해 `instance_id ?? template_id` 를 기록하되
+- payload 내부에 `template_id`, `instance_id` 를 별도로 포함해 의미를 보존한다.
+
+## 6. UI 설계
+
+## 6.1 `/app/install`
+
+현재 문제:
+
+- shared status 를 보여준다.
+- shared provisioning 버튼이 있다.
+- 설치 코드를 shared instance 기준으로 만든다.
+
+목표:
+
+- `/app/install` 은 템플릿 install 안내 화면이어야 한다.
+- shared 상태/생성 버튼을 제거한다.
+- 설치 코드는 template `widget_id` + template `public_key` 기반이어야 한다.
+- “공유 인스턴스 준비” 같은 문구를 제거한다.
+
+즉, install 페이지는 “템플릿은 바로 설치 가능”이라는 상품 의미를 드러내야 한다.
+
+## 6.2 `/app/create?tab=template`
+
+현재 `src/lib/conversation/client/useWidgetTemplateSettingsController.ts:610-618` 은 이미 template 기반 install snippet 을 생성하고 있다.
+
+이 구현은 사용자 의도와 맞는다.
+
+따라서 원칙은 아래와 같다.
+
+- template 탭의 snippet 계약을 기준 소스로 삼는다.
+- `/app/install` 도 동일 계약을 따라야 한다.
+- template 저장 시 instance 생성/동기화를 걸지 않는다.
+
+## 6.3 `/app/create?tab=chat`
+
+이 탭은 dedicated 인스턴스 관리 탭으로 유지한다.
+
+- 인스턴스 생성
+- 접근 제어
+- 인스턴스 전용 install snippet
+- 인스턴스 전용 public key 관리
+
+즉, 템플릿 설치와 인스턴스 설치를 같은 개념으로 섞지 않는다.
+
+## 7. 레거시 데이터 정리 설계
+
+## 7.1 정리 대상
+
+현재 `chat_policy.widget.instance_kind = "template_shared"` 로 만들어진 row 는 서비스 의도상 정상 도메인 객체가 아니다.  
+이 row 들은 이전 오구현이 만든 synthetic row 로 간주한다.
+
+## 7.2 정리 원칙
+
+- 새 코드가 배포된 뒤, 레거시 shared row 를 사용자 DB 에서 정리해야 한다.
+- DB write 는 LLM 이 직접 실행하지 않는다.
+- 아래 SQL 은 사용자 또는 운영자가 직접 실행한다.
+
+## 7.3 사용자 실행용 확인 SQL
+
+```sql
+select
+  id,
+  template_id,
+  name,
+  created_by,
+  created_at,
+  updated_at
+from public."B_chat_widget_instances"
+where chat_policy->'widget'->>'instance_kind' = 'template_shared'
+order by created_at desc;
+```
+
+## 7.4 사용자 실행용 삭제 SQL
+
+아래 SQL 은 synthetic shared row 를 삭제한다.  
+이 row 가 실제 사용자 운영 인스턴스로 쓰인 적이 없는지 먼저 확인한 뒤 실행한다.
+
+```sql
+delete from public."B_chat_widget_instances"
+where chat_policy->'widget'->>'instance_kind' = 'template_shared';
+```
+
+## 7.5 사용자 실행용 레거시 key 제거 SQL
+
+shared row 삭제 후에도 일반 인스턴스 `chat_policy` 내부에 오래된 `instance_kind` key 가 남아 있을 수 있다.  
+필요하면 아래 SQL 로 key 만 제거한다.
+
+```sql
+update public."B_chat_widget_instances"
+set chat_policy = jsonb_strip_nulls(
+  case
+    when chat_policy ? 'widget' then jsonb_set(
+      chat_policy,
+      '{widget}',
+      coalesce(chat_policy->'widget', '{}'::jsonb) - 'instance_kind'
+    )
+    else chat_policy
+  end
+)
+where chat_policy->'widget' ? 'instance_kind';
+```
+
+## 8. 수정 전 이해확정 절차
+
+후속 구현을 시작하기 전에 아래 이해 목록을 먼저 사용자에게 제시하고, 사용자가 명시적으로 “이 이해가 맞다”고 확정한 뒤에만 수정한다.
+
+이해 목록은 아래 문장을 그대로 기반으로 작성한다.
+
+1. 템플릿은 `B_chat_widgets` row 만으로 공개 위젯이 동작해야 한다.
+2. 인스턴스는 `B_chat_widget_instances` 의 별도 사용자 자산이며, 사용자가 명시적으로 만들 때만 존재해야 한다.
+3. `instance_kind`, `template_shared`, shared provisioning 개념은 제거 대상이다.
+4. `/app/install` 은 template install 안내 화면이어야 하며, 인스턴스 생성 버튼이 있으면 안 된다.
+5. `/app/create?tab=chat` 은 dedicated 인스턴스 관리 화면으로 유지한다.
+6. 템플릿 저장 API 는 인스턴스를 자동 생성하거나 동기화하지 않아야 한다.
+7. 런타임 토큰/세션은 `template_id` 필수, `instance_id` 선택 구조로 재설계해야 한다.
+8. 레거시 shared row 정리는 운영자가 SQL 로 직접 수행한다.
+
+확정 절차:
+
+1. 이해 목록 제시
+2. 사용자 명시 확정
+3. 수정 파일 화이트리스트 재확인
+4. 파일별 수정 직전 `docs/diff` 백업
+5. 코드 수정 시작
+
+확정 없이 임의로 수정에 착수하지 않는다.
+
+## 9. 실행 정책 (필수 준수)
+
+아래 정책은 본 설계 또는 후속 수정에서 100% 준수한다.
+
+1. 공통 계약 우선
+   - 개별 라우트마다 예외 처리로 막지 않는다.
+   - 토큰, 세션 metadata, runtime config helper 등 공통 계약부터 바꾼다.
+   - `instance_kind` 제거는 문자열 삭제가 아니라 런타임 구조 재정렬로 수행한다.
+
+2. 수정 범위 통제
+   - 화이트리스트 밖 파일은 수정하지 않는다.
+   - 추가 파일 수정이 필요하면 즉시 중단하고 사용자 승인 후 확장한다.
+
+3. 수정 전 백업 의무
+   - 수정할 파일마다 수정 직전 상태를 `docs/diff` 에 저장한다.
+   - 파일 전체 또는 수정 구간을 복구 가능한 형태로 남긴다.
+   - 백업 누락 시 수정 금지다.
+
+4. 단계별 구현
+   - 1단계: 토큰/런타임 공통 계약 변경
+   - 2단계: template/public runtime API 정리
+   - 3단계: instance CRUD API 정리
+   - 4단계: install UI 정리
+   - 5단계: 레거시 정리 SQL 제공
+   - 6단계: build + MCP 검증
+
+5. DB 쓰기 제한
+   - LLM 은 Supabase MCP 로 DB 구조/상태 확인은 시도할 수 있다.
+   - DB 데이터 수정이 필요하면 SQL 을 문서에 적고 사용자가 직접 실행한다.
+   - LLM 이 DB row 를 직접 수정하지 않는다.
+
+6. 테스트 의무
+   - 매 실행마다 `supabase` MCP 확인 시도
+   - 매 실행마다 `chrome-devtools` MCP 로 실제 페이지/흐름 확인
+   - 코드 수정 후 `npm run build` 수행
+   - 테스트 결과를 문서 하단에 기록
+
+7. 빌드 안정성
+   - 비자명한 수정 후 `npm run build` 를 통과시키지 못하면 추가 기능 수정 금지
+   - 빌드 에러는 즉시 해결 후 다음 단계로 진행
+
+8. 레거시 호환 처리
+   - 캐시된 구버전 브라우저 코드로 인한 즉시 장애를 막기 위해
+   - 1회 배포 동안은 `instance_kind` request field 와 구버전 widget token payload 를 읽기 호환으로만 유지할 수 있다
+   - 단, 새 코드의 분기 기준으로 사용하지는 않는다
+
+## 10. 수정 허용 화이트리스트 (필수 준수)
+
+아래 파일만 수정 가능하다.  
+각 파일은 적힌 목적 범위 내에서만 수정한다.
+
+| 파일 | 허용 목적 |
+| --- | --- |
+| `docs/delInstancekind.md` | 본 설계 문서 유지, 테스트 기록 업데이트 |
+| `src/lib/widgetToken.ts` | widget token payload 를 `template_id` + `instance_id` 구조로 공통 계약 변경 |
+| `src/lib/widgetRuntimeConfig.ts` | template-only mode 를 공통 해석 가능하도록 타입/헬퍼 계약 변경 |
+| `src/lib/widgetPolicyUtils.ts` | 레거시 `instance_kind` key 제거용 공통 정리 helper 추가가 필요할 때만 수정 |
+| `src/lib/widgetSharedInstance.ts` | 레거시 shared helper 제거 또는 사용 중단 정리 |
+| `src/app/api/widget/config/route.ts` | template public runtime 이 template row 만으로 동작하도록 수정 |
+| `src/app/api/widget/init/route.ts` | 새 token/session 계약 적용, shared fallback 제거 |
+| `src/app/api/widget/chat/route.ts` | token 기반 runtime target 해석을 template/instance 공용 계약으로 변경 |
+| `src/app/api/widget/stream/route.ts` | token 기반 runtime target 해석을 template/instance 공용 계약으로 변경 |
+| `src/app/api/widget/sessions/route.ts` | template mode session 조회 지원 |
+| `src/app/api/widget/history/route.ts` | template mode session 검증 지원 |
+| `src/app/api/widget/logs/route.ts` | template mode session 검증 지원 |
+| `src/app/api/widget/event/route.ts` | event 저장 시 template/instance 의미 보존 |
+| `src/app/api/widget-instances/route.ts` | `instance_kind` 입력 제거, pure instance create API 로 정리 |
+| `src/app/api/widget-instances/[id]/route.ts` | shared lock/reserved logic 제거 |
+| `src/app/api/widgets/route.ts` | template install read API 로 축소, shared status 제거 |
+| `src/app/api/widget-templates/[id]/route.ts` | template 저장 시 shared sync 제거 |
+| `src/app/api/widget-templates/[id]/chat-policy/route.ts` | template 정책 저장 시 shared sync 제거 |
+| `src/components/settings/WidgetInstallPanel.tsx` | shared provisioning UI 제거, template install 안내로 재구성 |
+| `src/components/settings/WidgetQuickstartPanel.tsx` | shared wording 제거, template quickstart 로 재구성 |
+| `src/app/app/install/page.tsx` | install 페이지 탭/설명 정렬이 필요할 때만 수정 |
+
+화이트리스트 외 파일 수정이 필요하면 즉시 중단하고 사용자 승인 후 추가한다.
+
+## 11. 구현 순서
+
+1. 사용자 이해확정
+2. 수정 대상 파일별 `docs/diff` 백업 생성
+3. `widgetToken.ts`, `widgetRuntimeConfig.ts` 공통 계약 수정
+4. `widget/config`, `widget/init`, `widget/chat`, `widget/stream` 수정
+5. `widget/history`, `widget/logs`, `widget/sessions`, `widget/event` 수정
+6. `widget-instances`, `widget-templates`, `widgets` API 수정
+7. `WidgetInstallPanel`, `WidgetQuickstartPanel`, 필요 시 `install/page.tsx` 수정
+8. `rg` 로 `instance_kind`, `template_shared`, `findTemplateSharedInstance`, `provisionTemplateSharedInstance`, `syncTemplateSharedInstance`, `SHARED_INSTANCE_MISSING` 전체 재검색
+9. `npm run build`
+10. Chrome DevTools MCP 검증
+11. Supabase MCP 확인 시도 및 사용자 실행용 SQL 제시
+12. 문서 하단 테스트 기록 업데이트
+
+## 12. 검증 체크리스트
+
+- [ ] 템플릿 공개키만으로 `/api/widget/config` 가 성공한다.
+- [ ] 템플릿 공개키만으로 `/api/widget/init` 가 성공한다.
+- [ ] 템플릿 모드 세션 metadata 에 `template_id` 가 기록된다.
+- [ ] 템플릿 모드 세션 metadata 에 `widget_instance_id` 가 강제되지 않는다.
+- [ ] 인스턴스 모드 설치 코드가 기존처럼 동작한다.
+- [ ] `POST /api/widget-instances` 가 더 이상 shared provisioning 을 수행하지 않는다.
+- [ ] `PATCH/DELETE /api/widget-instances/[id]` 에서 shared lock 오류가 제거된다.
+- [ ] `GET /api/widgets` 응답에 shared status, instance public key 가 더 이상 필요하지 않다.
+- [ ] `/app/install` 에서 “공유 인스턴스 생성” 버튼이 제거된다.
+- [ ] `/app/install` 설치 코드가 template `widget_id` + template `public_key` 기반으로 표시된다.
+- [ ] `rg` 검색 결과에서 신규 코드 경로에 `instance_kind`, `template_shared` 의존이 남지 않는다.
+- [ ] `npm run build` 가 성공한다.
+
+## 13. 테스트 기록 작성 규칙
+
+후속 구현 시 아래 형식으로 문서 하단에 계속 추가한다.
+
+```md
+### YYYY-MM-DD HH:mm 실행 기록
+- 변경 파일:
+  - ...
+- build:
+  - 성공 / 실패
+- supabase MCP:
+  - 실행 내용
+  - 결과
+- chrome-devtools MCP:
+  - 확인 URL
+  - 확인 결과
+- 사용자 실행 SQL:
+  - ...
+- 남은 리스크:
+  - ...
+```
+
+## 14. 현재 실행 기록
+
+### 2026-03-14 문서 작성 기록
+
+- 변경 파일:
+  - `docs/delInstancekind.md`
+  - `docs/diff/20260314__docs__delInstancekind.md.absent.before`
+- build:
+  - 미실행
+  - 사유: 코드 변경이 아닌 설계 문서 추가만 수행
+- supabase MCP:
+  - `list_tables(public)` 확인 시도
+  - 결과: `Auth required`
+  - 해석: 현재 세션에서는 Supabase MCP 인증이 없어 DB 읽기 검증을 진행하지 못함
+- chrome-devtools MCP:
+  - `http://localhost:3000/app/install`
+  - 결과: 현재 화면에 `공유 인스턴스 생성`, `공유 인스턴스가 아직 없습니다` 문구가 실제로 노출됨
+  - `http://localhost:3000/app/create?tab=chat`
+  - 결과: dedicated 인스턴스 설치 코드와 Preview URL 이 실제로 노출됨
+- 사용자 실행 SQL:
+  - 없음
+  - 사유: 이번 실행은 코드/DB 수정이 아니라 설계 문서 작성만 수행
+- 남은 리스크:
+  - runtime token/session 계약 변경이 넓게 퍼져 있어, 구현 시 공통 계약부터 수정하지 않으면 route 별 핫픽스로 다시 깨질 가능성이 높음
+  - 레거시 `template_shared` row 정리를 하지 않으면, hidden row 가 일반 인스턴스 목록에 노출될 수 있음
+
+## 15. 최종 결론
+
+이 설계의 핵심은 아래 두 문장으로 요약된다.
+
+1. 템플릿은 `B_chat_widgets` row 만으로 바로 동작해야 한다.
+2. 인스턴스는 `B_chat_widget_instances` 의 사용자 자산이며, explicit 생성 시에만 존재해야 한다.
+
+따라서 `instance_kind` 와 shared instance 계약은 제거 대상이며, 단순 문자열 삭제가 아니라 아래 공통 계약을 함께 바꿔야 한다.
+
+- widget token 계약
+- session metadata 계약
+- runtime config helper 계약
+- install UI/API 계약
+- legacy synthetic row 정리 절차
+
+후속 구현은 반드시 본 문서의 이해확정 절차와 화이트리스트를 먼저 따르고 시작한다.

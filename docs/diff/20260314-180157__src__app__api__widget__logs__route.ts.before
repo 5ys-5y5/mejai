@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import { readWidgetTokenInstanceId, readWidgetTokenTemplateId, verifyWidgetToken } from "@/lib/widgetToken";
+import { verifyWidgetToken } from "@/lib/widgetToken";
 
 const TRANSCRIPT_SNAPSHOT_EVENT_TYPE = "DEBUG_TRANSCRIPT_SNAPSHOT_SAVED";
 const WIDGET_PROXY_EVENT_PREFIX = "WIDGET_RUNTIME_PROXY_";
@@ -56,28 +56,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const tokenInstanceId = readWidgetTokenInstanceId(payload);
-  const tokenTemplateId = readWidgetTokenTemplateId(payload);
-
-  if (tokenInstanceId) {
-    const { data: instance } = await supabaseAdmin
-      .from("B_chat_widget_instances")
-      .select("id, is_active")
-      .eq("id", tokenInstanceId)
-      .maybeSingle();
-    if (!instance || !instance.is_active) {
-      return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
-    }
-  } else if (tokenTemplateId) {
-    const { data: template } = await supabaseAdmin
-      .from("B_chat_widgets")
-      .select("id, is_active")
-      .eq("id", tokenTemplateId)
-      .maybeSingle();
-    if (!template || !template.is_active) {
-      return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
-    }
-  } else {
+  const { data: instance } = await supabaseAdmin
+    .from("B_chat_widget_instances")
+    .select("id, is_active")
+    .eq("id", payload.widget_id)
+    .maybeSingle();
+  if (!instance || !instance.is_active) {
     return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
 
@@ -92,18 +76,8 @@ export async function GET(req: NextRequest) {
 
   const metadata = session.metadata && typeof session.metadata === "object" ? (session.metadata as Record<string, any>) : null;
   const metadataWidgetId = metadata ? String(metadata.widget_instance_id || "").trim() : "";
-  const metadataTemplateId = metadata ? String(metadata.template_id || "").trim() : "";
-  if (tokenInstanceId) {
-    if (metadataWidgetId && metadataWidgetId !== tokenInstanceId) {
-      return NextResponse.json({ error: "SESSION_WIDGET_MISMATCH" }, { status: 403 });
-    }
-  } else {
-    if (metadataWidgetId) {
-      return NextResponse.json({ error: "SESSION_WIDGET_MISMATCH" }, { status: 403 });
-    }
-    if (tokenTemplateId && metadataTemplateId && metadataTemplateId !== tokenTemplateId) {
-      return NextResponse.json({ error: "SESSION_WIDGET_MISMATCH" }, { status: 403 });
-    }
+  if (metadataWidgetId && metadataWidgetId !== String(payload.widget_id)) {
+    return NextResponse.json({ error: "SESSION_WIDGET_MISMATCH" }, { status: 403 });
   }
   const metadataVisitorId = metadata
     ? String(metadata.visitor_id || metadata.visitorId || metadata.external_user_id || "").trim()

@@ -11,6 +11,7 @@ import {
   type WidgetInstanceRow,
   type WidgetTemplateRow,
 } from "@/lib/widgetRuntimeConfig";
+import { findTemplateSharedInstance, SHARED_INSTANCE_MISSING_ERROR } from "@/lib/widgetSharedInstance";
 
 type TemplateRow = WidgetTemplateRow & {
   public_key?: string | null;
@@ -134,12 +135,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "AUTH_FAILED" }, { status: 403 });
     }
     template = data as TemplateRow;
+    try {
+      const shared = await findTemplateSharedInstance(supabaseAdmin, template.id);
+      if (!shared) {
+        return NextResponse.json({ error: SHARED_INSTANCE_MISSING_ERROR }, { status: 409 });
+      }
+      instance = shared as InstanceRow;
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : SHARED_INSTANCE_MISSING_ERROR },
+        { status: 400 }
+      );
+    }
+  }
+
+  if (!instance) {
+    return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
   }
 
   if (!template) {
-    if (!instance) {
-      return NextResponse.json({ error: "WIDGET_NOT_FOUND" }, { status: 404 });
-    }
     const { data, error } = await supabaseAdmin
       .from("B_chat_widgets")
       .select("*")
@@ -154,7 +168,7 @@ export async function POST(req: NextRequest) {
     template = data as TemplateRow;
   }
 
-  const basePolicy = resolveWidgetBasePolicy(template);
+  const basePolicy = resolveWidgetBasePolicy(template, instance);
   const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
   const resolved = resolveWidgetRuntimeConfig(template, instance, filteredOverrides);
   const origin = readOrigin(body);
@@ -175,16 +189,8 @@ export async function POST(req: NextRequest) {
     }
     if (existing?.metadata && typeof existing.metadata === "object") {
       const metadata = existing.metadata as Record<string, unknown>;
-      const metadataTemplateId = String(metadata.template_id || "").trim();
-      const metadataInstanceId = String(metadata.widget_instance_id || "").trim();
-      if (metadataTemplateId && metadataTemplateId !== String(template.id || "")) {
-        sessionId = "";
-      }
-      if (instance?.id) {
-        if (metadataInstanceId && metadataInstanceId !== String(instance.id)) {
-          sessionId = "";
-        }
-      } else if (metadataInstanceId) {
+      const instanceId = String(metadata.widget_instance_id || "");
+      if (instanceId && instanceId !== String(instance.id)) {
         sessionId = "";
       }
     }
@@ -193,7 +199,7 @@ export async function POST(req: NextRequest) {
   if (!sessionId) {
     sessionId = crypto.randomUUID();
     const metadata = {
-      widget_instance_id: instance?.id || null,
+      widget_instance_id: instance.id,
       template_id: template.id,
       origin: origin || null,
       page_url: pageUrl || null,
@@ -217,9 +223,8 @@ export async function POST(req: NextRequest) {
   let widgetToken: string;
   try {
     widgetToken = issueWidgetToken({
-      org_id: template.created_by ? String(template.created_by) : null,
-      template_id: String(template.id),
-      instance_id: instance?.id || null,
+      org_id: template.created_by ? String(template.created_by) : "",
+      widget_id: String(instance.id),
       session_id: sessionId,
       visitor_id: visitorId || null,
       origin: origin || null,
@@ -241,8 +246,7 @@ export async function POST(req: NextRequest) {
           turn_id: null,
           event_type: "UI_SETTINGS_SOURCE",
           payload: {
-            widget_id: instance?.id || template.id,
-            widget_instance_id: instance?.id || null,
+            widget_instance_id: instance.id,
             template_id: template.id,
             page_key: settingsSource.pageKey,
             source: settingsSource.source,
@@ -258,7 +262,7 @@ export async function POST(req: NextRequest) {
       } catch (error) {
         console.warn("[widget/init] failed to log ui settings source", {
           sessionId,
-          widgetId: instance?.id || template.id,
+          widgetId: instance.id,
           error: error instanceof Error ? error.message : String(error),
         });
       }
@@ -269,10 +273,10 @@ export async function POST(req: NextRequest) {
     widget_token: widgetToken,
     session_id: sessionId,
     widget_config: {
-      id: instance?.id || template.id,
+      id: instance.id,
       name: resolved.name,
       theme: resolved.theme || {},
-      public_key: instance?.public_key || template.public_key || null,
+      public_key: instance.public_key,
       chat_policy: chatPolicy,
       setup_config: resolved.setup_config,
     },
