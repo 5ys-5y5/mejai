@@ -9,7 +9,6 @@ import {
   CreditCard,
   HomeIcon,
   Inbox,
-  MessageCircle,
   PhoneCall,
   PlusSquare,
   Route as RouteIcon,
@@ -254,13 +253,6 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
             to="/app/create"
             icon={PlusSquare}
             label="생성하기"
-            collapsed={collapsed}
-            onClick={onNavigate}
-          />
-          <SidebarLink
-            to="/app/chat"
-            icon={MessageCircle}
-            label="대화하기"
             collapsed={collapsed}
             onClick={onNavigate}
           />
