@@ -10,8 +10,6 @@ export type RuntimeContext = {
   runtimeRequestStartedAt?: string;
   runtimeTurnId?: string;
   runtimeEndUser?: Record<string, any> | null;
-  mcpProviderBindings?: Record<string, unknown>;
-  authSettingsProviders?: Record<string, unknown> | null;
 };
 
 export type CompiledPolicy = ReturnType<typeof compilePolicy>;

@@ -5,7 +5,6 @@ import { AlertTriangle, Trash2 } from "lucide-react";
 import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
 import { StateBanner } from "@/components/design-system";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { CreateListTable, CreateResourceShell } from "@/components/create/CreateResourceShell";
 import { apiFetch } from "@/lib/apiClient";
@@ -67,7 +66,7 @@ type ProviderConnectionSelections = Partial<Record<SupportedProviderKey, string>
 function parseVersionParts(value?: string | null) {
   if (!value) return null;
   const raw = value.trim();
-  const match = raw.match(/^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$/i);
+  const match = raw.match(/^v?(\\d+)(?:\\.(\\d+))?(?:\\.(\\d+))?$/i);
   if (!match) return null;
   return [Number(match[1] || 0), Number(match[2] || 0), Number(match[3] || 0)];
 }

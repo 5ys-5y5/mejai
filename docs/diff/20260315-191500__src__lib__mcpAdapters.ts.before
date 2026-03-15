@@ -10,23 +10,11 @@ import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { isTokenExpired, refreshCafe24Token } from "@/lib/cafe24Tokens";
-import {
-  readSupportedProviderState,
-  resolveSupportedProviderConnection,
-  upsertDefaultProviderConnection,
-  writeSupportedProviderState,
-  type Cafe24Connection,
-  type JusoConnection,
-  type SolapiConnection,
-} from "@/lib/providerConnections";
 
 type AdapterContext = {
   supabase: SupabaseClient;
   orgId: string;
   userId: string;
-  connectionId?: string | null;
-  providerBindings?: Record<string, unknown>;
-  authSettingsProviders?: Record<string, unknown> | null;
 };
 
 type ToolAdapter = (params: Record<string, unknown>, ctx?: AdapterContext) => Promise<ToolCallResult>;
@@ -79,11 +67,21 @@ function chooseBestAlias<T extends { alias: string; match_type: string; priority
 
 const LOOKUP_ORDER_EMBED = "items,receivers,buyer,return";
 
+type Cafe24ProviderConfig = {
+  mall_id?: string;
+  scope?: string;
+  access_token?: string;
+  refresh_token?: string;
+  expires_at?: string;
+  shop_no?: string;
+  board_no?: string;
+};
+
 type AuthSettingsRow = {
   id: string;
   org_id: string;
   user_id: string;
-  providers: Record<string, unknown>;
+  providers: Record<string, Cafe24ProviderConfig | undefined>;
 };
 
 let cachedEnvFile: Record<string, string> | null = null;
@@ -146,43 +144,9 @@ function buildSolapiAuthHeader(apiKey: string, apiSecret: string) {
   return `HMAC-SHA256 apiKey=${apiKey}, date=${date}, salt=${salt}, signature=${signature}`;
 }
 
-async function getJusoConfig(ctx?: AdapterContext) {
-  const row = ctx ? await loadAuthSettingsRow(ctx) : null;
-  const connection = row
-    ? resolveSupportedProviderConnection(ctx?.authSettingsProviders || row.providers || {}, "juso", resolveRequestedConnectionId(ctx, "juso"))
-    : null;
-  let apiKey = connection?.juso_api_key || readEnv("JUSO_API_KEY");
-  if (!apiKey) {
-    cachedEnvFile = null;
-    apiKey = connection?.juso_api_key || readEnv("JUSO_API_KEY");
-  }
-  return {
-    apiKey,
-    connection,
-  };
-}
-
-async function getSolapiConfig(ctx?: AdapterContext) {
-  const row = ctx ? await loadAuthSettingsRow(ctx) : null;
-  const connection = row
-    ? resolveSupportedProviderConnection(
-        ctx?.authSettingsProviders || row.providers || {},
-        "solapi",
-        resolveRequestedConnectionId(ctx, "solapi")
-      )
-    : null;
-  return {
-    apiKey: connection?.solapi_api_key || readEnv("SOLAPI_API_KEY"),
-    apiSecret: connection?.solapi_api_secret || readEnv("SOLAPI_API_SECRET"),
-    from: connection?.solapi_from || readEnv("SOLAPI_FROM"),
-    temp: connection?.solapi_temp || readEnv("SOLAPI_TEMP"),
-    bypass: connection ? Boolean(connection.solapi_bypass) : isEnvTrue("SOLAPI_BYPASS"),
-    connection,
-  };
-}
-
-async function solapiSendMessage(params: { to: string; text: string; from: string }, ctx?: AdapterContext) {
-  const { apiKey, apiSecret } = await getSolapiConfig(ctx);
+async function solapiSendMessage(params: { to: string; text: string; from: string }) {
+  const apiKey = readEnv("SOLAPI_API_KEY");
+  const apiSecret = readEnv("SOLAPI_API_SECRET");
   if (!apiKey || !apiSecret) {
     return { ok: false as const, error: "SOLAPI_CONFIG_MISSING" };
   }
@@ -226,28 +190,6 @@ function extractSolapiMessageId(payload: Record<string, unknown>) {
   return null;
 }
 
-async function loadAuthSettingsRow(ctx?: AdapterContext) {
-  if (!ctx) return null;
-  const { data, error } = await ctx.supabase
-    .from("A_iam_auth_settings")
-    .select("id, org_id, user_id, providers")
-    .eq("org_id", ctx.orgId)
-    .eq("user_id", ctx.userId)
-    .maybeSingle();
-  if (error || !data) return null;
-  return data as AuthSettingsRow;
-}
-
-function resolveRequestedConnectionId(ctx: AdapterContext | undefined, providerKey: string) {
-  if (!ctx) return null;
-  if (ctx.connectionId) return String(ctx.connectionId).trim();
-  const binding =
-    ctx.providerBindings && typeof ctx.providerBindings === "object"
-      ? (ctx.providerBindings as Record<string, { connection_id?: string }>)[providerKey]
-      : null;
-  return binding?.connection_id ? String(binding.connection_id).trim() : null;
-}
-
 async function bootstrapCafe24FromEnv(ctx: AdapterContext, row: AuthSettingsRow) {
   const mallId = readEnv("CAFE24_MALL_ID");
   const accessToken = readEnv("CAFE24_ACCESS_TOKEN");
@@ -258,65 +200,61 @@ async function bootstrapCafe24FromEnv(ctx: AdapterContext, row: AuthSettingsRow)
   const expiresAt = readEnv("CAFE24_EXPIRES_AT");
   if (!mallId || !accessToken || !refreshToken) return null;
 
-  const preferredConnectionId = resolveRequestedConnectionId(ctx, "cafe24");
-  const currentState = readSupportedProviderState(row.providers || {}, "cafe24");
-  const current = resolveSupportedProviderConnection(row.providers || {}, "cafe24", preferredConnectionId);
-  const nextState = upsertDefaultProviderConnection(
-    "cafe24",
-    currentState,
-    {
-      ...(current || {}),
-      mall_id: mallId,
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      expires_at: expiresAt || new Date().toISOString(),
-      scope: scope || String((current as Record<string, unknown> | null)?.scope || "").trim() || undefined,
-      shop_no: shopNo || current?.shop_no,
-      board_no: boardNo || current?.board_no,
-      label: current?.label || mallId,
-      id: current?.id,
-    },
-    new Date().toISOString()
-  );
-  const providers = writeSupportedProviderState(row.providers || {}, "cafe24", nextState);
+  const providers = (row.providers || {}) as Record<string, Cafe24ProviderConfig | undefined>;
+  const current = providers.cafe24 || {};
+  const nextCafe24 = {
+    ...current,
+    mall_id: mallId,
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_at: expiresAt || new Date().toISOString(),
+    scope: scope || current.scope,
+    shop_no: shopNo || current.shop_no,
+    board_no: boardNo || current.board_no,
+  };
+  delete (nextCafe24 as Record<string, unknown>).client_id;
+  delete (nextCafe24 as Record<string, unknown>).client_secret;
+  providers.cafe24 = nextCafe24;
 
-  await ctx.supabase.from("A_iam_auth_settings").update({ providers, updated_at: new Date().toISOString() }).eq("id", row.id);
+  await ctx.supabase
+    .from("A_iam_auth_settings")
+    .update({ providers, updated_at: new Date().toISOString() })
+    .eq("id", row.id);
 
-  return resolveSupportedProviderConnection(providers, "cafe24", preferredConnectionId) || nextState.connections[0] || null;
+  return providers.cafe24 || null;
 }
 
 async function getCafe24Config(ctx?: AdapterContext) {
   if (!ctx) {
     return { ok: false as const, error: "MISSING_CONTEXT" };
   }
-  const row = await loadAuthSettingsRow(ctx);
-  if (!row) {
+  const { supabase, orgId, userId } = ctx;
+  const { data, error } = await supabase
+    .from("A_iam_auth_settings")
+    .select("id, org_id, user_id, providers")
+    .eq("org_id", orgId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data) {
     return { ok: false as const, error: "CAFE24_TOKEN_NOT_FOUND" };
   }
-  const preferredConnectionId = resolveRequestedConnectionId(ctx, "cafe24");
-  let cafe24 = resolveSupportedProviderConnection(ctx.authSettingsProviders || row.providers || {}, "cafe24", preferredConnectionId);
+  const row = data as AuthSettingsRow;
+  let cafe24 = row.providers?.cafe24 || {};
   const envScope = readEnv("CAFE24_SCOPE");
-  if (!cafe24?.mall_id || !cafe24.access_token || !cafe24.refresh_token) {
+  if (!cafe24.mall_id || !cafe24.access_token || !cafe24.refresh_token) {
     const bootstrapped = await bootstrapCafe24FromEnv(ctx, row);
     if (bootstrapped) {
       cafe24 = bootstrapped;
     }
   }
-  const scopeText = String(((cafe24 as Record<string, unknown> | null)?.scope || "")).trim();
-  if ((!scopeText || scopeText.length === 0) && envScope && cafe24) {
-    cafe24 = { ...cafe24, scope: envScope } as Cafe24Connection;
+  // Backward compatibility: older provider rows may miss scope.
+  // Fall back to env scope so C_mcp_tools.scope_key checks can work.
+  if ((!cafe24.scope || String(cafe24.scope).trim().length === 0) && envScope) {
+    cafe24 = { ...cafe24, scope: envScope };
     try {
-      const nextState = upsertDefaultProviderConnection(
-        "cafe24",
-        readSupportedProviderState(row.providers || {}, "cafe24"),
-        {
-          ...cafe24,
-          scope: envScope,
-        },
-        new Date().toISOString()
-      );
-      const providers = writeSupportedProviderState(row.providers || {}, "cafe24", nextState);
-      await ctx.supabase
+      const providers = (row.providers || {}) as Record<string, Cafe24ProviderConfig | undefined>;
+      providers.cafe24 = { ...(providers.cafe24 || {}), scope: envScope };
+      await supabase
         .from("A_iam_auth_settings")
         .update({ providers, updated_at: new Date().toISOString() })
         .eq("id", row.id);
@@ -324,18 +262,16 @@ async function getCafe24Config(ctx?: AdapterContext) {
       // no-op: fallback in memory is enough for runtime
     }
   }
-  if (!cafe24?.mall_id || !cafe24.access_token || !cafe24.refresh_token) {
+  if (!cafe24.mall_id || !cafe24.access_token || !cafe24.refresh_token) {
     return { ok: false as const, error: "CAFE24_PROVIDER_CONFIG_MISSING" };
   }
-  const cafe24Record = cafe24 as Cafe24Connection & Record<string, unknown>;
   const shopNo = cafe24.shop_no || "1";
   const boardNo = cafe24.board_no || "";
   return {
     ok: true as const,
     settingsId: row.id,
-    connectionId: cafe24.id || preferredConnectionId || null,
     mallId: cafe24.mall_id,
-    scope: String(cafe24Record.scope || "").trim(),
+    scope: cafe24.scope || "",
     accessToken: cafe24.access_token,
     refreshToken: cafe24.refresh_token,
     expiresAt: cafe24.expires_at || "",
@@ -383,8 +319,9 @@ async function cafe24Request(
   }
 }
 
-async function solapiScheduleMessage(params: { to: string; text: string; from: string; scheduledAt: string }, ctx?: AdapterContext) {
-  const { apiKey, apiSecret } = await getSolapiConfig(ctx);
+async function solapiScheduleMessage(params: { to: string; text: string; from: string; scheduledAt: string }) {
+  const apiKey = readEnv("SOLAPI_API_KEY");
+  const apiSecret = readEnv("SOLAPI_API_SECRET");
   if (!apiKey || !apiSecret) {
     return { ok: false as const, error: "SOLAPI_CONFIG_MISSING" };
   }
@@ -487,8 +424,14 @@ async function requestCafe24WithRetry(
   return first;
 }
 
-async function searchJusoAddress(keyword: string, ctx?: AdapterContext) {
-  const { apiKey } = await getJusoConfig(ctx);
+async function searchJusoAddress(keyword: string) {
+  // 1. Try Juso API if key exists
+  let apiKey = readEnv("JUSO_API_KEY");
+  if (!apiKey) {
+    cachedEnvFile = null;
+    apiKey = readEnv("JUSO_API_KEY");
+  }
+
   const debugInfo: Record<string, unknown> = {
     keyFound: !!apiKey,
     keyLength: apiKey ? apiKey.length : 0,
@@ -1074,7 +1017,7 @@ const adapters: Record<string, ToolAdapter> = {
 
     if (!finalZipcode && address1) {
       // Auto-find zipcode
-      const searchRes = await searchJusoAddress(address1, ctx);
+      const searchRes = await searchJusoAddress(address1);
       if (searchRes.ok && searchRes.data && searchRes.data.length > 0) {
         // Logic: If all results share the same zipNo, use it.
         const firstZip = searchRes.data[0].zipNo;
@@ -1792,9 +1735,8 @@ const adapters: Record<string, ToolAdapter> = {
         ? data.map((row) => String((row as Record<string, unknown>)?.id || "").trim()).filter(Boolean)
         : [];
 
-      const solapiConfig = await getSolapiConfig(ctx);
-      const bypass = solapiConfig.bypass;
-      const from = solapiConfig.from;
+      const bypass = isEnvTrue("SOLAPI_BYPASS");
+      const from = readEnv("SOLAPI_FROM");
       for (let i = 0; i < rows.length; i += 1) {
         const row = rows[i];
         const id = ids[i];
@@ -1817,7 +1759,7 @@ const adapters: Record<string, ToolAdapter> = {
             from,
             text: String(row.message_text || ""),
             scheduledAt,
-          }, ctx);
+          });
           if (!sent.ok) {
             sendError = sent.error;
           } else {
@@ -1825,7 +1767,7 @@ const adapters: Record<string, ToolAdapter> = {
             solapiMessageId = extractSolapiMessageId((sent.data || {}) as Record<string, unknown>);
           }
         } else {
-          const sent = await solapiSendMessage({ to: String(row.phone), from, text: String(row.message_text || "") }, ctx);
+          const sent = await solapiSendMessage({ to: String(row.phone), from, text: String(row.message_text || "") });
           if (!sent.ok) {
             sendError = sent.error;
           } else {
@@ -1906,9 +1848,8 @@ const adapters: Record<string, ToolAdapter> = {
     if (!destination) {
       return { status: "error", error: { code: "INVALID_INPUT", message: "destination is required" } };
     }
-    const solapiConfig = await getSolapiConfig(ctx);
-    const bypassSms = solapiConfig.bypass;
-    const tempCode = solapiConfig.temp;
+    const bypassSms = isEnvTrue("SOLAPI_BYPASS");
+    const tempCode = readEnv("SOLAPI_TEMP");
     if (bypassSms && !tempCode) {
       return {
         status: "error",
@@ -1921,7 +1862,7 @@ const adapters: Record<string, ToolAdapter> = {
     const code = tempCode ? tempCode : String(Math.floor(100000 + Math.random() * 900000));
     const testMode = bypassSms || Boolean(tempCode);
     const otpRef = crypto.randomUUID();
-    const from = solapiConfig.from;
+    const from = readEnv("SOLAPI_FROM");
     const text = String(params.text || `인증번호는 ${code} 입니다.`);
     let sendOk = false;
     let sendError: string | null = null;
@@ -1937,7 +1878,7 @@ const adapters: Record<string, ToolAdapter> = {
       // continue to record OTP/notification even when from is missing
       void envKeys;
     } else {
-      const sendResult = await solapiSendMessage({ to: destination, from, text }, ctx);
+      const sendResult = await solapiSendMessage({ to: destination, from, text });
       if (!sendResult.ok) {
         sendError = sendResult.error;
       } else {
@@ -2074,11 +2015,12 @@ const adapters: Record<string, ToolAdapter> = {
     };
   },
   search_address: async (params, ctx) => {
+    void ctx;
     const keyword = String(params.keyword || "").trim();
     if (!keyword) {
       return { status: "error", error: { code: "INVALID_INPUT", message: "keyword is required" } };
     }
-    const result = await searchJusoAddress(keyword, ctx);
+    const result = await searchJusoAddress(keyword);
     if (!result.ok) {
       return {
         status: "error",

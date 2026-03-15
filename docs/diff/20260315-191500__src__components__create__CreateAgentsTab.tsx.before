@@ -5,23 +5,9 @@ import { AlertTriangle, Trash2 } from "lucide-react";
 import { MultiSelectPopover, SelectPopover, type SelectOption } from "@/components/SelectPopover";
 import { StateBanner } from "@/components/design-system";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { CreateListTable, CreateResourceShell } from "@/components/create/CreateResourceShell";
 import { apiFetch } from "@/lib/apiClient";
-import {
-  buildAgentMcpBindingsFromSelections,
-  createEmptyProviderToolSelections,
-  groupSupportedToolIdsByProvider,
-  normalizeAgentMcpBindings,
-} from "@/lib/agentMcpBindings";
-import {
-  SUPPORTED_PROVIDER_KEYS,
-  SUPPORTED_PROVIDER_META,
-  readSupportedProviderState,
-  type SupportedProviderKey,
-  type SupportedProviderState,
-} from "@/lib/providerConnections";
 import { formatKstDateTime } from "@/lib/kst";
 import { toast } from "sonner";
 
@@ -32,7 +18,6 @@ type AgentItem = {
   llm: string | null;
   kb_id: string | null;
   mcp_tool_ids?: string[] | null;
-  mcp_provider_bindings?: Record<string, unknown> | null;
   version: string | null;
   is_active: boolean | null;
   created_at?: string | null;
@@ -54,15 +39,6 @@ type McpTool = {
   provider_key?: string;
   description?: string | null;
 };
-
-type ProviderStateMap = {
-  cafe24: SupportedProviderState<"cafe24">;
-  juso: SupportedProviderState<"juso">;
-  solapi: SupportedProviderState<"solapi">;
-};
-
-type ProviderToolSelections = Record<SupportedProviderKey, string[]>;
-type ProviderConnectionSelections = Partial<Record<SupportedProviderKey, string>>;
 
 function parseVersionParts(value?: string | null) {
   if (!value) return null;
@@ -113,11 +89,6 @@ export function CreateAgentsTab() {
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [kbItems, setKbItems] = useState<KbItem[]>([]);
   const [mcpTools, setMcpTools] = useState<McpTool[]>([]);
-  const [providerStates, setProviderStates] = useState<ProviderStateMap>({
-    cafe24: { connections: [] },
-    juso: { connections: [] },
-    solapi: { connections: [] },
-  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,36 +99,24 @@ export function CreateAgentsTab() {
   const [name, setName] = useState("");
   const [llm, setLlm] = useState("chatgpt");
   const [kbId, setKbId] = useState("");
+  const [mcpToolIds, setMcpToolIds] = useState<string[]>([]);
   const [website, setWebsite] = useState("");
   const [goal, setGoal] = useState("");
-  const [selectedProviders, setSelectedProviders] = useState<SupportedProviderKey[]>([]);
-  const [selectedToolIdsByProvider, setSelectedToolIdsByProvider] =
-    useState<ProviderToolSelections>(createEmptyProviderToolSelections);
-  const [selectedConnectionIdsByProvider, setSelectedConnectionIdsByProvider] = useState<ProviderConnectionSelections>({});
-  const [legacyToolIds, setLegacyToolIds] = useState<string[]>([]);
 
   const loadData = async (nextSelectedId?: string | null, preserveCreateMode = false) => {
     setLoading(true);
     setError(null);
     try {
-      const [agentRes, kbRes, toolRes, cafe24Res, jusoRes, solapiRes] = await Promise.all([
+      const [agentRes, kbRes, toolRes] = await Promise.all([
         apiFetch<{ items: AgentItem[] }>("/api/agents?limit=200"),
         apiFetch<{ items: KbItem[] }>("/api/kb?limit=200"),
         apiFetch<{ items: McpTool[] }>("/api/mcp/tools").catch(() => ({ items: [] })),
-        apiFetch<{ provider: Record<string, unknown> }>("/api/auth-settings/providers?provider=cafe24"),
-        apiFetch<{ provider: Record<string, unknown> }>("/api/auth-settings/providers?provider=juso"),
-        apiFetch<{ provider: Record<string, unknown> }>("/api/auth-settings/providers?provider=solapi"),
       ]);
       const nextAgents = agentRes.items || [];
       const active = getActiveAgents(nextAgents);
       setAgents(nextAgents);
       setKbItems(kbRes.items || []);
       setMcpTools(toolRes.items || []);
-      setProviderStates({
-        cafe24: readSupportedProviderState({ cafe24: cafe24Res.provider }, "cafe24"),
-        juso: readSupportedProviderState({ juso: jusoRes.provider }, "juso"),
-        solapi: readSupportedProviderState({ solapi: solapiRes.provider }, "solapi"),
-      });
 
       if (preserveCreateMode) {
         setSelectedId(null);
@@ -190,69 +149,36 @@ export function CreateAgentsTab() {
     [activeAgents, selectedId]
   );
 
-  const kbById = useMemo(() => {
-    const map = new Map<string, KbItem>();
-    kbItems.forEach((item) => map.set(item.id, item));
-    return map;
-  }, [kbItems]);
-
-  const toolProviderById = useMemo(() => {
-    const map = new Map<string, string>();
-    mcpTools.forEach((tool) => {
-      if (tool.id) {
-        map.set(tool.id, String(tool.provider_key || "").trim().toLowerCase());
-      }
-    });
-    return map;
-  }, [mcpTools]);
-
   useEffect(() => {
     if (isCreating) {
       setName("");
       setLlm("chatgpt");
       setKbId("");
+      setMcpToolIds([]);
       setWebsite("");
       setGoal("");
-      setSelectedProviders([]);
-      setSelectedToolIdsByProvider(createEmptyProviderToolSelections());
-      setSelectedConnectionIdsByProvider({});
-      setLegacyToolIds([]);
       return;
     }
     if (!selectedAgent) return;
-    const bindings = normalizeAgentMcpBindings(selectedAgent.mcp_provider_bindings);
-    const supportedSelections = groupSupportedToolIdsByProvider(selectedAgent.mcp_tool_ids ?? [], toolProviderById);
-    const unsupported = (selectedAgent.mcp_tool_ids ?? []).filter((toolId) => {
-      const providerKey = toolProviderById.get(toolId);
-      return !providerKey || !SUPPORTED_PROVIDER_KEYS.includes(providerKey as SupportedProviderKey);
-    });
-    const nextProviders = SUPPORTED_PROVIDER_KEYS.filter(
-      (providerKey) => (supportedSelections[providerKey]?.length || 0) > 0 || Boolean(bindings[providerKey])
-    );
     setName(selectedAgent.name || "");
     setLlm(selectedAgent.llm === "gemini" ? "gemini" : "chatgpt");
     setKbId(selectedAgent.kb_id || "");
+    setMcpToolIds(selectedAgent.mcp_tool_ids ?? []);
     setWebsite(selectedAgent.website || "");
     setGoal(selectedAgent.goal || "");
-    setSelectedProviders(nextProviders);
-    setSelectedToolIdsByProvider({
-      cafe24: supportedSelections.cafe24 || [],
-      juso: supportedSelections.juso || [],
-      solapi: supportedSelections.solapi || [],
-    });
-    setSelectedConnectionIdsByProvider({
-      cafe24: bindings.cafe24?.connection_id,
-      juso: bindings.juso?.connection_id,
-      solapi: bindings.solapi?.connection_id,
-    });
-    setLegacyToolIds(unsupported);
-  }, [isCreating, selectedAgent, toolProviderById]);
+  }, [isCreating, selectedAgent]);
 
   useEffect(() => {
     if (!isCreating && !selectedId && activeAgents.length > 0) {
       setSelectedId(activeAgents[0].id);
     }
   }, [activeAgents, isCreating, selectedId]);
+
+  const kbById = useMemo(() => {
+    const map = new Map<string, KbItem>();
+    kbItems.forEach((item) => map.set(item.id, item));
+    return map;
+  }, [kbItems]);
 
   const kbOptions = useMemo<SelectOption[]>(
     () =>
@@ -264,105 +190,31 @@ export function CreateAgentsTab() {
     [kbItems]
   );
 
-  const providerOptions = useMemo<SelectOption[]>(
+  const mcpOptions = useMemo<SelectOption[]>(
     () =>
-      SUPPORTED_PROVIDER_KEYS.map((providerKey) => ({
-        id: providerKey,
-        label: SUPPORTED_PROVIDER_META[providerKey].label,
-        description: `${providerStates[providerKey].connections.length} connections`,
+      mcpTools.map((tool) => ({
+        id: tool.id,
+        label: tool.tool_key || tool.name,
+        description: tool.description || undefined,
+        group: tool.provider_key || "기타",
       })),
-    [providerStates]
-  );
-
-  const toolOptionsByProvider = useMemo(
-    () =>
-      SUPPORTED_PROVIDER_KEYS.reduce(
-        (accumulator, providerKey) => {
-          accumulator[providerKey] = mcpTools
-            .filter((tool) => String(tool.provider_key || "").trim().toLowerCase() === providerKey)
-            .map((tool) => ({
-              id: tool.id,
-              label: tool.tool_key || tool.name,
-              description: tool.description || undefined,
-            }));
-          return accumulator;
-        },
-        {} as Record<SupportedProviderKey, SelectOption[]>
-      ),
     [mcpTools]
   );
 
-  const connectionOptionsByProvider = useMemo(
-    () =>
-      SUPPORTED_PROVIDER_KEYS.reduce(
-        (accumulator, providerKey) => {
-          accumulator[providerKey] = providerStates[providerKey].connections.map((connection) => ({
-            id: connection.id,
-            label: connection.label,
-            description: connection.is_active ? "활성" : "비활성",
-          }));
-          return accumulator;
-        },
-        {} as Record<SupportedProviderKey, SelectOption[]>
-      ),
-    [providerStates]
-  );
-
-  const connectionLabelsByProvider = useMemo(
-    () =>
-      SUPPORTED_PROVIDER_KEYS.reduce(
-        (accumulator, providerKey) => {
-          accumulator[providerKey] = new Map(
-            providerStates[providerKey].connections.map((connection) => [connection.id, connection.label])
-          );
-          return accumulator;
-        },
-        {} as Record<SupportedProviderKey, Map<string, string>>
-      ),
-    [providerStates]
-  );
-
-  const flatSupportedToolIds = useMemo(
-    () => SUPPORTED_PROVIDER_KEYS.flatMap((providerKey) => selectedToolIdsByProvider[providerKey] || []),
-    [selectedToolIdsByProvider]
-  );
-
   const isDirty = useMemo(() => {
-    const nextBindings = buildAgentMcpBindingsFromSelections({
-      selectedProviders,
-      selectedConnectionIdsByProvider,
-      connectionLabelsByProvider,
-    });
-    const nextToolIds = [...flatSupportedToolIds, ...legacyToolIds].sort();
     if (isCreating) {
-      return Boolean(name.trim() || kbId || website.trim() || goal.trim() || nextToolIds.length > 0 || selectedProviders.length > 0);
+      return Boolean(name.trim() || kbId || website.trim() || goal.trim() || mcpToolIds.length > 0);
     }
     if (!selectedAgent) return false;
-    const currentBindings = JSON.stringify(normalizeAgentMcpBindings(selectedAgent.mcp_provider_bindings));
-    const candidateBindings = JSON.stringify(nextBindings);
     return (
       name.trim() !== (selectedAgent.name || "").trim() ||
       llm !== (selectedAgent.llm === "gemini" ? "gemini" : "chatgpt") ||
       kbId !== (selectedAgent.kb_id || "") ||
-      JSON.stringify(nextToolIds) !== JSON.stringify([...(selectedAgent.mcp_tool_ids ?? [])].sort()) ||
-      currentBindings !== candidateBindings ||
+      JSON.stringify([...mcpToolIds].sort()) !== JSON.stringify([...(selectedAgent.mcp_tool_ids ?? [])].sort()) ||
       website.trim() !== (selectedAgent.website || "").trim() ||
       goal.trim() !== (selectedAgent.goal || "").trim()
     );
-  }, [
-    connectionLabelsByProvider,
-    flatSupportedToolIds,
-    goal,
-    isCreating,
-    kbId,
-    legacyToolIds,
-    llm,
-    name,
-    selectedAgent,
-    selectedConnectionIdsByProvider,
-    selectedProviders,
-    website,
-  ]);
+  }, [goal, isCreating, kbId, llm, mcpToolIds, name, selectedAgent, website]);
 
   const handleCreate = () => {
     setSelectedId(null);
@@ -383,24 +235,6 @@ export function CreateAgentsTab() {
       toast.error("연결할 지식을 선택해 주세요.");
       return;
     }
-    for (const providerKey of selectedProviders) {
-      if (!selectedConnectionIdsByProvider[providerKey]) {
-        toast.error(`${SUPPORTED_PROVIDER_META[providerKey].label} 연결 정보를 선택해 주세요.`);
-        return;
-      }
-      if ((selectedToolIdsByProvider[providerKey] || []).length === 0) {
-        toast.error(`${SUPPORTED_PROVIDER_META[providerKey].label} 하위 기능을 최소 1개 선택해 주세요.`);
-        return;
-      }
-    }
-
-    const mcpProviderBindings = buildAgentMcpBindingsFromSelections({
-      selectedProviders,
-      selectedConnectionIdsByProvider,
-      connectionLabelsByProvider,
-    });
-    const mcpToolIds = [...flatSupportedToolIds, ...legacyToolIds];
-
     setSaving(true);
     try {
       if (isCreating) {
@@ -412,7 +246,6 @@ export function CreateAgentsTab() {
             llm,
             kb_id: kbId,
             mcp_tool_ids: mcpToolIds,
-            mcp_provider_bindings: mcpProviderBindings,
             website: website.trim() || null,
             goal: goal.trim() || null,
             is_active: true,
@@ -431,7 +264,6 @@ export function CreateAgentsTab() {
             llm,
             kb_id: kbId,
             mcp_tool_ids: mcpToolIds,
-            mcp_provider_bindings: mcpProviderBindings,
             website: website.trim() || null,
             goal: goal.trim() || null,
           }),
@@ -463,13 +295,17 @@ export function CreateAgentsTab() {
   const banner = error ? (
     <StateBanner tone="danger" title="비서 로딩 실패" description={error} />
   ) : mcpTools.length === 0 ? (
-    <StateBanner tone="warning" title="도구 없음" description="MCP 도구 목록을 불러오지 못했습니다." />
+    <StateBanner
+      tone="warning"
+      title="도구 없음"
+      description="연결된 도구가 없습니다. 비서는 도구 없이도 저장할 수 있습니다."
+    />
   ) : null;
 
   return (
     <CreateResourceShell
-      description="좌측에서 비서를 고르고, 우측에서 provider -> connection -> tools 구조로 MCP 연결을 저장합니다."
-      helperText="저장 시 `mcp_tool_ids` 는 하위 기능 allowlist로, `mcp_provider_bindings` 는 provider별 connection_id binding으로 함께 기록됩니다."
+      description="좌측에서 비서를 고르고, 우측에서 LLM · 지식 · 도구 연결과 기본 정보를 한 번에 수정합니다."
+      helperText="새 항목을 누르면 빈 폼으로 전환되고, 저장 후 활성 버전이 목록에 반영됩니다."
       banner={banner}
       listTitle="비서 목록"
       listCountLabel={`총 ${loading ? "-" : activeAgents.length}개`}
@@ -550,7 +386,7 @@ export function CreateAgentsTab() {
       detailTitle={isCreating ? "새 비서" : selectedAgent?.name || "비서를 선택하세요"}
       detailDescription={
         isCreating
-          ? "기본 정보와 provider binding을 입력해 새 비서를 생성합니다."
+          ? "이름, LLM, 지식, 도구 연결을 입력해 새 비서를 생성합니다."
           : selectedAgent
             ? `현재 버전 ${selectedAgent.version || "-"}`
             : "좌측 목록에서 비서를 선택하면 상세 편집이 열립니다."
@@ -605,73 +441,16 @@ export function CreateAgentsTab() {
               </div>
 
               <label className="block">
-                <div className="mb-1 text-xs text-slate-600">사용할 도구(provider)</div>
+                <div className="mb-1 text-xs text-slate-600">도구</div>
                 <MultiSelectPopover
-                  values={selectedProviders}
-                  onChange={(values) => {
-                    const nextProviders = SUPPORTED_PROVIDER_KEYS.filter((providerKey) => values.includes(providerKey));
-                    setSelectedProviders(nextProviders);
-                    setSelectedToolIdsByProvider((current) => ({
-                      cafe24: nextProviders.includes("cafe24") ? current.cafe24 : [],
-                      juso: nextProviders.includes("juso") ? current.juso : [],
-                      solapi: nextProviders.includes("solapi") ? current.solapi : [],
-                    }));
-                    setSelectedConnectionIdsByProvider((current) => ({
-                      cafe24: nextProviders.includes("cafe24") ? current.cafe24 : undefined,
-                      juso: nextProviders.includes("juso") ? current.juso : undefined,
-                      solapi: nextProviders.includes("solapi") ? current.solapi : undefined,
-                    }));
-                  }}
-                  options={providerOptions}
-                  placeholder="provider 선택"
+                  values={mcpToolIds}
+                  onChange={setMcpToolIds}
+                  options={mcpOptions}
+                  placeholder="도구 선택"
                   className="w-full"
                   buttonClassName="min-h-10"
-                  searchable={false}
                 />
               </label>
-
-              {selectedProviders.map((providerKey) => (
-                <Card key={providerKey} className="space-y-4 border-slate-200 bg-slate-50 p-4">
-                  <div>
-                    <div className="text-sm font-semibold text-slate-900">{SUPPORTED_PROVIDER_META[providerKey].label}</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      connection을 하나 고르고, 해당 provider의 하위 기능을 선택합니다.
-                    </div>
-                  </div>
-
-                  <label className="block">
-                    <div className="mb-1 text-xs text-slate-600">연결 정보</div>
-                    <SelectPopover
-                      value={selectedConnectionIdsByProvider[providerKey] || ""}
-                      onChange={(value) =>
-                        setSelectedConnectionIdsByProvider((current) => ({ ...current, [providerKey]: value }))
-                      }
-                      options={connectionOptionsByProvider[providerKey]}
-                      placeholder={
-                        connectionOptionsByProvider[providerKey].length > 0
-                          ? "connection 선택"
-                          : "API 탭에서 connection을 먼저 등록하세요"
-                      }
-                      className="w-full"
-                      buttonClassName="h-10"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <div className="mb-1 text-xs text-slate-600">하위 기능</div>
-                    <MultiSelectPopover
-                      values={selectedToolIdsByProvider[providerKey] || []}
-                      onChange={(values) =>
-                        setSelectedToolIdsByProvider((current) => ({ ...current, [providerKey]: values }))
-                      }
-                      options={toolOptionsByProvider[providerKey]}
-                      placeholder="하위 기능 선택"
-                      className="w-full"
-                      buttonClassName="min-h-10"
-                    />
-                  </label>
-                </Card>
-              ))}
 
               <label className="block">
                 <div className="mb-1 text-xs text-slate-600">웹사이트</div>

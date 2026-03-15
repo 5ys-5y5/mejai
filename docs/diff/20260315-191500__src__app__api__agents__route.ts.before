@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import crypto from "crypto";
-import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizeAgentMcpBindings, validateAgentMcpConfiguration } from "@/lib/agentMcpBindings";
-import { listAvailableConnectionIdsByProvider } from "@/lib/providerConnections";
 
 function parseOrder(orderParam: string | null) {
   if (!orderParam) return { field: "created_at", ascending: false };
@@ -34,15 +31,6 @@ function normalizeNullableText(value: unknown) {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
-}
-
-async function loadToolProviderById(
-  supabase: SupabaseClient,
-  toolIds: string[]
-) {
-  if (toolIds.length === 0) return new Map<string, string>();
-  const { data } = await supabase.from("C_mcp_tools").select("id, provider_key").in("id", toolIds);
-  return new Map((data || []).map((row) => [String(row.id || ""), String(row.provider_key || "").trim().toLowerCase()]));
 }
 
 export async function GET(req: NextRequest) {
@@ -103,26 +91,8 @@ export async function POST(req: NextRequest) {
   }
 
   const normalizedAdminKbIds = normalizeIdArray(body.admin_kb_ids);
-  const normalizedMcpToolIds = normalizeIdArray(body.mcp_tool_ids) ?? [];
-  const normalizedMcpProviderBindings = normalizeAgentMcpBindings(body.mcp_provider_bindings);
   const normalizedWebsite = normalizeNullableText(body.website);
   const normalizedGoal = normalizeNullableText(body.goal);
-  const toolProviderById = await loadToolProviderById(context.supabase, normalizedMcpToolIds);
-  const { data: authSettingsRow } = await context.supabase
-    .from("A_iam_auth_settings")
-    .select("providers")
-    .eq("org_id", context.orgId)
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  const mcpConfigValidation = validateAgentMcpConfiguration({
-    toolIds: normalizedMcpToolIds,
-    bindings: normalizedMcpProviderBindings,
-    toolProviderById,
-    availableConnectionIdsByProvider: listAvailableConnectionIdsByProvider(authSettingsRow?.providers || {}),
-  });
-  if (!mcpConfigValidation.ok) {
-    return NextResponse.json({ error: mcpConfigValidation.error }, { status: 400 });
-  }
 
   const newId = crypto.randomUUID();
   const payload = {
@@ -131,8 +101,7 @@ export async function POST(req: NextRequest) {
     name: String(body.name || "").trim(),
     llm: body.llm,
     kb_id: body.kb_id,
-    mcp_tool_ids: mcpConfigValidation.normalizedToolIds,
-    mcp_provider_bindings: mcpConfigValidation.normalizedBindings,
+    mcp_tool_ids: Array.isArray(body.mcp_tool_ids) ? body.mcp_tool_ids : [],
     admin_kb_ids: normalizedAdminKbIds === undefined ? null : normalizedAdminKbIds,
     agent_type: body.agent_type ?? null,
     industry: body.industry ?? null,

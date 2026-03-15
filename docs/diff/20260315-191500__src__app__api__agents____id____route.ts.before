@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizeAgentMcpBindings, validateAgentMcpConfiguration } from "@/lib/agentMcpBindings";
-import { listAvailableConnectionIdsByProvider } from "@/lib/providerConnections";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -70,12 +68,6 @@ function normalizeNullableText(value: unknown) {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : null;
-}
-
-async function loadToolProviderById(client: SupabaseClient, toolIds: string[]) {
-  if (toolIds.length === 0) return new Map<string, string>();
-  const { data } = await client.from("C_mcp_tools").select("id, provider_key").in("id", toolIds);
-  return new Map((data || []).map((row) => [String(row.id || ""), String(row.provider_key || "").trim().toLowerCase()]));
 }
 
 function isSameIdList(a?: string[] | null, b?: string[] | null) {
@@ -160,7 +152,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
     llm?: string;
     kb_id?: string;
     mcp_tool_ids?: string[];
-    mcp_provider_bindings?: Record<string, unknown>;
     admin_kb_ids?: string[] | null;
     agent_type?: string | null;
     industry?: string | null;
@@ -174,9 +165,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   if (typeof body.llm === "string") payload.llm = body.llm;
   if (typeof body.kb_id === "string") payload.kb_id = body.kb_id;
   if (Array.isArray(body.mcp_tool_ids)) payload.mcp_tool_ids = body.mcp_tool_ids;
-  if (body.mcp_provider_bindings && typeof body.mcp_provider_bindings === "object") {
-    payload.mcp_provider_bindings = body.mcp_provider_bindings;
-  }
   const normalizedAdminKbIds = normalizeIdArray(body.admin_kb_ids);
   if (normalizedAdminKbIds !== undefined) payload.admin_kb_ids = normalizedAdminKbIds;
   if (body.agent_type === null || typeof body.agent_type === "string") payload.agent_type = body.agent_type;
@@ -226,10 +214,6 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const nextLlm = payload.llm ?? existing.llm;
   const nextKbId = payload.kb_id ?? existing.kb_id;
   const nextMcpToolIds = payload.mcp_tool_ids ?? existing.mcp_tool_ids ?? [];
-  const nextMcpProviderBindings =
-    payload.mcp_provider_bindings === undefined
-      ? normalizeAgentMcpBindings(existing.mcp_provider_bindings ?? {})
-      : normalizeAgentMcpBindings(payload.mcp_provider_bindings);
   const nextAdminKbIds =
     payload.admin_kb_ids === undefined ? (existing.admin_kb_ids ?? null) : payload.admin_kb_ids;
   const nextAgentType = payload.agent_type === undefined ? (existing.agent_type ?? null) : payload.agent_type;
@@ -237,33 +221,14 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
   const nextUseCase = payload.use_case === undefined ? (existing.use_case ?? null) : payload.use_case;
   const nextWebsite = payload.website === undefined ? (existing.website ?? null) : payload.website;
   const nextGoal = payload.goal === undefined ? (existing.goal ?? null) : payload.goal;
-  const toolProviderById = await loadToolProviderById(serverContext.supabase, nextMcpToolIds);
-  const { data: authSettingsRow } = await serverContext.supabase
-    .from("A_iam_auth_settings")
-    .select("providers")
-    .eq("org_id", serverContext.orgId)
-    .eq("user_id", serverContext.user.id)
-    .maybeSingle();
-  const mcpConfigValidation = validateAgentMcpConfiguration({
-    toolIds: nextMcpToolIds,
-    bindings: nextMcpProviderBindings,
-    toolProviderById,
-    availableConnectionIdsByProvider: listAvailableConnectionIdsByProvider(authSettingsRow?.providers || {}),
-  });
-  if (!mcpConfigValidation.ok) {
-    return NextResponse.json({ error: mcpConfigValidation.error }, { status: 400 });
-  }
-
   const shouldActivate = payload.is_active === true;
   const shouldDeactivate = payload.is_active === false;
 
   const mcpChanged =
-    JSON.stringify(mcpConfigValidation.normalizedToolIds ?? []) !== JSON.stringify(existing.mcp_tool_ids ?? []);
-  const bindingsChanged =
-    JSON.stringify(nextMcpProviderBindings) !== JSON.stringify(normalizeAgentMcpBindings(existing.mcp_provider_bindings ?? {}));
+    JSON.stringify(nextMcpToolIds ?? []) !== JSON.stringify(existing.mcp_tool_ids ?? []);
   const adminKbChanged = !isSameIdList(nextAdminKbIds, existing.admin_kb_ids ?? null);
   const configChanged =
-    nextLlm !== existing.llm || nextKbId !== existing.kb_id || mcpChanged || bindingsChanged || adminKbChanged;
+    nextLlm !== existing.llm || nextKbId !== existing.kb_id || mcpChanged || adminKbChanged;
   const metaChanged =
     nextName !== existing.name ||
     nextAgentType !== (existing.agent_type ?? null) ||
@@ -292,8 +257,7 @@ export async function PATCH(req: NextRequest, context: RouteContext) {
       name: nextName,
       llm: nextLlm,
       kb_id: nextKbId,
-      mcp_tool_ids: mcpConfigValidation.normalizedToolIds,
-      mcp_provider_bindings: mcpConfigValidation.normalizedBindings,
+      mcp_tool_ids: nextMcpToolIds,
       admin_kb_ids: Array.isArray(nextAdminKbIds) ? nextAdminKbIds : null,
       agent_type: nextAgentType,
       industry: nextIndustry,

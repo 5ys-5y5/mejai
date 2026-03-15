@@ -2,15 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import { callAdapter } from "@/lib/mcpAdapters";
 import { applyMasking, checkPolicyConditions, validateToolParams } from "@/lib/mcpPolicy";
-import { normalizeAgentMcpBindings } from "@/lib/agentMcpBindings";
 
 type ToolCallBody = {
   tool?: string;
   tool_key?: string;
   provider_key?: string;
   name?: string;
-  agent_id?: string | null;
-  connection_id?: string | null;
   params?: Record<string, unknown>;
   session_id?: string | null;
 };
@@ -139,30 +136,6 @@ export async function POST(req: NextRequest) {
   }
 
   const start = Date.now();
-  let providerBindings = {};
-  let authSettingsProviders: Record<string, unknown> | null = null;
-  let resolvedConnectionId = String(body.connection_id || "").trim() || null;
-  const resolvedProviderKey = String(tool.provider_key || providerKey || "").trim().toLowerCase();
-  if (body.agent_id) {
-    const { data: agentRow } = await context.supabase
-      .from("B_bot_agents")
-      .select("mcp_provider_bindings")
-      .eq("id", String(body.agent_id || "").trim())
-      .or(`org_id.eq.${context.orgId},org_id.is.null`)
-      .maybeSingle();
-    providerBindings = normalizeAgentMcpBindings(agentRow?.mcp_provider_bindings ?? {});
-    if (!resolvedConnectionId && resolvedProviderKey && providerBindings && typeof providerBindings === "object") {
-      const candidate = (providerBindings as Record<string, { connection_id?: string }>)[resolvedProviderKey];
-      resolvedConnectionId = candidate?.connection_id ? String(candidate.connection_id).trim() : null;
-    }
-  }
-  const { data: authSettingsRow } = await context.supabase
-    .from("A_iam_auth_settings")
-    .select("providers")
-    .eq("org_id", context.orgId)
-    .eq("user_id", context.user.id)
-    .maybeSingle();
-  authSettingsProviders = (authSettingsRow?.providers || {}) as Record<string, unknown>;
   const result = await callAdapter(
     String(tool.provider_key || "unknown"),
     resolvedParams,
@@ -170,9 +143,6 @@ export async function POST(req: NextRequest) {
       supabase: context.supabase,
       orgId: context.orgId,
       userId: context.user.id,
-      connectionId: resolvedConnectionId,
-      providerBindings,
-      authSettingsProviders,
     },
     { toolName: tool.name }
   );

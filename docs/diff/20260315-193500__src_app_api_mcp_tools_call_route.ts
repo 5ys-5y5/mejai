@@ -142,7 +142,6 @@ export async function POST(req: NextRequest) {
   let providerBindings = {};
   let authSettingsProviders: Record<string, unknown> | null = null;
   let resolvedConnectionId = String(body.connection_id || "").trim() || null;
-  const resolvedProviderKey = String(tool.provider_key || providerKey || "").trim().toLowerCase();
   if (body.agent_id) {
     const { data: agentRow } = await context.supabase
       .from("B_bot_agents")
@@ -151,8 +150,8 @@ export async function POST(req: NextRequest) {
       .or(`org_id.eq.${context.orgId},org_id.is.null`)
       .maybeSingle();
     providerBindings = normalizeAgentMcpBindings(agentRow?.mcp_provider_bindings ?? {});
-    if (!resolvedConnectionId && resolvedProviderKey && providerBindings && typeof providerBindings === "object") {
-      const candidate = (providerBindings as Record<string, { connection_id?: string }>)[resolvedProviderKey];
+    if (!resolvedConnectionId && providerKey && providerBindings && typeof providerBindings === "object") {
+      const candidate = (providerBindings as Record<string, { connection_id?: string }>)[providerKey];
       resolvedConnectionId = candidate?.connection_id ? String(candidate.connection_id).trim() : null;
     }
   }

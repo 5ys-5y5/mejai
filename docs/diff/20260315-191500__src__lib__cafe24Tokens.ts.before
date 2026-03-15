@@ -1,11 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  readSupportedProviderState,
-  resolveSupportedProviderConnection,
-  upsertDefaultProviderConnection,
-  writeSupportedProviderState,
-  type Cafe24Connection,
-} from "@/lib/providerConnections";
 
 export function isTokenExpired(expiresAt: string, skewMs = 30_000) {
   const exp = Date.parse(expiresAt);
@@ -62,44 +55,16 @@ async function requestCafe24TokenRefresh(input: {
   return { ok: true as const, payload };
 }
 
-function findCafe24ConnectionByRefreshToken(connections: Cafe24Connection[], refreshToken: string) {
-  const normalized = String(refreshToken || "").trim();
-  if (!normalized) return null;
-  return (
-    connections.find((connection) => connection.refresh_token === normalized) ||
-    connections.find((connection) => (connection.refresh_token_candidates || []).includes(normalized)) ||
-    null
-  );
-}
-
-async function readCafe24ProviderSnapshot(
-  supabase: SupabaseClient,
-  settingsId: string,
-  preferredConnectionId?: string | null,
-  refreshToken?: string
-) {
+async function readCafe24ProviderSnapshot(supabase: SupabaseClient, settingsId: string) {
   const { data, error } = await supabase
     .from("A_iam_auth_settings")
     .select("providers")
     .eq("id", settingsId)
     .maybeSingle();
-  if (error || !data) {
-    return {
-      providers: null as Record<string, unknown> | null,
-      cafe24: null as Cafe24Connection | null,
-      connectionId: null as string | null,
-    };
-  }
-  const providers = (data.providers || {}) as Record<string, unknown>;
-  const state = readSupportedProviderState(providers, "cafe24");
-  const preferred = resolveSupportedProviderConnection(providers, "cafe24", preferredConnectionId);
-  const matchedByToken = findCafe24ConnectionByRefreshToken(state.connections, String(refreshToken || "").trim());
-  const cafe24 = preferred || matchedByToken || state.connections[0] || null;
-  return {
-    providers,
-    cafe24,
-    connectionId: cafe24?.id || preferredConnectionId || null,
-  };
+  if (error || !data) return { providers: null as Record<string, Record<string, unknown> | undefined> | null, cafe24: null as Record<string, unknown> | null };
+  const providers = (data.providers || {}) as Record<string, Record<string, unknown> | undefined>;
+  const cafe24 = (providers.cafe24 || {}) as Record<string, unknown>;
+  return { providers, cafe24 };
 }
 
 function toRefreshTokenCandidates(input: {
@@ -127,32 +92,22 @@ function toRefreshTokenCandidates(input: {
 async function writeRefreshFailureAudit(input: {
   supabase: SupabaseClient;
   settingsId: string;
-  providers: Record<string, unknown> | null;
-  connectionId?: string | null;
+  providers: Record<string, Record<string, unknown> | undefined> | null;
   error: string;
   attemptedCandidates: string[];
 }) {
-  const { supabase, settingsId, providers, connectionId, error, attemptedCandidates } = input;
+  const { supabase, settingsId, providers, error, attemptedCandidates } = input;
   if (!providers) return;
-  const nowIso = new Date().toISOString();
-  const currentState = readSupportedProviderState(providers, "cafe24");
-  const nextState = {
-    connections: currentState.connections.map((connection) =>
-      connection.id === connectionId
-        ? {
-            ...connection,
-            last_refresh_error: error,
-            last_refresh_attempt_at: nowIso,
-            attempted_candidates: attemptedCandidates.map((token) => maskRefreshToken(token)).filter(Boolean),
-            updated_at: nowIso,
-          }
-        : connection
-    ),
+  const currentCafe24 = (providers.cafe24 || {}) as Record<string, unknown>;
+  providers.cafe24 = {
+    ...currentCafe24,
+    last_refresh_error: error,
+    last_refresh_attempt_at: new Date().toISOString(),
+    attempted_candidates: attemptedCandidates.map((token) => maskRefreshToken(token)).filter(Boolean),
   };
-  const nextProviders = writeSupportedProviderState(providers, "cafe24", nextState);
   await supabase
     .from("A_iam_auth_settings")
-    .update({ providers: nextProviders, updated_at: nowIso })
+    .update({ providers, updated_at: new Date().toISOString() })
     .eq("id", settingsId);
 }
 
@@ -161,7 +116,6 @@ export async function refreshCafe24Token(cfg: {
   mallId: string;
   refreshToken: string;
   supabase: SupabaseClient;
-  connectionId?: string | null;
 }) {
   const clientId = readEnv("CAFE24_CLIENT_ID");
   const clientSecret = readEnv("CAFE24_CLIENT_SECRET_KEY");
@@ -169,7 +123,7 @@ export async function refreshCafe24Token(cfg: {
     return { ok: false as const, error: "Missing CAFE24_CLIENT_ID/CAFE24_CLIENT_SECRET_KEY" };
   }
 
-  const snapshot = await readCafe24ProviderSnapshot(cfg.supabase, cfg.settingsId, cfg.connectionId, cfg.refreshToken);
+  const snapshot = await readCafe24ProviderSnapshot(cfg.supabase, cfg.settingsId);
   const latestRefreshToken = String(snapshot.cafe24?.refresh_token || "").trim();
   const candidateTokens = toRefreshTokenCandidates({
     initialRefreshToken: cfg.refreshToken,
@@ -212,7 +166,6 @@ export async function refreshCafe24Token(cfg: {
       supabase: cfg.supabase,
       settingsId: cfg.settingsId,
       providers: snapshot.providers,
-      connectionId: snapshot.connectionId,
       error: lastError,
       attemptedCandidates: candidateTokens,
     });
@@ -227,44 +180,35 @@ export async function refreshCafe24Token(cfg: {
   if (settingsError || !settingsRow) {
     return { ok: false as const, error: "Auth settings not found" };
   }
-  const providers = (settingsRow.providers || {}) as Record<string, unknown>;
-  const current = snapshot.cafe24;
-  const existingCandidates = Array.isArray(current?.refresh_token_candidates) ? current.refresh_token_candidates : [];
+  const providers = (settingsRow.providers || {}) as Record<string, Record<string, unknown> | undefined>;
+  const current = (providers.cafe24 || {}) as Record<string, unknown>;
+  const existingCandidates = Array.isArray(current.refresh_token_candidates) ? current.refresh_token_candidates : [];
   const nextCandidates = toRefreshTokenCandidates({
     initialRefreshToken: String(payload.refresh_token || "").trim(),
     latestRefreshToken: usedRefreshToken,
     snapshotCandidates: existingCandidates,
     envRefreshToken: "",
   }).slice(0, 8);
-  const nowIso = new Date().toISOString();
-  const nextState = upsertDefaultProviderConnection(
-    "cafe24",
-    readSupportedProviderState(providers, "cafe24"),
-    {
-      ...(current || {}),
-      id: snapshot.connectionId || current?.id,
-      label: current?.label || cfg.mallId,
-      mall_id: current?.mall_id || cfg.mallId,
-      access_token: payload.access_token,
-      refresh_token: String(payload.refresh_token || usedRefreshToken || "").trim(),
-      expires_at: payload.expires_at,
-      refresh_token_candidates: nextCandidates,
-      last_refresh_error: null,
-      last_refresh_attempt_at: nowIso,
-      attempted_candidates: [],
-    },
-    nowIso
-  );
-  const nextProviders = writeSupportedProviderState(providers, "cafe24", nextState);
+  const next = {
+    ...current,
+    access_token: payload.access_token,
+    refresh_token: String(payload.refresh_token || usedRefreshToken || "").trim(),
+    expires_at: payload.expires_at,
+    refresh_token_candidates: nextCandidates,
+    last_refresh_error: null,
+    last_refresh_attempt_at: new Date().toISOString(),
+    attempted_candidates: [],
+  };
+  providers.cafe24 = next;
   const { error } = await cfg.supabase
     .from("A_iam_auth_settings")
     .update({
-      providers: nextProviders,
-      updated_at: nowIso,
+      providers,
+      updated_at: new Date().toISOString(),
     })
     .eq("id", cfg.settingsId);
   if (error) {
     return { ok: false as const, error: `Token update failed: ${error.message}` };
   }
-  return { ok: true as const, accessToken: payload.access_token, connectionId: snapshot.connectionId || null };
+  return { ok: true as const, accessToken: payload.access_token };
 }

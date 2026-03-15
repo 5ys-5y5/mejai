@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Trash2 } from "lucide-react";
 import { CreateCafe24ConnectionFlow, type Cafe24ProviderDraft } from "@/components/create/CreateCafe24ConnectionFlow";
 import { CreateJusoConnectionForm } from "@/components/create/CreateJusoConnectionForm";
@@ -123,22 +123,6 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
   const [jusoDraft, setJusoDraft] = useState<JusoConnection>(createEmptyJusoDraft);
   const [solapiDraft, setSolapiDraft] = useState<SolapiConnection>(createEmptySolapiDraft);
 
-  const selectedKeyRef = useRef<SupportedProviderKey>(selectedKey);
-  const selectedConnectionIdsRef = useRef<SelectedConnectionMap>(selectedConnectionIds);
-  const creatingByProviderRef = useRef<CreatingMap>(creatingByProvider);
-
-  useEffect(() => {
-    selectedKeyRef.current = selectedKey;
-  }, [selectedKey]);
-
-  useEffect(() => {
-    selectedConnectionIdsRef.current = selectedConnectionIds;
-  }, [selectedConnectionIds]);
-
-  useEffect(() => {
-    creatingByProviderRef.current = creatingByProvider;
-  }, [creatingByProvider]);
-
   const hydrateDraftForProvider = useCallback(
     (
       providerKey: SupportedProviderKey,
@@ -188,9 +172,6 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
       setLoading(true);
       setError(null);
       try {
-        const currentSelectedKey = selectedKeyRef.current;
-        const currentSelectedConnectionIds = selectedConnectionIdsRef.current;
-        const currentCreatingByProvider = creatingByProviderRef.current;
         const [cafe24Res, jusoRes, solapiRes] = await Promise.all(
           SUPPORTED_PROVIDER_KEYS.map((providerKey) =>
             apiFetch<ProviderPayloadResponse>(`/api/auth-settings/providers?provider=${providerKey}`)
@@ -203,22 +184,19 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
           solapi: readSupportedProviderState({ solapi: solapiRes.provider }, "solapi"),
         };
 
-        const resolvedProviderKey = nextProviderKey || currentSelectedKey;
+        const resolvedProviderKey = nextProviderKey || selectedKey;
         const resolvedSelectedIds: SelectedConnectionMap = {
           cafe24:
-            currentSelectedConnectionIds.cafe24 &&
-            nextStates.cafe24.connections.some((item) => item.id === currentSelectedConnectionIds.cafe24)
-              ? currentSelectedConnectionIds.cafe24
+            selectedConnectionIds.cafe24 && nextStates.cafe24.connections.some((item) => item.id === selectedConnectionIds.cafe24)
+              ? selectedConnectionIds.cafe24
               : nextStates.cafe24.connections[0]?.id || null,
           juso:
-            currentSelectedConnectionIds.juso &&
-            nextStates.juso.connections.some((item) => item.id === currentSelectedConnectionIds.juso)
-              ? currentSelectedConnectionIds.juso
+            selectedConnectionIds.juso && nextStates.juso.connections.some((item) => item.id === selectedConnectionIds.juso)
+              ? selectedConnectionIds.juso
               : nextStates.juso.connections[0]?.id || null,
           solapi:
-            currentSelectedConnectionIds.solapi &&
-            nextStates.solapi.connections.some((item) => item.id === currentSelectedConnectionIds.solapi)
-              ? currentSelectedConnectionIds.solapi
+            selectedConnectionIds.solapi && nextStates.solapi.connections.some((item) => item.id === selectedConnectionIds.solapi)
+              ? selectedConnectionIds.solapi
               : nextStates.solapi.connections[0]?.id || null,
         };
 
@@ -226,15 +204,13 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
           resolvedSelectedIds[resolvedProviderKey] = nextConnectionId;
         }
 
-        const shouldCreateCurrentProvider =
-          forceCreate || (!resolvedSelectedIds[resolvedProviderKey] && nextStates[resolvedProviderKey].connections.length === 0);
         const resolvedCreating: CreatingMap = {
           ...emptyCreatingMap,
-          ...currentCreatingByProvider,
-          [resolvedProviderKey]: shouldCreateCurrentProvider,
+          ...creatingByProvider,
+          [resolvedProviderKey]: forceCreate,
         };
 
-        if (!shouldCreateCurrentProvider && nextConnectionId !== undefined && !nextConnectionId) {
+        if (!forceCreate && nextConnectionId !== undefined && !nextConnectionId) {
           resolvedSelectedIds[resolvedProviderKey] = nextStates[resolvedProviderKey].connections[0]?.id || null;
         }
 
@@ -249,7 +225,7 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
         setLoading(false);
       }
     },
-    [hydrateAllDrafts]
+    [creatingByProvider, hydrateAllDrafts, selectedConnectionIds, selectedKey]
   );
 
   useEffect(() => {
@@ -279,14 +255,13 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
   const currentCreating = creatingByProvider[selectedKey];
 
   const selectConnection = (providerKey: SupportedProviderKey, connectionId: string | null, forceCreate = false) => {
-    const shouldCreate = forceCreate || !connectionId;
     const nextSelectedIds = {
       ...selectedConnectionIds,
       [providerKey]: connectionId,
     };
     const nextCreating = {
       ...creatingByProvider,
-      [providerKey]: shouldCreate,
+      [providerKey]: forceCreate,
     };
     setSelectedKey(providerKey);
     setSelectedConnectionIds(nextSelectedIds);
@@ -301,26 +276,26 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
       }
       setSaving(true);
       try {
-        const selectedConnectionId = selectedConnectionIdsRef.current[providerKey] || undefined;
-        const shouldCreate = creatingByProviderRef.current[providerKey] || !selectedConnectionId;
-        const mode = shouldCreate ? "create_connection" : "update_connection";
+        const isCreating = creatingByProvider[providerKey];
+        const connectionId = isCreating ? undefined : selectedConnectionIds[providerKey] || undefined;
+        const mode = isCreating ? "create_connection" : "update_connection";
         await apiFetch("/api/auth-settings/providers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             provider: providerKey,
             mode,
-            connection_id: shouldCreate ? undefined : selectedConnectionId,
+            connection_id: connectionId,
             values,
             commit: true,
           }),
         });
-        await loadData(providerKey, String(values.id || selectedConnectionId || ""), false);
+        await loadData(providerKey, String(values.id || connectionId || ""), false);
       } finally {
         setSaving(false);
       }
     },
-    [isAdmin, loadData]
+    [creatingByProvider, isAdmin, loadData, selectedConnectionIds]
   );
 
   const deleteSelectedConnection = useCallback(async () => {
@@ -376,9 +351,8 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
           getRowId={(item) => item.id}
           selectedId={selectedKey}
           onSelect={(item) => {
-            if (loading) return;
             const preferred = storedStates[item.id].connections[0]?.id || null;
-            selectConnection(item.id, preferred, !preferred);
+            selectConnection(item.id, preferred, false);
           }}
           columns={[
             {
@@ -450,7 +424,7 @@ export function CreateApiTab({ isAdmin }: { isAdmin: boolean }) {
                 type="button"
                 size="sm"
                 onClick={() => selectConnection(selectedKey, null, true)}
-                disabled={!isAdmin || saving || loading}
+                disabled={!isAdmin || saving}
                 className="rounded-xl bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800"
               >
                 새 연결

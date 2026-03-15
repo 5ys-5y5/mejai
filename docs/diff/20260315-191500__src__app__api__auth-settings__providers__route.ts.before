@@ -1,14 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerContext } from "@/lib/serverAuth";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import {
-  applyProviderConnectionCommand,
-  isSupportedProviderKey,
-  readSupportedProviderState,
-  serializeProviderStateForResponse,
-  upsertDefaultProviderConnection,
-  writeSupportedProviderState,
-} from "@/lib/providerConnections";
 
 function getProviderFromParams(req: NextRequest) {
   const url = new URL(req.url);
@@ -18,7 +10,7 @@ function getProviderFromParams(req: NextRequest) {
 type AuthSettingsRow = {
   id: string;
   user_id: string;
-  providers: Record<string, unknown> | null;
+  providers: Record<string, Record<string, unknown> | undefined> | null;
   updated_at?: string | null;
 };
 
@@ -67,7 +59,7 @@ export async function GET(req: NextRequest) {
   }
 
   let data:
-    | { providers: Record<string, unknown> | null }
+    | { providers: Record<string, Record<string, unknown> | undefined> | null }
     | null = null;
   let error: { message: string } | null = null;
   if (provider === "chat_policy") {
@@ -92,13 +84,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  const providers = (data?.providers || {}) as Record<string, unknown>;
-  if (isSupportedProviderKey(provider)) {
-    const state = readSupportedProviderState(providers, provider);
-    return NextResponse.json({
-      provider: serializeProviderStateForResponse(provider, state),
-    });
-  }
+  const providers = (data?.providers || {}) as Record<string, Record<string, unknown> | undefined>;
   return NextResponse.json({ provider: providers[provider] || {} });
 }
 
@@ -120,13 +106,11 @@ export async function POST(req: NextRequest) {
 
   const body = (await req.json()) as {
     provider?: string;
-    mode?: "create_connection" | "update_connection" | "delete_connection";
-    connection_id?: string;
     values?: Record<string, unknown>;
     commit?: boolean;
   };
   const provider = (body.provider || "").trim();
-  if (!provider) {
+  if (!provider || !body.values) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   }
   if (body.commit !== true) {
@@ -146,7 +130,7 @@ export async function POST(req: NextRequest) {
   }
 
   let data:
-    | { id: string; providers: Record<string, unknown> | null; user_id?: string }
+    | { id: string; providers: Record<string, Record<string, unknown> | undefined> | null; user_id?: string }
     | null = null;
   let error: { message: string; code?: string } | null = null;
   if (provider === "chat_policy") {
@@ -171,79 +155,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
-  const nowIso = new Date().toISOString();
-
-  if (isSupportedProviderKey(provider)) {
-    const currentProviders = (data?.providers || {}) as Record<string, unknown>;
-    const currentState = readSupportedProviderState(currentProviders, provider);
-    let nextState = currentState;
-
-    try {
-      if (body.mode) {
-        if ((body.mode === "create_connection" || body.mode === "update_connection") && !body.values) {
-          return NextResponse.json({ error: "VALUES_REQUIRED" }, { status: 400 });
-        }
-        nextState = applyProviderConnectionCommand(
-          provider,
-          currentState,
-          {
-            mode: body.mode,
-            connectionId: body.connection_id,
-            values: body.values,
-          },
-          nowIso
-        );
-      } else {
-        if (!body.values) {
-          return NextResponse.json({ error: "VALUES_REQUIRED" }, { status: 400 });
-        }
-        nextState = upsertDefaultProviderConnection(provider, currentState, body.values, nowIso);
-      }
-    } catch (commandError) {
-      return NextResponse.json(
-        { error: commandError instanceof Error ? commandError.message : "INVALID_PROVIDER_COMMAND" },
-        { status: 400 }
-      );
-    }
-
-    const nextProviders = writeSupportedProviderState(currentProviders, provider, nextState);
-    if (!data) {
-      const { error: insertError } = await supabase.from("A_iam_auth_settings").insert({
-        org_id: context.orgId,
-        user_id: context.user.id,
-        providers: nextProviders,
-        updated_at: nowIso,
-      });
-      if (insertError) {
-        return NextResponse.json({ error: insertError.message }, { status: 400 });
-      }
-    } else {
-      const { error: updateError } = await supabase
-        .from("A_iam_auth_settings")
-        .update({ providers: nextProviders, updated_at: nowIso })
-        .eq("id", data.id);
-      if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 400 });
-      }
-    }
-
-    return NextResponse.json({
-      ok: true,
-      provider: serializeProviderStateForResponse(provider, nextState, body.connection_id),
-    });
-  }
-
-  if (!isSupportedProviderKey(provider) && !body.values) {
-    return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
-  }
-
   if (!data) {
     const providers = { [provider]: body.values };
     const { error: insertError } = await supabase.from("A_iam_auth_settings").insert({
       org_id: context.orgId,
       user_id: context.user.id,
       providers,
-      updated_at: nowIso,
+      updated_at: new Date().toISOString(),
     });
     if (insertError) {
       return NextResponse.json({ error: insertError.message }, { status: 400 });
@@ -254,11 +172,14 @@ export async function POST(req: NextRequest) {
   const providers = (data.providers || {}) as Record<string, Record<string, unknown> | undefined>;
   const current = providers[provider] || {};
   const next = { ...current, ...body.values };
+  if (provider === "cafe24") {
+    delete (next as Record<string, unknown>).scope;
+  }
   providers[provider] = next;
 
   const { error: updateError } = await supabase
     .from("A_iam_auth_settings")
-    .update({ providers, updated_at: nowIso })
+    .update({ providers, updated_at: new Date().toISOString() })
     .eq("id", data.id);
 
   if (updateError) {

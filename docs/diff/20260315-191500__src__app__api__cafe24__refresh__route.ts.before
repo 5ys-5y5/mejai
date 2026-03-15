@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { refreshCafe24Token } from "@/lib/cafe24Tokens";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import { readSupportedProviderState } from "@/lib/providerConnections";
 
 type AuthSettingsRow = {
   id: string;
   org_id?: string;
   user_id?: string;
-  providers?: Record<string, unknown>;
+  providers?: Record<string, Record<string, unknown> | undefined>;
 };
 
 function readCronSecret() {
@@ -56,35 +55,32 @@ export async function GET(req: NextRequest) {
   };
 
   for (const row of data as AuthSettingsRow[]) {
-    const state = readSupportedProviderState(row.providers || {}, "cafe24");
-    if (state.connections.length === 0) {
+    const cafe24 = (row.providers?.cafe24 || {}) as Record<string, unknown>;
+    if (!cafe24 || Object.keys(cafe24).length === 0) {
       summary.skipped += 1;
       continue;
     }
-    for (const cafe24 of state.connections) {
-      const mallId = String(cafe24.mall_id || "");
-      const refreshToken = String(cafe24.refresh_token || "");
-      if (!mallId || !refreshToken) {
-        summary.skipped += 1;
-        continue;
-      }
+    const mallId = String(cafe24.mall_id || "");
+    const refreshToken = String(cafe24.refresh_token || "");
+    if (!mallId || !refreshToken) {
+      summary.skipped += 1;
+      continue;
+    }
 
-      summary.eligible += 1;
-      const refreshed = await refreshCafe24Token({
-        settingsId: row.id,
-        mallId,
-        refreshToken,
-        connectionId: cafe24.id,
-        supabase,
-      });
-      if (refreshed.ok) {
-        summary.refreshed += 1;
-        continue;
-      }
-      summary.failed += 1;
-      if (summary.failures.length < 50) {
-        summary.failures.push({ id: `${row.id}:${cafe24.id}`, reason: refreshed.error });
-      }
+    summary.eligible += 1;
+    const refreshed = await refreshCafe24Token({
+      settingsId: row.id,
+      mallId,
+      refreshToken,
+      supabase,
+    });
+    if (refreshed.ok) {
+      summary.refreshed += 1;
+      continue;
+    }
+    summary.failed += 1;
+    if (summary.failures.length < 50) {
+      summary.failures.push({ id: row.id, reason: refreshed.error });
     }
   }
 

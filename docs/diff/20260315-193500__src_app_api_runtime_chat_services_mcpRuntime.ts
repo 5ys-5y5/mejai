@@ -1,21 +1,5 @@
 import type { AddressSearchResult, RuntimeContext } from "../shared/runtimeTypes";
 
-function buildAdapterContext(context: RuntimeContext, providerKey?: string) {
-  const bindings =
-    context.mcpProviderBindings && typeof context.mcpProviderBindings === "object"
-      ? (context.mcpProviderBindings as Record<string, { connection_id?: string }>)
-      : null;
-  const connectionId = providerKey ? String(bindings?.[providerKey]?.connection_id || "").trim() : "";
-  return {
-    supabase: context.supabase,
-    orgId: context.orgId,
-    userId: context.user.id,
-    connectionId: connectionId || undefined,
-    providerBindings: context.mcpProviderBindings,
-    authSettingsProviders: context.authSettingsProviders ?? null,
-  };
-}
-
 export async function callMcpTool(
   context: RuntimeContext,
   tool: string,
@@ -150,7 +134,11 @@ export async function callMcpTool(
     result = await callAdapter(
       String(toolRecord.provider_key || "unknown"),
       resolvedParams,
-      buildAdapterContext(context, providerKey),
+      {
+        supabase: context.supabase,
+        orgId: context.orgId,
+        userId: context.user.id,
+      },
       { toolName: String(toolRecord.name || "") }
     );
     latency = Date.now() - start;
@@ -329,7 +317,7 @@ export async function callAddressSearchWithAudit(
         const current = (await callAdapter(
           "search_address",
           { keyword: kw },
-          buildAdapterContext(context, "juso")
+          { supabase: context.supabase, orgId: context.orgId, userId: context.user.id }
         )) as { status?: string; data?: Record<string, any>; error?: unknown };
         const currentData = (current?.data || {}) as Record<string, any>;
         const currentError = current?.error;

@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
   }
 
   let data:
-    | { providers: Record<string, unknown> | null }
+    | { providers: Record<string, Record<string, unknown> | undefined> | null }
     | null = null;
   let error: { message: string } | null = null;
   if (provider === "chat_policy") {
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
     commit?: boolean;
   };
   const provider = (body.provider || "").trim();
-  if (!provider) {
+  if (!provider || !body.values) {
     return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   }
   if (body.commit !== true) {
@@ -231,10 +231,6 @@ export async function POST(req: NextRequest) {
       ok: true,
       provider: serializeProviderStateForResponse(provider, nextState, body.connection_id),
     });
-  }
-
-  if (!isSupportedProviderKey(provider) && !body.values) {
-    return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   }
 
   if (!data) {

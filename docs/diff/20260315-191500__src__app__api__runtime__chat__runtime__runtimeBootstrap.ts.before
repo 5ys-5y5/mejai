@@ -18,8 +18,6 @@ import { prepareSessionState } from "./sessionRuntime";
 import { pushRuntimeTimingStage, type RuntimeTimingStage } from "./runtimeSupport";
 import { DEFAULT_TOOL_PROVIDER_MAP } from "./mcpToolRegistry";
 import type { CompiledPolicy, RuntimeContext } from "../shared/runtimeTypes";
-import { normalizeAgentMcpBindings } from "@/lib/agentMcpBindings";
-import { readSupportedProviderState, resolveSupportedProviderConnection } from "@/lib/providerConnections";
 
 type Body = {
   page_key?: string;
@@ -52,7 +50,6 @@ type AgentShape = {
   llm?: string | null;
   kb_id?: string | null;
   mcp_tool_ids?: string[] | null;
-  mcp_provider_bindings?: Record<string, unknown> | null;
   admin_kb_ids?: string[] | null;
   is_active?: boolean | null;
 };
@@ -390,7 +387,7 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
   const userRole = (accessRow?.org_role as string | null) ?? null;
   const userOrgId = (accessRow?.org_id as string | null) ?? null;
 
-  let authSettings: { id?: string | null; providers?: Record<string, unknown> | null } | null = null;
+  let authSettings: { id?: string | null; providers?: Record<string, Record<string, any> | undefined> | null } | null = null;
   const { data: authSettingsByUser } = await context.supabase
     .from("A_iam_auth_settings")
     .select("id, providers")
@@ -407,29 +404,17 @@ export async function bootstrapRuntime(params: BootstrapParams): Promise<
       .maybeSingle();
     authSettings = authSettingsByOrg || null;
   }
-  const providers = (authSettings?.providers || {}) as Record<string, unknown>;
-  const agentMcpProviderBindings = normalizeAgentMcpBindings(agent.mcp_provider_bindings ?? {});
+  const providers = (authSettings?.providers || {}) as Record<string, Record<string, any> | undefined>;
   const providerAvailable = Object.keys(providers || {}).filter((key) => {
-    if (key === "cafe24" || key === "juso" || key === "solapi") {
-      return readSupportedProviderState(providers, key).connections.length > 0;
-    }
     const value = providers[key];
-    return Boolean(value && typeof value === "object" && Object.keys(value as Record<string, unknown>).length > 0);
+    return value && Object.keys(value).length > 0;
   });
-  const cafe24Provider = resolveSupportedProviderConnection(
-    providers,
-    "cafe24",
-    agentMcpProviderBindings.cafe24?.connection_id
-  );
+  const cafe24Provider = (providers.cafe24 || {}) as Record<string, any>;
   const providerConfig = {
-    mall_id: cafe24Provider?.mall_id ? String(cafe24Provider.mall_id) : null,
-    shop_no: cafe24Provider?.shop_no ? String(cafe24Provider.shop_no) : null,
-    board_no: cafe24Provider?.board_no ? String(cafe24Provider.board_no) : null,
+    mall_id: cafe24Provider.mall_id ? String(cafe24Provider.mall_id) : null,
+    shop_no: cafe24Provider.shop_no ? String(cafe24Provider.shop_no) : null,
+    board_no: cafe24Provider.board_no ? String(cafe24Provider.board_no) : null,
   };
-  (context as RuntimeContextAny & { mcpProviderBindings?: Record<string, unknown>; authSettingsProviders?: Record<string, unknown> }).mcpProviderBindings =
-    agentMcpProviderBindings;
-  (context as RuntimeContextAny & { mcpProviderBindings?: Record<string, unknown>; authSettingsProviders?: Record<string, unknown> }).authSettingsProviders =
-    providers;
   pushRuntimeTimingStage(timingStages, "load_auth_settings", iamLookupStartedAt);
 
   const adminKbStartedAt = Date.now();
