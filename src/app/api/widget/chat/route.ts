@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { getServerContext } from "@/lib/serverAuth";
-import { readWidgetTokenInstanceId, readWidgetTokenTemplateId, verifyWidgetToken } from "@/lib/widgetToken";
+import { issueWidgetToken, readWidgetTokenInstanceId, readWidgetTokenTemplateId, verifyWidgetToken } from "@/lib/widgetToken";
 import { resolveRuntimeFlags } from "@/lib/runtimeFlags";
+import { ensureWidgetSession } from "@/lib/widgetSessions";
 import {
   applyConversationFeatureVisibility,
   isEnabledByGate,
@@ -122,6 +123,16 @@ function readVisitorUserId(input: Record<string, any> | null | undefined) {
   return String(candidate || "").trim();
 }
 
+function readVisitorId(input: Record<string, any> | null | undefined) {
+  if (!input || typeof input !== "object") return "";
+  const candidate = input.id || input.visitor_id || input.visitorId || input.external_user_id || input.externalUserId;
+  return String(candidate || "").trim();
+}
+
+function normalizeText(value: unknown) {
+  return String(value || "").trim();
+}
+
 function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -183,10 +194,7 @@ export async function POST(req: NextRequest) {
   if (!message) {
     return NextResponse.json({ error: "EMPTY_MESSAGE" }, { status: 400 });
   }
-  const sessionId = String(body.session_id || payload.session_id || "").trim();
-  if (!sessionId) {
-    return NextResponse.json({ error: "SESSION_ID_REQUIRED" }, { status: 400 });
-  }
+  const requestedSessionId = String(body.session_id || payload.session_id || "").trim();
   const agentId = body.agent_id;
   const llm = body.llm;
   const kbId = body.kb_id;
@@ -197,6 +205,9 @@ export async function POST(req: NextRequest) {
   const route = body.route;
   const overrides = normalizeWidgetOverrides(body.overrides);
   const visitor = body.visitor;
+  const requestOrigin = normalizeText(body.origin) || normalizeText(payload.origin);
+  const requestPageUrl = normalizeText(body.page_url || body.pageUrl);
+  const requestReferrer = normalizeText(body.referrer);
   const runtimeFlags = resolveRuntimeFlags(
     body?.runtime_flags && typeof body.runtime_flags === "object" ? body.runtime_flags : undefined
   );
@@ -259,6 +270,44 @@ export async function POST(req: NextRequest) {
   const runtimeWidgetId = String(instance?.id || runtimeTemplate.id || "").trim();
   const runtimeWidgetName = String(resolved.name || runtimeTemplate.name || instance?.name || "").trim();
   const runtimePublicKey = String(instance?.public_key || runtimeTemplate.public_key || "").trim();
+  const visitorId = readVisitorId(visitor) || normalizeText(payload.visitor_id);
+  let sessionId = "";
+  try {
+    const ensuredSession = await ensureWidgetSession(supabaseAdmin, {
+      sessionId: requestedSessionId,
+      templateId: resolvedTemplateId,
+      instanceId: instance?.id || null,
+      origin: requestOrigin || null,
+      pageUrl: requestPageUrl || null,
+      referrer: requestReferrer || null,
+      visitorId: visitorId || null,
+      visitor: visitor && typeof visitor === "object" ? (visitor as Record<string, unknown>) : null,
+      createIfMissing: true,
+    });
+    sessionId = ensuredSession.sessionId;
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "WIDGET_SESSION_RESOLVE_FAILED" },
+      { status: 400 }
+    );
+  }
+
+  let responseWidgetToken = token;
+  try {
+    responseWidgetToken = issueWidgetToken({
+      org_id: orgId || null,
+      template_id: resolvedTemplateId,
+      instance_id: instance?.id || null,
+      session_id: sessionId,
+      visitor_id: visitorId || null,
+      origin: requestOrigin || null,
+    });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "WIDGET_TOKEN_REFRESH_FAILED" },
+      { status: 500 }
+    );
+  }
 
   const providerValue: ConversationFeaturesProviderShape | null = resolved.chat_policy || null;
   const featureFlags = applyConversationFeatureVisibility(
@@ -531,10 +580,10 @@ export async function POST(req: NextRequest) {
       {
         error: "WIDGET_RUNTIME_PROXY_FETCH_FAILED",
         detail: error instanceof Error ? error.message : String(error),
-        proxy_trace_id: proxyTraceId,
-      },
-      { status: 502 }
-    );
+      proxy_trace_id: proxyTraceId,
+    },
+    { status: 502 }
+  );
   }
 
   const rawText = await res.text();
@@ -626,6 +675,8 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(
     {
       ...data,
+      session_id: sessionId,
+      widget_token: responseWidgetToken,
       proxy_trace_id: proxyTraceId,
     },
     { status: res.status }

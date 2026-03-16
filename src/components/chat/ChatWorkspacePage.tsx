@@ -42,6 +42,7 @@ type ChatMonitorOverviewResponse = {
   items: Array<{
     session_id: string;
     session_code: string | null;
+    page_url: string | null;
     template_id: string | null;
     template_name: string | null;
     template_missing: boolean;
@@ -102,6 +103,13 @@ type ChatMonitorSessionDetail = {
   }>;
 };
 
+const CHAT_PAGE_SIZE_OPTIONS = [
+  { id: "10", label: "10개", description: "페이지당 10개" },
+  { id: "100", label: "100개", description: "페이지당 100개" },
+] as const satisfies SelectOption[];
+
+type PaginationToken = number | "ellipsis";
+
 function formatSessionCode(value: string | null, id: string) {
   return value || id.slice(0, 8);
 }
@@ -117,6 +125,51 @@ function formatSessionStatus(item: ChatMonitorOverviewResponse["items"][number])
   return "종료";
 }
 
+function formatConversationPage(pageUrl: string | null) {
+  if (!pageUrl) return "-";
+  try {
+    const parsed = new URL(pageUrl);
+    return `${parsed.host}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return pageUrl;
+  }
+}
+
+function normalizePageSize(rawValue: string | null) {
+  const parsed = Number(rawValue || 10);
+  return parsed === 100 ? 100 : 10;
+}
+
+function normalizePage(rawValue: string | null) {
+  const parsed = Number(rawValue || 1);
+  return Number.isFinite(parsed) ? Math.max(Math.trunc(parsed), 1) : 1;
+}
+
+function buildPaginationTokens(currentPage: number, totalPages: number): PaginationToken[] {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const tokens: PaginationToken[] = [1];
+  const windowStart = Math.max(2, currentPage - 1);
+  const windowEnd = Math.min(totalPages - 1, currentPage + 1);
+
+  if (windowStart > 2) {
+    tokens.push("ellipsis");
+  }
+
+  for (let page = windowStart; page <= windowEnd; page += 1) {
+    tokens.push(page);
+  }
+
+  if (windowEnd < totalPages - 1) {
+    tokens.push("ellipsis");
+  }
+
+  tokens.push(totalPages);
+  return tokens;
+}
+
 export function ChatWorkspacePage() {
   const pathname = usePathname();
   const router = useRouter();
@@ -127,6 +180,9 @@ export function ChatWorkspacePage() {
   const listId = (searchParams.get("list") as ChatMonitorListId | null) || "all";
   const sessionId = searchParams.get("sessionId") || "";
   const previewTab = (searchParams.get("previewTab") as WidgetConversationTab | null) || "chat";
+  const pageSize = normalizePageSize(searchParams.get("pageSize"));
+  const currentPage = normalizePage(searchParams.get("page"));
+  const currentOffset = (currentPage - 1) * pageSize;
 
   const [overview, setOverview] = useState<ChatMonitorOverviewResponse | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(true);
@@ -135,6 +191,11 @@ export function ChatWorkspacePage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const totalSessions = overview?.summary.session_count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalSessions / pageSize));
+  const visibleRangeStart = totalSessions === 0 ? 0 : currentOffset + 1;
+  const visibleRangeEnd = totalSessions === 0 ? 0 : currentOffset + (overview?.items.length ?? 0);
+  const paginationTokens = buildPaginationTokens(currentPage, totalPages);
 
   const replaceQuery = useCallback(
     (updates: Record<string, string | null>) => {
@@ -164,7 +225,8 @@ export function ChatWorkspacePage() {
     params.set("templateId", templateId);
     params.set("instanceId", instanceId);
     params.set("list", listId);
-    params.set("limit", "120");
+    params.set("limit", String(pageSize));
+    params.set("offset", String(currentOffset));
 
     apiFetch<ChatMonitorOverviewResponse>(`/api/chat-monitor?${params.toString()}`)
       .then((response) => {
@@ -182,10 +244,30 @@ export function ChatWorkspacePage() {
     return () => {
       mounted = false;
     };
-  }, [instanceId, listId, reloadNonce, templateId]);
+  }, [currentOffset, instanceId, listId, pageSize, reloadNonce, templateId]);
 
   useEffect(() => {
     if (!overview) return;
+
+    if (totalSessions === 0) {
+      if (currentPage !== 1) {
+        replaceQuery({ page: "1", sessionId: null });
+        return;
+      }
+      if (sessionId) {
+        replaceQuery({ sessionId: null });
+      }
+      return;
+    }
+
+    if (currentPage > totalPages) {
+      replaceQuery({ page: String(totalPages), sessionId: null });
+    }
+  }, [currentPage, overview, replaceQuery, sessionId, totalPages, totalSessions]);
+
+  useEffect(() => {
+    if (!overview) return;
+    if (totalSessions === 0 || currentPage > totalPages) return;
     const availableIds = new Set(overview.items.map((item) => item.session_id));
     if (sessionId && availableIds.has(sessionId)) return;
     if (overview.selection.default_session_id) {
@@ -195,7 +277,7 @@ export function ChatWorkspacePage() {
     if (sessionId) {
       replaceQuery({ sessionId: null });
     }
-  }, [overview, replaceQuery, sessionId]);
+  }, [currentPage, overview, replaceQuery, sessionId, totalPages, totalSessions]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -270,6 +352,8 @@ export function ChatWorkspacePage() {
     [overview]
   );
 
+  const pageSizeOptions = useMemo<SelectOption[]>(() => [...CHAT_PAGE_SIZE_OPTIONS], []);
+
   return (
     <div className="px-5 py-6 md:px-8">
       <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -290,6 +374,7 @@ export function ChatWorkspacePage() {
                   replaceQuery({
                     templateId: nextTemplateId,
                     instanceId: "all",
+                    page: "1",
                     sessionId: null,
                   });
                 }}
@@ -308,6 +393,7 @@ export function ChatWorkspacePage() {
                   replaceQuery({
                     templateId: nextInstanceId !== "all" && linkedTemplateId ? linkedTemplateId : templateId,
                     instanceId: nextInstanceId,
+                    page: "1",
                     sessionId: null,
                   });
                 }}
@@ -323,6 +409,7 @@ export function ChatWorkspacePage() {
                 onChange={(nextListId) => {
                   replaceQuery({
                     list: nextListId,
+                    page: "1",
                     sessionId: null,
                   });
                 }}
@@ -361,67 +448,150 @@ export function ChatWorkspacePage() {
                   총 {overviewLoading ? "-" : overview?.summary.session_count ?? 0}개
                 </div>
               </div>
+              <div className="flex items-center gap-2">
+                <div className="text-[11px] font-semibold text-slate-500">페이지당</div>
+                <SelectPopover
+                  value={String(pageSize)}
+                  onChange={(nextPageSize) => {
+                    const normalizedPageSize = normalizePageSize(nextPageSize);
+                    replaceQuery({
+                      pageSize: String(normalizedPageSize),
+                      page: "1",
+                      sessionId: null,
+                    });
+                  }}
+                  options={pageSizeOptions}
+                  className="w-[104px]"
+                  buttonClassName="h-9"
+                />
+              </div>
             </div>
 
-            <div className="max-h-[70vh] overflow-y-auto">
+            <div>
               {overviewLoading ? (
                 <div className="p-4 text-sm text-slate-500">세션 목록을 불러오는 중입니다.</div>
               ) : (
-                <CreateListTable
-                  rows={overview?.items || []}
-                  getRowId={(item) => item.session_id}
-                  selectedId={sessionId || null}
-                  onSelect={(item) => replaceQuery({ sessionId: item.session_id })}
-                  emptyState={<div className="p-4 text-sm text-slate-500">조건에 맞는 대화가 없습니다.</div>}
-                  columns={[
-                    {
-                      id: "session",
-                      label: "세션",
-                      width: "minmax(0,1.2fr)",
-                      render: (item) => (
-                        <div className="truncate text-sm font-semibold text-slate-900">
-                          {formatSessionCode(item.session_code, item.session_id)}
-                        </div>
-                      ),
-                    },
-                    {
-                      id: "template",
-                      label: "템플릿",
-                      width: "minmax(0,1.35fr)",
-                      render: (item) => item.template_name || "-",
-                    },
-                    {
-                      id: "instance",
-                      label: "인스턴스",
-                      width: "minmax(0,1.35fr)",
-                      render: (item) => item.instance_name || "-",
-                    },
-                    {
-                      id: "status",
-                      label: "상태",
-                      width: "minmax(0,0.9fr)",
-                      render: (item) => formatSessionStatus(item),
-                    },
-                    {
-                      id: "satisfaction",
-                      label: "만족도",
-                      width: "minmax(0,0.7fr)",
-                      render: (item) => formatSatisfaction(item.satisfaction),
-                    },
-                    {
-                      id: "turns",
-                      label: "턴 수",
-                      width: "minmax(0,0.7fr)",
-                      render: (item) => `${item.turn_count}`,
-                    },
-                    {
-                      id: "activity",
-                      label: "최근 활동",
-                      width: "minmax(0,1fr)",
-                      render: (item) => formatKstDateTime(item.last_turn_at || item.started_at),
-                    },
-                  ]}
-                />
+                <>
+                  <CreateListTable
+                    rows={overview?.items || []}
+                    getRowId={(item) => item.session_id}
+                    selectedId={sessionId || null}
+                    onSelect={(item) => replaceQuery({ sessionId: item.session_id })}
+                    emptyState={<div className="p-4 text-sm text-slate-500">조건에 맞는 대화가 없습니다.</div>}
+                    columns={[
+                      {
+                        id: "session",
+                        label: "세션",
+                        width: "minmax(0,1.2fr)",
+                        render: (item) => (
+                          <div className="truncate text-sm font-semibold text-slate-900">
+                            {formatSessionCode(item.session_code, item.session_id)}
+                          </div>
+                        ),
+                      },
+                      {
+                        id: "template",
+                        label: "템플릿",
+                        width: "minmax(0,1.35fr)",
+                        render: (item) => item.template_name || "-",
+                      },
+                      {
+                        id: "instance",
+                        label: "인스턴스",
+                        width: "minmax(0,1.15fr)",
+                        render: (item) => item.instance_name || "-",
+                      },
+                      {
+                        id: "page",
+                        label: "대화 페이지",
+                        width: "minmax(0,1.6fr)",
+                        render: (item) => {
+                          const pageLabel = formatConversationPage(item.page_url);
+                          return (
+                            <div className="truncate text-sm text-slate-700" title={item.page_url || undefined}>
+                              {pageLabel}
+                            </div>
+                          );
+                        },
+                      },
+                      {
+                        id: "status",
+                        label: "상태",
+                        width: "minmax(0,0.9fr)",
+                        render: (item) => formatSessionStatus(item),
+                      },
+                      {
+                        id: "satisfaction",
+                        label: "만족도",
+                        width: "minmax(0,0.7fr)",
+                        render: (item) => formatSatisfaction(item.satisfaction),
+                      },
+                      {
+                        id: "turns",
+                        label: "턴 수",
+                        width: "minmax(0,0.7fr)",
+                        render: (item) => `${item.turn_count}`,
+                      },
+                      {
+                        id: "activity",
+                        label: "최근 활동",
+                        width: "minmax(0,1fr)",
+                        render: (item) => formatKstDateTime(item.last_turn_at || item.started_at),
+                      },
+                    ]}
+                  />
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">
+                    <div className="text-xs text-slate-500">
+                      {overviewLoading ? "불러오는 중" : `${visibleRangeStart}-${visibleRangeEnd} / ${totalSessions}`}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => replaceQuery({ page: String(currentPage - 1), sessionId: null })}
+                        disabled={overviewLoading || currentPage <= 1}
+                        className="h-8 rounded-lg border-slate-200 px-3 text-xs text-slate-700 hover:bg-slate-50"
+                      >
+                        이전
+                      </Button>
+                      {paginationTokens.map((token, index) =>
+                        token === "ellipsis" ? (
+                          <span key={`ellipsis-${index}`} className="px-2 text-xs text-slate-400">
+                            ...
+                          </span>
+                        ) : (
+                          <Button
+                            key={token}
+                            type="button"
+                            variant={token === currentPage ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => replaceQuery({ page: String(token), sessionId: null })}
+                            disabled={overviewLoading}
+                            className={
+                              token === currentPage
+                                ? "h-8 rounded-lg bg-slate-900 px-3 text-xs text-white hover:bg-slate-800"
+                                : "h-8 rounded-lg border-slate-200 px-3 text-xs text-slate-700 hover:bg-slate-50"
+                            }
+                          >
+                            {token}
+                          </Button>
+                        )
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => replaceQuery({ page: String(currentPage + 1), sessionId: null })}
+                        disabled={overviewLoading || currentPage >= totalPages}
+                        className="h-8 rounded-lg border-slate-200 px-3 text-xs text-slate-700 hover:bg-slate-50"
+                      >
+                        다음
+                      </Button>
+                    </div>
+                  </div>
+                </>
               )}
             </div>
           </Card>

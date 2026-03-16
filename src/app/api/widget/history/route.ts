@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   }
   const targetSessionId = sessionOverride || String(payload.session_id || "").trim();
   if (!targetSessionId) {
-    return NextResponse.json({ error: "SESSION_ID_REQUIRED" }, { status: 400 });
+    return NextResponse.json({ session_id: null, messages: [] });
   }
   if (sessionOverride && !payload.visitor_id) {
     return NextResponse.json({ error: "VISITOR_ID_REQUIRED" }, { status: 403 });

@@ -1407,7 +1407,7 @@ export default function WidgetEmbedPage() {
     async (rawText: string, displayText?: string) => {
       const text = String(rawText || "").trim();
       const display = String(displayText ?? rawText ?? "").trim();
-      if (!text || !widgetToken || !sessionId || sending) return;
+      if (!text || !widgetToken || sending) return;
       setInputValue("");
       setSending(true);
       const userId = buildId();
@@ -1450,6 +1450,15 @@ export default function WidgetEmbedPage() {
         const shouldSendRoute =
           allowNewOverrides &&
           (policyFeatures.setup.routeSelector || Boolean(baseFeatures.setup.defaultRoute));
+        const requestOrigin =
+          String(pendingMeta?.origin || "").trim() ||
+          (typeof window !== "undefined" ? String(window.location.origin || "").trim() : "");
+        const requestPageUrl =
+          String(pendingMeta?.page_url || "").trim() ||
+          (typeof window !== "undefined" ? String(window.location.href || "").trim() : "");
+        const requestReferrer =
+          String(pendingMeta?.referrer || "").trim() ||
+          (typeof document !== "undefined" ? String(document.referrer || "").trim() : "");
         const agentId = shouldSendAgent ? selectedAgentId.trim() || undefined : undefined;
         const kbId = shouldSendKb ? policyConfig.kbId.trim() || undefined : undefined;
         const adminKbIds =
@@ -1471,9 +1480,12 @@ export default function WidgetEmbedPage() {
           },
           body: JSON.stringify({
             message: text,
-            session_id: sessionId,
+            session_id: sessionId || undefined,
             overrides: pendingOverrides || undefined,
             preview: isPreview,
+            origin: requestOrigin || undefined,
+            page_url: requestPageUrl || undefined,
+            referrer: requestReferrer || undefined,
             agent_id: agentId,
             llm: shouldSendLlm ? policyConfig.llm || undefined : undefined,
               inline_kb: shouldSendInlineKb ? inlineKbCandidate || undefined : undefined,
@@ -1531,8 +1543,22 @@ export default function WidgetEmbedPage() {
         const messageText =
           botFields.content ||
           "응답을 생성하지 못했습니다. 다시 시도해 주세요.";
+        const nextWidgetToken = String(data.widget_token || widgetToken || "");
         const nextSessionId = String(data.session_id || sessionId || "");
+        if (nextWidgetToken) {
+          setWidgetToken(nextWidgetToken);
+        }
         setSessionId(nextSessionId);
+        if (nextSessionId) {
+          try {
+            window.parent?.postMessage?.(
+              { type: "mejai_widget_session", session_id: nextSessionId },
+              "*"
+            );
+          } catch {
+            // ignore
+          }
+        }
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === botId

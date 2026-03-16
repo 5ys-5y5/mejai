@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
 import { issueWidgetToken } from "@/lib/widgetToken";
 import { WIDGET_PAGE_KEY, type ConversationFeaturesProviderShape } from "@/lib/conversation/pageFeaturePolicy";
 import { normalizeWidgetOverrides } from "@/lib/widgetTemplateMeta";
+import { ensureWidgetSession } from "@/lib/widgetSessions";
 import {
   filterWidgetOverridesByPolicy,
   resolveWidgetBasePolicy,
@@ -16,14 +16,6 @@ type TemplateRow = WidgetTemplateRow & {
   public_key?: string | null;
 };
 type InstanceRow = WidgetInstanceRow;
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function makeSessionCode() {
-  return `w_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 function readVisitorId(input: Record<string, any>) {
   const visitor = input.visitor && typeof input.visitor === "object" ? input.visitor : null;
@@ -161,57 +153,25 @@ export async function POST(req: NextRequest) {
   const pageUrl = String(body.page_url || body.pageUrl || body.referrer || "").trim();
 
   const visitorId = readVisitorId(body);
-  const now = nowIso();
-  let sessionId = String(body.session_id || "").trim();
-
-  if (sessionId) {
-    const { data: existing } = await supabaseAdmin
-      .from("D_conv_sessions")
-      .select("id, metadata")
-      .eq("id", sessionId)
-      .maybeSingle();
-    if (!existing) {
-      sessionId = "";
-    }
-    if (existing?.metadata && typeof existing.metadata === "object") {
-      const metadata = existing.metadata as Record<string, unknown>;
-      const metadataTemplateId = String(metadata.template_id || "").trim();
-      const metadataInstanceId = String(metadata.widget_instance_id || "").trim();
-      if (metadataTemplateId && metadataTemplateId !== String(template.id || "")) {
-        sessionId = "";
-      }
-      if (instance?.id) {
-        if (metadataInstanceId && metadataInstanceId !== String(instance.id)) {
-          sessionId = "";
-        }
-      } else if (metadataInstanceId) {
-        sessionId = "";
-      }
-    }
-  }
-
-  if (!sessionId) {
-    sessionId = crypto.randomUUID();
-    const metadata = {
-      widget_instance_id: instance?.id || null,
-      template_id: template.id,
+  let sessionId = "";
+  try {
+    const ensuredSession = await ensureWidgetSession(supabaseAdmin, {
+      sessionId: String(body.session_id || "").trim(),
+      templateId: String(template.id || ""),
+      instanceId: instance?.id || null,
       origin: origin || null,
-      page_url: pageUrl || null,
+      pageUrl: pageUrl || null,
       referrer: String(body.referrer || "").trim() || null,
-      visitor_id: visitorId || null,
+      visitorId: visitorId || null,
       visitor: body.visitor && typeof body.visitor === "object" ? body.visitor : null,
-    };
-    const payload = {
-      id: sessionId,
-      session_code: makeSessionCode(),
-      started_at: now,
-      channel: "web_widget",
-      metadata,
-    };
-    const { error: insertError } = await supabaseAdmin.from("D_conv_sessions").insert(payload);
-    if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 400 });
-    }
+      createIfMissing: false,
+    });
+    sessionId = ensuredSession.sessionId;
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "WIDGET_SESSION_RESOLVE_FAILED" },
+      { status: 400 }
+    );
   }
 
   let widgetToken: string;
@@ -252,7 +212,7 @@ export async function POST(req: NextRequest) {
             origin: origin || null,
             page_url: pageUrl || null,
           },
-          created_at: nowIso(),
+          created_at: new Date().toISOString(),
           bot_context: { source: "widget_init" },
         });
       } catch (error) {

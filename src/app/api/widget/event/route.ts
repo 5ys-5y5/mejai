@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const { error } = await supabaseAdmin.from("F_widget_events").insert({
     org_id: payload.org_id || null,
     widget_id: widgetId,
-    session_id: payload.session_id,
+    session_id: String(payload.session_id || "").trim() || null,
     event_type: String(body.type || "").trim(),
     payload: {
       ...(body.payload && typeof body.payload === "object" ? (body.payload as Record<string, unknown>) : {}),

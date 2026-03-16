@@ -88,6 +88,7 @@ export type ChatMonitorOverviewResponse = {
   items: Array<{
     session_id: string;
     session_code: string | null;
+    page_url: string | null;
     template_id: string | null;
     template_name: string | null;
     template_missing: boolean;
@@ -175,6 +176,7 @@ type SessionRefs = {
   templateId: string | null;
   instanceId: string | null;
   visitorId: string | null;
+  pageUrl: string | null;
 };
 
 type SessionStats = {
@@ -339,6 +341,7 @@ export function extractSessionWidgetRefs(metadata: unknown): SessionRefs {
       normalizeText(record?.visitor_id) ||
       normalizeText(record?.visitorId) ||
       normalizeText(record?.external_user_id),
+    pageUrl: normalizeText(record?.page_url),
   };
 }
 
@@ -693,6 +696,7 @@ function toOverviewItem(item: SessionShape) {
   return {
     session_id: item.row.id,
     session_code: normalizeText(item.row.session_code),
+    page_url: item.refs.pageUrl,
     template_id: item.previewTarget.template_id || item.refs.templateId,
     template_name: item.template?.name || (item.refs.templateId ? formatMissingLabel("템플릿", item.refs.templateId) : null),
     template_missing: item.templateMissing,

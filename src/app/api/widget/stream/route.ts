@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { createAdminSupabaseClient } from "@/lib/supabaseAdmin";
-import { readWidgetTokenInstanceId, readWidgetTokenTemplateId, verifyWidgetToken } from "@/lib/widgetToken";
+import { issueWidgetToken, readWidgetTokenInstanceId, readWidgetTokenTemplateId, verifyWidgetToken } from "@/lib/widgetToken";
 import { resolveRuntimeFlags } from "@/lib/runtimeFlags";
+import { ensureWidgetSession } from "@/lib/widgetSessions";
 import {
   applyConversationFeatureVisibility,
   isEnabledByGate,
@@ -39,6 +40,16 @@ function readVisitorUserId(input: Record<string, any> | null | undefined) {
     input.external_user_id ||
     input.externalUserId;
   return String(candidate || "").trim();
+}
+
+function readVisitorId(input: Record<string, any> | null | undefined) {
+  if (!input || typeof input !== "object") return "";
+  const candidate = input.id || input.visitor_id || input.visitorId || input.external_user_id || input.externalUserId;
+  return String(candidate || "").trim();
+}
+
+function normalizeText(value: unknown) {
+  return String(value || "").trim();
 }
 
 function isUuid(value: string) {
@@ -81,6 +92,9 @@ async function handleStream(
     mcp_provider_keys?: unknown[] | null;
     mode?: string | null;
     overrides?: Record<string, unknown> | null;
+    origin?: string | null;
+    page_url?: string | null;
+    referrer?: string | null;
   }
 ) {
   const authHeader = req.headers.get("authorization") || "";
@@ -147,6 +161,30 @@ async function handleStream(
   const basePolicy = resolveWidgetBasePolicy(runtimeTemplate);
   const filteredOverrides = filterWidgetOverridesByPolicy(overrides, basePolicy);
   const resolved = resolveWidgetRuntimeConfig(runtimeTemplate, instance, filteredOverrides);
+  const visitorId = readVisitorId(extras?.visitor) || normalizeText(payload.visitor_id);
+  const requestedOrigin = normalizeText(extras?.origin) || normalizeText(payload.origin);
+  const requestedPageUrl = normalizeText(extras?.page_url);
+  const requestedReferrer = normalizeText(extras?.referrer);
+  const ensuredSession = await ensureWidgetSession(supabaseAdmin, {
+    sessionId,
+    templateId: resolvedTemplateId,
+    instanceId: instance?.id || null,
+    origin: requestedOrigin || null,
+    pageUrl: requestedPageUrl || null,
+    referrer: requestedReferrer || null,
+    visitorId: visitorId || null,
+    visitor: extras?.visitor && typeof extras.visitor === "object" ? extras.visitor : null,
+    createIfMissing: true,
+  });
+  const resolvedSessionId = ensuredSession.sessionId;
+  const responseWidgetToken = issueWidgetToken({
+    org_id: runtimeTemplate.created_by ? String(runtimeTemplate.created_by) : null,
+    template_id: resolvedTemplateId,
+    instance_id: instance?.id || null,
+    session_id: resolvedSessionId,
+    visitor_id: visitorId || null,
+    origin: requestedOrigin || null,
+  });
 
   const providerValue: ConversationFeaturesProviderShape | null = resolved.chat_policy || null;
   const featureFlags = applyConversationFeatureVisibility(
@@ -310,6 +348,14 @@ async function handleStream(
   const stream = new ReadableStream({
     async start(controller) {
       controller.enqueue(encoder.encode(encodeEvent("ready", { ts: Date.now() })));
+      controller.enqueue(
+        encoder.encode(
+          encodeEvent("session", {
+            session_id: resolvedSessionId,
+            widget_token: responseWidgetToken,
+          })
+        )
+      );
       try {
         const targetUrl = new URL("/api/runtime/chat", req.nextUrl.origin);
         const runtimeFlags = resolveRuntimeFlags(
@@ -324,7 +370,7 @@ async function handleStream(
           },
           body: JSON.stringify({
             message,
-            session_id: sessionId,
+            session_id: resolvedSessionId,
             agent_id: effectiveAgentId || undefined,
             page_key: WIDGET_PAGE_KEY,
             mode: extras?.mode || undefined,
@@ -372,7 +418,7 @@ export async function POST(req: NextRequest) {
   }
   const message = String(body.message || "").trim();
   const sessionId = String(body.session_id || "").trim();
-  if (!sessionId || !message) {
+  if (!message) {
     return new Response(encodeEvent("error", { error: "INVALID_INPUT" }), {
       status: 400,
       headers: { "Content-Type": "text/event-stream" },
@@ -403,6 +449,9 @@ export async function POST(req: NextRequest) {
     mcp_provider_keys: mcpProviderKeys,
     mode,
     overrides,
+    origin: typeof body?.origin === "string" ? body.origin : null,
+    page_url: typeof body?.page_url === "string" ? body.page_url : null,
+    referrer: typeof body?.referrer === "string" ? body.referrer : null,
   });
 }
 
@@ -410,7 +459,7 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const message = String(url.searchParams.get("message") || "").trim();
   const sessionId = String(url.searchParams.get("session_id") || "").trim();
-  if (!message || !sessionId) {
+  if (!message) {
     return new Response(encodeEvent("error", { error: "INVALID_INPUT" }), {
       status: 400,
       headers: { "Content-Type": "text/event-stream" },
