@@ -82,6 +82,16 @@ function formatSatisfaction(value?: number | null) {
   return value.toFixed(1);
 }
 
+function formatPreviewVisibility(value?: string | null) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
+  if (normalized === "public" || normalized === "user" || normalized === "admin") {
+    return normalized.toUpperCase();
+  }
+  return normalized ? normalized.toUpperCase() : "-";
+}
+
 function renderFallbackTranscript(messages: ChatMonitorTranscriptMessage[]) {
   if (messages.length === 0) {
     return (
@@ -128,6 +138,8 @@ export function ChatMonitoringPreviewPanel({
   onPreviewTabChange,
 }: ChatMonitoringPreviewPanelProps) {
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
+  const selectedPreviewTabStatus =
+    detail?.preview_tabs.find((panel) => panel.tab === previewTab) || detail?.preview_tabs[0] || null;
 
   const panels = useMemo<WidgetConversationPreviewPanel[]>(() => {
     if (!detail) return [];
@@ -186,20 +198,10 @@ export function ChatMonitoringPreviewPanel({
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold">
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-600">
-                  {detail.session.template_name || "템플릿 미지정"}
-                </span>
-                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-slate-600">
-                  {detail.session.instance_name || "인스턴스 미지정"}
-                </span>
-                <span
-                  className={`rounded-full border px-2 py-0.5 ${
-                    detail.preview_target.can_preview
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-amber-200 bg-amber-50 text-amber-700"
-                  }`}
-                >
-                  {detail.preview_target.can_preview ? "preview 가능" : "fallback"}
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-0.5 text-slate-700">
+                  {(selectedPreviewTabStatus?.enabled ? "ON" : "OFF") +
+                    " | " +
+                    formatPreviewVisibility(selectedPreviewTabStatus?.visibility)}
                 </span>
               </div>
             </div>
@@ -208,6 +210,7 @@ export function ChatMonitoringPreviewPanel({
               panels={panels}
               selectedTab={previewTab}
               onSelectTab={onPreviewTabChange}
+              showMetaHeader={false}
               emptyState={<div className="flex h-full items-center justify-center text-xs text-slate-400">세션 프리뷰 정보가 없습니다.</div>}
             />
 

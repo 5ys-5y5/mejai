@@ -4,19 +4,14 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Book,
-  ClipboardCheck,
   CreditCard,
   HomeIcon,
   Inbox,
   MessageCircle,
-  PhoneCall,
   PlusSquare,
-  Route as RouteIcon,
   Shield,
   Settings,
   UserRound,
-  Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
@@ -223,8 +218,8 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
           <SidebarLink to="/app" icon={HomeIcon} label="대시보드" collapsed={collapsed} onClick={onNavigate} />
         </SidebarGroup>
 
-        <SidebarGroup header="모니터링" collapsed={collapsed}>
-          <SidebarLink to="/app/calls" icon={PhoneCall} label="통화/세션" collapsed={collapsed} onClick={onNavigate} />
+        <SidebarGroup header="고객 정보" collapsed={collapsed}>
+
           <SidebarLink
             to="/app/contacts"
             icon={UserRound}
@@ -233,23 +228,9 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
             activePaths={["/app/contacts", "/app/users"]}
             onClick={onNavigate}
           />
-          <SidebarLink
-            to="/app/review"
-            icon={Inbox}
-            label="후속 지원 요청"
-            badge={badgeCount}
-            collapsed={collapsed}
-            onClick={onNavigate}
-          />
         </SidebarGroup>
 
-        <SidebarGroup header="구성" collapsed={collapsed}>
-          <SidebarLink to="/app/agents" icon={Users} label="에이전트" collapsed={collapsed} onClick={onNavigate} />
-          <SidebarLink to="/app/kb" icon={Book} label="지식 베이스" collapsed={collapsed} onClick={onNavigate} />
-          <SidebarLink to="/app/rules" icon={RouteIcon} label="규칙" collapsed={collapsed} onClick={onNavigate} />
-        </SidebarGroup>
-
-        <SidebarGroup header="온보딩" collapsed={collapsed}>
+        <SidebarGroup header="에이전트" collapsed={collapsed}>
           <SidebarLink
             to="/app/create"
             icon={PlusSquare}
@@ -260,14 +241,15 @@ export function AppSidebar({ onNavigate, collapsed = false }: { onNavigate: () =
           <SidebarLink
             to="/app/chat"
             icon={MessageCircle}
-            label="대화하기"
+            label="대화기록"
             collapsed={collapsed}
             onClick={onNavigate}
           />
           <SidebarLink
-            to="/app/install"
-            icon={ClipboardCheck}
-            label="설치하기"
+            to="/app/review"
+            icon={Inbox}
+            label="후속 지원 요청"
+            badge={badgeCount}
             collapsed={collapsed}
             onClick={onNavigate}
           />

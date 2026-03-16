@@ -43,6 +43,14 @@ type ChatMonitorOverviewResponse = {
     session_id: string;
     session_code: string | null;
     page_url: string | null;
+    phone_number: string | null;
+    caller_masked: string | null;
+    duration_sec: number | null;
+    channel: string | null;
+    agent_id: string | null;
+    sentiment: string | null;
+    is_escalated: boolean | null;
+    escalation_reason: string | null;
     template_id: string | null;
     template_name: string | null;
     template_missing: boolean;
@@ -353,6 +361,69 @@ export function ChatWorkspacePage() {
   );
 
   const pageSizeOptions = useMemo<SelectOption[]>(() => [...CHAT_PAGE_SIZE_OPTIONS], []);
+  const tableColumns = useMemo(() => {
+    return [
+      {
+        id: "session",
+        label: "세션",
+        width: "minmax(0,1.2fr)",
+        render: (item: ChatMonitorOverviewResponse["items"][number]) => (
+          <div className="truncate text-sm font-semibold text-slate-900">
+            {formatSessionCode(item.session_code, item.session_id)}
+          </div>
+        ),
+      },
+      {
+        id: "template",
+        label: "템플릿",
+        width: "minmax(0,1.35fr)",
+        render: (item: ChatMonitorOverviewResponse["items"][number]) => item.template_name || "-",
+      },
+      {
+        id: "instance",
+        label: "인스턴스",
+        width: "minmax(0,1.15fr)",
+        render: (item: ChatMonitorOverviewResponse["items"][number]) => item.instance_name || "-",
+      },
+      {
+        id: "page",
+        label: "대화 페이지",
+        width: "minmax(0,1.6fr)",
+        render: (item: ChatMonitorOverviewResponse["items"][number]) => {
+          const pageLabel = formatConversationPage(item.page_url);
+          return (
+            <div className="truncate text-sm text-slate-700" title={item.page_url || undefined}>
+              {pageLabel}
+            </div>
+          );
+        },
+      },
+      {
+        id: "status",
+        label: "상태",
+        width: "minmax(0,0.9fr)",
+        render: (item: ChatMonitorOverviewResponse["items"][number]) => formatSessionStatus(item),
+      },
+      {
+        id: "satisfaction",
+        label: "만족도",
+        width: "minmax(0,0.65fr)",
+        render: (item: ChatMonitorOverviewResponse["items"][number]) => formatSatisfaction(item.satisfaction),
+      },
+      {
+        id: "turns",
+        label: "턴 수",
+        width: "minmax(0,0.65fr)",
+        render: (item: ChatMonitorOverviewResponse["items"][number]) => `${item.turn_count}`,
+      },
+      {
+        id: "activity",
+        label: "최근 활동",
+        width: "minmax(0,1fr)",
+        render: (item: ChatMonitorOverviewResponse["items"][number]) => formatKstDateTime(item.last_turn_at || item.started_at),
+      },
+    ];
+  }, []);
 
   return (
     <div className="px-5 py-6 md:px-8">
@@ -444,9 +515,6 @@ export function ChatWorkspacePage() {
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div>
                 <div className="text-sm font-semibold text-slate-900">대화 리스트</div>
-                <div className="mt-1 text-xs text-slate-500">
-                  총 {overviewLoading ? "-" : overview?.summary.session_count ?? 0}개
-                </div>
               </div>
               <div className="flex items-center gap-2">
                 <div className="text-[11px] font-semibold text-slate-500">페이지당</div>
@@ -478,67 +546,7 @@ export function ChatWorkspacePage() {
                     selectedId={sessionId || null}
                     onSelect={(item) => replaceQuery({ sessionId: item.session_id })}
                     emptyState={<div className="p-4 text-sm text-slate-500">조건에 맞는 대화가 없습니다.</div>}
-                    columns={[
-                      {
-                        id: "session",
-                        label: "세션",
-                        width: "minmax(0,1.2fr)",
-                        render: (item) => (
-                          <div className="truncate text-sm font-semibold text-slate-900">
-                            {formatSessionCode(item.session_code, item.session_id)}
-                          </div>
-                        ),
-                      },
-                      {
-                        id: "template",
-                        label: "템플릿",
-                        width: "minmax(0,1.35fr)",
-                        render: (item) => item.template_name || "-",
-                      },
-                      {
-                        id: "instance",
-                        label: "인스턴스",
-                        width: "minmax(0,1.15fr)",
-                        render: (item) => item.instance_name || "-",
-                      },
-                      {
-                        id: "page",
-                        label: "대화 페이지",
-                        width: "minmax(0,1.6fr)",
-                        render: (item) => {
-                          const pageLabel = formatConversationPage(item.page_url);
-                          return (
-                            <div className="truncate text-sm text-slate-700" title={item.page_url || undefined}>
-                              {pageLabel}
-                            </div>
-                          );
-                        },
-                      },
-                      {
-                        id: "status",
-                        label: "상태",
-                        width: "minmax(0,0.9fr)",
-                        render: (item) => formatSessionStatus(item),
-                      },
-                      {
-                        id: "satisfaction",
-                        label: "만족도",
-                        width: "minmax(0,0.7fr)",
-                        render: (item) => formatSatisfaction(item.satisfaction),
-                      },
-                      {
-                        id: "turns",
-                        label: "턴 수",
-                        width: "minmax(0,0.7fr)",
-                        render: (item) => `${item.turn_count}`,
-                      },
-                      {
-                        id: "activity",
-                        label: "최근 활동",
-                        width: "minmax(0,1fr)",
-                        render: (item) => formatKstDateTime(item.last_turn_at || item.started_at),
-                      },
-                    ]}
+                    columns={tableColumns}
                   />
 
                   <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-4 py-3">

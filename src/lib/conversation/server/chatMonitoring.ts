@@ -89,6 +89,14 @@ export type ChatMonitorOverviewResponse = {
     session_id: string;
     session_code: string | null;
     page_url: string | null;
+    phone_number: string | null;
+    caller_masked: string | null;
+    duration_sec: number | null;
+    channel: string | null;
+    agent_id: string | null;
+    sentiment: string | null;
+    is_escalated: boolean | null;
+    escalation_reason: string | null;
     template_id: string | null;
     template_name: string | null;
     template_missing: boolean;
@@ -142,8 +150,16 @@ type SessionRow = {
   created_at?: string | null;
   started_at?: string | null;
   ended_at?: string | null;
+  phone_number?: string | null;
+  duration_sec?: number | null;
+  channel?: string | null;
+  caller_masked?: string | null;
+  agent_id?: string | null;
   satisfaction?: number | null;
   outcome?: string | null;
+  sentiment?: string | null;
+  is_escalated?: boolean | null;
+  escalation_reason?: string | null;
   metadata?: Record<string, unknown> | null;
 };
 
@@ -697,6 +713,14 @@ function toOverviewItem(item: SessionShape) {
     session_id: item.row.id,
     session_code: normalizeText(item.row.session_code),
     page_url: item.refs.pageUrl,
+    phone_number: normalizeText(item.row.phone_number),
+    caller_masked: normalizeText(item.row.caller_masked),
+    duration_sec: typeof item.row.duration_sec === "number" ? item.row.duration_sec : null,
+    channel: normalizeText(item.row.channel),
+    agent_id: normalizeText(item.row.agent_id),
+    sentiment: normalizeText(item.row.sentiment),
+    is_escalated: typeof item.row.is_escalated === "boolean" ? item.row.is_escalated : null,
+    escalation_reason: normalizeText(item.row.escalation_reason),
     template_id: item.previewTarget.template_id || item.refs.templateId,
     template_name: item.template?.name || (item.refs.templateId ? formatMissingLabel("템플릿", item.refs.templateId) : null),
     template_missing: item.templateMissing,
@@ -764,7 +788,9 @@ export async function loadChatMonitorOverview(
     async (from, to) =>
       await supabaseAdmin
         .from("D_conv_sessions")
-        .select("id, session_code, created_at, started_at, ended_at, satisfaction, outcome, metadata")
+        .select(
+          "id, session_code, created_at, started_at, ended_at, phone_number, duration_sec, channel, caller_masked, agent_id, satisfaction, outcome, sentiment, is_escalated, escalation_reason, metadata"
+        )
         .order("started_at", { ascending: false, nullsFirst: false })
         .range(from, to),
     500
